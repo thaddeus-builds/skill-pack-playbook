@@ -22,13 +22,14 @@ What it guards:
     = {"market": M, "items": …}; "$value" stands for the owner's answer
     where `value_arg` passes it. So console/relay.py's subject check
     passes for exactly what the owner was shown, and nothing else.
-  * A gate is attached only when the relayed call can reach this row: the
-    console appends no --market, so facts/decisions asks carry a gate only
-    when the verb resolves to this row's market without one (exactly one
-    market declared, or the harness has none), every verb word is a plain
-    token, `expect` fits the console's limit and the confirm is not
-    already refused. Otherwise the ask has no gate and a coded warning
-    says why (a person confirms at the terminal).
+  * A gate is attached only when the relayed call can reach this row:
+    every verb word is a plain token, `expect` fits the console's limit and
+    the confirm is not already refused. When the verb alone would not
+    resolve to this row's market (several markets declared or waiting), the
+    gate names it: `market` (console/relay.py passes `--market=M`), and
+    `expect` already holds the market, so the subject must name it too.
+    Otherwise the ask has no gate and a coded warning says why (a person
+    confirms at the terminal).
   * Evidence comes from the harness's own rows, each item's source
     labelled "harness (<table>)"; the agent's argument goes in
     `recommend.because`, which pending leaves null: every ask is listed
@@ -189,7 +190,7 @@ def _recommend(shape: dict, value: str) -> dict:
 
 
 def _gate(ask_id: str, verb: list[str], expect: dict, value_arg: bool,
-          warnings: list[Msg]) -> dict | None:
+          warnings: list[Msg], market: str | None = None) -> dict | None:
     """The gate block, or None with a coded warning saying why not."""
     for w in verb:
         if not TOKEN_RE.match(w):
@@ -207,20 +208,31 @@ def _gate(ask_id: str, verb: list[str], expect: dict, value_arg: bool,
             f"console holds {LIMITS['expect']}); confirm it at the terminal",
             id=ask_id, length=size))
         return None
-    return {"verb": verb, "value_arg": value_arg, "expect": expect}
+    gate = {"verb": verb, "value_arg": value_arg, "expect": expect}
+    if market is not None:
+        gate["market"] = market
+    return gate
+
+
+def _market_word(m: str, relay_markets: list[str]) -> str | None:
+    """The gate's `market` when the verb alone would not reach market m
+    (several markets declared or waiting), else None (the ask is unchanged
+    for a harness with one market)."""
+    return None if relay_markets == [m] else m
 
 
 def _reachable(ask_id: str, m: str, relay_markets: list[str],
                confirmed: list[str], door: bool,
                warnings: list[Msg]) -> bool:
-    """Can a relayed facts/decisions call (no --market) reach market m?"""
-    if relay_markets != [m]:
+    """Can a relayed facts/decisions call (with --market=M when it needs
+    one) reach market m?"""
+    if relay_markets != [m] and not TOKEN_RE.match(m):
         warnings.append(msg(
             "pending_gate_market_ambiguous",
-            f"{ask_id}: no gate, the console's call names no market and "
-            f"{len(relay_markets)} are declared ({', '.join(relay_markets)}); "
-            f"confirm it at the terminal with --market {m}", id=ask_id,
-            markets=relay_markets))
+            f"{ask_id}: no gate, the console's call cannot name the market "
+            f"(not a plain word) and several are declared "
+            f"({', '.join(relay_markets)}); confirm it at the terminal with "
+            f"--market", id=ask_id, markets=relay_markets))
         return False
     if door and m not in confirmed:
         warnings.append(msg(
@@ -299,7 +311,7 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
         gate = _gate(ask_id, ["facts", "confirm", key],
                      {"market": m, "items": {key: "$value" if value_arg
                                              else value}},
-                     value_arg, warnings)
+                     value_arg, warnings, _market_word(m, relay_markets))
     if gate:
         ask["gate"] = gate
     return ask, _about(ask_id, "client_facts", m, {"key": key},
@@ -373,7 +385,8 @@ def _decision_ask(con: sqlite3.Connection, r: dict, *,
         if value_arg:
             items[eid][key] = "$value"
         gate = _gate(ask_id, ["decisions", "confirm", et, eid, key],
-                     {"market": m, "items": items}, value_arg, warnings)
+                     {"market": m, "items": items}, value_arg, warnings,
+                     _market_word(m, relay_markets))
     if gate:
         ask["gate"] = gate
     return ask, _about(ask_id, "decisions", m,

@@ -83,7 +83,7 @@ ABOUT = {
     "if_no": "What 'no' would change (for choose and provide: what happens if none of it fits).",
     "effect": "What happens when they approve, in plain words.",
     "input": "How a provided value is typed: {type: text|number|date|url, min?, max?, unit?}.",
-    "gate": "{verb: [words], expect: {payload}, value_arg?}: run the harness's own human gate when this is answered; use \"$value\" in expect for the answer.",
+    "gate": "{verb: [words], expect: {payload}, value_arg?, market?}: run the harness's own human gate when this is answered; use \"$value\" in expect for the answer.",
 }
 ANSWER_VALUES = ("The value of an answer is always text: yes or no for confirm and approve, "
                  "an option's value for choose, what was typed for provide.")

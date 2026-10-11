@@ -4,7 +4,8 @@ A harness that wants a human in the loop answers a first call with a challenge
 (a one-time code bound to exactly what it would write) and accepts the same call
 again with that code. `run()` is the console's side of that exchange:
 
-    1 ask     <cmd> <verb…> [--value=V] --reason=R --json     stdin /dev/null
+    1 ask     <cmd> <verb…> [--market=M] [--value=V] --reason=R --json
+                                                         stdin /dev/null
     2 read    the harness's one JSON document (stdout only)
     3 check   the payload the code is bound to is what the human was shown
     4 answer  the same call + --code=C --relay-user=web:U --relay-at=T
@@ -30,7 +31,10 @@ What this module guarantees, and the tests hold it to:
     adds is one `--name=value` element (`--value`, `--reason`, and on the second
     call `--code`, `--relay-user`, `--relay-at`), so nothing the human types and
     no code the harness issues, even one starting with `-`, can be read as
-    another option or become another command.
+    another option or become another command. A gate's `market` (one plain
+    word, checked when the ask was added) becomes `--market=M`, so a harness
+    with several markets is told which one; the subject it binds still has to
+    match what was shown.
   * The code is sent only when the subject matches what was shown
     (`core.matches`: everything the ask names is in it exactly, an extra item
     is not allowed, only the harness's own envelope may say more); a mismatch
@@ -108,6 +112,9 @@ def run(ask: dict, value: str, *, cmd: list[str], verbs: list[list[str]],
         return fail("gate_refused", WHO)
 
     argv = cmd + verb
+    market = ask["gate"].get("market")
+    if market is not None:
+        argv.append(f"--market={market}")
     if ask["gate"].get("value_arg", False):
         argv.append(f"--value={norm}")
     argv += ["--reason=" + _plain(reason or "")[:MAX_REASON], "--json"]
@@ -158,7 +165,10 @@ def _verb(ask, verbs) -> list[str] | None:
     if not (isinstance(verb, list) and 1 <= len(verb) <= core.LIMITS["verb"]
             and all(isinstance(w, str) and core.TOKEN_RE.fullmatch(w) for w in verb)
             and isinstance(expect, dict) and expect
-            and isinstance(gate.get("value_arg", False), bool)):
+            and isinstance(gate.get("value_arg", False), bool)
+            and (gate.get("market") is None
+                 or (isinstance(gate.get("market"), str)
+                     and core.TOKEN_RE.fullmatch(gate["market"])))):
         return None
     if not any(isinstance(p, list) and p and verb[:len(p)] == p
                for p in verbs or []):
