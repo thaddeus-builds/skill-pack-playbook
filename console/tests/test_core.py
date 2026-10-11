@@ -398,6 +398,9 @@ def test_gate_shape():
     g = ok(ask("confirm", gate={"verb": ["facts", "confirm"], "expect": {"a": 1}}))["gate"]
     assert g == {"verb": ["facts", "confirm"], "expect": {"a": 1}, "value_arg": False}
     assert "gate" not in ok(ask("provide", gate=None))
+    mk = {"verb": ["facts", "confirm"], "expect": {"market": "TW", "a": 1}, "market": "TW"}
+    assert ok(ask("confirm", gate=mk))["gate"] == {**mk, "value_arg": False}, \
+        "a gate may name the market its call is for"
     ok(ask("approve", gate={"verb": ["queue", "approve"], "expect": {"n": 1}}))
     stored = ok(gated())
     assert core.validate_ask(stored) == (stored, []), "a stored gated ask re-validates to itself"
@@ -420,6 +423,10 @@ def test_gate_shape():
         ("gate.expect", "required", {"verb": ["x"], "expect": {"a": {1, 2}}}),
         ("gate.expect", "required", {"verb": ["x"], "expect": {"a": object()}}),
         ("gate.value_arg", "bad_type", {"verb": ["x"], "expect": {"a": 1}, "value_arg": "yes"}),
+        ("gate.market", "bad_value", {"verb": ["x"], "expect": {"a": 1}, "market": "-x"}),
+        ("gate.market", "bad_value", {"verb": ["x"], "expect": {"a": 1}, "market": "T W"}),
+        ("gate.market", "bad_value", {"verb": ["x"], "expect": {"a": 1}, "market": ""}),
+        ("gate.market", "bad_value", {"verb": ["x"], "expect": {"a": 1}, "market": 5}),
     ]
     for field, code, gate in bads:
         assert has(errs(ask("provide", gate=gate)), field, code), (field, gate)

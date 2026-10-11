@@ -128,7 +128,7 @@ sequenceDiagram
 
 What a harness must meet:
 
-1. Called as `<cmd> <verb…> [--value=V] --reason=R --json`, stdin closed, in a session of its own with no terminal: a gate that reads `/dev/tty` can be satisfied only by a person at the operator's terminal, never by a click. It prints one JSON document.
+1. Called as `<cmd> <verb…> [--market=M] [--value=V] --reason=R --json`, stdin closed, in a session of its own with no terminal: a gate that reads `/dev/tty` can be satisfied only by a person at the operator's terminal, never by a click. It prints one JSON document.
 2. Without `--code` it answers `{"code": "confirm_code_required", "params": {"confirm_code": "…"}, "subject": {…}}`; `subject` is what the code is bound to.
 3. With `--code=C --relay-user=web:NAME --relay-at=ISO-TIME` added it accepts the code once, only for that subject, and writes; exit 0 means done, a non-zero exit with `error` or `message` in its document a refusal.
 4. Every value the console adds is one `--name=value` argument, so a value or code starting with `-` is never read as a flag.
@@ -143,7 +143,7 @@ The ask names the verb and the payload; the operator names the command:
          "expect": {"items": {"unit_cost": "$value"}}}
 ```
 
-`expect` is what the owner is told will be written (`$value` = their answer). The console sends the code only if the harness's `subject` matches what `expect` names exactly: every key and value, a nested object key for key, so an extra item is refused. Only the top level of `subject` may say more (its envelope: verb, market, version). `expect` holds no empty `{}` or `[]`. `value_arg` adds `--value=<answer>`; a `choose` or `provide` gate must set it and put `"$value"` in `expect`, so the answer is what the code is bound to. A "no" never goes through the gate.
+`expect` is what the owner is told will be written (`$value` = their answer). The console sends the code only if the harness's `subject` matches what `expect` names exactly: every key and value, a nested object key for key, so an extra item is refused. Only the top level of `subject` may say more (its envelope: verb, market, version). `expect` holds no empty `{}` or `[]`. `value_arg` adds `--value=<answer>`; a `choose` or `provide` gate must set it and put `"$value"` in `expect`, so the answer is what the code is bound to. `market` (optional, one plain word) adds `--market=<market>`, for a harness with several markets that cannot tell which one from the verb; put the same market in `expect` so the subject has to name it. A "no" never goes through the gate.
 
 ```bash
 uv run console/serve.py --relay-cmd "uv run my_harness.py" --relay-verbs "facts confirm,queue approve"

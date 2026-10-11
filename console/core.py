@@ -310,9 +310,9 @@ def _binds_value(x) -> bool:
 def _gate(errors, g, step):
     if not isinstance(g, dict):
         errors.append({"field": "gate", "code": "bad_type",
-                       "message": "gate is an object {verb, expect, value_arg?}"})
+                       "message": "gate is an object {verb, expect, value_arg?, market?}"})
         return None
-    _unknown(errors, "gate", g, {"verb", "expect", "value_arg"})
+    _unknown(errors, "gate", g, {"verb", "expect", "value_arg", "market"})
     verb, expect = g.get("verb"), g.get("expect")
     ok = True
     if not (isinstance(verb, list) and 1 <= len(verb) <= LIMITS["verb"]
@@ -341,7 +341,18 @@ def _gate(errors, g, step):
                        "message": "a choose or provide gate must carry the answer: "
                                   "value_arg true and \"$value\" in expect"})
         ok = False
-    return {"verb": list(verb), "expect": expect, "value_arg": va} if ok else None
+    mk = g.get("market")
+    if mk is not None and not (isinstance(mk, str) and TOKEN_RE.match(mk)):
+        errors.append({"field": "gate.market", "code": "bad_value",
+                       "message": "market: one plain word (letters, digits, _ . : @ / -), "
+                                  "the harness's --market for this call"})
+        ok = False
+    if not ok:
+        return None
+    out = {"verb": list(verb), "expect": expect, "value_arg": va}
+    if mk is not None:
+        out["market"] = mk
+    return out
 
 
 def validate_ask(raw) -> tuple[dict | None, list[dict]]:
