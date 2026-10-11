@@ -11,7 +11,13 @@ format (console/README.md "A clear ask"; console/examples/*.json):
     registry's bounds and unit), `choose` (a choice key) or `confirm`;
   * a pending decision -> `provide` / `choose` / `confirm` by its domain;
   * a pending queue item -> `approve`, its `effect` from the proposal's
-    `expected`.
+    `expected`;
+  * a client file the harness has staged (the `staged=` hook: kit.workbook_map
+    rows and the values read from the file, kit.file_gate) -> ONE `confirm`
+    for the whole file: what the agent read from it is confirmed together,
+    once per version, never one number at a time. The harness gives the verb
+    and the payload its own gate binds; pending shows the values and the
+    rows and attaches that gate.
 
 What it guards:
 
@@ -119,6 +125,16 @@ def _table(caption: str, d: dict, table: str) -> dict | None:
     return {"table": {"caption": _clip(f"{caption}. Source: harness "
                                        f"({table})", LIMITS["caption"]),
                       "columns": ["Field", "Value"], "rows": rows}}
+
+
+def _grid(caption: str, columns: list[str], rows: list[list[Any]],
+          table: str) -> dict | None:
+    rows = [[_cell(c) for c in r] for r in rows][:LIMITS["rows"]]
+    if not rows:
+        return None
+    return {"table": {"caption": _clip(f"{caption}. Source: harness "
+                                       f"({table})", LIMITS["caption"]),
+                      "columns": columns, "rows": rows}}
 
 
 def _evidence(*items: dict | None) -> list[dict]:
@@ -444,16 +460,67 @@ def _queue_ask(r: dict, warnings: list[Msg]) -> tuple[dict, dict]:
                        if_no=if_no)
 
 
+def _file_ask(f: dict, warnings: list[Msg]) -> tuple[dict, dict]:
+    """One ask for one staged client file. `f` (the harness's): name (the
+    file's id), version (the staged bundle's), source (where it lives, for
+    the evidence), rows (how many map rows it confirms), shown ([[row id,
+    content]], the rows to show), values ([{key, market, value, cell}]),
+    verb and expect (the harness's gate: the verb that confirms this
+    version and the subject it binds), market (the gate's --market, when
+    the verb needs one)."""
+    name, version = str(f["name"]), str(f["version"])
+    values, n_rows = list(f.get("values") or []), int(f.get("rows") or 0)
+    ask_id = _ask_id("file", [name], q.canonical(f["expect"]))
+    title = _cut(msg("pending_title_file",
+                     f"What the agent read from {name}: {n_rows} map row(s) "
+                     f"and {len(values)} value(s). Confirm them together?",
+                     name=name, rows=n_rows, values=len(values)),
+                 LIMITS["title"])
+    why = _cut(msg("pending_why_file",
+                   f"The agent mapped {name} (version {version}) and read "
+                   f"{len(values)} value(s) from its cells. One yes "
+                   f"confirms all of it; nothing from this version is used "
+                   f"before that.", name=name, version=version,
+                   values=len(values)), LIMITS["why"])
+    if_no = _cut(msg("pending_if_no_file",
+                     "Nothing from this version is used; the agent corrects "
+                     "the map or the values and stages the file again."),
+                 LIMITS["if_no"])
+    ask = {"id": ask_id, "step": "confirm", "kind": "file",
+           "group": _clip("Files", LIMITS["group"]),
+           "title": title, "why": why,
+           "evidence": _evidence(
+               _grid("Values read from the file", ["Value", "Market",
+                                                   "Read", "Cell"],
+                     [[v["key"], v["market"], v["value"], v["cell"]]
+                      for v in values], "workbook map"),
+               _grid("Map rows it confirms", ["Row", "Content"],
+                     [list(r) for r in f.get("shown") or []],
+                     "workbook map"),
+               _fact("Version", version, "workbook map"),
+               _fact("Stored as", f.get("source"), "workbook map")),
+           "recommend": {"value": "yes", "because": None}, "if_no": if_no}
+    gate = _gate(ask_id, list(f["verb"]), f["expect"], False, warnings,
+                 f.get("market"))
+    if gate:
+        ask["gate"] = gate
+    return ask, _about(ask_id, "workbook_map", f.get("market") or "",
+                       {"name": name, "version": version}, "confirm",
+                       gate is not None, title=title, why=why, if_no=if_no)
+
+
 # ---- all of them -----------------------------------------------------------
 
 def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
          registry: DecisionRegistry | None,
          thresholds: Thresholds | None = None,
          on_confirm: Callable | None = None,
-         market: str | None = None) -> dict:
+         market: str | None = None,
+         staged: Callable | None = None) -> dict:
     """{asks, about, warnings, message} for every row waiting on a human
     (of `market`, or of every market): declarations first, then facts,
-    decisions and queue items."""
+    staged files (`staged(con)`, the harness's list of _file_ask's
+    dicts), decisions and queue items."""
     warnings: list[Msg] = []
     out: list[tuple[dict, dict]] = []
     fact_markets = markets.declared(con, include_pending=True)
@@ -466,6 +533,10 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
                              relay_markets=fact_markets, confirmed=confirmed,
                              warnings=warnings))
     n_facts = len(out)
+    for f in (staged(con) if staged is not None else []):
+        if market is None or f.get("market") in (None, "", market):
+            out.append(_file_ask(f, warnings))
+    n_files = len(out) - n_facts
     if registry is not None:
         for m in ([market] if market else confirmed):
             for r in decisions.pending(con, m):
@@ -475,14 +546,19 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
                                          on_confirm=on_confirm,
                                          relay_markets=confirmed,
                                          warnings=warnings))
-    n_dec = len(out) - n_facts
+    n_dec = len(out) - n_facts - n_files
     for r in q.pending(con, market):
         out.append(_queue_ask(r, warnings))
-    n_q = len(out) - n_facts - n_dec
+    n_q = len(out) - n_facts - n_files - n_dec
     summary = msg("pending_summary",
                   f"{len(out)} ask(s) waiting on a person: {n_facts} fact(s), "
                   f"{n_dec} decision(s), {n_q} queue item(s)",
-                  facts=n_facts, decisions=n_dec, queue=n_q)
+                  facts=n_facts, decisions=n_dec, queue=n_q) if not n_files \
+        else msg("pending_summary_files",
+                 f"{len(out)} ask(s) waiting on a person: {n_facts} fact(s), "
+                 f"{n_files} file(s), {n_dec} decision(s), {n_q} queue "
+                 f"item(s)", facts=n_facts, files=n_files, decisions=n_dec,
+                 queue=n_q)
     if out:
         warnings.insert(0, msg(
             "pending_fill_because",
@@ -497,8 +573,10 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
 def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
          keys: FactKeys | None, registry: DecisionRegistry | None,
          thresholds: Thresholds | None = None,
-         on_confirm: Callable | None = None) -> int:
-    """`<cli> pending [--market M] [--json]`; the exit code."""
+         on_confirm: Callable | None = None,
+         staged: Callable | None = None) -> int:
+    """`<cli> pending [--market M] [--json]`; the exit code. `staged(con)`:
+    the harness's staged client files (see asks())."""
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = config()
     cmd = [cfg.cli, "pending", *argv]
@@ -515,7 +593,8 @@ def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
         con = db.connect(spec, read_only=True)
         try:
             doc = asks(con, keys=keys, registry=registry,
-                       thresholds=thresholds, on_confirm=on_confirm, market=m)
+                       thresholds=thresholds, on_confirm=on_confirm, market=m,
+                       staged=staged)
         finally:
             con.close()
         if a.json:

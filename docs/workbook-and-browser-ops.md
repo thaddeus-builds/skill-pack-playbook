@@ -75,6 +75,10 @@ No column names a business field, and none is called `date` (kit.db's default pe
 
 Three rules, tested: **an outgoing column has one owner** (one `out` or `both` row per workbook, sheet, anchor and header, whichever harness writes it); **every field is the harness's** (in its vocabulary, when it gives one); **nothing unconfirmed is read** (`confirmed()` and `pending()`). Shape problems (columns, closed values, unknown tables, a missing owner or reason, a key header with no column row) are reported first, as one coded refusal.
 
+`values.tsv` (optional, kit 0.12.0): `key, market, value, sheet, cell, status, note`, the numbers the agent read from single cells or ranges (a rate in `F14`, a target across `F32:Q32`), each a fact key of the harness. A map without it keeps its version.
+
+**One gate per file** (`kit.file_gate`, #66): the agent stages the map with its new rows `proposed`; `kit.pending` lists the staged bundle as one ask; the harness's confirm verb runs `plan()` then `confirm()`: one retype or one relayed code, bound to the staged and the confirmed bundle's versions, the row count and every value, after which the values are confirmed facts (`kit.facts.apply_file`) and the confirmed bundle is the one in force. The owner says yes once per version of the file, never once per number.
+
 ### Projection
 
 `records(import, map, table_id)` gives a harness's ingest the confirmed rows of one table in one raw file: typed values by field (an empty cell is `None`, never 0; money a number in the type's currency; dates ISO in either date system; booleans; `M/D～M/D` ranges as MM-DD pairs; codes trimmed), each with its source cell `<sha12>:<Sheet>!<ref>`, and an issue for a value that does not fit its type. The harness projects from raw, like every ingest; what it does with a row it cannot take (no fee, an unknown label) is the harness's rule, not the pack's.

@@ -14,10 +14,11 @@ one valid console ask, on the fake "shop" harness.
      harness command that runs kit.facts / kit.decisions / kit.queue),
      passes relay's subject check and writes exactly that row, @relay
      (a provided value other than the recommendation too).
-  4. No gate where the relayed call could not reach the row, each with a
-     coded warning: several markets declared (the console names no
-     market), a verb word the console cannot send, a binding longer than
-     the console holds.
+  4. Several markets declared or waiting: each fact or decision gate names
+     its market (the relay passes --market=M) and a relayed confirm writes
+     it. No gate where the relayed call could not reach the row, each with
+     a coded warning: a verb word the console cannot send, a binding longer
+     than the console holds.
   5. Ask ids are stable while nothing moves and new when the value does;
      pending.tsv is closed over pending.py.
 """

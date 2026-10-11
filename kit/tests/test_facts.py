@@ -41,6 +41,12 @@ banner is harness code and stays there).
      human-table triggers; readers confirmed / effective / pending.
  13. A harness with markets = [] keeps every fact under "_".
  14. facts.py's msg() calls are closed over its fragment.
+ 15. A client file's values (plan_file / apply_file): checked like `set`
+     before any gate (unknown key, bounds, the declaration itself, a
+     market not onboarded, a key twice: refused, nothing written); the
+     items and version a gate binds; written confirmed with the gate's
+     channel, history action confirm, a value already confirmed as it is
+     untouched; a fact that moved after the plan refuses all of them.
 """
 
 import getpass
@@ -152,6 +158,11 @@ def rows(data=None) -> dict:
     with closing(con(data)) as c:
         return {t: c.execute(f"SELECT * FROM {t} ORDER BY rowid").fetchall()
                 for t in ("client_facts", "client_facts_history")}
+
+
+def ecode(e) -> str | None:
+    """The code of a raised HarnessError (None for anything else)."""
+    return getattr(getattr(e, "message", None), "code", None)
 
 
 def code_of(out: str) -> str | None:
@@ -1017,6 +1028,67 @@ def test_protection_and_readers() -> None:
     empty.close()
 
 
+# ---- 15 --------------------------------------------------------------------
+
+def test_file_values() -> None:
+    print("[15] a client file's values: one gate with the file")
+    with closing(con()) as c:
+        for vals, code in (
+                ([("US", "nope", "1")], "fact_key_unknown"),
+                ([("US", "fee_pct", "120")], "fact_value_out_of_range"),
+                ([("US", "market_declared", "US")], "fact_file_declaration"),
+                ([("CA", "fee_pct", "5")], "market_not_onboarded"),
+                ([("US", "fee_pct", "5"), ("US", "fee_pct", "6")],
+                 "fact_file_twice")):
+            e = raises(lambda: facts.plan_file(c, vals, keys=KEYS,
+                                               thresholds=TH))
+            check(f"refused before any gate: {code}", ecode(e) == code,
+                  (vals, e))
+        plan = facts.plan_file(c, [("US", "fee_pct", "12.50"),
+                                   ("US", "monthly_cap", "3000"),
+                                   ("US", "threshold_max_step", "0.30")],
+                               keys=KEYS, thresholds=TH)
+    check("the plan: canonical values per market (what the gate binds), a "
+          "version from each fact's last history id, one line each",
+          plan["items"] == {"US": {"fee_pct": "12.5", "monthly_cap": "3000",
+                                   "threshold_max_step": "0.3"}}
+          and plan["version"].startswith("US:fee_pct:")
+          and len(plan["lines"]) == 3, plan)
+    run(["set", "fee_pct", "7", "--market", "US", "--source", "agent",
+         "--reason", "someone sets it while the human reads"])
+    mark = top()
+    with closing(con()) as c:
+        e = raises(lambda: facts.apply_file(SPEC, c, plan, channel="tty",
+                                            reason="r", source="file"))
+        e2 = raises(lambda: facts.apply_file(SPEC, c, plan, channel="cli",
+                                             reason="r", source="file"),
+                    ValueError)
+    check("a fact that moved after the plan: fact_changed_meanwhile, none "
+          "of the file's values written (threshold_max_step neither)",
+          ecode(e) == "fact_changed_meanwhile" and top() == mark
+          and fact("fee_pct")[:2] == ("7", 1), e)
+    check("a channel no gate returns (cli) is a bug: ValueError",
+          isinstance(e2, ValueError), e2)
+    with closing(con()) as c:
+        plan = facts.plan_file(c, [("US", "fee_pct", "12.50"),
+                                   ("US", "monthly_cap", "3000")],
+                               keys=KEYS, thresholds=TH)
+        got = facts.apply_file(SPEC, c, plan, channel="relay",
+                               reason="the IM workbook [relay user=web:o "
+                               "at=2026-10-11T10:00:00Z]",
+                               source="workbook:abc Budget!F14")
+    check("written confirmed with the gate's channel and the file as source; "
+          "a value already confirmed as it is writes nothing",
+          [r["key"] for r in got] == ["fee_pct"]
+          and fact("fee_pct") == ("12.5", 0, "workbook:abc Budget!F14",
+                                  f"{USER}@relay")
+          and fact("monthly_cap")[:2] == ("3000", 0)
+          and hist(mark) == [("US", "fee_pct", "confirm", "7", "12.5", 0,
+                              "the IM workbook [relay user=web:o "
+                              "at=2026-10-11T10:00:00Z]", f"{USER}@relay")],
+          (got, hist(mark)))
+
+
 # ---- 13 --------------------------------------------------------------------
 
 def test_unpartitioned() -> None:
@@ -1083,6 +1155,7 @@ if __name__ == "__main__":
     test_markets_and_reads()
     test_restore()
     test_protection_and_readers()
+    test_file_values()
     test_unpartitioned()
     test_closure()
     raise SystemExit(finish())
