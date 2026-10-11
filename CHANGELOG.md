@@ -10,7 +10,32 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-11
+### Added
+- One human gate per client file (#66; the KOL harness's R34, owner's option B): the map of a
+  client's workbook and the values the agent read from it pass ONE retype or ONE relayed code,
+  once per version, never one number at a time.
+  - `workbook_map.py`: an optional `values.tsv` (key, market, value, sheet, cell or range,
+    status, note); fact keys checked when the harness gives them; a map without it keeps its
+    version. `texts_confirmed()` (a staged bundle with every row confirmed), `confirmed_rows()`
+    and `gate_rows()` (what a bundle confirms that the one in force did not).
+  - `file_gate.py` (pack `workbook`): `plan()`, `ask()`, `confirm()`. The console ask and the
+    gate are built from the same plan; the binding is both bundles' versions, the row count and
+    every value, so it stays small whatever the map's size.
+  - `facts.py`: `plan_file()` checks a file's values as `set` would, before any gate;
+    `apply_file()` writes them confirmed with the gate's channel (history action `confirm`),
+    all or nothing if one moved meanwhile.
+  - `pending.py`: a `staged=` hook, one `file` ask per staged client file
+    (`pending_summary_files` when there is one).
+### Changed
+- `pending.py`: with several markets declared or waiting, a fact or decision ask keeps its gate
+  and names the market (`gate.market`); `pending_gate_market_ambiguous` is left for a market
+  that is not a plain word. A one-market harness gets the same asks as before.
+
 ### Other
+- Console: a gate may carry `market` (one plain word); the relay passes it as one `--market=M`
+  element after the verb, and `expect` holds the same market, so the harness's subject must
+  name it (#66).
 - Client template: the first call is `doctor` and `pending`, not a status verb (#55).
 - `templates/CHANGELOG.md`, rendered into every new harness, and a `changelog` job in both CI
   templates: a merge request that changes the code, a registry, the skill or the console must

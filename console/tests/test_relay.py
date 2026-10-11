@@ -761,6 +761,33 @@ def test_a_code_that_starts_with_a_dash_is_still_one_argument():
         assert res["ok"] and res["message"] == "seen *** web:alice", res
 
 
+def test_a_gate_market_is_one_argument_and_the_subject_must_name_it():
+    """A harness with several markets is told which one by `--market=M`, one
+    element right after the verb; a subject for another market is a change."""
+    with _t.tmpdir() as d:
+        ask = provide_ask(market="TW", expect={"market": "TW", "items": {"unit_cost": "$value"}})
+        c = Canned(d, chal(subject={"verb": "facts confirm", "market": "TW",
+                                    "items": {"unit_cost": 12}}), done())
+        res = c.run(ask, "12")
+        assert res["ok"], res
+        c1, c2 = c.calls()
+        assert c1["argv"] == VERB + ["--market=TW", "--value=12", "--reason=looks right", "--json"]
+        assert c2["argv"][:len(c1["argv"])] == c1["argv"]
+        assert "--market" not in c1["argv"]
+    with _t.tmpdir() as d:
+        c = Canned(d, chal(subject={"verb": "facts confirm", "market": "HK",
+                                    "items": {"unit_cost": 12}}), done())
+        res = c.run(ask, "12")
+        assert res["code"] == "gate_changed" and not res["ok"], res
+        assert len(c.calls()) == 1, "the code is never sent for another market"
+    with _t.tmpdir() as d:
+        c = Canned(d, chal(), done())
+        bad = copy.deepcopy(ask)
+        bad["gate"]["market"] = "-x"          # an ask edited after it was checked
+        res = c.run(bad, "12")
+        assert res["code"] == "gate_unavailable" and c.calls() == [], res
+
+
 def test_a_command_that_cannot_start_is_unavailable():
     with _t.tmpdir() as d:
         plain = os.path.join(d, "not-executable")

@@ -50,6 +50,20 @@ Ported from the reference harness's scripts/facts.py. What it guards:
 
 Readers for harness code: confirmed(), effective(), pending().
 
+A client file's values, one gate with the file (plan_file, apply_file):
+the values the agent read from a client's file (kit.workbook_map's
+values.tsv) are confirmed by the same human gate as the rest of that file,
+not one by one. plan_file() checks each (market, key, value) exactly as
+`set` would (a registered key, its bounds and canonical form, a confirmed
+market declaration; never the declaration itself) BEFORE any gate runs,
+and returns the items the harness puts in that gate's subject and the
+version every write to those facts moves. apply_file() writes them
+confirmed, with the gate's channel as changed_by and history action
+`confirm`, after checking again that none of them moved meanwhile. It is
+a write that raises trust: only a harness verb that has just passed
+kit.human.confirm() for a subject holding plan["items"] and
+plan["version"] calls it, as `confirm` calls its own write.
+
 Deviations from the reference and from the SPEC, each deliberate:
   * No klass, no value_type: the kit's client_facts has neither (a key's
     group lives in the FactKeys registry), so `--klass` is gone, and with
@@ -505,6 +519,97 @@ def cmd_confirm(run: _Run) -> dict | None:
         + (f" (was {old})" if old not in (None, value) else ""),
         key=a.key, market=m, value=value, was=old),
         {"confirmed": [row], "changed_by": by, "reason": reason})
+
+
+# ---- a client file's values, confirmed with the file -----------------------
+
+def plan_file(con: sqlite3.Connection,
+              values: list[tuple[str, str, str]], *, keys: FactKeys,
+              thresholds: Thresholds | None = None) -> dict:
+    """The facts a client file states, checked before its one gate.
+
+    `values` are (market, key, raw value). -> {"items": {market: {key:
+    value}} (canonical values: what the gate binds and shows),
+    "version": the facts' last history ids joined (every write moves it),
+    "rows": [{market, key, value, old, state, last}], "lines": one line
+    per value for the gate's prompt}. Refused (coded) at the first value
+    `set` would refuse, or the market declaration itself."""
+    rows, items, lines = [], {}, []
+    for m, key, raw in values:
+        m = market.validate(m)
+        if key == MARKET_KEY:
+            raise HarnessError(msg(
+                "fact_file_declaration",
+                f"a client file cannot declare a market ({MARKET_KEY} "
+                f"[{m}]); `facts init` does", market=m))
+        _key_shape(key)
+        if key not in keys.settable(thresholds):
+            keys.validate(key, "", thresholds=thresholds)       # raises
+        value = keys.validate(key, raw, thresholds=thresholds)
+        market.require_declared(con, m)
+        if key in items.get(m, {}):
+            raise HarnessError(msg(
+                "fact_file_twice", f"{key} [{m}] is stated twice",
+                key=key, market=m))
+        existing = _fetch(con, m, key)
+        old = existing["value"] if existing else None
+        rows.append({"market": m, "key": key, "value": value, "old": old,
+                     "state": _state(existing),
+                     "last": _last_id(con, m, key)})
+        items.setdefault(m, {})[key] = value
+        was = "" if old in (None, value) else f" (replacing {old})"
+        lines.append(f"{key} [{m}] = {value}{was}")
+    version = ",".join(f"{r['market']}:{r['key']}:{r['last']}" for r in rows)
+    return {"items": items, "version": version, "rows": rows,
+            "lines": lines}
+
+
+def apply_file(spec: db.SchemaSpec, con: sqlite3.Connection, plan: dict, *,
+               channel: str, reason: str, source: str,
+               client: str | None = None) -> list[dict]:
+    """Write plan_file()'s values confirmed, after the harness's gate
+    passed for a subject holding plan["items"] and plan["version"]
+    (`channel` is what kit.human.confirm returned). A value already
+    confirmed as it is writes nothing. -> the rows written. Refused,
+    nothing written, if any of the facts moved since the plan
+    (fact_changed_meanwhile)."""
+    if channel not in ("tty", "relay"):        # what a gate returns
+        raise ValueError(f"apply_file: channel {channel!r} is no gate's "
+                         f"(tty or relay)")
+    by = human.changed_by(channel, client)
+    reason = human.why(reason)
+    out = []
+    with db.keep_human_rows(spec, con):
+        for r in plan["rows"]:
+            m, key = r["market"], r["key"]
+            if (_last_id(con, m, key) != r["last"]
+                    or _state(_fetch(con, m, key)) != r["state"]):
+                raise HarnessError(msg(
+                    "fact_changed_meanwhile",
+                    f"{key} [{m}] changed while the human was being asked; "
+                    f"the confirmation no longer matches it. Nothing was "
+                    f"written.", key=key, market=m),
+                    [shlex.join([_cli(), "facts", "get", key, "--market",
+                                 m])])
+        for r in plan["rows"]:
+            m, key, value, old = r["market"], r["key"], r["value"], r["old"]
+            if r["state"] == (value, 0):
+                continue
+            at = human.now()
+            if r["state"] is None:
+                con.execute(f"INSERT INTO {FACTS} (market, key, value, "
+                            f"is_assumption, source, updated_at, changed_by) "
+                            f"VALUES (?,?,?,0,?,?,?)",
+                            (m, key, value, source, at, by))
+            else:
+                con.execute(f"UPDATE {FACTS} SET value=?, is_assumption=0, "
+                            f"source=?, updated_at=?, changed_by=? "
+                            f"WHERE market=? AND key=?",
+                            (value, source, at, by, m, key))
+            _log(con, m, key, "confirm", old, value, 0, source, reason, by,
+                 at)
+            out.append(_fetch(con, m, key))
+    return out
 
 
 def cmd_unconfirm(run: _Run) -> dict | None:
