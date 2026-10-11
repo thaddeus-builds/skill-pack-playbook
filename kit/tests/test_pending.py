@@ -14,10 +14,11 @@ one valid console ask, on the fake "shop" harness.
      harness command that runs kit.facts / kit.decisions / kit.queue),
      passes relay's subject check and writes exactly that row, @relay
      (a provided value other than the recommendation too).
-  4. No gate where the relayed call could not reach the row, each with a
-     coded warning: several markets declared (the console names no
-     market), a verb word the console cannot send, a binding longer than
-     the console holds.
+  4. Several markets declared or waiting: each fact or decision gate names
+     its market (the relay passes --market=M) and a relayed confirm writes
+     it. No gate where the relayed call could not reach the row, each with
+     a coded warning: a verb word the console cannot send, a binding longer
+     than the console holds.
   5. Ask ids are stable while nothing moves and new when the value does;
      pending.tsv is closed over pending.py.
 """
@@ -371,20 +372,30 @@ def test_no_gate() -> None:
         c.commit()
     doc = pend()
     refs = by_ref(doc)
+    decl, fact = doc["asks"][0], refs["fact:unit_cost"][0]
     check("two markets declared or waiting: the CA declaration (listed "
-          "first) and the US fact carry no gate, each with "
-          "pending_gate_market_ambiguous",
+          "first) and the US fact keep their gates, each naming its market "
+          "(the relay passes --market=M), and no ambiguity warning",
           doc["about"][0]["ref"] == {"key": "market_declared"}
-          and doc["about"][0]["market"] == "CA"
-          and not doc["about"][0]["gate"]
-          and "gate" not in refs["fact:unit_cost"][0]
-          and wcodes(doc).count("pending_gate_market_ambiguous") == 2,
-          doc["warning_codes"])
-    check("the decision (only US confirmed) keeps its gate",
-          "gate" in refs["decision:SKU-1:floor_price"][0])
+          and doc["about"][0]["market"] == "CA" and doc["about"][0]["gate"]
+          and decl["gate"]["market"] == "CA"
+          and fact["gate"]["market"] == "US"
+          and fact["gate"]["expect"]["market"] == "US"
+          and "pending_gate_market_ambiguous" not in wcodes(doc),
+          (decl.get("gate"), fact.get("gate"), doc["warning_codes"]))
+    check("the decision (only US confirmed) keeps its gate, with no market "
+          "word (one market can take decisions)",
+          "market" not in refs["decision:SKU-1:floor_price"][0]["gate"])
     got = console_add(filled(doc["asks"]))
-    check("the gateless asks are still valid console asks",
+    check("the market-naming asks are valid console asks",
           got.get("ok") is True, got)
+    got = relay(filled([fact])[0], "5")
+    check("relayed with --market=US, the US fact is confirmed while two "
+          "markets are declared", got.get("ok") is True
+          and fact_row("unit_cost")[:2] == ("5", 0), (got, fact_row("unit_cost")))
+    capture(lambda a: facts.main(a, spec=SPEC, keys=KEYS, thresholds=TH),
+            ["unconfirm", "unit_cost", "--market", "US", "--reason",
+             "back to pending for the next checks"], env=env())
 
     loose = DecisionRegistry()
     dset("product", "SKU 9", "note", "fragile", registry=loose)

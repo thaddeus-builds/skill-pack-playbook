@@ -29,9 +29,23 @@ for out and both); `type` one of TYPES. A row with table_id `-` and
 header `-` names a harness field that has no place in this workbook, and
 its note says why.
 
-`status` is proposed or confirmed in both files: an agent writes
+values.tsv (optional): the numbers and words the agent read from the
+workbook that are not rows of a table (a rate in one cell, a target across
+a row), each with where it was read: key (a fact key of the harness),
+market, value, sheet, cell (`F14`, or a range `F32:Q32`), status, note. A
+harness writes a confirmed value as a confirmed fact (kit.facts.plan_file /
+apply_file), so the map and the values the file states pass ONE human gate
+together, once per version of the bundle.
+
+`status` is proposed or confirmed in every file: an agent writes
 proposed, and only the owner's answer makes a row confirmed. confirmed()
 is what a projection reads; pending() is what still waits.
+texts_confirmed() is a staged bundle with every row confirmed (what the
+owner's one yes turns it into), gate_rows() what a bundle confirms that
+the one before it did not: exactly what that gate must show and bind.
+
+The version is the hash of the files' texts; a map without values.tsv
+keeps the version it had before values existed.
 
 What it guards (problems() -> [Msg], check() raises them as one):
 
@@ -43,7 +57,10 @@ What it guards (problems() -> [Msg], check() raises them as one):
     status, type), unique table ids, every column row naming a declared
     table, an owner for every out or both row, a reason for every
     no-place row, the key headers and an `@Header` market among the
-    table's column rows.
+    table's column rows;
+  * values: a key (one of the harness's fact keys, when it gives them),
+    a market, a value, a sheet and a cell or range for every row, one row
+    per key and market.
 
 PERSONAL types (email, person, url) mark columns whose values a harness
 never prints (kit.workbook_store masks them).
@@ -79,7 +96,11 @@ NO_PLACE = "-"
 # (kit.guards.release takes a string literal that is only a file name ending
 # in .tsv for a registry the harness must ship;
 # these are the client's, in its data folder)
-TABLES_FILE, COLUMNS_FILE = (f"{n}.tsv" for n in ("tables", "columns"))
+TABLES_FILE, COLUMNS_FILE, VALUES_FILE = (
+    f"{n}.tsv" for n in ("tables", "columns", "values"))
+VALUE_COLUMNS = ("key", "market", "value", "sheet", "cell", "status", "note")
+_CELL = re.compile(r"^[A-Z]{1,3}[1-9][0-9]{0,6}(?::[A-Z]{1,3}[1-9][0-9]{0,6})?$")
+CONFIRMED = "confirmed"
 
 
 @dataclass
@@ -87,6 +108,7 @@ class Map:
     tables: list[dict] = field(default_factory=list)
     columns: list[dict] = field(default_factory=list)
     version: str = ""
+    values: list[dict] = field(default_factory=list)
 
     def table(self, table_id: str) -> dict | None:
         return next((t for t in self.tables if t["table_id"] == table_id),
@@ -143,31 +165,60 @@ def _rows(name: str, text: str, want: tuple[str, ...]
     return out, []
 
 
-def parse(tables_text: str, columns_text: str) -> tuple[Map, list[Msg]]:
-    """The map from the two files' texts, and the shape problems met while
-    reading it (problems() adds the rules)."""
+def version_of(tables_text: str, columns_text: str,
+               values_text: str | None = None) -> str:
+    """The bundle's version: the hash of its texts (values.tsv only when
+    there is one, so an older map keeps its version)."""
+    body = tables_text + "\0" + columns_text
+    if values_text is not None:
+        body += "\0" + values_text
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+
+
+def parse(tables_text: str, columns_text: str,
+          values_text: str | None = None) -> tuple[Map, list[Msg]]:
+    """The map from its files' texts (values.tsv optional), and the shape
+    problems met while reading it (problems() adds the rules)."""
     tables, p1 = _rows(TABLES_FILE, tables_text, TABLE_COLUMNS)
     columns, p2 = _rows(COLUMNS_FILE, columns_text, COLUMN_COLUMNS)
-    version = hashlib.sha256(
-        (tables_text + "\0" + columns_text).encode("utf-8")).hexdigest()[:16]
-    return Map(tables=tables, columns=columns, version=version), p1 + p2
+    values, p3 = ([], []) if values_text is None else \
+        _rows(VALUES_FILE, values_text, VALUE_COLUMNS)
+    return Map(tables=tables, columns=columns,
+               version=version_of(tables_text, columns_text, values_text),
+               values=values), p1 + p2 + p3
 
 
-def load(folder: Path | str) -> Map:
-    """tables.tsv and columns.tsv from `folder`, checked for shape and for
-    the rules without a field vocabulary (check() again with one)."""
+def texts(folder: Path | str) -> dict[str, str]:
+    """{file name: text} of the map's files in `folder` (values.tsv only
+    when it is there); workbook_map_missing for a missing table or column
+    file."""
     d = Path(folder).expanduser()
-    texts = []
-    for name in (TABLES_FILE, COLUMNS_FILE):
+    out = {}
+    for name in (TABLES_FILE, COLUMNS_FILE, VALUES_FILE):
         p = d / name
         if not p.is_file():
+            if name == VALUES_FILE:
+                continue
             raise HarnessError(msg(
                 "workbook_map_missing",
                 f"{p} is not a file; a workbook map is tables.tsv and "
                 f"columns.tsv in one folder", path=str(p)),
                 ["write the map's two files, then import them again"])
-        texts.append(p.read_bytes().decode("utf-8-sig"))
-    m, probs = parse(*texts)
+        out[name] = p.read_bytes().decode("utf-8-sig")
+    return out
+
+
+def parse_texts(files: dict[str, str]) -> tuple[Map, list[Msg]]:
+    """parse() of a {file name: text} bundle (texts(), or a stored one)."""
+    return parse(files.get(TABLES_FILE, ""), files.get(COLUMNS_FILE, ""),
+                 files.get(VALUES_FILE))
+
+
+def load(folder: Path | str) -> Map:
+    """The map's files from `folder` (values.tsv when there is one),
+    checked for shape and for the rules without a field vocabulary
+    (check() again with one)."""
+    m, probs = parse_texts(texts(folder))
     check(m, extra=probs)
     return m
 
@@ -180,9 +231,11 @@ def _bad(file: str, line: int, column: str, value: str,
                value=value, expected=expected)
 
 
-def problems(m: Map, fields: set[str] | None = None) -> list[Msg]:
-    """Everything wrong with the map; empty when it holds."""
-    out: list[Msg] = []
+def problems(m: Map, fields: set[str] | None = None,
+             keys: set[str] | None = None) -> list[Msg]:
+    """Everything wrong with the map; empty when it holds. `fields` is the
+    harness's field vocabulary, `keys` its fact keys (values.tsv)."""
+    out: list[Msg] = _value_problems(m, keys)
     seen: dict[str, dict] = {}
     for t in m.tables:
         n = t["_line"]
@@ -277,26 +330,57 @@ def problems(m: Map, fields: set[str] | None = None) -> list[Msg]:
     return out
 
 
+def _value_problems(m: Map, keys: set[str] | None) -> list[Msg]:
+    out: list[Msg] = []
+    seen: set[tuple[str, str]] = set()
+    for v in m.values:
+        n = v["_line"]
+        for col in ("key", "market", "value", "sheet"):
+            if not v[col]:
+                out.append(_bad(VALUES_FILE, n, col, "", "a text"))
+        if not _CELL.match(v["cell"]):
+            out.append(_bad(VALUES_FILE, n, "cell", v["cell"],
+                            "a cell (F14) or a range (F32:Q32)"))
+        if v["status"] not in STATUSES:
+            out.append(_bad(VALUES_FILE, n, "status", v["status"],
+                            " | ".join(STATUSES)))
+        if keys is not None and v["key"] and v["key"] not in keys:
+            out.append(msg("workbook_map_value_key_unknown",
+                           f"values.tsv line {n}: {v['key']} is not one of "
+                           f"the harness's fact keys", line=n, key=v["key"]))
+        if (v["key"], v["market"]) in seen:
+            out.append(msg("workbook_map_value_duplicate",
+                           f"values.tsv: {v['key']} [{v['market']}] is "
+                           f"stated twice", key=v["key"],
+                           market=v["market"]))
+        seen.add((v["key"], v["market"]))
+    return out
+
+
 def check(m: Map, fields: set[str] | None = None, *,
+          keys: set[str] | None = None,
           extra: list[Msg] | None = None) -> None:
-    probs = list(extra or []) or problems(m, fields)   # a broken file first
+    probs = list(extra or []) or problems(m, fields, keys)  # a broken file first
     if probs:
         raise HarnessError(msg(
             "workbook_map_refused",
             f"the workbook map has {len(probs)} problem(s); nothing was "
             f"read through it: " + "; ".join(probs),
             count=len(probs), problems=joined(probs)),
-            ["fix the map's tables.tsv / columns.tsv, then import it again"])
+            ["fix the map's tables.tsv / columns.tsv / values.tsv, then "
+             "import it again"])
 
 
 def confirmed(m: Map) -> Map:
     """Only what the owner confirmed: a confirmed table with its confirmed
-    column rows. This is what a projection reads."""
-    tabs = [t for t in m.tables if t["status"] == "confirmed"]
+    column rows, and the confirmed values. This is what a projection
+    reads."""
+    tabs = [t for t in m.tables if t["status"] == CONFIRMED]
     ids = {t["table_id"] for t in tabs}
     cols = [c for c in m.columns
-            if c["status"] == "confirmed" and c["table_id"] in ids]
-    return Map(tables=tabs, columns=cols, version=m.version)
+            if c["status"] == CONFIRMED and c["table_id"] in ids]
+    return Map(tables=tabs, columns=cols, version=m.version,
+               values=[v for v in m.values if v["status"] == CONFIRMED])
 
 
 def pending(m: Map) -> list[dict]:
@@ -308,5 +392,60 @@ def pending(m: Map) -> list[dict]:
     out += [{"file": COLUMNS_FILE, "line": c["_line"],
              "table_id": c["table_id"], "header": c["header"],
              "direction": c["direction"]}
-            for c in m.columns if c["status"] != "confirmed"]
+            for c in m.columns if c["status"] != CONFIRMED]
+    out += [{"file": VALUES_FILE, "line": v["_line"], "table_id": "",
+             "header": f"{v['key']} [{v['market']}]", "direction": ""}
+            for v in m.values if v["status"] != CONFIRMED]
     return out
+
+
+def texts_confirmed(files: dict[str, str]) -> dict[str, str]:
+    """The same bundle with every row confirmed: each proposed status
+    becomes confirmed, every other byte stays. A staged bundle the owner
+    says yes to becomes this (its own, new version)."""
+    out = {}
+    for name, text in files.items():
+        lines = text.split("\n")
+        head = [h.strip() for h in lines[0].split("\t")] if lines else []
+        if "status" not in head:
+            out[name] = text
+            continue
+        i = head.index("status")
+        for n in range(1, len(lines)):
+            cells = lines[n].split("\t")
+            if len(cells) > i and cells[i].strip() == "proposed":
+                cells[i] = cells[i].replace("proposed", CONFIRMED)
+                lines[n] = "\t".join(cells)
+        out[name] = "\n".join(lines)
+    return out
+
+
+def _content(row: dict, cols: tuple[str, ...]) -> str:
+    return "\t".join(row.get(c, "") for c in cols
+                     if c not in ("status", "note"))
+
+
+def confirmed_rows(m: Map) -> dict[str, str]:
+    """{row id: content} of every row the map says confirmed: `table:<id>`,
+    `column:<table>|<header>|<field>`, `value:<key>|<market>`; the content
+    is every column but status and note."""
+    out = {}
+    for t in m.tables:
+        if t["status"] == CONFIRMED:
+            out[f"table:{t['table_id']}"] = _content(t, TABLE_COLUMNS)
+    for c in m.columns:
+        if c["status"] == CONFIRMED:
+            out[f"column:{c['table_id']}|{c['header']}|{c['field']}"] = \
+                _content(c, COLUMN_COLUMNS)
+    for v in m.values:
+        if v["status"] == CONFIRMED:
+            out[f"value:{v['key']}|{v['market']}"] = \
+                _content(v, VALUE_COLUMNS)
+    return out
+
+
+def gate_rows(prev: Map | None, new: Map) -> dict[str, str]:
+    """The rows `new` confirms that `prev` (the bundle in force before it)
+    did not confirm with the same content: what the gate must pass."""
+    old = set(confirmed_rows(prev).items()) if prev else set()
+    return {k: v for k, v in confirmed_rows(new).items() if (k, v) not in old}

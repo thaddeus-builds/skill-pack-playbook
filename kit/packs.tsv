@@ -37,6 +37,7 @@ retry	data	read retries that honour quotas
 workbook	workbook	a client's xlsx read as it is, stdlib only
 workbook_map	workbook	the client's map: tables, columns, one owner per outgoing column
 workbook_store	workbook	the generic store: tables by anchor, keyed rows, the change record
+file_gate	workbook	one human gate per client file
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	

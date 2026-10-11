@@ -14,8 +14,12 @@ pending_effect_queue	kind,target_ref,expected	{kind} on {target_ref}: {expected}
 pending_if_no_queue		Nothing is sent. The agent records the no with a reason code, and the next proposal run reads it	不会发送任何内容。助手会记录拒绝原因代码，下次提案时会参考
 pending_gate_bad_word	id,word	{id}: no gate, {word} cannot be a console verb word; confirm it at the terminal	{id}：无法通过控制台确认，{word} 不能作为命令词；请在终端确认
 pending_gate_too_long	id,length	{id}: no gate, what it binds is {length} characters, more than the console holds; confirm it at the terminal	{id}：无法通过控制台确认，绑定内容有 {length} 个字符，超出控制台上限；请在终端确认
-pending_gate_market_ambiguous	id,markets	{id}: no gate, the console's call names no market and several are declared ({markets}); confirm it at the terminal with --market	{id}：无法通过控制台确认，控制台的调用不带市场，而已登记多个市场（{markets}）；请在终端用 --market 确认
+pending_gate_market_ambiguous	id,markets	{id}: no gate, the console's call cannot name the market (not a plain word) and several are declared ({markets}); confirm it at the terminal with --market	{id}：无法通过控制台确认，市场名不是控制台能传的单词，而已登记多个市场（{markets}）；请在终端用 --market 确认
 pending_gate_not_onboarded	id,market	{id}: no gate yet, market {market} is not confirmed; answer its market declaration first	{id}：暂时无法通过控制台确认，市场 {market} 尚未确认；请先确认市场登记
 pending_gate_refused	id,reason	{id}: no gate, the confirm would be refused: {reason}	{id}：无法通过控制台确认，确认会被拒绝：{reason}
 pending_fill_because	count	write recommend.because in each of the {count} ask(s) before ask.py add; the console refuses an ask without it	在 ask.py add 之前，请为这 {count} 个问题逐一写上 recommend.because；缺少它控制台会拒收
 pending_summary	facts,decisions,queue	asks waiting on a person: {facts} fact(s), {decisions} decision(s), {queue} queue item(s)	等待本人处理的问题：事实 {facts} 项，决定 {decisions} 项，队列操作 {queue} 项
+pending_summary_files	facts,files,decisions,queue	asks waiting on a person: {facts} fact(s), {files} file(s), {decisions} decision(s), {queue} queue item(s)	等待本人处理的问题：事实 {facts} 项，客户文件 {files} 个，决定 {decisions} 项，队列操作 {queue} 项
+pending_title_file	name,rows,values	What the agent read from {name}: {rows} map row(s) and {values} value(s). Confirm them together?	从 {name} 读出的内容：映射 {rows} 行、数值 {values} 项。一起确认吗？
+pending_why_file	name,version,values	The agent mapped {name} (version {version}) and read {values} value(s) from its cells. One yes confirms all of it; nothing from this version is used before that	agent 映射了 {name}（版本 {version}），并从单元格读出 {values} 项数值。一次确认全部生效；确认前，这个版本的内容都不使用
+pending_if_no_file		Nothing from this version is used; the agent corrects the map or the values and stages the file again	这个版本的内容都不使用；agent 改正映射或数值后重新提交

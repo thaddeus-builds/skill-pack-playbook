@@ -17,6 +17,11 @@ the three rules, and the shape.
      place, key and market headers with a column row, the search box and
      the stop; check() raises one coded refusal with the count.
   6. workbook_map.py's msg() calls are closed over its fragment.
+  7. values.tsv (a value read from a cell, one gate with the map): its
+     shape and rules, a map without it keeps its version, load() reads it
+     when it is there; texts_confirmed() turns a staged bundle's proposed
+     rows confirmed and nothing else; gate_rows() is exactly what a bundle
+     confirms that the one in force did not.
 """
 
 import sys
@@ -220,10 +225,80 @@ def test_closure() -> None:
           probs)
 
 
+VALUES = ("key\tmarket\tvalue\tsheet\tcell\tstatus\tnote\n"
+          "eur_rate\tTW\t38\tBudget\tF14\tproposed\tF14 = F13*38 (SYNTHETIC)\n"
+          "roas_target\tTW\t5.09\tBudget\tF32:Q32\tproposed\t\n")
+
+
+def test_values() -> None:
+    print("\n[7] values.tsv: the values the file states, one gate with the map")
+    base, _ = WM.parse(X.IM_TABLES, X.IM_COLUMNS)
+    m, probs = WM.parse(X.IM_TABLES, X.IM_COLUMNS, VALUES)
+    check("a map with values holds; its version covers values.tsv, and a map "
+          "without one keeps the version it had (old bundles stay named)",
+          probs == [] and WM.problems(m, X.FIELDS, {"eur_rate", "roas_target"})
+          == [] and m.version != base.version and base.version ==
+          WM.version_of(X.IM_TABLES, X.IM_COLUMNS)
+          and [v["cell"] for v in m.values] == ["F14", "F32:Q32"], probs)
+    bad = VALUES + ("eur_rate\tTW\t40\tBudget\tF15\tproposed\t\n"
+                    "fx\tTW\t1\tBudget\tF14:\tmaybe\t\n"
+                    "\tTW\t\t\tZZZZ1\tproposed\t\n")
+    m2, _ = WM.parse(X.IM_TABLES, X.IM_COLUMNS, bad)
+    got = sorted(p.code for p in WM.problems(m2, X.FIELDS,
+                                             {"eur_rate", "roas_target"}))
+    check("values: a key stated twice, a key that is no fact key, a cell that "
+          "is no cell, a closed status, the required texts",
+          got == sorted(["workbook_map_value_duplicate",
+                         "workbook_map_value_key_unknown",
+                         "workbook_map_bad_value", "workbook_map_bad_value",
+                         "workbook_map_bad_value", "workbook_map_bad_value",
+                         "workbook_map_bad_value", "workbook_map_bad_value"]),
+          got)
+    check("without a key set, any key is shape-checked only",
+          "workbook_map_value_key_unknown" not in
+          {p.code for p in WM.problems(m2, X.FIELDS)})
+    d = Path(tmp_dir("map-values-"))
+    (d / "tables.tsv").write_text(X.IM_TABLES, encoding="utf-8")
+    (d / "columns.tsv").write_text(X.IM_COLUMNS, encoding="utf-8")
+    check("load() without values.tsv: no values", WM.load(d).values == []
+          and WM.load(d).version == base.version)
+    (d / "values.tsv").write_text(VALUES, encoding="utf-8")
+    check("load() with values.tsv: the values, the bundle's version",
+          len(WM.load(d).values) == 2 and WM.load(d).version == m.version)
+    check("pending() lists proposed values; confirmed() keeps none of them",
+          [p["header"] for p in WM.pending(m) if p["file"] == "values.tsv"]
+          == ["eur_rate [TW]", "roas_target [TW]"]
+          and WM.confirmed(m).values == [])
+
+    files = WM.texts(d)
+    yes = WM.texts_confirmed(files)
+    m3, probs3 = WM.parse_texts(yes)
+    check("texts_confirmed(): every row confirmed, nothing else changed",
+          probs3 == [] and WM.pending(m3) == []
+          and all(yes[n].replace("confirmed", "proposed") ==
+                  files[n].replace("confirmed", "proposed") for n in files)
+          and m3.version != m.version, WM.pending(m3)[:3])
+    rows = WM.gate_rows(None, m3)
+    check("gate_rows() from nothing: every row of the bundle, values as "
+          "value:<key>|<market>",
+          len(rows) == len(m3.tables) + len(m3.columns) + 2
+          and rows["value:eur_rate|TW"] == "eur_rate\tTW\t38\tBudget\tF14",
+          len(rows))
+    again = WM.parse_texts(WM.texts_confirmed(
+        {**files, "values.tsv": VALUES.replace("\t38\t", "\t39\t")}))[0]
+    check("gate_rows() against the bundle in force: only what changed (a "
+          "new rate is one row to pass)",
+          WM.gate_rows(m3, again) == {
+              "value:eur_rate|TW": "eur_rate\tTW\t39\tBudget\tF14"},
+          WM.gate_rows(m3, again))
+    check("a confirmed map has nothing new to pass",
+          WM.gate_rows(m3, m3) == {})
+
+
 def main() -> int:
     _shop.use()
     for fn in (test_maps, test_one_owner, test_fields, test_pending,
-               test_shape, test_closure):
+               test_shape, test_closure, test_values):
         fn()
     return finish()
 

@@ -47,7 +47,8 @@ import serve  # noqa: E402
 CONSOLE, AGENT, TOP = "console/README.md", "console/AGENT.md", "docs/consoles.md"
 QUEUE, INSTR = "templates/owner-queue-item.md", "templates/AGENT_INSTRUCTIONS.md"
 DOCS = (CONSOLE, AGENT, TOP, QUEUE, INSTR)
-HARNESS_FLAGS = {"--value", "--reason", "--json", "--code", "--relay-user", "--relay-at"}   # a harness's, not ours
+HARNESS_FLAGS = {"--value", "--market", "--reason", "--json", "--code", "--relay-user",
+                 "--relay-at"}                                    # a harness's, not ours
 SCHEMATIC = {"--name"}                                                                       # `--name=value`, the shape
 LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
 PATH = re.compile(r"(?<![\w/.-])((?:console|templates)/[A-Za-z0-9_./-]*[A-Za-z0-9_/])")
