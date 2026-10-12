@@ -11,7 +11,18 @@ names its fix in `next`):
   token_source   `<P>_TOKEN_SOURCE` is env or command
   home_secrets   a secret or the data dir that came from the HOME-level file
                  (shared by every client of this user) warns
-  env_files      a chain file readable by group or other warns (chmod 600)
+  env_files      a chain file readable by group or other warns (chmod 600);
+                 a line the chain never loads (kit.env.never_from_file)
+                 warns, naming the file and the name, never the value: a
+                 gate secret (doctor_env_gate_secret_in_file) or a seam,
+                 test marker, binding or loader variable
+                 (doctor_env_file_unsafe_name)
+  console_secret CONSOLE_SECRET (the owner console's own secret, which the
+                 console withholds from every harness call) set in the
+                 process env this harness runs in warns. The confirm-code
+                 secret there does not: the harness process issues and
+                 checks the relayed code, so whoever runs the gate (the
+                 console, or an agent relaying through chat) holds it
   data_dir       `<P>_DATA_DIR` set, absolute, outside the harness checkout;
                  the DB path too
   db             no DB yet (info); a DB stamped by a newer harness, human
@@ -31,6 +42,14 @@ names its fix in `next`):
                  `--strict` stays green on a harness that has not written
                  them yet
   kit_tty        KIT_TTY (the gate's test seam) set outside a test warns
+  checkout       the cwd is in another checkout of this same harness (a
+                 harness.toml of the same name at or above it) than the one
+                 whose code runs (the bound root), and the two differ: other
+                 HEADs, or docs or code (*.md, *.py, *.toml, *.tsv, *.js,
+                 *.sh) changed and not committed in either: the docs the agent reads there may not
+                 describe the code that runs (several sessions work in
+                 worktrees). Silent outside git, without git, in the bound
+                 checkout itself, or in a checkout of another harness
 
 then the harness's own checks: `check(ctx)` callables that call
 `ctx.ok/info/warn/fail(check, message, next)` with coded messages. `--live`
@@ -53,6 +72,7 @@ from __future__ import annotations
 import argparse
 import os
 import stat
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,6 +85,9 @@ from kit.messages import Msg, coded, msg
 
 LEVELS = ("ok", "info", "warn", "fail")
 SECRET_WORDS = ("SECRET", "TOKEN", "PASSWORD", "KEY", "CREDENTIAL")
+DOCS_AND_CODE = ("*.md", "*.py", "*.toml", "*.tsv", "*.js", "*.sh")
+HEAD_CHARS = 12                                # a HEAD as checkout_differs shows it
+GIT_TIMEOUT_S = 10
 SHOWN = ("DATA_DIR", "DB", "AUTH_ENV_PATHS", "TOKEN_SOURCE", "ALLOW_WRITES",
          "KILL", "CONFIRM_CODE_SECRET")
 
@@ -238,6 +261,47 @@ def check_env_files(ctx: Context) -> None:
             ctx.warn("env_files", msg("doctor_env_file_loose", f"{p} is "
                                       f"readable by other users", path=p),
                      [f"chmod 600 {p}"])
+    for p, name in env.chain().refused():
+        fix = [f"delete the {name} line from {p}"]
+        if env.is_gate_secret(name):
+            if name.endswith("CONFIRM_CODE_SECRET"):
+                fix += _console_secret_fix(name)
+            ctx.warn("env_files", msg(
+                "doctor_env_gate_secret_in_file", f"{name} is written in {p}: "
+                f"the harness never loads a gate secret from a file (an agent "
+                f"that can read or write the file could make its own approval "
+                f"codes). Remove the line; set it only in the process env of "
+                f"what runs the gate", file=p, name=name), fix)
+        else:
+            ctx.warn("env_files", msg(
+                "doctor_env_file_unsafe_name", f"{name} is written in {p}: the "
+                f"harness never loads it from a file (it would change who the "
+                f"gate thinks is at the terminal, which harness is bound, or "
+                f"the code that runs). Remove the line", file=p, name=name),
+                fix)
+
+
+def _console_secret_fix(name: str) -> list[str]:
+    """The deployment step for a client console made before kit 0.15.0
+    (scaffold/new_client.py's bin/console), which appends the confirm-code
+    secret to workspace/.env at each start; no harness code changes."""
+    return [f"if a client's bin/console wrote it: in bin/console, replace the "
+            f"4 lines from `envf=\"$root/workspace/.env\"` through `fi` with "
+            f"these 2, then restart the console:",
+            f'{name}="$(openssl rand -hex 32)"',
+            f"export {name}"]
+
+
+def check_console_secret(ctx: Context) -> None:
+    from kit import env
+    if os.environ.get(env.CONSOLE_SECRET):
+        ctx.warn("console_secret", msg(
+            "doctor_console_secret_in_env", f"{env.CONSOLE_SECRET} is set in "
+            f"the environment this harness runs in: it is the owner console's "
+            f"own secret, which the console withholds from every harness "
+            f"call; an agent here could sign the console's answers. Unset it; "
+            f"it belongs only to the console process", var=env.CONSOLE_SECRET),
+            [f"unset {env.CONSOLE_SECRET}"])
 
 
 def check_data_dir(ctx: Context) -> None:
@@ -415,9 +479,64 @@ def check_kit_tty(ctx: Context) -> None:
                  ["unset KIT_TTY"])
 
 
+def git_head(path: Path | str) -> tuple[str, list[str]] | None:
+    """(HEAD commit, the tracked docs and code under `path` changed and not
+    committed) of the git checkout at `path`; None outside git, without
+    git, or when git fails. Never takes git's optional locks: doctor
+    writes nothing, not even a refreshed index. Every inherited GIT_*
+    variable is dropped: a GIT_DIR or GIT_WORK_TREE (set in a git hook)
+    would make every path report that one repository."""
+    base = ["git", "--no-optional-locks", "-C", str(path)]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    try:
+        head = subprocess.run(base + ["rev-parse", "HEAD"],
+                              capture_output=True, text=True, env=env,
+                              timeout=GIT_TIMEOUT_S)
+        dirty = subprocess.run(base + ["status", "--porcelain",
+                                       "--untracked-files=no", "--",
+                                       *DOCS_AND_CODE],
+                               capture_output=True, text=True, env=env,
+                               timeout=GIT_TIMEOUT_S)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if head.returncode or dirty.returncode or not head.stdout.strip():
+        return None
+    return head.stdout.strip(), [ln[3:] for ln in dirty.stdout.splitlines()
+                                 if ln.strip()]
+
+
+def check_checkout(ctx: Context) -> None:
+    cfg = ctx.cfg
+    try:
+        docs = _config.find_root(Path.cwd())
+    except OSError:                              # the cwd was removed
+        return
+    if docs is None or docs == cfg.root.resolve():
+        return
+    try:
+        if _config.load(docs).name != cfg.name:  # another harness's checkout
+            return
+    except _config.ConfigError:
+        return
+    a, b = git_head(docs), git_head(cfg.root)
+    if a is None or b is None or (a[0] == b[0] and not a[1] and not b[1]):
+        return
+    docs_dirty, runs_dirty = ", ".join(a[1]) or "-", ", ".join(b[1]) or "-"
+    docs_head, runs_head = a[0][:HEAD_CHARS], b[0][:HEAD_CHARS]
+    ctx.warn("checkout", msg(
+        "doctor_checkout_differs", f"the cwd is in {docs} ({docs_head}; "
+        f"uncommitted: {docs_dirty}), not the checkout whose code runs "
+        f"({cfg.root}, {runs_head}; uncommitted: {runs_dirty}): the docs "
+        f"read there may not describe the code that runs. Read the docs of "
+        f"the checkout you run, or run that one", docs=str(docs),
+        docs_head=docs_head, docs_dirty=docs_dirty, runs=str(cfg.root),
+        runs_head=runs_head, runs_dirty=runs_dirty))
+
+
 BUILTIN: tuple[Check, ...] = (check_harness, check_env_chain,
                               check_token_source, check_home_secrets,
-                              check_env_files, check_data_dir, check_db,
+                              check_env_files, check_console_secret,
+                              check_data_dir, check_db,
                               check_markets, check_writes)
 
 
@@ -440,7 +559,7 @@ def collect(ctx_checks: Iterable[Check] = (), *, live: bool = False,
                   scripts_dir=Path(scripts_dir) if scripts_dir else None)
     steps: list[Callable[[Context], None]] = [
         *BUILTIN, lambda c: check_platform_lock(c, platform_lock),
-        check_verbs, check_kit_tty, *ctx_checks]
+        check_verbs, check_kit_tty, check_checkout, *ctx_checks]
     try:
         for fn in steps:
             try:
