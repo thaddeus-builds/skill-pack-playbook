@@ -47,7 +47,7 @@ The harness declares itself once, in `harness.toml` at its root ([templates/harn
 | `[ssot]` | `dir`, and the registries: `message_codes` (plus `<dir>/message_codes.d/*.tsv`), `fact_keys`, `decision_keys`, `constants`, `story_checks` |
 | `[release]` | `internal` (export-ignore), `must_ship`, `runtime` |
 | `[layers]` | `pull`, `ingest`, `compute`, `writer`, `writer_importers`, `clients`, `spawn_allowed`, `write_verbs`, `exempt` |
-| `[contract]`, `[auth]`, `[env]`, `[guards.*]` | optional: `no_db_next`, prose keys and data labels; token-command fields; default credential prefixes; the guards' parameters (`[guards.json_contract] args`: sample arguments per read verb) |
+| `[contract]`, `[auth]`, `[env]`, `[guards.*]` | optional: `no_db_next`, prose keys and data labels; token-command fields; default credential prefixes and `never_from_file` (the harness's own names an env file may not set, e.g. a test seam); the guards' parameters (`[guards.json_contract] args`: sample arguments per read verb) |
 
 The harness lists its verbs in `scripts/verbs.py` (`VERBS = [Verb(words, script, kind, …)]`, kinds `read`, `ingest`, `human`, `gated`, `external`, `dev`), and its CLI is three lines over `kit.cli.Dispatcher`. A verb may add `examples=("facts list --market US --json", …)` (command lines without the cli name, starting with the verb's words) and `keys=("facts", …)` (the top-level keys of its `--json` document): its own `--help` ends with them, `verbs --json` lists them, and doctor names the non-dev verbs without examples at level info. A script named after its whole verb (`compute_sales.py` for `compute sales`) is that verb; any other script is a family, and the words after the first are its sub-verb (`facts confirm X` runs `facts.py confirm X`). A read verb that needs an argument gets a sample one for the `--json` contract test: `[guards.json_contract] args = {"facts get" = ["unit_cost"]}`. The fake harness in [tests/fake_harness/](tests/fake_harness/) is a whole small example: a verb table, a CLI, facts, decisions, pending, a queue fed by a compute, execute with an empty allowlist.
 
@@ -65,7 +65,7 @@ Each module's docstring says what it guards and names its test; this is the map.
 | `runner.py` | How one script runs another and reads its one document; a child's failure keeps its code | `test_runner.py` |
 | `raw.py` | Raw only grows: write-once files, content-hash imports | `test_raw.py` |
 | `paths.py` | The data dir is required and absolute, never the cwd; one resolver for the DB | `test_paths.py` |
-| `env.py` | One env chain (process env → home file → `<DATA_DIR>/.env`), never the cwd; parsed, never sourced | `test_env.py` |
+| `env.py` | One env chain (process env → home file → `<DATA_DIR>/.env`), never the cwd; parsed, never sourced; a gate secret, the gate's test seam, the binding and loader variables are never loaded from a file (doctor names such a line) | `test_env.py` |
 | `auth.py` | Where a token comes from (`env` or a host `command`); expiry; a token never printed | `test_auth.py` |
 | `retry.py` | Reads only are retried; `Retry-After` honoured; `call` waits at least the quota's refill period, one budget per endpoint, and `GaveUp` carries the last reason | `test_retry.py` |
 | `db.py`, `schema_base.py` | Human tables are never dropped, never migrated, never shrink; triggers in the file; backups before a rebuild; a lossy rebuild and a newer file are refused | `test_db.py` |
