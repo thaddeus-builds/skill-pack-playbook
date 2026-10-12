@@ -42,7 +42,8 @@ owner_kinds, cli_verbs, none ("—"), table_prefixes, file_exts, held
 [[file, id, column]…], banned_terms, status_column ("status"),
 proposed_statuses (["proposed", "asked"]: the statuses of a row the
 owner has not adopted yet); for check_writes, write_code (["."]),
-write_skip ([<scripts_dir>/kit]), writers ({path: reason}), write_calls
+write_skip ({folder: reason}; the vendored <scripts_dir>/kit is
+always left out, with no row), writers ({path: reason}), write_calls
 ([]).
 
 Deviations (SPEC §guards): these parameters live in [guards.ssot], not
@@ -71,9 +72,14 @@ named in `write_calls` (the path is their first argument). A path is
 under the ssot dir when its expression holds a string with the dir as
 path segments ("ssot", "ssot/x.tsv", f"{root}/ssot/x"), an identifier
 with the word `ssot` (SSOT, cfg.ssot, ssot_dir) unless the name is bound
-only to data (`ssot_rows = read_tsv(...)`), or a name bound to such an
-expression: in the same scope (by its last binding above the line), an
-enclosing one, a class body (`self.p`, keyed by the class), or another
+only to data (a call that builds no path: `ssot_rows = read_tsv(...)`),
+or a name bound to such an expression: in the same scope (a name bound
+only by plain assignments in the scope's own statements holds what the
+last one above the line put in it; under a branch, loop, try, augmented
+assignment or comprehension any binding counts), an enclosing one, a
+class body or a method (`self.p`, keyed by the class and followed into
+its subclasses in the module; any class's when a base is out of sight;
+any other attribute by its text), or another
 scanned module's top level, imported by name (`from m import NAME`, a
 re-export followed) or reached through the module (`m.NAME`). A path goes
 through `/`, f-strings, IfExp and the calls that build or list paths
@@ -612,6 +618,7 @@ class _Writes:
         self.attrs: set[tuple[str | None, str]] = set()  # (class, "self.p")
         self.attr_names: set[str] = set()                         # "p"
         self.methods: dict[int, str] = {}   # id(method) -> its class
+        self.bases: dict[str, list[str]] = {}   # class -> its bases' names
         self.cls: str | None = None         # the class of the method scanned
         self.data: set[str] = set()     # names bound only to data (a read)
         self.flow: dict[str, list[tuple[int, bool]]] | None = None
@@ -631,13 +638,13 @@ class _Writes:
             return isinstance(node.value, str) and _ssot_text(node.value,
                                                               self.d)
         if isinstance(node, ast.Name):
+            word = node.id not in self.data and _ssot_word(node.id)
             if self.flow and node.id in self.flow:
                 before = [t for line, t in self.flow[node.id]
                           if line < node.lineno]
                 if before:
-                    return before[-1]
-            return node.id in names or (node.id not in self.data
-                                        and _ssot_word(node.id))
+                    return before[-1] or word
+            return node.id in names or word
         if isinstance(node, ast.Attribute):
             if node.attr in FILENAME_ATTRS:     # a path's words, not a path
                 return False
@@ -646,8 +653,7 @@ class _Writes:
             mod = self.module_of(node.value)
             if mod is not None:
                 return node.attr in self.known.get(mod, ())
-            return ((node.attr in self.attr_names
-                     and (self.cls, ast.unparse(node)) in self.attrs)
+            return ((node.attr in self.attr_names and self.attr_hit(node))
                     or self.tainted(node.value, names))
         if isinstance(node, ast.Call):
             f = node.func
@@ -677,6 +683,54 @@ class _Writes:
             return self.tainted(node.key, names) or self.tainted(node.value,
                                                                  names)
         return any(self.tainted(c, names) for c in ast.iter_child_nodes(node))
+
+    def builds_path(self, call: ast.Call) -> bool:
+        """A call whose value is a path (Path(), .resolve(), os.path.join,
+        one named for ssot), not data read from a file."""
+        f = call.func
+        name = f.attr if isinstance(f, ast.Attribute) else \
+            f.id if isinstance(f, ast.Name) else ""
+        q = self.qual(f)
+        return (_ssot_word(name)
+                or (isinstance(f, ast.Attribute) and name in PATH_METHODS)
+                or (isinstance(f, ast.Name) and name in PATH_CALLS)
+                or (q.rpartition(".")[2] in PATH_CALLS
+                    and q.split(".")[0] in ("os", "pathlib", "glob")))
+
+    def is_data(self, value: ast.AST, names: set[str]) -> bool:
+        """A value that is data: a call that builds no path and is given
+        none under ssot (`read_tsv(SSOT / name)` is rows)."""
+        call = value.value if isinstance(value, ast.Await) else value
+        return (isinstance(call, ast.Call) and not self.builds_path(call)
+                and not self.tainted(call, names))
+
+    def attr_key(self, node: ast.Attribute) -> str | None:
+        """The class an attribute is keyed by: the method's own for
+        `self.x` / `cls.x`, none for any other."""
+        root = node
+        while isinstance(root, ast.Attribute):
+            root = root.value
+        return self.cls if isinstance(root, ast.Name) and root.id in (
+            "self", "cls") else None
+
+    def attr_hit(self, node: ast.Attribute) -> bool:
+        """`self.x` set to an ssot path in this class or a base of it in
+        this module; any class's when a base is out of sight."""
+        text, key = ast.unparse(node), self.attr_key(node)
+        if key is None:
+            return (None, text) in self.attrs
+        seen, todo = set(), [key]
+        while todo:
+            c = todo.pop()
+            if c in seen:
+                continue
+            seen.add(c)
+            if (c, text) in self.attrs:
+                return True
+            if c not in self.bases:             # a base defined elsewhere
+                return any(t == text for _, t in self.attrs)
+            todo += self.bases[c]
+        return False
 
     def qual(self, func: ast.AST) -> str:
         parts: list[str] = []
@@ -731,6 +785,10 @@ class _Writes:
                     if f"{src}.{a.name}".strip(".") in self.known:
                         self.mods[local] = f"{src}.{a.name}".strip(".")
             elif isinstance(node, ast.ClassDef):
+                self.bases[node.name] = [
+                    b.id if isinstance(b, ast.Name) else ast.unparse(b)
+                    for b in node.bases if not (isinstance(b, ast.Name)
+                                                and b.id == "object")]
                 for s in node.body:
                     if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         self.methods[id(s)] = node.name
@@ -768,14 +826,28 @@ class _Writes:
         for t, v in pairs:
             if isinstance(t, ast.Name):
                 values.setdefault(t.id, []).append(v)
+        # a name every binding of which is a plain assignment in the scope's
+        # own statements (no branch, loop, try, with, augmented assignment,
+        # comprehension or class body): there the last one above holds
+        body = getattr(node, "body", [])
+        top = {id(n) for st in (body if isinstance(body, list) else [])
+               if isinstance(st, (ast.Assign, ast.AnnAssign))
+               for t in (st.targets if isinstance(st, ast.Assign)
+                         else [st.target])
+               for n in ast.walk(t) if isinstance(n, ast.Name)}
+        targets: dict[str, list[ast.Name]] = {}
+        for n in own:
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+                targets.setdefault(n.id, []).append(n)
+        straight = {k for k, ts in targets.items()
+                    if all(id(t) in top for t in ts)}
         saved, outer_data = (self.data, self.flow), self.data - bound
         self.flow = None
         while True:
             names = (outer - bound) | local
             self.data = outer_data | {
                 k for k, vs in values.items()
-                if all(_is_call(v) and not self.tainted(v, names)
-                       for v in vs)}
+                if all(self.is_data(v, names) for v in vs)}
             grow = set()
             for target, value in pairs:
                 if not self.tainted(value, names):
@@ -788,7 +860,8 @@ class _Writes:
                 elif isinstance(target, ast.Name):
                     grow.add(target.id)
                 elif isinstance(target, ast.Attribute):
-                    self.attrs.add((self.cls, ast.unparse(target)))
+                    self.attrs.add((self.attr_key(target),
+                                    ast.unparse(target)))
                     self.attr_names.add(target.attr)
             if grow <= local:
                 break
@@ -796,7 +869,7 @@ class _Writes:
         names = (outer - bound) | local
         self.flow = {}
         for t, v in pairs:
-            if isinstance(t, ast.Name):
+            if isinstance(t, ast.Name) and t.id in straight:
                 self.flow.setdefault(t.id, []).append(
                     (t.lineno, self.tainted(v, names)))
         for k in self.flow:
@@ -1090,6 +1163,26 @@ _WRITE_CASES: tuple[tuple[str, dict, bool], ...] = (
     ("import os\nos.open(Path('ssot/x'), os.O_RDONLY)\n", {}, False),
     ("import os\nfor d, _, fs in os.walk(Path('ssot')):\n    for f in fs:\n"
      "        os.remove(os.path.join(d, f))\n", {}, True),
+    ("def save(args, v):\n    if args.default:\n"
+     "        path = SSOT / 'constants.json'\n    else:\n"
+     "        path = args.client_dir / 'settings.json'\n"
+     "    path.write_text(v)\n", {}, True),
+    ("p = str(SSOT / 'a')\np += '.tmp'\nopen(p, 'w')\n", {}, True),
+    ("p = DATA / 'log'\nfor n in ns:\n    p.write_text(n)\n"
+     "    p = SSOT / n\n", {}, True),
+    ("p = SSOT / 'a'\nxs = [p.name for p in DATA.iterdir()]\n"
+     "p.write_text('')\n", {}, True),
+    ("import sys\nssot = Path(sys.argv[1])\n(ssot / 'x.json').write_text('')\n",
+     {}, True),
+    ("ssot_dir = ROOT / REG\n(ssot_dir / 'x.json').write_text('')\n", {}, True),
+    ("class Base:\n    def __init__(self):\n        self.p = SSOT / 'a'\n"
+     "class Child(Base):\n    def save(self):\n        self.p.write_text('')\n",
+     {}, True),
+    ("def a(obj):\n    obj.out = SSOT / 'a'\n"
+     "class C:\n    def f(self, obj):\n        obj.out.write_text('')\n",
+     {}, True),
+    ("store.out = SSOT / 'a'\nclass C:\n    def f(self):\n"
+     "        store.out.write_text('')\n", {}, True),
 )
 
 

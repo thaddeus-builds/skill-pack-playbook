@@ -57,8 +57,11 @@ scaffold, console, docs, conformance.
 ### Fixed
 - `check_writes` read some paths wrong. Now a path's words (`.name`, `.stem`, `.suffix`) are not a path, so
   `shutil.copy(CONST, DATA / CONST.name)` passes; a name the word `ssot` is in is a path only when it is not bound to
-  data (`ssot_rows = read_tsv(...)` is rows); a name holds what its last binding above the line put in it; `self.p` is
-  keyed by its class, and a class attribute (`p = Path(...)` in the class body, then `self.p`) is followed; another
+  data (a call that builds no path: `ssot_rows = read_tsv(...)` is rows, `ssot = Path(sys.argv[1])` is still a path); a
+  name bound only by plain assignments in its scope's own statements holds what the last one above the line put in it
+  (under a branch, loop, try, augmented assignment or comprehension any binding still counts); `self.p` is keyed by its
+  class and followed into subclasses in the module (any other attribute by its text, as before), and a class attribute
+  (`p = Path(...)` in the class body, then `self.p`) is followed; another
   module's ssot name is followed as `m.NAME` and `from pkg import m`, through a re-export, and only from the module
   that defines it (a same-named data path elsewhere passes); os.open writes unless its flags only read; os.walk and
   os.scandir keep a path. Each entry of `write_code` must find code (a misspelled one beside a good one was silent); a
@@ -66,8 +69,10 @@ scaffold, console, docs, conformance.
   is reported, never a crash; a virtualenv or `site-packages` inside the harness is not its code; a writers file row
   under a folder row is used, not stale. `writes_self_test()` tries each form.
 - `Thresholds.confirmed()` (and `load`, `get`, `overridden`) drops a confirmed `threshold_<name>` fact outside the
-  TSV's current min..max, so the default stands; `facts confirm` without `--value` checks the pending threshold value
-  against today's bounds (`fact_value_out_of_range`). Both are what `docs/rules.md` "Registries" item 9 says: a value
+  TSV's current min..max, so the default stands; `Thresholds.out_of_bounds(con)` lists those facts for a harness's
+  doctor (the client is asked again) and `facts list --thresholds` shows `default (outside min..max)` for them;
+  `facts confirm` without `--value` checks the pending threshold value against today's bounds
+  (`fact_value_out_of_range`) and confirms the value as stored. Both are what `docs/rules.md` "Registries" item 9 says: a value
   the bounds refuse is refused when written and again when read, since a bound may have moved.
 
 ## [0.25.0] - 2026-10-13
