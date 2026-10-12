@@ -41,6 +41,7 @@ file_gate	workbook	one human gate per client file
 workbook_patch	workbook	cells set in a copy of the client's xlsx, everything else byte for byte
 patternstore	learning	a per-client pattern store: closed rows, two-coder floor, shrunk rates
 pathweights	learning	path weights for variants: posteriors down a partition, states, the next batch, twins
+pagestyle	pages	one look for pages that guide making: states as colour, word and icon; one decision; the check
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	
