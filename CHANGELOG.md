@@ -18,7 +18,7 @@ scaffold, console, docs, conformance.
   part gains full recalculation on open; the same inputs give the same bytes. A formula, a value
   the client entered (not the harness's previous copy, `ours`), a merged cell or a missing sheet is
   never set, listed by ref. `table_sets` places a harness's results by the map (a table's `out` and
-  `both` columns by key, new columns after the header block with their header); `cell_sets` fills
+  `both` columns by key, new columns in the first column after the header block that is empty on the header row and every row of the table, never under the client's own data, found again by header on the next copy); `cell_sets` fills
   the map's new `cells.tsv`. First consumer: the KOL harness (meta-ads-retail-harness X39), which
   tried it on the client's real workbook: two parts changed, every other part identical.
 - `kit.workbook_map`: an optional `cells.tsv` (`field, sheet, cell, owner, status, note`), where a

@@ -14,9 +14,11 @@ tracker of _workbooks.py:
      value); a cell already holding the value is `same`; a value the
      harness wrote last time (`ours`) may be replaced.
   3. table_sets: the owner's out and both columns of a table by key, a new
-     column after the header block with its header; a key the sheet lacks
-     is counted, never added; another harness's columns and unconfirmed
-     rows are not written.
+     column after the header block with its header, never over a column of
+     the client's data (one with no header is skipped), found again by its
+     header on the next copy; a key the sheet lacks is counted, never
+     added; another harness's columns and unconfirmed rows are not
+     written.
   4. cells.tsv (kit/workbook_map.py): its shape and rules (a cell written
      twice, a bad range, an unknown field), a map without it keeps its
      version, confirmed() / pending() / confirmed_rows() carry it;
@@ -167,6 +169,21 @@ def test_table() -> None:
     p = P.plan(wb, sets)
     check("… and the plan keeps the client's Data Login (FALSE)",
           [k["ref"] for k in p.kept] == ["N17"], p.kept)
+    sheets = X._creators(1)
+    sheets["cells"]["P18"] = "a note with no header"   # data right of block
+    gap = W.read(X.build([sheets]))
+    sets2, _ = P.table_sets(gap, m, "roster", rows, "harness-a")
+    got2 = {(s.ref, s.value) for s in sets2}
+    check("a column with the client's data (no header) right of the block "
+          "is skipped: the new column goes to the next empty one",
+          ("Q16", "Harness stage") in got2 and ("Q17", "scale") in got2
+          and not any(r.startswith("P") for r, _ in got2), sorted(got2))
+    again = W.read(P.apply(X.build([sheets]), P.plan(gap, sets2)))
+    sets3, _ = P.table_sets(again, m, "roster", rows, "harness-a")
+    check("the next copy finds that column by its header across the gap",
+          ("Q17", "scale") in {(s.ref, s.value) for s in sets3}
+          and not any(s.ref == "R16" for s in sets3),
+          sorted((s.ref, s.value) for s in sets3))
 
 
 CELLS = ("field\tsheet\tcell\towner\tstatus\tnote\n"
