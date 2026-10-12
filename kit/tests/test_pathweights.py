@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """kit.pathweights: path weights for a harness's variants, on SYNTHETIC numbers only (DEMO ids, neutral tags).
 
-  [1] the settings: the defaults, a harness's own laid over them, every kind of value refused (an unknown key, not a
-      number, not finite, a bool, a count not whole, a probability or share outside (0, 1), close_ratio outside (0, 1],
-      prior_shift_max below 1, anything else not above 0)
+  [1] the settings: the defaults, a harness's own laid over them, every kind of value refused, the message naming the
+      key (an unknown key, not a number, not finite, a bool, a count not whole, a probability or share outside (0, 1),
+      close_ratio outside (0, 1], prior_shift_max below 1, twin_ratio not above 1, anything else not above 0), and
+      downweight_p not below promising_p
   [2] the statistics against known values: gamma_cdf (closed forms for shapes 1, 2 and 1/2, the recurrence to 7.5, both
-      branches), p_above, quantile (the inverse, closed form at shape 1), tenths (rounded toward a half)
+      branches; shapes 1e8 and 1e9 against Wilson-Hilferty, and a series cut short raises), p_above, quantile (the
+      inverse, closed form at shape 1), tenths (rounded toward a half)
   [3] the partition: every node's numbers are the sum of its leaves' (seeded random partitions, mixed depths), the
       account covers every leaf (a larger total taken, a smaller one refused); the posterior worked by hand, borrowed
       leave-one-out; a leaf with no numbers has its parent's mean; the shift clipped both ways; no rate, no posterior;
-      fractional conversions; bad leaves refused
+      fractional conversions; bad leaves refused (parents as a set among them)
   [4] judge(): every state with its reason, and the close proposal's conditions one at a time (enough spend, enough
-      units with settled spend, unlikely to reach close_ratio, down at all), each threshold moved by the settings; a
-      person's close stands over everything
+      units with settled spend, unlikely to reach close_ratio, down at all), each threshold moved by the settings; warm
+      decided by the settings in hand, not the account's own `warm`; a person's close stands over everything
   [5] pick(): cold = the harness's coverage order, whole moves, up to two over; warm = the explore share kept, at most
       half a batch per group (a bigger move alone), exclusive keys never both, shared keys together, a fill up to two
-      over rather than short, the same data the same batch (and another number, another batch); bad moves refused
+      over rather than short (the explore share too, only when nothing within fits), the same data the same batch (keys
+      in any order or as a set, in two processes with different PYTHONHASHSEED; another number, another batch); warm
+      decided by the settings in hand; bad moves refused
   [6] twins(): flagged only past every threshold, with the known differences; at most three, the largest gap first
   [7] calibration by simulation: every leaf equally good, five rounds, spend pushed to early leaders, two units per made
       leaf: at most 5 in 100 made leaves are ever proposed for closing (the measured rates are printed)
@@ -24,16 +28,21 @@
 import copy
 import json
 import math
+import os
 import random
+import subprocess
 import sys
 import time
 from pathlib import Path
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # ROOT
 
 from kit import pathweights as W  # noqa: E402
 from kit.testing.check import check, finish  # noqa: E402
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def raises(fn, *a, **kw) -> bool:
@@ -42,6 +51,15 @@ def raises(fn, *a, **kw) -> bool:
     except ValueError:
         return True
     return False
+
+
+def message(fn, *a, **kw) -> str:
+    """The ValueError's message, or "" when nothing is refused."""
+    try:
+        fn(*a, **kw)
+    except ValueError as e:
+        return str(e)
+    return ""
 
 
 # ---------------------------------------------------------------- [1] settings
@@ -63,14 +81,27 @@ def test_settings() -> None:
     bad = [("no_such_key", 1), ("batch_size", "five"), ("batch_size", 2.5), ("batch_size", 0), ("batch_size", True),
            ("prior_conv", float("nan")), ("prior_conv", float("inf")), ("prior_conv", 0), ("prior_conv", -1),
            ("promising_p", 1.0), ("downweight_p", 0.0), ("close_p", 1.2), ("twin_p", -0.1), ("explore_share", 1),
-           ("close_ratio", 0), ("close_ratio", 1.01), ("prior_shift_max", 0.99), ("twin_ratio", 0), (
-               "account_min_conv", None)]
-    check("every value that is not one is refused", all(raises(W.setting, k, v) for k, v in bad),
-          [(k, v) for k, v in bad if not raises(W.setting, k, v)])
+           ("close_ratio", 0), ("close_ratio", 1.01), ("prior_shift_max", 0.99), ("twin_ratio", 0),
+           ("twin_ratio", 0.5), ("twin_ratio", 1), ("account_min_conv", None)]
+    check("every value that is not one is refused, the message naming the key",
+          all(k in message(W.setting, k, v) for k, v in bad),
+          [(k, v, message(W.setting, k, v)) for k, v in bad if k not in message(W.setting, k, v)])
     check("…and settings() refuses it too, naming the key",
-          raises(W.settings, {"close_p": 1.5}) and raises(W.settings, {"nope": 1}))
+          "close_p" in message(W.settings, {"close_p": 1.5}) and "nope" in message(W.settings, {"nope": 1})
+          and "twin_ratio" in message(W.settings, {"twin_ratio": 1}),
+          [message(W.settings, o) for o in ({"close_p": 1.5}, {"nope": 1}, {"twin_ratio": 1})])
+    crossed = [{"downweight_p": 0.85}, {"promising_p": 0.15}, {"promising_p": 0.3, "downweight_p": 0.4},
+               {"promising_p": 0.5, "downweight_p": 0.5}]
+    said = [message(W.settings, o) for o in crossed]
+    check("settings() keeps downweight_p below promising_p (each fine alone, the pair refused), naming both",
+          all("downweight_p" in m and "promising_p" in m for m in said)
+          and all(not raises(W.setting, k, v) for o in crossed for k, v in o.items())
+          and W.settings({"promising_p": 0.6, "downweight_p": 0.4})["downweight_p"] == 0.4, said)
+    check("…and every function taking settings refuses the pair",
+          raises(W.judge, None, W.account(70, 10000), made=0, spend=0, settled=0, cfg={"downweight_p": 0.85})
+          and raises(W.pick, [], W.account(70, 10000), {"downweight_p": 0.85}))
     check("the edges that are values", W.setting("close_ratio", 1) == 1.0 and W.setting("prior_shift_max", 1) == 1.0
-          and W.setting("explore_share", 0.999) == 0.999)
+          and W.setting("explore_share", 0.999) == 0.999 and W.setting("twin_ratio", 1.01) == 1.01)
 
 
 # ---------------------------------------------------------------- [2] statistics
@@ -103,6 +134,27 @@ def test_statistics() -> None:
     check("gamma_cdf: 0 at and below 0; the median of Gamma(40) just under 40",
           W.gamma_cdf(3.0, 0) == 0.0 and W.gamma_cdf(3.0, -1.0) == 0.0 and abs(W.gamma_cdf(40.0, 40.0) - 0.5210) < 1e-3)
     check("gamma_cdf refuses a shape that is not above 0", raises(W.gamma_cdf, 0, 1.0) and raises(W.gamma_cdf, -1, 1.0))
+
+    def wilson_hilferty(a: float, x: float) -> float:
+        """P(a, x) by the cube-root normal approximation: its error falls like 1 / a, under 1e-6 from a = 1e8."""
+        z = ((x / a) ** (1 / 3) - (1 - 1 / (9 * a))) / math.sqrt(1 / (9 * a))
+        return 0.5 * math.erfc(-z / math.sqrt(2))
+    large = [(1e8, 1e8 - 5000), (1e8, 1e8), (1e8, 1e8 + 5000), (1e8, 1e8 - 30000), (1e9, 1e9 - 15811),
+             (1e9, 1e9 + 15811)]
+    errs = [abs(W.gamma_cdf(a, x) - wilson_hilferty(a, x)) for a, x in large]
+    check("gamma_cdf at shapes 1e8 and 1e9 (a leaf counting clicks): both branches run to convergence, within 1e-5 "
+          "of Wilson-Hilferty", max(errs) < 1e-5, errs)
+    check("…and so do p_above and quantile there",
+          abs(W.p_above(1e8, 1e8, 1.0) - (1 - wilson_hilferty(1e8, 1e8))) < 1e-5
+          and abs(W.gamma_cdf(1e8, 1e8 * W.quantile(1e8, 1e8, 0.1)) - 0.1) < 1e-6)   # lgamma(1e8) ~ 2e9: 1e-7
+    kept = W._terms
+    W._terms = lambda a: 10                         # far too few terms: the series and the fraction stop short
+    try:
+        said = [message(W.gamma_cdf, 1e8, 1e8), message(W.gamma_cdf, 1e8, 1e8 + 5000)]
+    finally:
+        W._terms = kept
+    check("a series or a continued fraction that does not converge raises, never returns a truncated value",
+          "series did not converge" in said[0] and "continued fraction did not converge" in said[1], said)
     check("p_above, Gamma(shape, rate)",
           abs(W.p_above(1, 2, 0.5) - math.exp(-1)) < 1e-12 and abs(W.p_above(2, 100, 0.03) - math.exp(-3) * 4) < 1e-12
           and abs(W.p_above(0.5, 4, 0.25) - (1 - _p_half(1.0))) < 1e-12)
@@ -223,6 +275,8 @@ def test_partition() -> None:
           and W.account(10, 500)["warm"] and not W.account(10, 500, {"account_min_conv": 11})["warm"])
     frac = W.posteriors([{"id": "DEMO-1", "parents": ["DEMO-a"], "conv": 2.75, "spend": 900},
                          {"id": "DEMO-2", "parents": ["DEMO-a"], "conv": 8.25, "spend": 900}])
+    check("parents in a tuple are a list's",
+          W.posteriors([{**x, "parents": tuple(x["parents"])} for x in leaves]) == got)
     check("fractional conversions are numbers like any other", frac["account"]["conv"] == 11.0
           and frac["leaves"]["DEMO-1"][0] == 4.75)
     wrong = [[{"id": "DEMO-1", "parents": [], "conv": -1, "spend": 10}],
@@ -231,11 +285,13 @@ def test_partition() -> None:
              [{"id": "DEMO-1", "parents": [], "conv": 1, "spend": None}],
              [{"id": "DEMO-1", "parents": "DEMO-a", "conv": 1, "spend": 10}],
              [{"id": "DEMO-1", "parents": [""], "conv": 1, "spend": 10}],
+             [{"id": "DEMO-1", "parents": {"DEMO-a", "DEMO-b"}, "conv": 1, "spend": 10}],
+             [{"id": "DEMO-1", "parents": frozenset({"DEMO-a"}), "conv": 1, "spend": 10}],
              [{"id": "DEMO-1", "parents": [], "conv": 1, "spend": 10, "shift": 0}],
              [{"id": "", "parents": [], "conv": 1, "spend": 10}],
              [{"id": "DEMO-1", "conv": 1, "spend": 10}, {"id": "DEMO-1", "conv": 1, "spend": 10}]]
-    check("a bad leaf is refused: negative, not finite, a bool, missing, parents not a list of keys, a zero shift, "
-          "no id, an id twice", all(raises(W.posteriors, x) for x in wrong),
+    check("a bad leaf is refused: negative, not finite, a bool, missing, parents not a list of keys (a set has no "
+          "order), a zero shift, no id, an id twice", all(raises(W.posteriors, x) for x in wrong),
           [i for i, x in enumerate(wrong) if not raises(W.posteriors, x)])
 
 
@@ -318,6 +374,25 @@ def test_judge() -> None:
           [w for cfg, w in moved if state([(1000, 0.5), (1000, 0.5)], cfg)["propose_close"]])
     check("…and so do the states", state([(1000, 15), (1000, 15)], {"promising_p": 0.99999})["state"] == "testing"
           and state([(1000, 15), (1000, 15)], {"min_expected_conv": 50.0})["why"] == "spend_thin")
+    two = [{"id": "DEMO-L1", "conv": 0, "spend": 1500}, {"id": "DEMO-L2", "conv": 15, "spend": 1500}]
+    pw = W.posteriors(two)                          # built with the defaults: 15 conversions, warm
+    strict = {"account_min_conv": 40.0}
+
+    def l1(acct, cfg=None):
+        return W.judge(pw["leaves"]["DEMO-L1"], acct, made=2, spend=1500, settled=2, cfg=cfg)
+    p, q = l1(pw["account"], strict), l1(pw["account"])
+    check("warm is decided by the settings judge() is given, not by the account's own `warm`: an account built "
+          "with the defaults, judged with a higher account_min_conv, is thin",
+          pw["account"]["warm"] and (p["state"], p["why"], p["propose_close"]) == ("testing", "account_thin", False)
+          and (q["state"], q["why"], q["propose_close"]) == ("down", "likely_worse", True), (p, q))
+    cold = {**pw["account"], "warm": False}         # what account(15, 3000, strict) says under its own settings
+    p = l1(cold)
+    check("…and one built with a higher account_min_conv, judged with the defaults, is judged",
+          not W.account(15, 3000, strict)["warm"] and (p["state"], p["why"]) == ("down", "likely_worse")
+          and l1(W.account(15, 3000, strict))["state"] == "down", p)
+    check("…no rate is never warm, and a bad account is refused",
+          l1({"conv": 15.0, "spend": 0.0, "rate": None, "warm": True})["why"] == "account_thin"
+          and raises(l1, {"conv": None, "spend": 3000.0, "rate": 0.005}) and raises(l1, "warm"))
     acct = W.account(70, 10000)
     check("judge refuses what cannot be: more settled than made, a warm judgement with no posterior",
           raises(W.judge, (3, 400), acct, made=1, spend=100, settled=2)
@@ -417,6 +492,19 @@ def test_pick() -> None:
     check("…while two shared ones fit together", both_shared > 0, both_shared)
     plan = W.pick([mv(1, "DEMO-g1", 3), mv(2, "DEMO-g2", 3)], WARM)
     check("a fill up to two over rather than short", plan["n"] == 6 and len(plan["batch"]) == 2, plan)
+    big = mv(3, "DEMO-g3", 6, "unknown", (60.0, 6000.0))
+    known = [mv(4, "DEMO-g4", 1, "known"), mv(5, "DEMO-g5", 1, "known"), mv(6, "DEMO-g6", 1, "known")]
+    fill = [mv(1, "DEMO-g1", 1, "unknown", (2.0, 500.0)), mv(2, "DEMO-g2", 1, "unknown", (2.0, 500.0)), big, *known]
+    sizes, took_big = set(), 0
+    for s in range(200):
+        plan = W.pick(fill, WARM, seed=s)
+        sizes.add(plan["n"])
+        took_big += any(b["id"] == "DEMO-m3" for b in plan["batch"])
+    check("the explore share draws among the unknown moves within the batch first: smaller ones that fill it exactly "
+          "beat a first try two over (200 seeds)", sizes == {5} and took_big == 0, (sizes, took_big))
+    plan = W.pick([big, *known], WARM)
+    check("…and takes one up to two over only when no unknown move fits within",
+          [b["id"] for b in plan["batch"]] == ["DEMO-m3"] and plan["n"] == 6, plan)
     plan = W.pick([mv(1, "DEMO-g1", 3), mv(2, "DEMO-g2", 5)], WARM)
     check("…never three over: short then", plan["n"] in (3, 5) and len(plan["batch"]) == 1, plan)
     plan = W.pick([mv(1, "DEMO-g1", 4), mv(2, "DEMO-g1", 1), mv(3, "DEMO-g2", 1)], WARM)
@@ -433,9 +521,36 @@ def test_pick() -> None:
         m2[2]["post"] = (12.0 + extra / 10, 1800.0)
         batches.add(json.dumps([b["id"] for b in W.pick(m2, WARM)["batch"]]))
     check("…and another number can give another batch (the seed comes from the data)", len(batches) > 1, batches)
+    keyed = [mv(i, f"DEMO-g{i}", 1, "unknown" if i % 2 else "known", None) for i in range(9)]
+    keyed[0]["exclusive"] = ["DEMO-k-alpha", "DEMO-k-beta", "DEMO-k-gamma", "DEMO-k-delta"]
+    keyed[3]["shared"] = ["DEMO-t-a", "DEMO-t-b", "DEMO-t-c"]
+    turned = copy.deepcopy(keyed)
+    turned[0]["exclusive"] = turned[0]["exclusive"][::-1] + ["DEMO-k-beta"]
+    turned[3]["shared"] = set(turned[3]["shared"])
+    ids = [b["id"] for b in W.pick(keyed, WARM)["batch"]]
+    check("a move's keys in another order, twice over or as a set: the same batch",
+          [b["id"] for b in W.pick(turned, WARM)["batch"]] == ids, ids)
+    code = ("import json, sys; sys.path.insert(0, sys.argv[1]); from kit import pathweights as W; "
+            "ms = [{'id': f'DEMO-m{i}', 'group': f'DEMO-g{i}', 'n': 1, 'kind': 'unknown' if i % 2 else 'known', "
+            "'post': None} for i in range(9)]; "
+            "ms[0]['exclusive'] = {'DEMO-k-alpha', 'DEMO-k-beta', 'DEMO-k-gamma', 'DEMO-k-delta'}; "
+            "ms[3]['shared'] = frozenset({'DEMO-t-a', 'DEMO-t-b', 'DEMO-t-c'}); "
+            "print(json.dumps([b['id'] for b in W.pick(ms, W.account(70, 10000))['batch']]))")
+    runs = {}
+    for hs in ("1", "2", "3", "4"):
+        got = subprocess.run([sys.executable, "-I", "-c", code, str(ROOT)], capture_output=True, text=True,
+                             env={**os.environ, "PYTHONHASHSEED": hs}, timeout=60)
+        runs[hs] = got.stdout.strip() if got.returncode == 0 else got.stderr.strip()[-300:]
+    check("…in any process: keys given as sets, four PYTHONHASHSEED values, one batch",
+          len(set(runs.values())) == 1 and json.loads(runs["1"]) == ids, runs)
+    thin = W.account(15, 3000)                      # warm under the defaults
+    check("pick() decides warm by the settings it is given: coverage under a higher account_min_conv",
+          W.pick(ms, thin)["mode"] == "weights" and W.pick(ms, thin, {"account_min_conv": 40.0})["mode"] == "coverage"
+          and W.pick(ms, W.account(15, 3000, {"account_min_conv": 40.0}))["mode"] == "weights")
     wrong = [[mv(1, "DEMO-g1"), mv(1, "DEMO-g2")], [mv(1, "DEMO-g1", 0)], [mv(1, "DEMO-g1", True)],
              [mv(1, "DEMO-g1", 1, "maybe")], [mv(1, "", 1)], [mv(1, "DEMO-g1", 1, post=(0, 1))],
              [mv(1, "DEMO-g1", 1, post=(1, 2, 3))], [mv(1, "DEMO-g1", 1, exclusive="DEMO-k")],
+             [mv(1, "DEMO-g1", 1, shared=["DEMO-k", ""])], [mv(1, "DEMO-g1", 1, shared={"DEMO-k": 1})],
              [{**mv(1, "DEMO-g1"), "id": None}]]
     check("a bad move is refused: an id twice, n not a whole number from 1, an unknown kind, no group, "
           "a bad posterior, keys not a list, no id", all(raises(W.pick, x, WARM) for x in wrong),

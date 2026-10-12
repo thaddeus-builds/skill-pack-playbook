@@ -28,21 +28,24 @@ scaffold, console, docs, conformance.
 
 ## [0.23.0] - 2026-10-13
 ### Added
-- `kit.pathweights` (pack `learning`; `docs/path-weights.md`): path weights for variants that come back with spend
-  and conversions. Exact Gamma statistics, stdlib only (`gamma_cdf`, `p_above`, `quantile`; `tenths` rounded toward a
-  half). `posteriors()`: each leaf of a partition (its ancestors' keys, any depth) gets a Gamma-Poisson posterior on
-  its settled numbers, the prior borrowed leave-one-out from its parent and worth `prior_conv` conversions, an optional
-  per-leaf prior factor clipped to [1 / `prior_shift_max`, `prior_shift_max`]; conversions may be fractional; a node's
-  numbers are its leaves' sums and the account covers them all. `judge()`: untested, testing, promising, down, closed,
-  each with its reason, and a close proposal (down, enough settled spend and units, unlikely to reach `close_ratio` of
-  the account rate) that a person confirms and the harness records: never decided here. `pick()`: the next batch over
-  the harness's moves, coverage order when cold, batched top-two Thompson when warm, at least `explore_share` from
-  moves not known yet, half a batch per group, `exclusive` and `shared` keys, up to two over rather than short, the
-  seed from the data. `twins()`: same-tag units whose rates differ by `twin_ratio` with probability `twin_p`, a clue
-  with what is known to differ. Every threshold in `DEFAULTS`; `settings()` refuses one that is not a value. The test
-  includes the calibration (every leaf equally good, five rounds, spend pushed to early leaders: at most 5 in 100 made
-  leaves ever proposed for closing). From the video-ads harness's creative space model (seen once, 2026-10-13), which
-  keeps its own copy for now.
+- `kit.pathweights` (pack `learning`; `docs/path-weights.md`): path weights for variants that come back with spend and
+  conversions. Exact Gamma statistics, stdlib only (`gamma_cdf`, `p_above`, `quantile`, run to convergence at any
+  shape, ValueError rather than a truncated value; `tenths` rounded toward a half). `posteriors()`: each leaf of a
+  partition (its ancestors' keys in order, any depth; a set refused) gets a Gamma-Poisson posterior on its settled
+  numbers, the prior borrowed leave-one-out from its parent and worth `prior_conv` conversions, an optional per-leaf
+  prior factor clipped to [1 / `prior_shift_max`, `prior_shift_max`]; conversions may be fractional; a node's numbers
+  are its leaves' sums and the account covers them all. `judge()`: untested, testing, promising, down, closed, each
+  with its reason (the account's warmth decided under the thresholds it is given), and a close proposal (down, enough
+  settled spend and units, unlikely to reach `close_ratio` of the account rate) that a person confirms and the harness
+  records: never decided here. `pick()`: the next batch over the harness's moves, coverage order when cold, batched
+  top-two Thompson when warm, at least `explore_share` from moves not known yet, half a batch per group, `exclusive`
+  and `shared` keys (a list or a set, kept sorted), a move within the batch before one up to two over (taken only when
+  none fits, the explore share too), the seed from the data, the same in any process. `twins()`: same-tag units whose
+  rates differ by `twin_ratio` (above 1) with probability `twin_p`, a clue with what is known to differ. Every
+  threshold in `DEFAULTS`; `settings()` refuses one that is not a value, naming the key, and a `downweight_p` not
+  below `promising_p`. The test includes the calibration (every leaf equally good, five rounds, spend pushed to early
+  leaders: at most 5 in 100 made leaves ever proposed for closing). From the video-ads harness's creative space model
+  (seen once, 2026-10-13), which keeps its own copy for now.
 
 ## [0.22.0] - 2026-10-12
 ### Added
