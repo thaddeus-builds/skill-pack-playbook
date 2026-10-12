@@ -26,6 +26,28 @@ scaffold, console, docs, conformance.
   fills offline is exported from the key registry, its answers come back as pending values
   sourced to the file. Each seen once, in the SEO harness. Tested in `tests/test_docs_build.py`.
 
+## [0.24.0] - 2026-10-13
+### Added
+- `kit.pagestyle` (new pack `pages`, `[kit] packs = ["pages"]`; `docs/page-style.md`): one look for the pages a harness
+  writes to guide making and show the reasoning (a plan's map, the next batch, a make page, an insight page). A state is
+  colour, word and icon (`chip()`, `vchip()`; the five states of `kit.pathweights`, Okabe-Ito blue and orange, grey for
+  closed; each state's text 4.5:1 on its fill in the light theme and both dark ones); a status bar and number tiles
+  first (`bar()`, `legend()`, `tiles()`); one decision with one copy button and a hint (`decision()`), commands, flags,
+  ids and hashes only there and in folds (`data-zone="decision"` / `"tech"`: `details()`, `owner()`); at most three
+  warnings, the rest one line that says where (`warnings()`; a limit above three refused); a node map with one cell per
+  item, each a link with its title, and an empty leaf that says why (`node_map()`); cards that unfold row by row with
+  ten dots and if it works / if it does not (`fold_row()`, `card()`, `story()`, `dots()`, `expand_all()`); the owner's
+  fold. `page()` is the whole document: doctype, lang, a CSP that allows no network, light and dark tokens on `:root`,
+  the page data as JSON with no `</`, filled in one pass (a text holding `__DATA__` stays text), a script that holds no
+  word (a button's words are its own attributes). Every visible word is the harness's: `Style(words, lang)` lays them
+  over `EN` and refuses an unknown key, an empty word or a template without `{n}`; `ZH` is a ready Simplified Chinese
+  set; the module-level parts are English; the currency is the harness's (`money`: `"¥{n}"`). `problems(page)` is the
+  check a harness's tests run on every page (the skeleton, one decision zone, one copy button and only there, no
+  command, flag, hash or code outside the zones plus the harness's own patterns, three warnings, a state's icon and word
+  on every chip, a title on every cell, no grid track wider than a 320px phone); `zones(page)` is the visible text by
+  zone. From the video-ads harness's page style (seen once, 2026-10-13; the owner made it the model for such pages),
+  which keeps its own copy for now.
+
 ## [0.23.0] - 2026-10-13
 ### Added
 - `kit.pathweights` (pack `learning`; `docs/path-weights.md`): path weights for variants that come back with spend and
