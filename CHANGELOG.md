@@ -15,6 +15,14 @@ scaffold, console, docs, conformance.
   the platform's own review stops a bad ad at no cost to the ad, the default is `warn`. Unconfirmed
   spend, the spend gate, consent and technical QC always stop. Seen once, an owner decision in the
   video-ads harness. Tested in `tests/test_docs_build.py`.
+- `docs/operating.md`, "Keeping a harness small as it grows": slim before features (an inventory
+  by loop stage, one home per concept, a `_parked/` folder with no verbs, docs or tests and a way
+  back, no new features while slimming), code filters and the agent judges (candidates listed
+  unranked, a skill picks with a `why` the code checks), and a newcomer-agent acceptance test
+  (`templates/client-handoff.md` rule 4 points at it). `docs/lessons.md`: a detached job that
+  vanished without its end gets one notice on the next listing; `templates/install-checklist.md`:
+  keep the harness, data and virtualenv on the internal disk. Each seen once, in the video-ads
+  harness. Tested in `tests/test_docs_build.py`.
 
 ## [0.14.0] - 2026-10-12
 ### Added
