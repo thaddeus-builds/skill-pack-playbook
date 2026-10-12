@@ -48,6 +48,7 @@ from __future__ import annotations
 import ast
 import functools
 import glob
+import inspect
 import re
 from datetime import date
 from pathlib import Path
@@ -201,6 +202,15 @@ def msg(code: str, text: str, **params) -> Msg:
     return Msg(code, text, params)
 
 
+# The names msg() binds itself. A registry param of one of these names can
+# never be passed (msg(c, t, code=…) is a TypeError at the one moment the
+# message is needed), so lint_registry() refuses it. Read from the signature,
+# so the set follows msg() if it ever changes.
+MSG_ARGS = frozenset(
+    p.name for p in inspect.signature(msg).parameters.values()
+    if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD))
+
+
 def _param(v):
     if isinstance(v, Msg):
         return code(v)
@@ -269,7 +279,8 @@ def joined(parts: list[Msg], sep: str = "; ") -> Msg:
 
 def lint_registry(reg: dict[str, dict]) -> list[str]:
     """Row-level problems: a code that is not snake_case, a meaning that
-    names a {placeholder} the row's params do not declare."""
+    names a {placeholder} the row's params do not declare, a param named
+    after one of msg()'s own arguments (MSG_ARGS)."""
     out = []
     for c, row in sorted(reg.items()):
         if not CODE_RE.match(c):
@@ -283,6 +294,11 @@ def lint_registry(reg: dict[str, dict]) -> list[str]:
         if extra:
             out.append(f"{row['file']}: {c}: meaning names "
                        f"{sorted(extra)} not in params {list(row['params'])}")
+        shadow = MSG_ARGS & set(row["params"])
+        if shadow:
+            out.append(f"{row['file']}: {c}: params {sorted(shadow)} are "
+                       f"msg()'s own arguments, so no call can pass them: "
+                       f"rename them")
     return out
 
 
