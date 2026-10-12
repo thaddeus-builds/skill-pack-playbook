@@ -20,7 +20,10 @@ scaffold, console, docs, conformance.
   the owner; Links are `name: where`. `problems(text)`, `check_file(path)`, `check_roadmap(root)`
   (`[guards.roadmap] file`, else `docs/ROADMAP.md` or `ROADMAP.md`; both is a problem), and a
   self-test that plants each break. From the video-ads harness, which has kept its roadmap in this
-  format, held by its own test, since 2026-10-01; a second harness adopted the format.
+  format, held by its own test, since 2026-10-01. A second harness copied the format without a test and does not pass the guard yet: a harness
+  still on the old template moves its "Start on a new machine" section to `docs/session-handoff.md`, gives each Done
+  row its reference, each Decisions row the owner's quoted words and each Waiting row its `unblocks:` before it adds
+  `tests/test_roadmap.py`.
 ### Other
 - A new harness is generated with `docs/ROADMAP.md` (from `templates/ROADMAP.md`, now the format
   as a short skeleton, `{{today}}` filled by the scaffolder) and `tests/test_roadmap.py`: twelve
