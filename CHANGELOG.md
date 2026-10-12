@@ -10,7 +10,7 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 
-## [0.17.0] - 2026-10-12
+## [0.21.0] - 2026-10-12
 ### Added
 - `kit.workbook_patch` (pack `workbook`, slice 4 of `docs/workbook-and-browser-ops.md`): cells set
   in a copy of a client's xlsx, stdlib only. Every part it does not set stays byte for byte (a
@@ -39,6 +39,80 @@ scaffold, console, docs, conformance.
   vanished without its end gets one notice on the next listing; `templates/install-checklist.md`:
   keep the harness, data and virtualenv on the internal disk. Each seen once, in the video-ads
   harness. Tested in `tests/test_docs_build.py`.
+- Scaffold: the next steps `scaffold/new_harness.py` prints end with the leak guard, in order:
+  create the client-term list outside the repository (seeded with the client's name from the
+  intake), name it in `[guards.leak] terms`, install `scripts/kit/tools/pre-push.sample` as the
+  pre-push hook, push. The hook is installed only once a list is named, since it refuses a push
+  without one.
+
+## [0.20.0] - 2026-10-12
+### Fixed
+- `messages.lint_registry()` (and so `check_registry_closed()`) refuses a registry param named
+  after one of `msg()`'s own arguments (`code`, `text`): `msg(code, text, **params)` cannot be
+  called with it, a TypeError at the one moment the message is needed. The names are read from
+  `msg()`'s signature (`messages.MSG_ARGS`), so they cannot drift. Seen once: in the video-ads
+  harness a param named `text` crashed `msg()`, and that harness has held the rule in its own
+  contract test since.
+
+## [0.19.0] - 2026-10-12
+### Added
+- `doctor.py`: `checkout` warns (`doctor_checkout_differs`) when the cwd is in another git
+  checkout of the same harness (a `harness.toml` of the same name at or above it) than the
+  bound one whose code runs, and the two differ: other HEADs, or docs or code (`*.md`, `*.py`,
+  `*.toml`, `*.tsv`, `*.js`, `*.sh`) changed and not committed in either. Several sessions
+  work in worktrees; an agent read SKILL.md in one and ran another's harness. Silent outside
+  git, without git, in the bound checkout and in another harness's checkout. `git_head()`
+  (HEAD plus the uncommitted docs and code; git's optional locks never taken; inherited
+  `GIT_*` variables dropped, so a hook's `GIT_DIR` cannot point both at one repository).
+  From the video-ads harness (seen once, a newcomer-agent audit).
+
+## [0.18.0] - 2026-10-12
+### Added
+- A "Never" table of the verbs only a person runs, first in a harness's SKILL.md, held to the
+  verb table (`kit/guards/evals.py`; seen once: a newcomer agent found the video-ads harness's
+  person-only rules scattered over five places, and that harness gathered them in one table at
+  the top of its SKILL.md). `never_problems()` and `check_never_table()` fail when a verb of
+  kind `gated`, or one `[guards.evals].extra` names, has no row; when a row names a verb an agent
+  may run, or no verb of the table, or does not say why; and when `## Never` is not the first
+  `##` section. A cell names verbs in code font, with or without the cli word; a code span with
+  a flag is a flag-level gate (`claims --confirm`, an agent's verb with a person's flag, or
+  `any --code`, a flag on every verb): its verb must exist (or be `any`) and need not be gated.
+  YAML front matter is skipped. The kind `external` is not person-only by itself (an external
+  read, a pull, is the agent's own; an eval forbids it only because the run is offline): an
+  external write only a person runs (`execute apply`) goes in `extra`. `[guards.evals].never`
+  renames the heading. `never_self_test()` plants each fault, `check_never()` reports, and
+  `kit.testing.suites.never_table(root)` is the suite a harness's test calls.
+
+### Other
+- Template `SKILL.md`: a `## Never` section first, the table of the verbs only a person runs
+  (`facts confirm`, `decisions confirm`, `facts restore`, `facts init`, `queue approve`,
+  `execute apply`), each with why; "Out of scope" points to it instead of listing them again.
+  `templates/harness.toml` sets `[guards.evals] extra = ["facts init", "execute apply"]`.
+- Scaffold: a thirteenth generated test, `tests/test_never_table.py` (`suites.never_table`), so a
+  new harness's Never table stays the verb table's. A harness scaffolded before adds the table
+  and the file (any generated test, calling `suites.never_table`) by hand; until then nothing
+  changes for it.
+
+## [0.17.0] - 2026-10-12
+### Added
+- `tools/leak_guard.py` and `tools/pre-push.sample` (testkit): a push whose added lines, file paths
+  or commit messages hold a client term is refused; `--range A..B` and `--tree` check by hand. A
+  term matches case- and whitespace-insensitively (`re:` for a regular expression), and a hit names
+  the term's line and list, never the term. The lists are client data and stay outside the
+  repository: `[guards.leak] terms` in harness.toml (paths or globs, one list per client workspace)
+  and `<PREFIX>_CLIENT_TERMS`. Fail closed: no list, a named list missing, an empty or unreadable
+  list, a bad pattern, one matching the empty string, or a git error refuses the push. Generalised
+  from the video-ads harness's own guard and its local hook, which read every client workspace's
+  list (seen once). Fixed here, and still open in that harness's copy: a non-ASCII path was read
+  as git's octal escape, so a CJK term in a file name passed; a path hit printed the path, which
+  holds the term; full-width and zero-width spellings passed (terms and text are now NFKC-normalised
+  without format characters); a binary or empty file's path and a merge's own resolution lines
+  were not read; an added line starting `++ ` was taken for a file header. Two `git log` runs read
+  every commit, and all terms are tried as one pattern first: 125 commits and 200 terms take about
+  0.1 s, not seconds.
+### Other
+- BUILD.md B1: install the hook before the first push; `templates/harness.toml` shows
+  `[guards.leak]`. `kit-tiers.tsv`: `tools.leak_guard`, extra, no consumer yet.
 
 ## [0.16.0] - 2026-10-12
 ### Added

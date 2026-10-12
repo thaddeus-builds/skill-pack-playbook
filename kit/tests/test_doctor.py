@@ -22,11 +22,16 @@ on the fake "shop" harness.
       that crashes or reports a plain str
   [8] exit: 0 with warnings, 1 with --strict, 1 on a failure; --json is one
       document whose every message is coded
+  [9] the checkout: the cwd in another git checkout of the same harness at
+      another HEAD, or with docs changed and not committed, warns; the same
+      HEAD, the bound checkout itself, a copy outside git and a checkout of
+      another harness are silent
 """
 
 import os
 import shutil
 import sqlite3
+import subprocess
 import sys
 from contextlib import closing
 from pathlib import Path
@@ -499,6 +504,105 @@ def test_exit() -> None:
           rc == 2 and doc and doc["code"] == "usage", (out, err))
 
 
+# ------------------------------------------------------------------ [9]
+
+GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+
+def git(where: Path, *args: str) -> str:
+    """git in `where` only: no inherited GIT_* (a git hook's GIT_DIR would
+    point every call at the outer repository)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    return subprocess.run(
+        ["git", "-C", str(where), "-c", "user.name=t", "-c",
+         "user.email=t@example.com", *args], check=True, capture_output=True,
+        text=True, env={**env, **GIT_ENV}).stdout.strip()
+
+
+def test_checkout() -> None:
+    print("\n[9] the cwd's checkout vs the checkout whose code runs")
+    if not shutil.which("git"):
+        print("  SKIP  no git")
+        return
+    base = Path(tmp_dir("doc-checkout-")).resolve()
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
+    code = base / "code"
+    shutil.copytree(_shop.SHOP, code, ignore=ignore)
+    (code / "SKILL.md").write_text("the docs\n", encoding="utf-8")
+    git(code, "init", "-q")
+    git(code, "add", "-A")
+    git(code, "commit", "-q", "-m", "one")
+    data = Path(tmp_dir("doc-checkout-data-"))
+    here = os.getcwd()
+
+    def differs(cwd: Path, **extra: str) -> list[dict]:
+        os.chdir(cwd)
+        try:
+            _, _, _, doc = run(data, "--json", root=code, **GIT_ENV, **extra)
+        finally:
+            os.chdir(here)
+        assert not [c for c in doc["checks"] if c["message_code"]["code"]
+                    == "doctor_check_crashed"], doc
+        return found(doc, "checkout")
+
+    same = base / "same"
+    git(base, "clone", "-q", str(code), str(same))
+    check("another checkout at the same HEAD, nothing uncommitted: silent",
+          differs(same) == [] and differs(same / "scripts") == [])
+    check("the bound checkout itself: silent", differs(code) == [])
+    ahead = base / "ahead"
+    git(base, "clone", "-q", str(code), str(ahead))
+    (ahead / "SKILL.md").write_text("newer docs\n", encoding="utf-8")
+    git(ahead, "add", "SKILL.md")
+    git(ahead, "commit", "-q", "-m", "two")
+    got = differs(ahead / "scripts")
+    check("another HEAD: one warning naming both checkouts and heads",
+          [c["message_code"]["code"] for c in got]
+          == ["doctor_checkout_differs"] and got[0]["level"] == "warn"
+          and got[0]["message_code"]["params"] == {
+              "docs": str(ahead),
+              "docs_head": git(ahead, "rev-parse", "HEAD")[:12],
+              "docs_dirty": "-", "runs": str(code),
+              "runs_head": git(code, "rev-parse", "HEAD")[:12],
+              "runs_dirty": "-"}
+          and got[0]["message_code"]["params"]["docs_head"]
+          in got[0]["message"], got)
+    check("an inherited GIT_DIR / GIT_WORK_TREE (a git hook) changes nothing",
+          [c["message_code"]["params"]["docs_head"] for c in differs(
+              ahead, GIT_DIR=str(code / ".git"), GIT_WORK_TREE=str(code),
+              GIT_INDEX_FILE=str(code / ".git" / "index"))]
+          == [git(ahead, "rev-parse", "HEAD")[:12]])
+    (same / "SKILL.md").write_text("edited, not committed\n",
+                                   encoding="utf-8")
+    (same / "notes.txt").write_text("untracked\n", encoding="utf-8")
+    got = differs(same)
+    check("the same HEAD with docs changed and not committed: warns, naming "
+          "them (an untracked file is not docs)",
+          [c["message_code"]["params"]["docs_dirty"] for c in got]
+          == ["SKILL.md"], got)
+    git(same, "checkout", "-q", "--", "SKILL.md")
+    tsv = next(same.glob("ssot/*.tsv"))
+    tsv.write_text(tsv.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    got = differs(same)
+    check("a registry (*.tsv) changed and not committed counts too",
+          [c["message_code"]["params"]["docs_dirty"] for c in got]
+          == [str(tsv.relative_to(same))], got)
+    plain = base / "plain"
+    shutil.copytree(_shop.SHOP, plain, ignore=ignore)
+    check("a copy outside git: silent", differs(plain) == [])
+    other = base / "other"
+    shutil.copytree(_shop.SHOP, other, ignore=ignore)
+    toml = other / "harness.toml"
+    toml.write_text(toml.read_text(encoding="utf-8").replace(
+        'name = "shop-harness"', 'name = "other-harness"'), encoding="utf-8")
+    git(other, "init", "-q")
+    git(other, "add", "-A")
+    git(other, "commit", "-q", "-m", "other")
+    check("a checkout of another harness: silent", differs(other) == [])
+    check("a cwd with no harness above it: silent", differs(base) == [])
+    check("git_head: None outside git", doctor.git_head(plain) is None)
+
+
 def main() -> int:
     test_fresh()
     test_writes()
@@ -508,6 +612,7 @@ def main() -> int:
     test_markets()
     test_hooks()
     test_exit()
+    test_checkout()
     return finish()
 
 

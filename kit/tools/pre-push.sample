@@ -1,0 +1,18 @@
+#!/bin/sh
+# Refuse a push whose commits (added lines, paths or messages) hold a client term:
+# kit/tools/leak_guard.py. Install once per clone, from the harness's top level:
+#   install -m 755 scripts/kit/tools/pre-push.sample "$(git rev-parse --git-common-dir)/hooks/pre-push"
+# The term lists stay outside the repository: [guards.leak] terms in harness.toml, or
+# <PREFIX>_CLIENT_TERMS. Without a usable list the push is refused.
+# git passes the remote's name and url as arguments and the refs being pushed on stdin;
+# both go to the guard.
+top=$(git rev-parse --show-toplevel) || exit 2
+guard="$top/scripts/kit/tools/leak_guard.py"     # <[harness].scripts_dir>/kit/tools/
+[ -f "$guard" ] || guard="$top/kit/tools/leak_guard.py"
+[ -f "$guard" ] || { echo "pre-push: no kit/tools/leak_guard.py under $top; push refused" >&2; exit 2; }
+for py in python3 python3.13 python3.12 python3.11; do
+  "$py" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null && break
+  py=""
+done
+[ -n "$py" ] || { echo "pre-push: no Python 3.11 or newer on PATH; push refused" >&2; exit 2; }
+exec "$py" "$guard" "$@"

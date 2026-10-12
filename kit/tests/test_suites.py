@@ -21,6 +21,8 @@ each on a planted violation, so no suite can pass by looking at nothing.
   [10b] roadmap: a Waiting row that names no row it unblocks; a second
       roadmap at the root
   [11] a harness without markets: the gate and the json contract hold
+  [12] never_table: a gated verb added to the table with no row in SKILL.md's
+      Never table; the table moved below the rules
 """
 
 import os
@@ -112,7 +114,8 @@ def spec_of(root: Path):
 
 
 ALL = ("run_tests", "ssot", "layering", "clock", "boundary", "json_contract",
-       "human_tables", "gate", "release", "kit_drift", "roadmap")
+       "human_tables", "gate", "release", "kit_drift", "roadmap",
+       "never_table")
 
 
 def every(root: Path) -> dict:
@@ -287,6 +290,25 @@ def main() -> int:
                    if name == "human_tables" else getattr(suites, name)(flat))
         check(f"{name}: green with markets = []", not failing(results),
               [(label, p) for label, p in results if p])
+
+    print("\n[12] never_table")
+    u1 = planted(root, "scripts/audit.py", "\"\"\"Sign an audit.\"\"\"\n")
+    u2 = planted(root, "scripts/verbs.py", replace=(
+        "VERBS = [\n", "VERBS = [\n    Verb((\"audit\", \"sign\"), "
+        "\"audit.py\", \"gated\"),\n"))
+    caught("a gated verb with no row in the Never table",
+           suites.never_table(root), "names exactly the verbs only a person")
+    u2()
+    u1()
+    skill = (root / "SKILL.md").read_text(encoding="utf-8")
+    never = skill[skill.index("## Never"):skill.index("## Rules for the agent")]
+    undo = planted(root, "SKILL.md", skill.replace(never, "").replace(
+        "## Scope of this skill", never + "## Scope of this skill"))
+    caught("the Never table below the rules", suites.never_table(root),
+           "names exactly the verbs only a person")
+    undo()
+    check("…and green again once it is undone",
+          not failing(suites.never_table(root)))
     _shop.use()
     return finish()
 
