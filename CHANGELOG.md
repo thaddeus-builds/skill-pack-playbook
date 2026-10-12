@@ -25,6 +25,20 @@ scaffold, console, docs, conformance.
   build and adds nothing to it. `docs/consoles.md`, client console item 7: a form the client
   fills offline is exported from the key registry, its answers come back as pending values
   sourced to the file. Each seen once, in the SEO harness. Tested in `tests/test_docs_build.py`.
+- `templates/design-first.md` (new; used, not copied): before a feature an owner has to understand
+  and steer, research it (the prior-art scan), write one design page in the owner's language (what
+  it is, how it decides, the few asks each with a recommended answer and one reply that agrees to
+  all, the tables it will store, append-only columns proven on a scratch copy of real data), show
+  a clickable demo drawn by the harness's own renderer from a synthetic world, wait for the owner's
+  yes, then write the code, after which the harness redraws the demo from a synthetic fixture to the
+  same private link. The demo's guard is one Python block a harness copies (`demo_problems()`: the
+  world marked synthetic, `DEMO` ids, `kit.pagestyle`'s synthetic badge and `problems()`, never in
+  the client's review folder, no client term by `kit/tools/leak_guard.py`, failing closed); and a
+  checklist. `docs/lessons.md` keeps what it paid for; a new harness's `CLAUDE.md`
+  (`templates/AGENT_INSTRUCTIONS.md`), the prior-art scan's "When to scan" and BUILD.md's B0.5
+  point at it. Seen once, in adcut-harness (its ROADMAP X45). Tested in
+  `tests/test_design_first.py`, which runs the template's guard on a synthetic page drawn with
+  `kit.pagestyle` and tries each way a demo can break the rule.
 
 ## [0.24.0] - 2026-10-13
 ### Added

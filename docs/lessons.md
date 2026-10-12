@@ -67,3 +67,31 @@ The rules:
   "stopped without an end", with no exit code. *Seen once (2026-10-11):* the harness, its data and its virtualenv sat
   on an external disk that the OS unmounted at screen lock; a queued paid job died two minutes after it started and
   nobody was told. Keep all three on the internal disk ([install checklist](../templates/install-checklist.md#scheduled-tasks-and-long-jobs)).
+
+## Design and a synthetic demo before code (from adcut-harness X45, 2026-10-13)
+
+Before it built a map of its creative plan, with a weight on each path and a close only a person confirms, the
+video-ads harness wrote one design page and a clickable demo of the real page, and wrote the code only after the owner
+said yes. The steps, what the design page holds, the demo's guards and a checklist:
+[templates/design-first.md](../templates/design-first.md).
+
+*Paid for:* the owner confirmed four decisions in one reply, and the code was built to a picture people had already
+agreed on; writing the page forced an answer to each trap the research had found before any of them was code (a tree
+whose branches crossed would have counted an item twice, a comparison would have brought back a target a person had
+parked, and the new append-only tables had columns that could never change once written); and the demo could be shown
+to other people because it held no client data.
+
+The rules:
+
+- A feature an owner has to understand and steer starts with research and one page the owner decides on, not with
+  code. Every ask on the page carries a recommended answer, so one reply can agree to all of them.
+- An append-only table's columns are proven on a scratch copy of real data before the page fixes them: once it holds
+  rows they cannot change.
+- The demo is the real page, drawn by the harness's own renderer from a synthetic world. A hand-made mock-up shows a
+  page the code will not write.
+- A demo is shared only when it is synthetic (marked, `DEMO` ids) and a scan for client terms that fails closed found
+  nothing; a client's real page is never shared.
+- Once the code exists, the harness draws the demo itself, from a synthetic fixture to the same link, so the picture
+  never drifts from the code.
+
+*Seen once* (2026-10-12 and 13), in that harness's ROADMAP X45.

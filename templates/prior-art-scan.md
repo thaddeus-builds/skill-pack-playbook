@@ -10,6 +10,7 @@ Before building, look at what already exists: tools the client could buy, open-s
 | Before the data and rules stages (3–6; BUILD.md B3 and B4) | Which API fields, metrics and thresholds do others use? What guardrails do their write paths have? | The last scan is under 30 days old and covered these |
 | Before a release that adds a write path or a paid call (BUILD.md B7 and B9) | What went wrong for others doing the same writes? | No new write or paid call |
 | When the client names a tool or a competitor | What does that tool do that we do not? | — |
+| Before a feature an owner has to understand and steer ([design-first.md](design-first.md), step 1) | How do others do it, and which traps does it hide? | A fix, a refactor, or a change only the builder sees |
 
 Each scan is dated. A scan older than 90 days is stale: re-scan before quoting it to the owner.
 

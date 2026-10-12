@@ -36,7 +36,7 @@ The same rows, with their status and the reference that signed each, are the har
 
 ## B0.5 · Prior-art scan
 
-Follow [templates/prior-art-scan.md](templates/prior-art-scan.md): one agent per lens, each claim with its link and date. The first scan comes after the first intake, before any story is accepted. It is repeated at fixed points: before B3 and B4, before B7 or B9 when they add a write path or a paid call, and whenever the client names a tool. Until the repository exists the scan waits in `$DATA_DIR/build/prior-art/`; at B1 it moves to `docs/prior-art/`. A borrowed idea that changes meaning or a number becomes an ask in B0.6.
+Follow [templates/prior-art-scan.md](templates/prior-art-scan.md): one agent per lens, each claim with its link and date. The first scan comes after the first intake, before any story is accepted. It is repeated at fixed points: before B3 and B4, before B7 or B9 when they add a write path or a paid call, and whenever the client names a tool. Before a feature an owner has to understand and steer, it is step 1 of [templates/design-first.md](templates/design-first.md): one design page and a synthetic demo the owner confirms before any code. Until the repository exists the scan waits in `$DATA_DIR/build/prior-art/`; at B1 it moves to `docs/prior-art/`. A borrowed idea that changes meaning or a number becomes an ask in B0.6.
 
 ## B0.6 · Build-time asks
 
