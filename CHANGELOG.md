@@ -23,6 +23,11 @@ scaffold, console, docs, conformance.
   vanished without its end gets one notice on the next listing; `templates/install-checklist.md`:
   keep the harness, data and virtualenv on the internal disk. Each seen once, in the video-ads
   harness. Tested in `tests/test_docs_build.py`.
+- Scaffold: the next steps `scaffold/new_harness.py` prints end with the leak guard, in order:
+  create the client-term list outside the repository (seeded with the client's name from the
+  intake), name it in `[guards.leak] terms`, install `scripts/kit/tools/pre-push.sample` as the
+  pre-push hook, push. The hook is installed only once a list is named, since it refuses a push
+  without one.
 
 ## [0.17.0] - 2026-10-12
 ### Added
