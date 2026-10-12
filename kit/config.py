@@ -10,6 +10,8 @@ hard-codes one. What this module guards:
   * which harness is bound: `KIT_HARNESS_ROOT` when set, else the first
     directory at or above the kit (a vendored copy lives at
     `<harness>/scripts/kit/`) that holds harness.toml; never the cwd;
+  * `KIT_TEST_RUN=1` (TEST_RUN_ENV) marks a process as a test: the test
+    runner and the sandbox set it (kit.human says what it is for);
   * `use(root)` (tests) switches the bound harness AND clears every kit
     cache that depends on it: a module registers its clear function with
     `on_reset(fn)`, so a stale registry or env chain never survives a
@@ -32,6 +34,7 @@ from typing import Callable
 
 FILE = "harness.toml"
 ROOT_ENV = "KIT_HARNESS_ROOT"
+TEST_RUN_ENV = "KIT_TEST_RUN"    # "1" in a test (kit.testing sets it)
 _PREFIX = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 _WORD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 

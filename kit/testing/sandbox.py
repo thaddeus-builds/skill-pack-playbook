@@ -2,11 +2,16 @@
 
 `sandbox_env(data_dir)` is os.environ minus every inherited `<P>_*` var
 (an operator's own exports, e.g. `<P>_AUTH_ENV_PATHS` or a live
-`<P>_DATA_DIR`, must never decide a test) and minus KIT_TTY, plus
+`<P>_DATA_DIR`, must never decide a test), minus KIT_TTY, and minus every
+variable named like a credential (CREDENTIAL: a name ending in TOKEN,
+_KEY, _KEY_ID, PASSWORD or _API, or holding SECRET: a provider token in
+the operator's shell must never reach a test's child), plus
 `<P>_DATA_DIR=<data_dir>`, `<P>_AUTH_ENV_PATHS=none` (no HOME or data-dir
-.env file: process env only), `PYTHONUTF8=1`, and `KIT_HARNESS_ROOT` =
-the bound harness, so a child that imports the kit binds the same one.
-`extra` goes on top (a value of None removes that var).
+.env file: process env only), `PYTHONUTF8=1`, `KIT_TEST_RUN=1` (the
+child is a test: kit.human), and `KIT_HARNESS_ROOT` = the bound harness,
+so a child that imports the kit binds the same one. `extra` goes on top
+(a value of None removes that var; a credential a test needs is passed
+here, e.g. the gate's `<P>_CONFIRM_CODE_SECRET`).
 
 `run(argv, env)` runs a command with no stdin (a gate must never read an
 answer from a pipe) and returns (exit code, stdout, stderr).
@@ -17,9 +22,12 @@ Test: kit/tests/test_check.py (sandbox cases).
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 
-from kit.config import ROOT_ENV, config
+from kit.config import ROOT_ENV, TEST_RUN_ENV, config
+
+CREDENTIAL = re.compile(r"(TOKEN|_KEY|_KEY_ID|PASSWORD|_API)$|SECRET")
 
 
 def sandbox_env(data_dir: str | os.PathLike, **extra: str | None
@@ -27,10 +35,12 @@ def sandbox_env(data_dir: str | os.PathLike, **extra: str | None
     cfg = config()
     p = cfg.env_prefix + "_"
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith(p) and k != "KIT_TTY"}
+           if not k.startswith(p) and k != "KIT_TTY"
+           and not CREDENTIAL.search(k)}
     env.update({cfg.env("DATA_DIR"): os.fspath(data_dir),
                 cfg.env("AUTH_ENV_PATHS"): "none",
                 "PYTHONUTF8": "1",
+                TEST_RUN_ENV: "1",
                 ROOT_ENV: str(cfg.root)})
     for k, v in extra.items():
         if v is None:

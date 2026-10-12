@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The harness itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the harness still runs anywhere.
 
-Version: `VERSION` (0.1.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.2.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a harness copies, and what it writes
 
@@ -220,6 +220,7 @@ A terminal `zylos add` prompts only for the required keys; a chat install prompt
 - **Values are strings, numbers or booleans**, stored as given (numbers and booleans as their JSON text). An object, an array or a multi-line value refuses the whole input, and nothing is written.
 - **Values read back exactly.** A value with edge whitespace or surrounding quotes is written quoted, so the kit's `.env` parser (`kit/env.py`) returns it unchanged. `lib.js` reads `.env` files by the same rules.
 - **Defaults.** A `defaults` entry is written when its group is in use and the key is absent.
+- **Never a gate secret.** `<PREFIX>_CONFIRM_CODE_SECRET` (or any `*CONFIRM_CODE_SECRET`) and `CONSOLE_SECRET` refuse the whole input, and the manifest and `SKILL.md` config may not name them: the harness never loads a gate secret from an env file (`kit/env.py`), since an agent that can read or write the file could make its own approval codes. console.js makes the confirm-code secret itself (below). Before 0.2.0 the relay read it from `<data dir>/.env`; delete that line if it is there (`doctor` names it).
 - **Interrupted runs clean up**: a half-written `.env.tmp-*` is removed.
 
 The adapter resolves a key as the harness does: process env, then `env.files`, then `<data dir>/.env` (later wins). `<PREFIX>_AUTH_ENV_PATHS` replaces the file chain (`none`: process env only).
@@ -271,7 +272,8 @@ The owner console (the playbook's `console/serve.py`: the asks inbox and the rel
 - `--title <title_key or name>`;
 - `--allow-host` for each domain in `allow_host_key`;
 - `--relay-cmd '<node>' '<skill>/zylos/bin/cli.js'` when `console.args` carries `--relay-verbs` (serve.py wants both or neither);
-- then `console.args`.
+- then `console.args`;
+- and in its environment a fresh random `<PREFIX>_CONFIRM_CODE_SECRET`, made at each start and never written to a file or printed: the relay's harness runs (`bin/cli.js`) issue and check a click's one-time code with it, and both calls of one click run under the same start.
 
 Who starts it: a terminal `zylos add` (`pm2 start ecosystem.config.cjs`, `pm2 save`); in a chat install the agent runs `pm2 start <skill dir>/ecosystem.config.cjs && pm2 save`; `zylos upgrade` restarts it if it ran; `zylos uninstall` deletes it; at boot core's own pm2 ecosystem loads it. A broken manifest makes the root file export no app (and log why) rather than break core's boot.
 
