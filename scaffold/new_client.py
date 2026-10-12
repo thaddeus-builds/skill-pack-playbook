@@ -17,9 +17,11 @@ kol-clients), never inside the harness checkout. What it writes, under
     wrapper refuses, in one line naming that variable, one older than
     Python 3.11 (the kit needs tomllib; macOS's own python3 is 3.9);
   * bin/console: this client's owner console (the harness's vendored
-    console/serve.py), log in workspace/console; the first run appends a
-    random <PREFIX>_CONFIRM_CODE_SECRET to workspace/.env (0600, never
-    printed) so a click can run a gate verb with a relayed code;
+    console/serve.py), log in workspace/console; each start exports a fresh
+    random <PREFIX>_CONFIRM_CODE_SECRET into the console's own process env
+    (never written to a file, never printed) so a click can run a gate verb
+    with a relayed code; the kit's env chain never loads that secret from
+    workspace/.env, where the agent's own runs would see it;
   * bin/ask: the agent's side of that console;
   * CLAUDE.md: the agent's brief (templates/client/CLAUDE.md; one
     `<<fill: …>>` left for who the client is);
@@ -129,14 +131,13 @@ exec "$py" {home}/{n['scripts']}/{cli}.py "$@"
     console = f"""#!/bin/sh
 # {a.title}'s owner console: what `{cli} pending` lists, answered in the
 # browser. A click on a gated ask runs the gate through ./bin/{cli} with a
-# relayed one-time code. The first run switches relayed confirmation on: a
-# random {p}_CONFIRM_CODE_SECRET appended to workspace/.env (0600), never printed.
+# relayed one-time code, signed with a random {p}_CONFIRM_CODE_SECRET made
+# fresh at each start and kept only in this process's env: never in a file
+# (the harness never loads it from one), never printed.
 set -e
 {python_check(p, "bin/console")}root="$(cd "$(dirname "$0")/.." && pwd)"
-envf="$root/workspace/.env"
-if ! grep -qs '^{p}_CONFIRM_CODE_SECRET=' "$envf"; then
-  (umask 077; printf '{p}_CONFIRM_CODE_SECRET=%s\\n' "$(openssl rand -hex 32)" >> "$envf")
-fi
+{p}_CONFIRM_CODE_SECRET="$(openssl rand -hex 32)"
+export {p}_CONFIRM_CODE_SECRET
 export {p}_DATA_DIR="$root/workspace" CONSOLE_DIR="$root/workspace/console"
 mkdir -p "$CONSOLE_DIR" && chmod 700 "$CONSOLE_DIR"
 exec "$py" {home}/console/serve.py --dir "$CONSOLE_DIR" --title "{a.title}" \\
