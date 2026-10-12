@@ -510,10 +510,13 @@ GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 
 
 def git(where: Path, *args: str) -> str:
+    """git in `where` only: no inherited GIT_* (a git hook's GIT_DIR would
+    point every call at the outer repository)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     return subprocess.run(
         ["git", "-C", str(where), "-c", "user.name=t", "-c",
          "user.email=t@example.com", *args], check=True, capture_output=True,
-        text=True, env={**os.environ, **GIT_ENV}).stdout.strip()
+        text=True, env={**env, **GIT_ENV}).stdout.strip()
 
 
 def test_checkout() -> None:
@@ -532,10 +535,10 @@ def test_checkout() -> None:
     data = Path(tmp_dir("doc-checkout-data-"))
     here = os.getcwd()
 
-    def differs(cwd: Path) -> list[dict]:
+    def differs(cwd: Path, **extra: str) -> list[dict]:
         os.chdir(cwd)
         try:
-            _, _, _, doc = run(data, "--json", root=code, **GIT_ENV)
+            _, _, _, doc = run(data, "--json", root=code, **GIT_ENV, **extra)
         finally:
             os.chdir(here)
         assert not [c for c in doc["checks"] if c["message_code"]["code"]
@@ -557,10 +560,18 @@ def test_checkout() -> None:
           [c["message_code"]["code"] for c in got]
           == ["doctor_checkout_differs"] and got[0]["level"] == "warn"
           and got[0]["message_code"]["params"] == {
-              "docs": str(ahead), "docs_head": git(ahead, "rev-parse", "HEAD"),
+              "docs": str(ahead),
+              "docs_head": git(ahead, "rev-parse", "HEAD")[:12],
               "docs_dirty": "-", "runs": str(code),
-              "runs_head": git(code, "rev-parse", "HEAD"), "runs_dirty": "-"},
-          got)
+              "runs_head": git(code, "rev-parse", "HEAD")[:12],
+              "runs_dirty": "-"}
+          and got[0]["message_code"]["params"]["docs_head"]
+          in got[0]["message"], got)
+    check("an inherited GIT_DIR / GIT_WORK_TREE (a git hook) changes nothing",
+          [c["message_code"]["params"]["docs_head"] for c in differs(
+              ahead, GIT_DIR=str(code / ".git"), GIT_WORK_TREE=str(code),
+              GIT_INDEX_FILE=str(code / ".git" / "index"))]
+          == [git(ahead, "rev-parse", "HEAD")[:12]])
     (same / "SKILL.md").write_text("edited, not committed\n",
                                    encoding="utf-8")
     (same / "notes.txt").write_text("untracked\n", encoding="utf-8")
@@ -569,6 +580,13 @@ def test_checkout() -> None:
           "them (an untracked file is not docs)",
           [c["message_code"]["params"]["docs_dirty"] for c in got]
           == ["SKILL.md"], got)
+    git(same, "checkout", "-q", "--", "SKILL.md")
+    tsv = next(same.glob("ssot/*.tsv"))
+    tsv.write_text(tsv.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    got = differs(same)
+    check("a registry (*.tsv) changed and not committed counts too",
+          [c["message_code"]["params"]["docs_dirty"] for c in got]
+          == [str(tsv.relative_to(same))], got)
     plain = base / "plain"
     shutil.copytree(_shop.SHOP, plain, ignore=ignore)
     check("a copy outside git: silent", differs(plain) == [])
