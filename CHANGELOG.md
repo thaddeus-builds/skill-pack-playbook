@@ -31,22 +31,35 @@ scaffold, console, docs, conformance.
 - `kit.pagestyle` (new pack `pages`, `[kit] packs = ["pages"]`; `docs/page-style.md`): one look for the pages a harness
   writes to guide making and show the reasoning (a plan's map, the next batch, a make page, an insight page). A state is
   colour, word and icon (`chip()`, `vchip()`; the five states of `kit.pathweights`, Okabe-Ito blue and orange, grey for
-  closed; each state's text 4.5:1 on its fill in the light theme and both dark ones); a status bar and number tiles
-  first (`bar()`, `legend()`, `tiles()`); one decision with one copy button and a hint (`decision()`), commands, flags,
-  ids and hashes only there and in folds (`data-zone="decision"` / `"tech"`: `details()`, `owner()`); at most three
-  warnings, the rest one line that says where (`warnings()`; a limit above three refused); a node map with one cell per
-  item, each a link with its title, and an empty leaf that says why (`node_map()`); cards that unfold row by row with
-  ten dots and if it works / if it does not (`fold_row()`, `card()`, `story()`, `dots()`, `expand_all()`); the owner's
-  fold. `page()` is the whole document: doctype, lang, a CSP that allows no network, light and dark tokens on `:root`,
-  the page data as JSON with no `</`, filled in one pass (a text holding `__DATA__` stays text), a script that holds no
-  word (a button's words are its own attributes). Every visible word is the harness's: `Style(words, lang)` lays them
-  over `EN` and refuses an unknown key, an empty word or a template without `{n}`; `ZH` is a ready Simplified Chinese
-  set; the module-level parts are English; the currency is the harness's (`money`: `"¥{n}"`). `problems(page)` is the
-  check a harness's tests run on every page (the skeleton, one decision zone, one copy button and only there, no
-  command, flag, hash or code outside the zones plus the harness's own patterns, three warnings, a state's icon and word
-  on every chip, a title on every cell, no grid track wider than a 320px phone); `zones(page)` is the visible text by
-  zone. From the video-ads harness's page style (seen once, 2026-10-13; the owner made it the model for such pages),
-  which keeps its own copy for now.
+  closed; each state's text 4.5:1 on its fill in the light theme and both dark ones, and nothing dims it: no opacity,
+  the map's hover only as dark as keeps 4.5:1); a status bar and number tiles first (`bar()`, `legend()`, `tiles()`; a
+  count is a whole number of items, anything else refused); one decision with one copy button and its hint
+  (`decision()`; a command without its hint refused), commands, flags, ids and hashes (either case, after Chinese text
+  too) only there and in folds (`data-zone="decision"` / `"tech"`: `details()`, `owner()`); at most three warnings on
+  the page, all its boxes together, the rest one line that names the owner's fold (`warnings()`; a limit above three
+  refused); a node map with one cell per item, each a link with its title, as many to a line as the waffle column's
+  width holds so none is past the map's edge, a stated node's icon never cut, and an empty leaf that says why
+  (`node_map()`; a cell without a title or a link and a node with nothing under it and no why refused, a text left None
+  empty); cards that unfold row by row with ten dots and if it works / if it does not (`fold_row()`, `card()`,
+  `story()`, `dots()`, `expand_all()`); the owner's fold, folded and last, which the more line names by its title up to
+  the colon (`fold_name()`), so `owner` and `more` are renamed together. `page()` is the whole document: doctype, lang,
+  a CSP that allows no network (`default-src 'none'`, never `'self'`, an image only inline as `data:`), light and dark
+  tokens on `:root`, the page data as strict JSON with no `</` (NaN and Infinity refused), filled in one pass (a text
+  holding `__DATA__` stays text), a script that holds no word (a button's words, its label too, are its own attributes;
+  a copy button comes back to its label after quick clicks and after the fallback). Every visible word is the
+  harness's: `Style(words, lang)` lays them over `EN` and refuses an unknown key, an empty word, a template without
+  `{n}` or a `more` that does not name the owner's fold; `ZH` is a ready Simplified Chinese set; the module-level parts
+  are English; a Style carries every name the module exports; the currency is the harness's (`money`: `"¥{n}"`).
+  `problems(page)` is the check a harness's tests run on every page, one line for each rule a page can break (the
+  skeleton with the style's own stylesheet and script, nothing loaded from outside the page, the harness's CSS dimming
+  or recolouring no state, a status bar or tiles before the one decision zone, one copy button with its hint and only
+  there, no command, flag, hash or code outside the zones plus the harness's own patterns, three warnings on the page
+  and a more line that names the owner's fold, the owner's fold folded and last, every card in a row, a state's icon and
+  word on every chip, node and cell, a title and a link on every cell and none past the map's edge, every in-page link
+  landing, a node with nothing under it saying why, no grid wider than a 320px phone's column, its fixed tracks added
+  up); `zones(page)` is the visible text by zone. Its test runs the copy button's script under node, so the `kit` suite
+  of `run_all.py` names node beside git. From the video-ads harness's page style (seen once, 2026-10-13; the owner made
+  it the model for such pages), which keeps its own copy for now.
 
 ## [0.23.0] - 2026-10-13
 ### Added

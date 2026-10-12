@@ -73,7 +73,7 @@ class Suite(NamedTuple):
 
 SUITES = (
     Suite("docs", "tests/run.py", (), "the build docs held to the files, and run_all.py"),
-    Suite("kit", "kit/tests/run.py", ("git",), "the shared harness modules and their guards"),
+    Suite("kit", "kit/tests/run.py", ("git", "node"), "the shared harness modules and their guards (pagestyle's copy script runs under node)"),
     Suite("scaffold", "scaffold/tests/run.py", ("git",), "the scaffolder: a generated harness is green before its first feature"),
     Suite("build", "build/tests/run.py", (), "the build-time tools: intake check, asks, apply"),
     Suite("console", "console/tests/run.py", ("git", "node"), "the owner console and its docs (console.js runs under node)"),
