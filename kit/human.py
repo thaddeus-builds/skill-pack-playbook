@@ -35,6 +35,13 @@ module guards:
                      The user is one token (no space, no bracket) and the
                      time is ISO 8601 with its zone, so what a caller
                      types cannot close the suffix and forge another one.
+                     A verb that writes to someone else's system on a chat
+                     yes passes `need_quote=True`: the relayed confirm then
+                     also needs `--relay-quote`, the confirming person's
+                     own words as sent, kept as ` [quote="…"]` (a JSON
+                     string, so it cannot close the suffix either). The
+                     code proves the person saw the summary; the words show
+                     what they said to it.
   * changed_by()     `<OS user>@tty|relay|cli`: derived, never typed. The OS
                      user is the account the process runs as (its passwd
                      entry, `uid:<euid>` without one), never LOGNAME/USER,
@@ -325,11 +332,20 @@ def confirm(what: str, prompt: str, expected: str, *, subj: str,
 
 
 def relay_audit(channel: str, relay_user: str | None,
-                relay_at: str | None) -> str:
+                relay_at: str | None, relay_quote: str | None = None, *,
+                need_quote: bool = False) -> str:
     """"" unless confirm() returned "relay"; then --relay-user and
     --relay-at are required and this is the history-reason suffix that
     records them. The chat app rides in the sender id by convention
-    (`<channel>:<sender id>`, the console sends `web:<user>`)."""
+    (`<channel>:<sender id>`, the console sends `web:<user>`).
+
+    `relay_quote` (--relay-quote) is the confirming person's own words, as
+    sent, whitespace collapsed; when given it is kept as ` [quote="…"]`.
+    With `need_quote` a relay without it is refused
+    (confirm_relay_quote_missing): pass it for a verb whose write leaves
+    the harness on a person's chat yes, so the record shows what was
+    said, not only that a code came back. The console relays a click, not
+    words: such a verb is confirmed in chat or at the terminal."""
     if channel != "relay":
         return ""
     if not relay_user or not relay_at:
@@ -345,7 +361,14 @@ def relay_audit(channel: str, relay_user: str | None,
                 f"--{field.replace('_', '-')} is not valid (one token for "
                 f"the user, an ISO 8601 time with its zone). Nothing was "
                 f"written.", field=field))
-    return f" [relay user={relay_user} at={relay_at}]"
+    quote = " ".join((relay_quote or "").split())
+    if need_quote and not quote:
+        raise Refused(msg(
+            "confirm_relay_quote_missing",
+            "--code needs --relay-quote too: the confirming person's own "
+            "words, as sent (history keeps them). Nothing was written."))
+    said = f" [quote={json.dumps(quote, ensure_ascii=False)}]" if quote else ""
+    return f" [relay user={relay_user} at={relay_at}]{said}"
 
 
 def _iso_with_zone(text: str) -> bool:
@@ -431,10 +454,12 @@ def json_refusal(e: BaseException, cmd: list[str]) -> dict:
 
 
 def add_gate_args(parser: argparse.ArgumentParser, *,
-                  reason: bool = True, for_client: bool = False) -> None:
+                  reason: bool = True, for_client: bool = False,
+                  quote: bool = False) -> None:
     """--code, --relay-user, --relay-at (and --reason unless the verb
-    declares its own). argparse accepts the `--name=value` form the
-    console sends, so a code starting with `-` stays one argument."""
+    declares its own; --relay-quote for a verb that passes need_quote to
+    relay_audit). argparse accepts the `--name=value` form the console
+    sends, so a code starting with `-` stays one argument."""
     parser.add_argument(
         "--code", help="off a TTY, instead of retyping: the one-time code "
         "the human relayed back, bound to exactly this request")
@@ -444,6 +469,10 @@ def add_gate_args(parser: argparse.ArgumentParser, *,
     parser.add_argument(
         "--relay-at", help="ISO 8601 time the human's reply arrived — "
         "required with --code")
+    if quote:
+        parser.add_argument(
+            "--relay-quote", help="the confirming person's own words, as "
+            "sent — required with --code (kept in history)")
     if for_client:
         parser.add_argument(
             "--for-client", metavar="NAME", help="the client's own "

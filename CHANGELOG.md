@@ -29,6 +29,18 @@ scaffold, console, docs, conformance.
   pre-push hook, push. The hook is installed only once a list is named, since it refuses a push
   without one.
 
+## [0.20.0] - 2026-10-12
+### Added
+- `human.py`: `relay_audit(..., relay_quote, need_quote=True)` and `add_gate_args(quote=True)`
+  (`--relay-quote`). A verb whose write leaves the harness on a person's chat yes asks for the
+  confirming person's own words, as sent, beside `--relay-user` and `--relay-at`; a relay
+  without them is refused (`confirm_relay_quote_missing`), and the words are kept on the
+  history reason as ` [quote="…"]`, one JSON string that cannot close the suffix. The code
+  proves the person saw the summary; the words show what they said to it. Off by default:
+  existing callers are unchanged, and the console (which relays a click, not words) never
+  confirms such a verb. From the SEO harness (seen once, an owner decision on its store write,
+  2026-10-12).
+
 ## [0.19.0] - 2026-10-12
 ### Added
 - `doctor.py`: `checkout` warns (`doctor_checkout_differs`) when the cwd is in another git
