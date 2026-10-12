@@ -5,29 +5,37 @@ A harness that makes variants (ads, posts, emails) and gets back, per variant, i
 it makes out as a partition: every unit (one variant) sits on exactly one leaf (a path), and every leaf under its
 ancestors (any depth: a direction, then a template, then one value per variable, say). What the kit guards:
 
-  * exact statistics, stdlib only: `gamma_cdf()` (the regularized lower incomplete gamma), `p_above()`, `quantile()`;
-    `tenths()` reads a probability as "about n times in 10", rounded toward a half, so 0.79 reads 7 and 0.21 reads 3
-    and a number shown never crosses the 0.8 or 0.2 line its state was judged on;
+  * exact statistics, stdlib only: `gamma_cdf()` (the regularized lower incomplete gamma: its series and continued
+    fraction run until they converge, the terms allowed growing with the square root of the shape, and raise
+    ValueError rather than return a truncated value), `p_above()`, `quantile()`; `tenths()` reads a probability as
+    "about n times in 10", rounded toward a half, so 0.79 reads 7 and 0.21 reads 3 and a number shown never crosses
+    the 0.8 or 0.2 line its state was judged on;
   * `posteriors()`: a leaf's rate (conversions per unit of spend) is a Gamma-Poisson posterior on its settled numbers
     (fractional conversions allowed: the Poisson kernel is then a quasi-likelihood, and the mean stays right). Its
-    prior is borrowed down the partition, leave-one-out: account -> each level -> the leaf, every level's prior mean
+    parents are its ancestors' keys in order, a list (a set is refused: its order changes from process to process).
+    Its prior is borrowed down the partition, leave-one-out: account -> each level -> the leaf, every level's prior mean
     its parent's posterior mean with the level's own numbers taken out (nothing counts twice), worth `prior_conv`
     conversions; an optional per-leaf factor moves the leaf's prior mean, clipped to [1 / prior_shift_max,
     prior_shift_max]. A node's numbers are the sum of its children's, and the account covers every leaf;
   * `judge()`: five states, each with its reason (REASONS). Only settled numbers count, so a leaf the platform starved
-    stays testing, never down. A down leaf is proposed for closing when its settled spend would buy
-    close_min_expected_conv at the account rate, close_min_units of its units have settled spend and P(rate >=
-    close_ratio x the account rate) is at most close_p. A close is never decided here: a person confirms it, and the
-    harness records it (and passes `closed=True` from then on);
+    stays testing, never down, and nothing is judged until the account is warm: a rate and account_min_conv settled
+    conversions under the thresholds judge() is given (`pick()` decides it the same way; the `warm` an account()
+    dict carries answers only for the thresholds that built it). A down leaf is proposed for closing when its settled
+    spend would buy close_min_expected_conv at the account rate, close_min_units of its units have settled spend and
+    P(rate >= close_ratio x the account rate) is at most close_p. A close is never decided here: a person confirms it,
+    and the harness records it (and passes `closed=True` from then on);
   * `pick()`: the next batch, over the moves the harness built (what a move makes is the harness's). With no warm
     account, the harness's coverage order; once warm, batched top-two Thompson draws, at least explore_share of the
     batch from moves not known yet, at most half a batch per group (one move bigger than that stands alone), two moves
     that share an exclusive key never both (a key one move holds `shared` fits beside another's `shared`, never beside
-    an `exclusive`), a fill up to two over rather than short, and a seed from the data: the same data, the same batch;
+    an `exclusive`; a move's keys are a list or a set, kept sorted), a move that fits the batch before one up to two
+    over (taken only when none fits, in the explore share too), and a seed from the data: the same data, the same
+    batch, in any process;
   * `twins()`: units of one group with the same tags whose settled rates differ by twin_ratio with probability twin_p,
     past two count thresholds; at most three, the largest gap first, with what is known to differ. A clue, never proof;
   * every threshold is in DEFAULTS (SETTINGS says what each is); `settings()` lays a harness's or a client's own values
-    over them and refuses one that is not a value of that threshold (`setting()`, ValueError).
+    over them and refuses one that is not a value of that threshold (`setting()`, ValueError), and a downweight_p not
+    below promising_p (one P(better) would then be both promising and down).
 
 The platform does not randomise delivery: "better than the account" is a statement about these numbers, never a cause.
 What a leaf is, what a move makes, where the numbers come from, who closes and how a person sees it are the harness's.
@@ -93,7 +101,8 @@ _SLACK = 1e-9                                   # 0.3 x 10 is 3, not 3.000000000
 def setting(key: str, value: object) -> float | int:
     """The typed value of one threshold, or ValueError saying what is wrong: an unknown key, a value that is not a
     finite number (a bool is none), a count that is not whole, a probability or share not strictly between 0 and 1,
-    a close_ratio not in (0, 1], a prior_shift_max below 1 (1: the factor moves nothing), anything else not above 0."""
+    a close_ratio not in (0, 1], a prior_shift_max below 1 (1: the factor moves nothing), a twin_ratio not above 1 (at
+    1 or below, two units with the same numbers are twins), anything else not above 0. Every message names the key."""
     if key not in DEFAULTS:
         raise ValueError(f"no setting {key!r} (the settings: {', '.join(DEFAULTS)})")
     whole = TYPES[key] is int
@@ -118,29 +127,44 @@ def setting(key: str, value: object) -> float | int:
     elif key == "prior_shift_max":
         if v < 1:
             raise ValueError(f"{key}: at least 1 (1 means the factor moves nothing)")
+    elif key == "twin_ratio":
+        if v <= 1:
+            raise ValueError(f"{key}: above 1 (how many times better the best twin must be)")
     elif v <= 0:
         raise ValueError(f"{key}: must be above 0")
     return v
 
 
 def settings(over: Mapping[str, object] | None = None) -> dict:
-    """DEFAULTS with `over` laid on them, every value of `over` checked by setting() (ValueError on the first bad one).
-    Every function here takes its thresholds this way."""
-    return {**DEFAULTS, **{k: setting(k, v) for k, v in (over or {}).items()}}
+    """DEFAULTS with `over` laid on them, every value of `over` checked by setting() (ValueError on the first bad one),
+    then the one check across keys: downweight_p below promising_p, so no P(better) is both down and promising (a
+    client who moves one line past the other moves the other too). Every function here takes its thresholds this
+    way."""
+    out = {**DEFAULTS, **{k: setting(k, v) for k, v in (over or {}).items()}}
+    if not out["downweight_p"] < out["promising_p"]:
+        raise ValueError(f"downweight_p ({out['downweight_p']:g}) must be below promising_p ({out['promising_p']:g}): "
+                         "one P(better) would be both down and promising")
+    return out
 
 
 # ---------------------------------------------------------------- statistics
 
+def _terms(a: float) -> int:
+    """The most terms the series or the continued fraction may take at shape a: near x = a both need about 8 x sqrt(a)
+    (the series' terms fall off like exp(-n^2 / 2a)), so the allowance grows with sqrt(a)."""
+    return 10000 + int(10 * math.sqrt(a))
+
+
 def _gser(a: float, x: float) -> float:
     s = term = 1.0 / a
     ap = a
-    for _ in range(10000):
+    for _ in range(_terms(a)):
         ap += 1
         term *= x / ap
         s += term
         if abs(term) < abs(s) * 1e-15:
-            break
-    return s * math.exp(-x + a * math.log(x) - math.lgamma(a))
+            return s * math.exp(-x + a * math.log(x) - math.lgamma(a))
+    raise ValueError(f"gamma_cdf({a!r}, {x!r}): the series did not converge in {_terms(a)} terms")
 
 
 def _gcf(a: float, x: float) -> float:
@@ -148,7 +172,7 @@ def _gcf(a: float, x: float) -> float:
     b = x + 1 - a
     c, d = 1 / tiny, 1 / b
     h = d
-    for i in range(1, 10000):
+    for i in range(1, _terms(a)):
         an = -i * (i - a)
         b += 2
         d = an * d + b
@@ -158,13 +182,15 @@ def _gcf(a: float, x: float) -> float:
         d = 1 / d
         h *= d * c
         if abs(d * c - 1) < 1e-15:
-            break
-    return math.exp(-x + a * math.log(x) - math.lgamma(a)) * h
+            return math.exp(-x + a * math.log(x) - math.lgamma(a)) * h
+    raise ValueError(f"gamma_cdf({a!r}, {x!r}): the continued fraction did not converge in {_terms(a)} terms")
 
 
 def gamma_cdf(a: float, x: float) -> float:
     """The regularized lower incomplete gamma P(a, x) = P(X <= x) for X ~ Gamma(shape a, rate 1): the series below
-    a + 1, the continued fraction above. 0 for x <= 0; ValueError for a shape that is not above 0."""
+    a + 1, the continued fraction above, each run until it converges (_terms(): the allowance grows with sqrt(a)). 0
+    for x <= 0; ValueError for a shape that is not above 0, and for a series or fraction that did not converge (never
+    a truncated value)."""
     if not a > 0:
         raise ValueError("a gamma's shape is above 0")
     if x <= 0:
@@ -218,10 +244,20 @@ def _post(p: object, what: str) -> Post | None:
 
 
 def _keys(x: object, what: str) -> tuple[str, ...]:
+    """A leaf's parents: keys from the top, in order, so a list or a tuple. A set is refused: its order changes from
+    process to process, and with it the tree."""
+    if isinstance(x, str) or not isinstance(x, (list, tuple)) or not all(isinstance(k, str) and k for k in x):
+        raise ValueError(f"{what}: a list of non-empty strings, in order (a set has no order)")
+    return tuple(x)
+
+
+def _keyset(x: object, what: str) -> tuple[str, ...]:
+    """A move's exclusive or shared keys: their order means nothing, so a list or a set, kept sorted and each once
+    (neither the order given nor a set's own reaches the seed)."""
     if isinstance(x, str) or not isinstance(x, (list, tuple, set, frozenset)) \
             or not all(isinstance(k, str) and k for k in x):
-        raise ValueError(f"{what}: a list of non-empty strings")
-    return tuple(x)
+        raise ValueError(f"{what}: a list or a set of non-empty strings")
+    return tuple(sorted(set(x)))
 
 
 def _ids(items: Sequence[Mapping], what: str) -> None:
@@ -257,10 +293,10 @@ def _without(post: Post, y: float, s: float) -> float:
 def posteriors(leaves: Iterable[Mapping], cfg: Mapping | None = None,
                total: tuple[float, float] | None = None) -> dict:
     """{account, nodes, leaves} for a partition. A leaf is {id, parents, conv, spend, shift?}: `parents` its ancestors'
-    keys from the top (strings, any depth, none = directly under the account), `conv` and `spend` its settled numbers
-    (the sum of its units'), `shift` an optional factor on its prior mean (1 = none; clipped to [1 / prior_shift_max,
-    prior_shift_max]). `total` is the account's (conv, spend) when it holds more than the leaves (units on no leaf);
-    it is never less (ValueError).
+    keys from the top (a list of strings in that order, any depth, none = directly under the account; a set is
+    refused), `conv` and `spend` its settled numbers (the sum of its units'), `shift` an optional factor on its prior
+    mean (1 = none; clipped to [1 / prior_shift_max, prior_shift_max]). `total` is the account's (conv, spend) when it
+    holds more than the leaves (units on no leaf); it is never less (ValueError).
 
     `account`: account()'s dict plus `post`, the account's own Gamma(prior_conv + Y, prior_conv / rate + S).
     `nodes`: {tuple of keys from the top: {conv, spend, leaves, post}}, the sums of the leaves under it and its
@@ -309,12 +345,24 @@ def posteriors(leaves: Iterable[Mapping], cfg: Mapping | None = None,
     return {"account": acct, "nodes": nodes, "leaves": posts}
 
 
+def _warm(acct: Mapping, cfg: Mapping) -> bool:
+    """Whether the account is warm under the thresholds in hand: a rate, and at least account_min_conv settled
+    conversions. The `warm` an account() dict carries answers for the thresholds that built it and is not read here."""
+    if not isinstance(acct, Mapping):
+        raise ValueError("the account is a mapping (account() or posteriors()['account'])")
+    if not acct.get("rate"):                    # None (no spend or no conversion): never warm
+        return False
+    _amount(acct["rate"], "the account's rate")
+    return _amount(acct.get("conv"), "the account's conversions") >= cfg["account_min_conv"]
+
+
 # ---------------------------------------------------------------- the state of a leaf (or a node)
 
 def judge(post: Post | None, acct: Mapping, *, made: int, spend: float, settled: int, closed: bool = False,
           cfg: Mapping | None = None) -> dict:
     """{state, why, propose_close} of a leaf (a node is judged by the same rule; whether a node's proposal is shown is
-    the harness's): `post` its posterior (posteriors()), `acct` the account (account() or posteriors()["account"]),
+    the harness's): `post` its posterior (posteriors()), `acct` the account (account() or posteriors()["account"]:
+    whether it is warm is decided here, from its rate and conversions under `cfg`, never from its own `warm`),
     `made` its units made, `spend` its settled spend, `settled` its units with settled spend, `closed` a person's close
     standing on it. Once judged it also carries `rate` (the posterior mean), `lo` and `hi` (INTERVAL), `expected` (the
     settled spend in conversions at the account rate, 3 places) and `p_better` (P(rate > the account's), 4 places); a
@@ -331,7 +379,7 @@ def judge(post: Post | None, acct: Mapping, *, made: int, spend: float, settled:
         return out("closed_by_person")
     if made == 0:
         return out("not_made")
-    if not acct.get("warm"):
+    if not _warm(acct, cfg):
         return out("account_thin" if spend > 0 else "no_settled_numbers")
     if spend <= 0:
         return out("no_settled_numbers")
@@ -375,24 +423,27 @@ def _move(m: object) -> dict:
     if m.get("kind") not in KINDS:
         raise ValueError(f"{what}: kind is one of {', '.join(KINDS)}")
     return {"id": m.get("id"), "group": m["group"], "n": n, "kind": m["kind"], "post": _post(m.get("post"), what),
-            "exclusive": _keys(m.get("exclusive", ()), f"{what}: exclusive"),
-            "shared": _keys(m.get("shared", ()), f"{what}: shared")}
+            "exclusive": _keyset(m.get("exclusive", ()), f"{what}: exclusive"),
+            "shared": _keyset(m.get("shared", ()), f"{what}: shared")}
 
 
 def pick(moves: Sequence[Mapping], acct: Mapping, cfg: Mapping | None = None, seed: int | None = None) -> dict:
     """{mode, batch, n, moves, left}: the next batch of about batch_size units, drawn from `moves` the harness built. A
     move is {id, group, n, kind, post, exclusive?, shared?, ...}: `n` the units it makes, `kind` known or unknown,
     `post` the posterior it is drawn on (None: the account's own rate, worth prior_conv), `exclusive` and `shared` keys
-    (two moves never both hold one key when either holds it exclusive); any other key rides along into the batch.
+    (a list or a set, their order meaning nothing; two moves never both hold one key when either holds it exclusive);
+    any other key rides along into the batch.
 
-    Cold (the account not warm): mode `coverage`, the moves in the order given (the harness's coverage order), each
-    taken whole while the batch is short, so it may run up to two over. Warm: mode `weights`, first at least
-    explore_share of the batch from unknown moves (plain Thompson draws), then batched top-two Thompson over all (each
-    draw takes the leader, or, TOP_TWO of the time, the best of a fresh draw over the others); a move up to two over is
-    taken rather than leaving the batch short. Always: a group takes at most half a batch, rounded down (at least 1),
-    and one move bigger than that only into a group with nothing else, then standing alone. The draws are seeded by
-    `seed`, else by the moves and the account, so the same data gives the same batch. Each batch entry is its move
-    without `post`, with `basis` (coverage or weights) and, warm, `p_better` (its post against the account's rate)."""
+    Cold (the account not warm under `cfg`, as judge() decides it): mode `coverage`, the moves in the order given (the
+    harness's coverage order), each taken whole while the batch is short, so it may run up to two over. Warm: mode
+    `weights`, first at least explore_share of the batch from unknown moves (plain Thompson draws), then batched
+    top-two Thompson over all (each draw takes the leader, or, TOP_TWO of the time, the best of a fresh draw over the
+    others); in both, the draw is among the moves that fit within the batch, and a move up to two over is taken only
+    when none fits, rather than leaving the batch (or its explore share) short. Always: a group takes at most half a
+    batch, rounded down (at least 1), and one move bigger than that only into a group with nothing else, then standing
+    alone. The draws are seeded by `seed`, else by the moves and the account (keys sorted), so the same data gives the
+    same batch, in any process. Each batch entry is its move without `post`, with `basis` (coverage or weights) and,
+    warm, `p_better` (its post against the account's rate)."""
     cfg = settings(cfg)
     if not isinstance(moves, Sequence) or isinstance(moves, (str, bytes)):
         raise ValueError("moves: a list")
@@ -426,7 +477,7 @@ def pick(moves: Sequence[Mapping], acct: Mapping, cfg: Mapping | None = None, se
     def done(mode: str) -> dict:
         return {"mode": mode, "batch": picked, "n": total(), "moves": len(ms), "left": len(ms) - len(picked)}
 
-    if not acct.get("warm"):
+    if not _warm(acct, cfg):
         for i in range(len(ms)):
             if total() >= k:
                 break
@@ -452,7 +503,8 @@ def pick(moves: Sequence[Mapping], acct: Mapping, cfg: Mapping | None = None, se
     pool = list(range(len(ms)))
     explore = math.ceil(cfg["explore_share"] * k - _SLACK)
     while sum(ms[i]["n"] for i in chosen if ms[i]["kind"] == "unknown") < explore:
-        cands = [i for i in pool if ms[i]["kind"] == "unknown" and fits(i, k + 2)]
+        unknown = [i for i in pool if ms[i]["kind"] == "unknown"]
+        cands = [i for i in unknown if fits(i, k)] or [i for i in unknown if fits(i, k + 2)]  # within the batch first
         if not cands:
             break
         d = {i: draw(i) for i in cands}
