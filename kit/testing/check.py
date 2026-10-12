@@ -11,7 +11,14 @@ not pass.
 The function-per-test style (the console's `_t.main(globals())`) runs
 over the same gate: `raise SystemExit(run_functions(globals()))` runs
 each `test_*` function as one check (it passes when it returns without
-raising), refusing `python -O`, which would skip every assert.
+raising), refusing `python -O`, which would skip every assert. The call
+must come after the file's last test: a `test_*` the file defines below
+it would never run (under pytest it would, so nothing looked wrong), and
+run_functions fails the file naming it.
+
+Importing this module marks the process as a test (`KIT_TEST_RUN=1`,
+kit.config.TEST_RUN_ENV), so a file run on its own sees what it sees
+under the runner.
 
 `tmp_dir()` makes a sandbox under the run's TMPDIR that no with/finally
 has to remove: it goes when the file exits, because the runner fails a
@@ -22,6 +29,7 @@ Test: kit/tests/test_check.py (and every kit test uses it).
 
 from __future__ import annotations
 
+import ast
 import atexit
 import contextlib
 import io
@@ -33,6 +41,9 @@ import tempfile
 import traceback
 from typing import Any, Callable
 
+from kit.config import TEST_RUN_ENV
+
+os.environ[TEST_RUN_ENV] = "1"
 PASSES = 0
 FAILS: list[tuple[str, str]] = []
 
@@ -77,7 +88,28 @@ def run_functions(g: dict) -> int:
             check(name, True)
         except (Exception, SystemExit):
             check(name, False, traceback.format_exc().rstrip())
+    late = _defined_below(g, {n for n, _ in tests})
+    if late:
+        check("every test_* is defined above the run_functions() call", False,
+              f"never run, defined below it: {', '.join(late)}; end the "
+              f"file with the call")
     return finish()
+
+
+def _defined_below(g: dict, ran: set[str]) -> list[str]:
+    """The top-level `test_*` functions of g's source file that were not
+    in g when run_functions was called: defined below the call."""
+    path = g.get("__file__")
+    if not path:
+        return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+    except (OSError, SyntaxError, ValueError):
+        return []
+    return [n.name for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name.startswith("test_") and n.name not in ran]
 
 
 def tmp_dir(prefix: str | None = None) -> str:
