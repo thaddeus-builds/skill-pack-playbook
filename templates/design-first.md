@@ -30,27 +30,72 @@ One page in the owner's language, for someone who will never read the code:
 
 The page the feature will write, clickable, from a world nobody owns. Its guards:
 
-- **A synthetic marker.** The world is marked synthetic (`"synthetic": true`), and the page says so where it is seen first: `kit.pagestyle`'s badge, `<span class="syn">`, in the header.
+- **A synthetic marker.** The world is marked synthetic (`"synthetic": true`, that value and no other), and the page says so where it is seen first: `kit.pagestyle`'s badge, `<span class="syn">` with its words, in the page's first `<header>`, before the decision. The guard reads where it sits in the markup: a badge in a comment, a fold (`<details>`), a script or style, or under an element with a `hidden` or `style` attribute does not count.
 - **DEMO ids.** The product, the project and every code and id on the page start with `DEMO`, so nothing on it can be taken for, or matched to, a real one.
-- **No client term.** Before it is written, the page is scanned with the harness's client-term lists (`load_terms` and `scan` of [kit/tools/leak_guard.py](../kit/tools/leak_guard.py)). It fails closed: a hit, no list, a named list missing or unreadable, or lists with no term, and nothing is written.
-- **The harness's own renderer.** It is drawn by the code that will draw the real page (for a page that guides making, [`kit.pagestyle`](../docs/page-style.md)) and passes that renderer's check (`problems()`). Never a hand-made mock-up: it shows a page the code will not write.
-- **Never in the client's review folder.** The demo is written outside the client's data, and a client's real page is never shared.
+- **No client term.** Before it is written, the page is scanned with the harness's client-term lists (`load_terms` and `scan` of [kit/tools/leak_guard.py](../kit/tools/leak_guard.py)), in each form it reaches a reader: as written, unescaped, as shown (its tags gone, then unescaped, so a term split by `<b>` or `<br>` is whole again), and with its page data's JSON escapes read back (`\u0026` is `&`, `\"` is `"`, `\n` a new line). It fails closed: a hit, no list, a named list missing or unreadable, or lists with no term, and nothing is written.
+- **The harness's own renderer.** It is drawn by the code that will draw the real page (for a page that guides making, [`kit.pagestyle`](../docs/page-style.md)) and passes that renderer's check (`problems()`) with the harness's own style and command patterns, as every page the harness writes does. Never a hand-made mock-up: it shows a page the code will not write.
+- **Never in a client's data.** The demo is written outside every client's data folder (each `$DATA_DIR`, its review folder included), and a client's real page is never shared.
 - **Shared privately.** One private link, given to the owner, who decides who else sees it. Every new version goes to the same link.
 
-The guard, for a harness to copy into the tool that writes its demo. `ids` is the product, the project and every code and id the page shows; a page drawn with another renderer runs that renderer's check in place of `style.problems`.
+The guard, for a harness to copy into the tool that writes its demo. `ids` is the product, the project and every code and id the page shows; `client_data` is every client's data folder; `style` and `commands` are the harness's own style and command patterns (its CLI's name), as in [Checking a page](../docs/page-style.md#checking-a-page). A page drawn with another renderer runs that renderer's check in place of `style.problems`.
 
 ```python
 import html
+import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 from kit import pagestyle
 from kit.tools import leak_guard
 
-MARK = '<span class="syn">'                         # kit.pagestyle's "synthetic data" badge
+JSON_ESCAPE = re.compile(r'\\(u[0-9a-fA-F]{4}|["\\/bfnrt])')
+CONTROL = {"b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
 
 
-def demo_problems(world: dict, ids: list[str], page: str, *, out: Path, review: Path, terms: list[Path],
-                  style: pagestyle.Style = pagestyle.DEFAULT) -> list[str]:
+def read_back(text: str) -> str:
+    """JSON's string escapes read back, as an agent that parses the page data reads it: \\u0026 is &, \\" is "."""
+    return JSON_ESCAPE.sub(lambda m: chr(int(m[1][1:], 16)) if m[1][0] == "u" else CONTROL.get(m[1], m[1]), text)
+
+
+def forms(page: str) -> tuple[str, ...]:
+    """The page as a reader gets it: as written, unescaped, as shown (tags gone, then unescaped), its data read back."""
+    return page, html.unescape(page), html.unescape(re.sub(r"<[^>]*>", " ", page)), read_back(page)
+
+
+class Badge(HTMLParser):
+    """The words of the synthetic badge (<span class="syn">) in the page's first <header>, before the decision; not in
+    a comment, a fold, a script, a style or a template, nor under an element with a hidden or style attribute."""
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+
+    def __init__(self, page: str):
+        super().__init__(convert_charrefs=True)
+        self.open, self.headers, self.decided, self.words = [], 0, False, ""
+        self.feed(page)
+        self.close()
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        self.decided = self.decided or a.get("data-zone") == "decision"
+        self.headers += tag == "header"
+        if tag not in self.VOID:
+            self.open.append((tag, a))
+
+    def handle_endtag(self, tag):
+        tags = [t for t, _ in self.open]
+        if tag in tags:
+            del self.open[len(tags) - 1 - tags[::-1].index(tag):]
+
+    def handle_data(self, data):
+        tags = {t for t, _ in self.open}
+        if (self.headers == 1 and "header" in tags and not self.decided
+                and not tags & {"details", "script", "style", "template"}
+                and not any("hidden" in a or "style" in a for _, a in self.open)
+                and any(t == "span" and "syn" in (a.get("class") or "").split() for t, a in self.open)):
+            self.words += data
+
+
+def demo_problems(world: dict, ids: list[str], page: str, *, out: Path, client_data: list[Path], terms: list[Path],
+                  style: pagestyle.Style, commands: list[str]) -> list[str]:
     """Why this demo page may not be written or shared; [] when it may. Fails closed on the term lists."""
     found = []
     if world.get("synthetic") is not True:
@@ -58,16 +103,18 @@ def demo_problems(world: dict, ids: list[str], page: str, *, out: Path, review: 
     if not ids:
         found.append("no ids given: the product and the project at least")
     found += [f"{i!r} is not a DEMO id" for i in ids if not str(i).startswith("DEMO")]
-    if MARK not in page:
-        found.append("the page carries no synthetic marker")
-    found += style.problems(page)
-    if out.resolve().is_relative_to(review.resolve()):
-        found.append("the demo is never written into the client's review folder")
+    if not Badge(page).words.strip():
+        found.append("no synthetic badge in the page's first header, before the decision")
+    found += style.problems(page, commands=commands)
+    if not client_data:
+        found.append("no client data folder given: where the demo goes cannot be checked")
+    elif any(out.resolve().is_relative_to(d.resolve()) for d in client_data):
+        found.append("the demo is never written into a client's data folder")
     try:
         lists = leak_guard.load_terms(terms)         # Refusal: no list, one missing or unreadable, no term in them
     except leak_guard.Refusal as why:
         return [*found, f"no usable client-term list ({why}): nothing is written"]
-    hits = set(leak_guard.scan(page, lists)) | set(leak_guard.scan(html.unescape(page), lists))
+    hits = {h for text in forms(page) for h in leak_guard.scan(text, lists)}
     return [*found, *(f"a client term, {h}" for h in sorted(hits))]
 ```
 
@@ -86,6 +133,6 @@ The tool writes the page only when the list is empty, and prints the reasons oth
 - [ ] The design page says what it is, how it decides, the asks (each with a recommended answer, and one reply that agrees to all) and what it stores
 - [ ] Every append-only column is proven on a scratch copy of real data
 - [ ] The demo is drawn by the harness's own renderer from a synthetic world and passes the renderer's check
-- [ ] The demo guard finds nothing: the synthetic marker, `DEMO` ids, no client term, outside the client's review folder
+- [ ] The demo guard finds nothing: the synthetic world and its badge in the header, `DEMO` ids, the renderer's check with the harness's style and commands, no client term in any form of the page, outside every client's data folder
 - [ ] The demo is shared privately, and the owner confirmed before any code
 - [ ] After the code, the harness redraws the demo from a synthetic fixture to the same link
