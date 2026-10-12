@@ -24,6 +24,16 @@ scaffold, console, docs, conformance.
   renames the heading. `never_self_test()` plants each fault, `check_never()` reports, and
   `kit.testing.suites.never_table(root)` is the suite a harness's test calls.
 
+### Other
+- Template `SKILL.md`: a `## Never` section first, the table of the verbs only a person runs
+  (`facts confirm`, `decisions confirm`, `facts restore`, `facts init`, `queue approve`), each with
+  why; "Out of scope" points to it instead of listing them again. `templates/harness.toml` sets
+  `[guards.evals] extra = ["facts init"]`.
+- Scaffold: a thirteenth generated test, `tests/test_never_table.py` (`suites.never_table`), so a
+  new harness's Never table stays the verb table's. A harness scaffolded before adds the table
+  and the file (any generated test, calling `suites.never_table`) by hand; until then nothing
+  changes for it.
+
 ## [0.14.0] - 2026-10-12
 ### Added
 - `kit/guards/roadmap.py` and `kit.testing.suites.roadmap`: one ROADMAP.md format. The title,

@@ -39,7 +39,7 @@ ACTIONS_EXPR = re.compile(r"\$\{\{[^}]*\}\}")     # a GitHub Actions expression,
 STEPS = ["B0", "B0.5", "B0.6", "B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "B10"]
 GENERATED = {"test_ssot.py", "test_layering.py", "test_clock.py", "test_json_contract.py", "test_release.py", "test_kit_drift.py",
              "test_human_tables.py", "test_gate.py", "test_boundary.py", "test_run_tests.py", "test_changelog.py",
-             "test_roadmap.py"}
+             "test_roadmap.py", "test_never_table.py"}
 
 
 def doc(rel: str) -> str:
@@ -158,7 +158,7 @@ def test_every_template_is_listed_in_the_templates_readme():
 
 
 ROW = re.compile(r"^\| \[([^\]]+)\]\([^)]*\) \| [^|]* \| `([^`]+)`[^|]*\|", re.M)   # | [template](link) | step | `target` ... | ...
-NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen"]
 
 
 def rendered_problems(rendered: dict[str, str], readme: str) -> list[str]:
@@ -190,7 +190,7 @@ def test_the_docs_say_how_many_tests_a_new_harness_starts_with_and_it_is_the_rea
     for rel, n in (("docs/kit-and-tools.md", 2), (BUILD, 1)):
         said = stated_test_counts(doc(rel))
         assert len(said) == n and set(said) == {want}, (rel, said, want)
-    assert set(stated_test_counts(doc("docs/kit-and-tools.md").replace("the twelve tests", "the nine tests"))) != {want}   # a stale count shows
+    assert set(stated_test_counts(doc("docs/kit-and-tools.md").replace("the thirteen tests", "the nine tests"))) != {want}   # a stale count shows
 
 
 def test_every_harness_test_named_is_one_the_scaffolder_generates():
@@ -383,7 +383,8 @@ def test_every_placeholder_is_one_the_templates_readme_explains():
 def test_harness_toml_parses_and_holds_what_the_kit_reads():
     with open(os.path.join(REPO, "templates/harness.toml"), "rb") as f:
         cfg = tomllib.load(f)
-    assert set(cfg) == {"harness", "kit", "ssot", "release", "layers"}
+    assert set(cfg) == {"harness", "kit", "ssot", "release", "layers", "guards"}
+    assert cfg["guards"] == {"evals": {"extra": ["facts init"]}}, "the person-only verb besides the gated ones (SKILL.md's Never)"
     assert cfg["kit"] == {"packs": []}, "a new harness takes base and testkit; --packs adds more"
     assert {"name", "cli", "env_prefix", "db_file", "scripts_dir", "languages", "markets", "home_env_file"} \
         <= set(cfg["harness"])
