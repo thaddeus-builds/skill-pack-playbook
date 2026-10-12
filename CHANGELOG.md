@@ -24,6 +24,30 @@ scaffold, console, docs, conformance.
   keep the harness, data and virtualenv on the internal disk. Each seen once, in the video-ads
   harness. Tested in `tests/test_docs_build.py`.
 
+## [0.16.0] - 2026-10-12
+### Added
+- `kit.testing.run_tests`: a file's own budget, a `# kit-timeout: S` comment (a comment may follow
+  it), and `--timeout S` for
+  one run's default (still 300 s), so a slow end-to-end file need not make every hang wait as long
+  as it does (#56; the video-ads harness's files that build whole outputs take 3-5 minutes, every
+  other file under 40 s, and it raised its one timeout to 600 s).
+- `KIT_TEST_RUN=1` (`kit.config.TEST_RUN_ENV`) marks a process as a test: the runner exports it to
+  every file, importing `kit.testing.check` sets it, `sandbox_env()` hands it to every child. A
+  harness that honours the `KIT_TTY` seam only in a test checks it, not pytest's variable (#56; the
+  video-ads harness's seam was refused under the runner and passed under pytest). It tells a test
+  from a run; any process can export it, so it is no security boundary.
+### Fixed
+- `run_functions()` fails a file with a top-level `test_*` it never collected, naming it (defined
+  below the call, or hidden by a decorator without functools.wraps): such a test never ran, and the
+  file still printed `RESULT: N passed` (#56; the video-ads harness, 38 tests in 8 files).
+- `sandbox_env()` drops every credential-looking variable (a name ending in TOKEN, _KEY, _KEY_ID,
+  PASSWORD or _API, or holding SECRET), as the video-ads harness's own test setup does; a test
+  passes the one it needs as an extra.
+### Other
+- Console: `tests/_t.py`'s `main(globals())` fails a file the same way (#56).
+### Changed
+- `kit/env.py`: `KIT_TEST_RUN` joins the names never loaded from an env file (with 0.15.0's list).
+
 ## [0.15.0] - 2026-10-12
 ### Changed
 - `env.py`: the env chain never loads a gate secret or a test seam from a file, only from the

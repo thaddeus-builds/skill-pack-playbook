@@ -64,7 +64,14 @@ a person counts as present. A regular file is read one answer per line,
 each answer consumed (the prompt goes to stderr); anything else (a
 device) is opened like /dev/tty. It exists so tests can drive the TTY
 path in-process and in a child; sandbox_env()/clean_env() strip it, and
-doctor should warn when it is set outside a test.
+doctor should warn when it is set outside a test. A harness that honours
+the seam only in a test (so an agent cannot use it in production) tells
+one by `KIT_TEST_RUN=1` (kit.config.TEST_RUN_ENV): the test runner
+exports it to every file, importing kit.testing.check sets it, and
+sandbox_env() hands it to every child, so a file passes the same way
+under any runner (a pytest-only variable such as PYTEST_CURRENT_TEST
+does not). It tells a test from a run, nothing more: any process can
+export it, so like the gate itself it is not a security boundary.
 
 Additions to the reference (principle 5, every message coded): the
 refusals it raised as plain text are coded too (confirm_typed_mismatch,
