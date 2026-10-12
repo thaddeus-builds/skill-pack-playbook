@@ -185,9 +185,9 @@ def test_numerals() -> None:
 
 
 REFERENCE = [
-    ("scene 12 line", "每天3次，精华层层渗透滋养，补气助阳，益精生血。"),
+    ("scene 12 line", "每天3次，温和配方层层舒缓，安神助眠，放松身心。"),
     ("scene 12 caption", "每天3次"),
-    ("scene 20 line", "就记住每天一次，里面内含多种生血精华成分，会层层滋养。"),
+    ("scene 20 line", "就记住每天一次，里面内含多种舒缓植物成分，会层层放松。"),
 ]
 DOSAGE = {"dosage_per_day": {
     "value": "3", "status": "pending",

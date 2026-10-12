@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The phrasebook (kit/phrasebook.py) holds each of its guards, in two
 domains: an OTC throat product's Chinese script lines (checked by
-kit.claimscope against 急慢性咽炎引起的咽干、咽痛, with a speech-recognition
+kit.claimscope against 用嗓过度引起的咽干、咽痛, with a speech-recognition
 homophone fix) and an investment fund's English lines.
 
   1. norm(): spaces and punctuation gone, NFKC, case folded, the harness's
@@ -57,7 +57,7 @@ LEX = claimscope.lexicon([
         ("F005", "always", "a guarantee", "(?i)guaranteed|risk[- ]free")]])
 RECORD = {"subject": "本品", "allowed": ["咽干", "咽痛", "咽炎",
                                        "capital growth"],
-          "scope_text": "急慢性咽炎引起的咽干、咽痛"}
+          "scope_text": "用嗓过度引起的咽干、咽痛"}
 HOMOPHONES = {"咽喉咽": "咽喉炎"}
 
 
@@ -129,8 +129,8 @@ def do_approve(p: Path, pid: str, **kw):
 def test_norm_and_clauses() -> None:
     print("[1] norm() and clauses()")
     check("spaces and punctuation of both widths go",
-          phrasebook.norm("用于 急慢性咽炎，引起的“咽干”、咽痛！")
-          == "用于急慢性咽炎引起的咽干咽痛")
+          phrasebook.norm("用于 用嗓过度，引起的“咽干”、咽痛！")
+          == "用于用嗓过度引起的咽干咽痛")
     check("NFKC and case folded: Ｇｕａｒａｎｔｅｅｄ 8%! == guaranteed 8",
           phrasebook.norm("Ｇｕａｒａｎｔｅｅｄ 8%!") == phrasebook.norm(
               "guaranteed 8") == "guaranteed8")
@@ -160,12 +160,12 @@ def test_add_and_harvest() -> None:
           r["new"] and r["text"] == "咽喉炎是不会自己好的"
           and r["status"] == "rejected" and "咽喉炎 (C010)" in r["findings"],
           r)
-    r = phrasebook.add(p, "用于急慢性咽炎引起的咽干、咽痛", check_fn=check_fn,
+    r = phrasebook.add(p, "用于用嗓过度引起的咽干、咽痛", check_fn=check_fn,
                        tag="claim")
     check("a clean phrase is pending, with its id and tag",
           r["status"] == "pending" and r["id"] == "P0002"
           and r["tag"] == "claim", r)
-    r = phrasebook.add(p, "用于急慢性咽炎引起的咽干，咽痛。", check_fn=check_fn)
+    r = phrasebook.add(p, "用于用嗓过度引起的咽干，咽痛。", check_fn=check_fn)
     check("punctuation does not make it new", r["new"] is False
           and r["id"] == "P0002", r)
     e = raises(lambda: phrasebook.add(p, " ，。", check_fn=check_fn),
@@ -240,7 +240,7 @@ def test_known_bad_is_refused_next_time() -> None:
 def test_approve() -> None:
     print("[4] only a person approves, only this text, only without errors")
     p = book()
-    r = phrasebook.add(p, "用于急慢性咽炎引起的咽干、咽痛", check_fn=check_fn)
+    r = phrasebook.add(p, "用于用嗓过度引起的咽干、咽痛", check_fn=check_fn)
     pid = r["id"]
     before = p.read_bytes()
     _, exc, _, _ = gate(do_approve(p, pid))
@@ -258,9 +258,9 @@ def test_approve() -> None:
           and "咽干、咽痛" in err and phrasebook.approved(row, fix)
           and row["note"] == "leaflet wording", (repr(exc), row))
     check("an approved phrase lints clean",
-          found(p, "用于急慢性咽炎引起的咽干，咽痛。") == [])
+          found(p, "用于用嗓过度引起的咽干，咽痛。") == [])
     rows = phrasebook.load(p)
-    rows[0]["text"] = "用于急慢性咽炎引起的咽干、咽痛、咳嗽"
+    rows[0]["text"] = "用于用嗓过度引起的咽干、咽痛、咳嗽"
     phrasebook.save(p, rows)
     check("an edited text is no longer approved",
           not phrasebook.approved(phrasebook.load(p)[0], fix))
