@@ -635,11 +635,12 @@ def test_ssot_writes(root: Path) -> None:
         clean("a virtualenv inside the harness is not its code",
               ssot.check_writes(root))
     with planted(root, "scripts/vendor/w.py", SPACE_SET):
-        caught("write_skip without its reason is reported (and its folder "
-               "still left out)",
-               _with(root, toml + '\n[guards.ssot.write_skip]\n'
-                     '"scripts/vendor" = ""\n'),
+        got = _with(root, toml + '\n[guards.ssot.write_skip]\n'
+                    '"scripts/vendor" = ""\n')
+        caught("write_skip without its reason is reported", got,
                "[guards.ssot].write_skip 'scripts/vendor': give its reason")
+        check("…and its folder is still left out",
+              not any(p.startswith("scripts/vendor/w.py") for p in got), got)
         clean("…and passes with it",
               _with(root, toml + '\n[guards.ssot.write_skip]\n'
                     '"scripts/vendor" = "a vendored client library, read by '

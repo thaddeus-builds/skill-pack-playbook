@@ -425,6 +425,19 @@ def test_thresholds() -> None:
           th.get("max_step", moved, "GB") == 0.2
           and th.get("min_orders", moved, "GB") == 3.0
           and th.overridden(moved, "GB") == {}, th.load(moved, "GB"))
+    got = th.out_of_bounds(moved)
+    check("out_of_bounds(): each confirmed fact today's bounds refuse, for "
+          "doctor (a pending one and an in-bounds one are not listed)",
+          got == [{"market": "GB", "key": "threshold_max_step", "value": "1.5",
+                   "min": 0, "max": 1},
+                  {"market": "GB", "key": "threshold_min_orders",
+                   "value": "-2", "min": 0, "max": None}], got)
+    rows = {r["name"]: r for r in th.listing(moved, "GB")}
+    check("facts list --thresholds says why the default stands",
+          rows["max_step"]["in_effect"] == "default (outside min..max)"
+          and rows["max_step"]["effective"] == 0.2
+          and th.listing(moved, "US")[0]["in_effect"] == "client",
+          rows["max_step"])
     empty = sqlite3.connect(":memory:")
     check("a DB without client_facts: the defaults",
           th.load(empty, "US") == th.overridable())
