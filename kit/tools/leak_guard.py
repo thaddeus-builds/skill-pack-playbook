@@ -73,8 +73,12 @@ class Refusal(Exception):
 
 
 class Terms(list):
-    """(place, pattern) per term, and `any`: all of them as one pattern,
-    so a line that holds none is passed over in one search."""
+    """(place, pattern, plain) per term, and `any`: the plain terms as one
+    pattern, so a line that holds none of them passes them over in one
+    search. A `re:` term is always searched on its own: joined, its
+    backreferences would point at another term's group, and on Python 3.9
+    an inline global flag such as `(?a)` would reach every other term
+    (both fail open; seen in the video-ads harness)."""
     any: re.Pattern | None = None
 
 
@@ -152,7 +156,7 @@ def resolve(specs: list[tuple[str, str]], base: Path) -> list[Path]:
 
 
 def load_terms(paths: list[Path]) -> Terms:
-    """(place, pattern) per term. A plain term is matched with its
+    """(place, pattern, plain) per term. A plain term is matched with its
     whitespace removed against text with its whitespace removed; a `re:`
     term against the text both as it is and without whitespace."""
     out = Terms()
@@ -167,7 +171,8 @@ def load_terms(paths: list[Path]) -> Terms:
             if not t or t.startswith("#"):
                 continue
             place = f"line {n} of list {k}"
-            body = t[3:] if t.startswith("re:") else re.escape(WS.sub("", t))
+            plain = not t.startswith("re:")
+            body = re.escape(WS.sub("", t)) if plain else t[3:]
             try:
                 pat = re.compile(body, re.I)
             except re.error:
@@ -176,14 +181,11 @@ def load_terms(paths: list[Path]) -> Terms:
             if pat.search(""):
                 raise Refusal(f"term on {place} matches the empty string "
                               f"(it would match every line)")
-            out.append((place, pat))
+            out.append((place, pat, plain))
     if not out:
         raise Refusal("the term lists hold no term")
-    try:
-        out.any = re.compile("|".join(f"(?:{p.pattern})" for _, p in out),
-                             re.I)
-    except re.error:             # a term with its own global flags: one by one
-        out.any = None
+    plains = [p.pattern for _, p, plain in out if plain]
+    out.any = re.compile("|".join(plains), re.I) if plains else None
     return out
 
 
@@ -191,11 +193,10 @@ def scan(text: str, terms: Terms) -> list[str]:
     """The place of every term found in one line of text."""
     text = norm(text)
     squeezed = WS.sub("", text)
-    if terms.any is not None and not (terms.any.search(squeezed)
-                                      or terms.any.search(text)):
-        return []
-    return [place for place, pat in terms
-            if pat.search(squeezed) or pat.search(text)]
+    some = terms.any is None or bool(terms.any.search(squeezed)
+                                     or terms.any.search(text))
+    return [place for place, pat, plain in terms if (some or not plain)
+            and (pat.search(squeezed) or pat.search(text))]
 
 
 def _unquote(path: str) -> str:

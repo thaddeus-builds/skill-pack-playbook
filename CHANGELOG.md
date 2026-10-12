@@ -26,6 +26,18 @@ scaffold, console, docs, conformance.
   fills offline is exported from the key registry, its answers come back as pending values
   sourced to the file. Each seen once, in the SEO harness. Tested in `tests/test_docs_build.py`.
 
+## [0.21.1] - 2026-10-12
+### Fixed
+- `tools/leak_guard.py` failed open when a `re:` term sat beside other terms: every term was
+  joined into one pattern and a line it missed was passed over. Joined, a later term's
+  backreference pointed at another term's group (`re:(a)\1` then `re:(b)\1`: an added `bb`
+  passed, though `re:(b)\1` alone refused it); and on Python 3.9 (macOS's `/usr/bin/python3`,
+  which a pre-push hook may run) an inline global flag not at the start, such as `(?a)`, only
+  warned and reached every term (`re:X\wY` beside `re:(?a)zzz`: an added `X示Y` passed under
+  3.9, refused under 3.12). Now only plain terms are joined for the quick pass; every `re:`
+  term is always searched on its own. Seen once, in the video-ads harness, whose own guard
+  fixed it first.
+
 ## [0.21.0] - 2026-10-12
 ### Added
 - `kit.workbook_patch` (pack `workbook`, slice 4 of `docs/workbook-and-browser-ops.md`): cells set
