@@ -52,11 +52,12 @@ A harness picks what an open finding does, per channel, with one switch: for exa
 - **`warn`, where the platform's own review stops a non-compliant ad at no cost to the ad.** The step runs; the finding is shown and recorded with the step's result, and a person decides before anything is uploaded. A late rejection then costs only the generation, which is cheap next to good ads held back by a false alarm. This is the default for such a channel.
 - **`block`, where it does not:** a channel with no review of its own, a rejection that costs money or standing (an account penalised for refusals, or for probing the reviewers), or copy that must be held by law before it is published. An open error refuses the spend, fails QC and refuses export.
 
-**Always stops**, whatever the switch, because these are money, consent or a broken file, not a reading of the copy:
+**Always stops**, at least these, whatever the switch, because these are money, consent or a broken file, not a reading of the copy:
 
 - **Unconfirmed spend:** no cap, a paid call with no price, or a plan larger than the cap leaves. A price nobody confirmed never rides a standing allowance: the whole plan waits for a person's approval.
 - **The spend gate:** no person's approval, or one bound to a different plan.
 - **Consent:** a real person's face, voice or words with no confirmed consent record ([template](third-party-consent.md)).
+- **Preflight:** a paid request the vendor's own schema rules out (`kit/preflight.py`) is refused before it is sent.
 - **Technical QC:** duration, canvas, audio, and each element the category's rules require on screen (an AI label, a legal bar) present. What a required element *says*, while unconfirmed, is a finding and follows the switch.
 
 *Seen once, an owner decision in the video-ads harness:* it first stopped on every finding. The owner changed that: the platform's second review stops a bad ad by itself, so a late rejection costs the ad nothing and loses only the cheap generation. Claim-scope, asset and unconfirmed-legal findings became warnings a person decides on; the switch keeps the old stops. The same owner later narrowed it at upload: a file the platform would refuse is not sent unchanged, because probing the reviewers is penalised.
