@@ -42,6 +42,14 @@ names its fix in `next`):
                  `--strict` stays green on a harness that has not written
                  them yet
   kit_tty        KIT_TTY (the gate's test seam) set outside a test warns
+  checkout       the cwd is in another checkout of this same harness (a
+                 harness.toml of the same name at or above it) than the one
+                 whose code runs (the bound root), and the two differ: other
+                 HEADs, or docs or code (*.md, *.py, *.toml) changed and not
+                 committed in either: the docs the agent reads there may not
+                 describe the code that runs (several sessions work in
+                 worktrees). Silent outside git, without git, in the bound
+                 checkout itself, or in a checkout of another harness
 
 then the harness's own checks: `check(ctx)` callables that call
 `ctx.ok/info/warn/fail(check, message, next)` with coded messages. `--live`
@@ -64,6 +72,7 @@ from __future__ import annotations
 import argparse
 import os
 import stat
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,6 +85,8 @@ from kit.messages import Msg, coded, msg
 
 LEVELS = ("ok", "info", "warn", "fail")
 SECRET_WORDS = ("SECRET", "TOKEN", "PASSWORD", "KEY", "CREDENTIAL")
+DOCS_AND_CODE = ("*.md", "*.py", "*.toml")   # what checkout_differs compares
+GIT_TIMEOUT_S = 10
 SHOWN = ("DATA_DIR", "DB", "AUTH_ENV_PATHS", "TOKEN_SOURCE", "ALLOW_WRITES",
          "KILL", "CONFIRM_CODE_SECRET")
 
@@ -467,6 +478,56 @@ def check_kit_tty(ctx: Context) -> None:
                  ["unset KIT_TTY"])
 
 
+def git_head(path: Path | str) -> tuple[str, list[str]] | None:
+    """(HEAD commit, the tracked docs and code under `path` changed and not
+    committed) of the git checkout at `path`; None outside git, without
+    git, or when git fails. Never takes git's optional locks: doctor
+    writes nothing, not even a refreshed index."""
+    base = ["git", "--no-optional-locks", "-C", str(path)]
+    try:
+        head = subprocess.run(base + ["rev-parse", "HEAD"],
+                              capture_output=True, text=True,
+                              timeout=GIT_TIMEOUT_S)
+        dirty = subprocess.run(base + ["status", "--porcelain",
+                                       "--untracked-files=no", "--",
+                                       *DOCS_AND_CODE],
+                               capture_output=True, text=True,
+                               timeout=GIT_TIMEOUT_S)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if head.returncode or dirty.returncode or not head.stdout.strip():
+        return None
+    return head.stdout.strip(), [ln[3:] for ln in dirty.stdout.splitlines()
+                                 if ln.strip()]
+
+
+def check_checkout(ctx: Context) -> None:
+    cfg = ctx.cfg
+    try:
+        docs = _config.find_root(Path.cwd())
+    except OSError:                              # the cwd was removed
+        return
+    if docs is None or docs == cfg.root.resolve():
+        return
+    try:
+        if _config.load(docs).name != cfg.name:  # another harness's checkout
+            return
+    except _config.ConfigError:
+        return
+    a, b = git_head(docs), git_head(cfg.root)
+    if a is None or b is None or (a[0] == b[0] and not a[1] and not b[1]):
+        return
+    docs_dirty, runs_dirty = ", ".join(a[1]) or "-", ", ".join(b[1]) or "-"
+    ctx.warn("checkout", msg(
+        "doctor_checkout_differs", f"the cwd is in {docs} ({a[0][:10]}; "
+        f"uncommitted: {docs_dirty}), not the checkout whose code runs "
+        f"({cfg.root}, {b[0][:10]}; uncommitted: {runs_dirty}): the docs "
+        f"read there may not describe the code that runs. Read the docs of "
+        f"the checkout you run, or run that one", docs=str(docs),
+        docs_head=a[0], docs_dirty=docs_dirty, runs=str(cfg.root),
+        runs_head=b[0], runs_dirty=runs_dirty))
+
+
 BUILTIN: tuple[Check, ...] = (check_harness, check_env_chain,
                               check_token_source, check_home_secrets,
                               check_env_files, check_console_secret,
@@ -493,7 +554,7 @@ def collect(ctx_checks: Iterable[Check] = (), *, live: bool = False,
                   scripts_dir=Path(scripts_dir) if scripts_dir else None)
     steps: list[Callable[[Context], None]] = [
         *BUILTIN, lambda c: check_platform_lock(c, platform_lock),
-        check_verbs, check_kit_tty, *ctx_checks]
+        check_verbs, check_kit_tty, check_checkout, *ctx_checks]
     try:
         for fn in steps:
             try:

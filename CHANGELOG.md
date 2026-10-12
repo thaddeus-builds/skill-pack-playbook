@@ -10,6 +10,17 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-12
+### Added
+- `doctor.py`: `checkout` warns (`doctor_checkout_differs`) when the cwd is in another git
+  checkout of the same harness (a `harness.toml` of the same name at or above it) than the
+  bound one whose code runs, and the two differ: other HEADs, or docs or code (`*.md`, `*.py`,
+  `*.toml`) changed and not committed in either. Several sessions work in worktrees; an agent
+  read SKILL.md in one and ran another's harness. Silent outside git, without git, in the
+  bound checkout and in another harness's checkout. `git_head()` (HEAD plus the uncommitted
+  docs and code; git's optional locks never taken). From the video-ads harness (seen once,
+  a newcomer-agent audit).
+
 ## [0.15.0] - 2026-10-12
 ### Changed
 - `env.py`: the env chain never loads a gate secret or a test seam from a file, only from the
