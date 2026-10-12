@@ -36,10 +36,12 @@ Placing a harness's results comes from the client's map
 
   * table_sets(wb, map, table_id, rows, owner): one row per key of the
     table (rows = {key: {field: value}}); each `out` or `both` column the
-    owner writes is the table's column with that header, or a new column
-    right after the table's header block (its header written too), in the
-    map's order; a key the sheet lacks is counted
-    (workbook_patch_keys_missing), never added;
+    owner writes is the column whose header cell reads its header (the
+    table's own, else anywhere on the header row), or a new one: the
+    first column after the table's header block that is empty on the
+    header row and on every row of the table (its header written too), in
+    the map's order, so never under the client's own data; a key the
+    sheet lacks is counted (workbook_patch_keys_missing), never added;
   * cell_sets(map, values, owner): each cells.tsv row the owner writes,
     values = {field: value, or a list filling its range in order}; a list
     of another length is listed (workbook_patch_values_length).
@@ -356,18 +358,37 @@ def table_sets(wb: Workbook, m: wm.Map, table_id: str,
         return [], [m_ for _, _, m_ in issues]
     outs = [c for c in cols if c["direction"] in ("out", "both")
             and c["owner"] == owner]
-    sheet = loc.sheet.name
+    sh, hr = loc.sheet, loc.header_row
+    sheet = sh.name
+
+    def filled(r: int, k: int) -> bool:
+        cell = sh.value(r, k)
+        return cell is not None and ((cell.text or "") != ""
+                                     or cell.formula is not None)
+
+    def found(header: str) -> int | None:
+        """The column whose header cell reads `header`: the table's own,
+        else anywhere on the header row (a column an earlier copy added
+        after a gap)."""
+        hit = next((k.col for k in loc.columns
+                    if norm(k.path) == norm(header)
+                    or norm(k.header) == norm(header)), None)
+        return hit or next((k for (r, k), cell in sorted(sh.cells.items())
+                            if r == hr and cell.text is not None
+                            and norm(cell.text) == norm(header)), None)
+
     place: dict[str, int] = {}
     nxt = max(c.col for c in loc.columns) + 1
     sets: list[Set] = []
     for c in outs:
-        hit = next((k.col for k in loc.columns
-                    if norm(k.path) == norm(c["header"])
-                    or norm(k.header) == norm(c["header"])), None)
+        hit = found(c["header"])
         if hit is None:
+            # the first column after the block empty on the header row and
+            # on every row of the table: never under the client's own data
+            while filled(hr, nxt) or any(filled(r, nxt) for r in loc.rows):
+                nxt += 1
             hit, nxt = nxt, nxt + 1
-            sets.append(Set(sheet, ref(loc.header_row, hit), c["header"],
-                            c["field"]))
+            sets.append(Set(sheet, ref(hr, hit), c["header"], c["field"]))
         place[c["field"]] = hit
     seen = set()
     for key, occ, r, _ in keyed_rows(loc, issues):
