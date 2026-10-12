@@ -82,6 +82,12 @@ FUNCS = (HEADER + "from kit.testing.check import run_functions\n"
          "def test_two():\n    assert 'a'.upper() == 'A'\n"
          "raise SystemExit(run_functions(globals()))\n")
 FUNCS_BAD = FUNCS.replace("== 'A'", "== 'B'")
+FUNCS_WRAPPED = (HEADER + "from kit.testing.check import run_functions\n"
+                 "def plain(f):\n    def inner():\n        return f()\n"
+                 "    inner.__module__ = 'elsewhere'\n    return inner\n"
+                 "def test_one():\n    assert True\n"
+                 "@plain\ndef test_hidden():\n    assert True\n"
+                 "raise SystemExit(run_functions(globals()))\n")
 FUNCS_LATE = (FUNCS.replace("raise SystemExit", "if __name__ == '__main__':\n"
                              "    raise SystemExit")
               + "\n\ndef test_appended_later():\n    assert False\n")
@@ -158,8 +164,13 @@ def main() -> int:
     rc, out, _ = gate({"test_late.py": FUNCS_LATE})
     check("a test_* defined below the run_functions() call fails its file, "
           "named", rc == 1 and "tests/test_late.py: exit 1" in out
-          and "defined below it: test_appended_later" in out
+          and "test_appended_later: never ran (defined below the call" in out
           and "PASS  test_one" in out, out)
+    rc, out, _ = gate({"test_wrapped.py": FUNCS_WRAPPED})
+    check("a test a decorator hid from run_functions() fails its file, named "
+          "with both causes", rc == 1 and "test_hidden: never ran (defined "
+          "below the call, or decorated away without functools.wraps)" in out,
+          out)
     rc, out, _ = gate({"test_ok.py": PASS, "test_lie.py": GREEN_LIE})
     check("one bad file fails the whole run; the good one still counts",
           rc == 1 and "RESULT: 1 passed, 1 failed" in out, out)
@@ -171,6 +182,9 @@ def main() -> int:
     check("budget(): the file's comment, else the default",
           run_tests.budget(_planted(SLOW_OWN), 5) == 30
           and run_tests.budget(_planted(PASS), 5) == 5)
+    check("budget(): a trailing comment after the number is allowed",
+          run_tests.budget(_planted("# kit-timeout: 600  # builds videos\n"
+                                    + PASS), 5) == 600)
     check("budget(): text in a string is not a comment; 0 is no budget",
           run_tests.budget(_planted(SLOW_IN_TEXT), 5) == 5
           and run_tests.budget(_planted("# kit-timeout: 0\n" + PASS), 5) == 5)

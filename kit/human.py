@@ -70,7 +70,8 @@ one by `KIT_TEST_RUN=1` (kit.config.TEST_RUN_ENV): the test runner
 exports it to every file, importing kit.testing.check sets it, and
 sandbox_env() hands it to every child, so a file passes the same way
 under any runner (a pytest-only variable such as PYTEST_CURRENT_TEST
-does not).
+does not). It tells a test from a run, nothing more: any process can
+export it, so like the gate itself it is not a security boundary.
 
 Additions to the reference (principle 5, every message coded): the
 refusals it raised as plain text are coded too (confirm_typed_mismatch,
