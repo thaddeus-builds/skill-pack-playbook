@@ -2,16 +2,19 @@
 """kit/tools/leak_guard.py and pre-push.sample, on throwaway repositories
 and a SYNTHETIC term list:
 
-  * a term in an added line, in a path, or only in a commit message is a
-    hit; case and whitespace do not hide it; a removed line and a clean
-    commit pass; the output names the term's line and list, never the
-    term;
+  * a term in an added line, in a path (a non-ASCII one, a binary or an
+    empty file too), or only in a commit message is a hit; case,
+    whitespace, full-width and zero-width spellings do not hide it; a
+    removed line and a clean commit pass; no output line holds the term,
+    not even as a path; an added line that reads like a diff header is
+    still read;
   * the pre-push stdin: only what is pushed, a deletion adds nothing, a
     new branch is what no remote has; --tree reads the working tree;
   * the lists: `[guards.leak] terms` (a glob, `~`) and
     `<PREFIX>_CLIENT_TERMS` are both read, `--terms` replaces them;
-    fail closed: none configured, a named list missing, a glob matching
-    nothing, an empty list, an empty or bad pattern all refuse (exit 2);
+    fail closed: none configured, a named list missing (alone or beside
+    one that exists), a glob matching nothing, an empty list, a bad
+    pattern or one matching the empty string all refuse (exit 2);
   * the hook, installed as the sample says: a push holding a term is
     refused, a clean one goes through, a push with no list is refused.
 """
@@ -19,6 +22,7 @@ and a SYNTHETIC term list:
 import contextlib
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -32,9 +36,10 @@ from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 from kit.tools import leak_guard  # noqa: E402
 
 TOOLS = _shop.KIT / "tools"
-# Widgetco on line 2, the regex on line 3. Synthetic: no client's term.
-TERMS = "# synthetic terms\nWidgetco\nre:\\bqq-\\d{3}\\b\n"
-SECRET_WORDS = ("widgetco", "widg etco", "qq-")
+# Widgetco on line 2, the regex on line 3, a CJK name on line 4. Synthetic:
+# no client's term.
+TERMS = "# synthetic terms\nWidgetco\nre:\\bqq-\\d{3}\\b\n示例公司\n"
+SECRET_WORDS = ("widgetco", "widg etco", "qq-", "示例公司", "示例 公司")
 GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
        "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main"]
 
@@ -83,14 +88,15 @@ def run(r: Path, *argv: str, stdin: str = "", environ=None
 
 
 def leaks(*texts: str) -> bool:
-    """True when any output names a term itself (a path holding one aside:
-    that is where the hit is)."""
-    body = "\n".join(texts).lower().replace("docs/widgetco.txt", "")
+    """True when any output line holds a term, in any spelling the guard
+    reads as the term."""
+    body = leak_guard.norm("\n".join(texts)).lower()
     return any(w in body for w in SECRET_WORDS)
 
 
 def hits(lines: list[str]) -> list[str]:
-    return sorted(x.split(" ", 1)[1] for x in lines)
+    """The hit lines, each commit's short sha written <sha>, sorted."""
+    return sorted(re.sub(r"\b[0-9a-f]{10}\b", "<sha>", x) for x in lines)
 
 
 def main() -> int:
@@ -102,13 +108,61 @@ def main() -> int:
                            f"{base}..HEAD")
     check("a term in an added line, a path and the message: refused (exit 1)",
           code == 1 and hits(lines) == sorted([
-              "(commit message):3: term on line 2 of list 1",
-              "a.md:2: term on line 2 of list 1",
-              "a.md:3: term on line 3 of list 1",
-              "docs/widgetco.txt (its path): term on line 2 of list 1"]),
+              "<sha> (commit message):3: term on line 2 of list 1",
+              "<sha> a.md:2: term on line 2 of list 1",
+              "<sha> a.md:3: term on line 3 of list 1",
+              "a file path in commit <sha>: term on line 2 of list 1"]),
           lines)
-    check("the output names the term's line and list, never the term",
+    check("no output line holds the term, not even the path that holds it",
           not leaks(*lines, err), (lines, err))
+    r, terms, base = repo()
+    commit(r, {"资料/示例公司/说明.md": "one\nWidgetco here\n",
+               "x/示例公司.bin": "\0\1binary", "y/示例公司-empty.txt": ""},
+           "cjk")
+    code, lines, err = run(r, "--terms", str(terms), "--range",
+                           f"{base}..HEAD")
+    check("a CJK term in a non-ASCII path (a text, a binary and an empty "
+          "file) is found, and the path is not printed",
+          code == 1 and hits(lines) == sorted(
+              ["a file path in commit <sha>: term on line 4 of list 1"] * 3
+              + ["<sha> (a file whose path holds a term):2: term on line 2 "
+                 "of list 1"]) and not leaks(*lines, err), lines)
+    r, terms, base = repo()
+    git(r, "checkout", "-q", "-b", "side")
+    commit(r, {"a.md": "side\n"}, "side")
+    git(r, "checkout", "-q", "-")
+    commit(r, {"a.md": "main\n"}, "main")
+    subprocess.run([*GIT, "merge", "-q", "side"], cwd=r, capture_output=True)
+    commit(r, {"a.md": "resolved for qq-555\n"}, "merge side")
+    code, lines, _ = run(r, "--terms", str(terms), "--range", f"{base}..HEAD")
+    check("a merge's own resolution line is read (a combined diff)",
+          code == 1 and hits(lines) == ["<sha> a.md:1: term on line 3 of "
+                                        "list 1"], lines)
+    check("a path git quotes even with core.quotePath off is read back",
+          leak_guard._unquote('"b/\\347\\244\\272 \\"x\\".md"')
+          == 'b/示 "x".md' and leak_guard._unquote("b/a b.md\t") == "b/a b.md")
+    r, terms, base = repo()
+    commit(r, {"f.md": "ok\n++ widgetco\n+++ b/qq-123\n"}, "diff-like")
+    code, lines, _ = run(r, "--terms", str(terms), "--range", f"{base}..HEAD")
+    check("an added line that reads like a diff header is still read",
+          code == 1 and hits(lines) == ["<sha> f.md:2: term on line 2 of "
+                                        "list 1", "<sha> f.md:3: term on line"
+                                        " 3 of list 1"], lines)
+    r, terms, base = repo()
+    commit(r, {"g.md": "ＷＩＤＧＥＴＣＯ\nWidg\u200betco\nqq\u2011123 no\n"},
+           "evasions")
+    code, lines, _ = run(r, "--terms", str(terms), "--range", f"{base}..HEAD")
+    check("full-width and zero-width spellings are the same term",
+          code == 1 and hits(lines) == ["<sha> g.md:1: term on line 2 of "
+                                        "list 1", "<sha> g.md:2: term on line"
+                                        " 2 of list 1"], lines)
+    wide = Path(tmp_dir("leak-wide-")) / "t.txt"
+    wide.write_text("ｑｑ\u200b－１２３\n", encoding="utf-8")
+    commit(r, {"h.md": "qq-123\n"}, "h")
+    code, lines, _ = run(r, "--terms", str(wide), "--range", "HEAD~1..HEAD")
+    check("a term written full-width in the list is normalised too",
+          code == 1 and hits(lines) == ["<sha> h.md:1: term on line 1 of "
+                                        "list 1"], lines)
 
     r, terms, base = repo()
     commit(r, {"b.md": "a clean line\n"}, "ship it for Widgetco")
@@ -116,7 +170,7 @@ def main() -> int:
                            f"{base}..HEAD")
     check("a term only in the commit message: refused",
           code == 1 and hits(lines)
-          == ["(commit message):1: term on line 2 of list 1"]
+          == ["<sha> (commit message):1: term on line 2 of list 1"]
           and not leaks(*lines, err), (lines, err))
 
     r, terms, base = repo()
@@ -134,8 +188,8 @@ def main() -> int:
     code, lines, _ = run(r, "--terms", str(terms), "origin", "url",
                          stdin=f"refs/heads/x {head} refs/heads/x {base}\n")
     check("only what is pushed is read",
-          code == 1 and hits(lines) == ["c.md:1: term on line 3 of list 1"],
-          lines)
+          code == 1 and hits(lines) == ["<sha> c.md:1: term on line 3 of "
+                                        "list 1"], lines)
     check("nothing new: passes",
           run(r, "--terms", str(terms),
               stdin=f"refs/heads/x {head} refs/heads/x {head}\n")[:2]
@@ -147,12 +201,28 @@ def main() -> int:
           run(r, "--terms", str(terms),
               stdin=f"refs/heads/y {head} refs/heads/y {zero}\n")[0] == 1)
     r, terms, _ = repo()
+    held = commit(r, {"old.md": "Widgetco, already on the remote\n"}, "old")
+    git(r, "update-ref", "refs/remotes/origin/main", held)
+    head = commit(r, {"new.md": "clean\n"}, "new")
+    check("a new branch: not the commits a remote already has",
+          run(r, "--terms", str(terms),
+              stdin=f"refs/heads/z {head} refs/heads/z {zero}\n")[:2]
+          == (0, []))
+    r, terms, _ = repo()
     check("--tree: a clean tree passes",
           run(r, "--terms", str(terms), "--tree")[:2] == (0, []))
     commit(r, {"d.md": "one\nWidg etco\n"}, "d")
     check("--tree: a term with a space inside is still found",
           run(r, "--terms", str(terms), "--tree")[:2]
           == (1, ["d.md:2: term on line 2 of list 1"]))
+    commit(r, {"widgetco/e.md": "qq-321\n"}, "e")
+    code, lines, _ = run(r, "--terms", str(terms), "--tree")
+    check("--tree: a path holding a term is not printed",
+          code == 1 and sorted(lines)[:3] == [
+              "(a tracked file whose path holds a term):1: term on line 3 of "
+              "list 1", "a tracked file path: term on line 2 of list 1",
+              "d.md:2: term on line 2 of list 1"] and not leaks(*lines),
+          lines)
 
     print("\n[3] where the lists are, and fail closed")
     toml = ('[harness]\nname = "acme"\ncli = "acme"\nenv_prefix = "ACME"\n'
@@ -163,27 +233,28 @@ def main() -> int:
     code, lines, _ = run(r, "--range", rng)
     check("[guards.leak] terms: a glob from the top level; one matching "
           "nothing adds nothing", code == 1 and hits(lines)
-          == ["e.md:1: term on line 2 of list 1"], lines)
+          == ["<sha> e.md:1: term on line 2 of list 1"], lines)
     extra = terms.parent / "more.txt"
     extra.write_text("# more\n\nre:e\\.md\n", encoding="utf-8")
     code, lines, _ = run(r, "--range", rng)
     check("… every match of the glob is a list, in sorted order",
-          code == 1 and hits(lines) == ["e.md (its path): term on line 3 of "
-                                        "list 2", "e.md:1: term on line 2 of "
-                                        "list 1"], lines)
+          code == 1 and hits(lines) == [
+              "<sha> (a file whose path holds a term):1: term on line 2 of "
+              "list 1", "a file path in commit <sha>: term on line 3 of list "
+              "2"], lines)
     extra.unlink()
     other = Path(tmp_dir("leak-env-")) / "terms.txt"
     other.write_text("re:^Widgetco$\n", encoding="utf-8")
     code, lines, _ = run(r, "--range", rng,
                          environ={"ACME_CLIENT_TERMS": f"{other}{os.pathsep}"})
     check("<PREFIX>_CLIENT_TERMS is read after harness.toml's lists",
-          code == 1 and hits(lines) == ["e.md:1: term on line 1 of list 2",
-                                        "e.md:1: term on line 2 of list 1"],
-          lines)
+          code == 1 and hits(lines) == ["<sha> e.md:1: term on line 1 of "
+                                        "list 2", "<sha> e.md:1: term on line"
+                                        " 2 of list 1"], lines)
     code, lines, _ = run(r, "--range", rng, "--terms", str(other))
     check("--terms replaces the configured lists",
-          code == 1 and hits(lines) == ["e.md:1: term on line 1 of list 1"],
-          lines)
+          code == 1 and hits(lines) == ["<sha> e.md:1: term on line 1 of "
+                                        "list 1"], lines)
     home = Path(tmp_dir("leak-home-"))
     shutil.copy(terms, home / "t.txt")
     saved = os.environ.get("HOME")
@@ -205,6 +276,8 @@ def main() -> int:
     refused("no harness.toml and no --terms", repo_dir=bare)
     refused("a named list that is missing", "--terms",
             str(terms.parent / "gone.txt"))
+    refused("a named list missing beside one that exists", "--terms",
+            str(terms), "--terms", str(terms.parent / "gone.txt"))
     refused("<PREFIX>_CLIENT_TERMS naming a missing list",
             environ={"ACME_CLIENT_TERMS": str(terms.parent / "gone.txt")})
     refused("a glob that matches nothing anywhere", "--terms",
@@ -215,6 +288,9 @@ def main() -> int:
     empty.write_text("re:\n", encoding="utf-8")
     refused("an empty pattern (it would match everything)", "--terms",
             str(empty))
+    for empties in ("re:a*", "re:x?", "re:^", "re:(?:)"):
+        empty.write_text(f"Widgetco\n{empties}\n", encoding="utf-8")
+        refused(f"{empties!r} matches the empty string", "--terms", str(empty))
     empty.write_text("re:(widgetco\n", encoding="utf-8")
     refused("a bad regular expression, its text not echoed", "--terms",
             str(empty))
