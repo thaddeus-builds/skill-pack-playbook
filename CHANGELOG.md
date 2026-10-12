@@ -16,6 +16,15 @@ scaffold, console, docs, conformance.
   then publish; archive every write under raw; read back and say so; revert is the inverse
   write, never a delete). Approve rule 5 points at it. Seen once, the SEO harness's store write
   (`scripts/apply_shopify.py`). Tested in `tests/test_docs_build.py`.
+- `docs/rules.md`, "What an agent judges": a judgement quotes the page and the harness checks
+  each quote word for word on the kept copy (markup, entities, spacing, dash and quote marks
+  normalised; inline tags dropped without a space); an outside party is classified by its
+  place in the value chain apart from the analysis switch, and a "no" stays a row on a
+  read-only page; a large group competes on a segment, per market. In the data layers: a
+  partial (filtered) paid pull is filed apart and flagged; an overview runs each report's own
+  build and adds nothing to it. `docs/consoles.md`, client console item 7: a form the client
+  fills offline is exported from the key registry, its answers come back as pending values
+  sourced to the file. Each seen once, in the SEO harness. Tested in `tests/test_docs_build.py`.
 
 ## [0.21.0] - 2026-10-12
 ### Added
