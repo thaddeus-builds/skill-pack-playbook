@@ -14,7 +14,8 @@
 // written quoted so it reads back exactly. A manifest `defaults` entry is
 // written when a key of its group is in use and it is absent (zylos-core never
 // applies a declared default). No network, no uv: Zylos kills it after 30 s.
-// Only key names are printed.
+// A gate secret (*CONFIRM_CODE_SECRET, CONSOLE_SECRET) refuses the whole input:
+// the harness never loads it from the .env. Only key names are printed.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -39,6 +40,7 @@ const bad = [];
 for (const [k, v] of Object.entries(values)) {
   if (v === null || v === undefined || v === '') continue;
   if (!KEY.test(k)) { bad.push(`${k} (not a KEY name)`); continue; }
+  if (h.isGateSecret(k)) { bad.push(`${k} (a gate secret: the harness never loads it from the .env)`); continue; }
   if (typeof v === 'object') { bad.push(`${k} (an object or array, not a string)`); continue; }
   const s = String(v); // numbers/booleans: their JSON text
   if (/[\r\n\v\f\x1c-\x1e\x85\u2028\u2029]/.test(s)) { bad.push(`${k} (multi-line value)`); continue; }

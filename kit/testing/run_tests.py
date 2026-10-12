@@ -2,8 +2,9 @@
 
 Runs each `<tests_dir>/<pattern>` file (sorted; an argument keeps the
 files whose name contains it, several arguments = any of them) as its own
-process, `workers` at a time, `timeout_s` each, with cwd = `root`, and
-fails a file that
+process, `workers` at a time, with cwd = `root` and `KIT_TEST_RUN=1`
+(kit.config.TEST_RUN_ENV: how a harness tells a test from production, see
+kit.human), and fails a file that
 
   1. exits non-zero, or times out (its whole process group is killed);
   2. prints no `RESULT: N passed` line (a file that crashed early, or
@@ -15,6 +16,11 @@ fails a file that
      `uv-*.lock` files excepted): a sandbox left behind piles up run after
      run. Each file gets its own TMPDIR, so a leak is named on the file
      that made it; the dirs are swept and removed at the end either way.
+
+A file's time budget is its own `# kit-timeout: S` comment when it has
+one (a file that builds whole outputs may need minutes), else the run's
+default: `timeout_s`, which `--timeout S` overrides for one run. A short
+default keeps a hang from waiting as long as the slowest file.
 
 When several RESULT lines appear (a test that prints a nested run's
 output), the last one counts. Both conventions the playbook uses parse
@@ -41,10 +47,14 @@ import subprocess
 import sys
 import tempfile
 import time
+import tokenize
 from pathlib import Path
+
+from kit.config import TEST_RUN_ENV
 
 RESULT_LINE = re.compile(
     r"^\s*RESULT:\s+(\d+)\s+passed(?:\s*,\s*(\d+)\s+failed)?\b", re.MULTILINE)
+BUDGET = re.compile(r"#\s*kit-timeout:\s*(\d+(?:\.\d+)?)\s*(?:#.*)?$")
 IGNORE_LEAKS = ("uv-*.lock",)
 TAIL = 40
 
@@ -56,6 +66,21 @@ def parse_result(out: str) -> tuple[int | None, int]:
         return None, 0
     m = ms[-1]
     return int(m.group(1)), int(m.group(2) or 0)
+
+
+def budget(file: Path, default: float) -> float:
+    """The file's own `# kit-timeout: S` comment (a real comment, not text
+    in a string), else `default`. A budget of 0 is no budget."""
+    try:
+        with tokenize.open(file) as f:
+            for tok in tokenize.generate_tokens(f.readline):
+                if tok.type == tokenize.COMMENT:
+                    m = BUDGET.match(tok.string)
+                    if m and float(m.group(1)) > 0:
+                        return float(m.group(1))
+    except (OSError, SyntaxError, tokenize.TokenError):
+        pass                # the file fails on its own run; keep the default
+    return default
 
 
 def discover(root: Path, tests_dir: str, pattern: str,
@@ -83,7 +108,8 @@ def sweep(tmp: Path, ignore: tuple[str, ...] = IGNORE_LEAKS) -> list[str]:
 def _exec(file: Path, root: Path, tmp: Path, timeout_s: float
           ) -> tuple[int | None, str]:
     """(exit code or None on timeout, stdout+stderr)."""
-    env = {**os.environ, "TMPDIR": str(tmp), "PYTHONDONTWRITEBYTECODE": "1"}
+    env = {**os.environ, "TMPDIR": str(tmp), "PYTHONDONTWRITEBYTECODE": "1",
+           TEST_RUN_ENV: "1"}
     p = subprocess.Popen([sys.executable, str(file)], cwd=root, env=env,
                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT, text=True,
@@ -122,7 +148,9 @@ def verdict(rc: int | None, passed: int | None, failed: int,
 
 
 def run_one(file: Path, *, root: Path, tmp: Path, timeout_s: float) -> dict:
-    """{file, ok, why, passed, secs, out} of one file run with TMPDIR=tmp."""
+    """{file, ok, why, passed, secs, out} of one file run with TMPDIR=tmp,
+    within its own budget (`timeout_s` when it declares none)."""
+    timeout_s = budget(file, timeout_s)
     t0 = time.monotonic()
     rc, out = _exec(file, root, tmp, timeout_s)
     left = sweep(tmp)
@@ -132,12 +160,42 @@ def run_one(file: Path, *, root: Path, tmp: Path, timeout_s: float) -> dict:
             "secs": time.monotonic() - t0, "out": out}
 
 
+def _timeout_arg(args: list[str], default: float
+                 ) -> tuple[list[str], float]:
+    """(the other arguments, the run's default budget): `--timeout S` or
+    `--timeout=S` overrides `default`; S must be a positive number."""
+    rest, value = [], None
+    it = iter(args)
+    for a in it:
+        if a == "--timeout":
+            value = next(it, "")
+        elif a.startswith("--timeout="):
+            value = a.split("=", 1)[1]
+        else:
+            rest.append(a)
+    if value is None:
+        return rest, default
+    try:
+        s = float(value)
+    except ValueError:
+        s = 0
+    if not 0 < s < float("inf"):
+        raise ValueError(f"--timeout needs a positive number of seconds, "
+                         f"got {value!r}")
+    return rest, s
+
+
 def main(argv: list[str] | None = None, *, root: Path | str,
          tests_dir: str = "tests", pattern: str = "test_*.py",
          workers: int = 4, timeout_s: float = 300) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     verbose = any(a in ("-v", "--verbose") for a in argv)
     filters = [a for a in argv if a not in ("-v", "--verbose")]
+    try:
+        filters, timeout_s = _timeout_arg(filters, timeout_s)
+    except ValueError as e:
+        print(f"FAILED: {e}")
+        return 1
     root = Path(root).resolve()
     files = discover(root, tests_dir, pattern, filters)
     if not files:

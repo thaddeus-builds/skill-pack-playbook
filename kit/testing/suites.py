@@ -45,6 +45,10 @@ reports them through kit.testing.check. A generated test is
                 [guards.roadmap] file) keeps the one format, and its planted
                 self-test
   kit_drift     kit.guards.drift.check_harness
+  never_table   kit.guards.evals.check_never_table: SKILL.md's first section
+                is `## Never`, whose table names exactly the verbs only a
+                person runs (every gated verb, and [guards.evals].extra),
+                and its planted self-test
 
 Test: kit/tests/test_suites.py (every suite green on a generated harness,
 and each one failing on a planted violation).
@@ -639,6 +643,17 @@ def roadmap(root: Path | str) -> Results:
     return [("the roadmap rule catches each planted break", g.self_test()),
             ("the roadmap keeps the one format (sections, dated rows, ids, "
              "what each wait unblocks)", g.check_roadmap(root))]
+
+
+# ---- never_table ---------------------------------------------------------------------
+
+def never_table(root: Path | str) -> Results:
+    bind(root)
+    from kit.guards import evals as g
+    return [("the Never-table rule catches each planted fault",
+             g.never_self_test()),
+            ("SKILL.md's Never table names exactly the verbs only a person "
+             "runs", g.check_never_table(root))]
 
 
 # ---- release -------------------------------------------------------------------------

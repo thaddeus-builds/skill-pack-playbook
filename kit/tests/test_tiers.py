@@ -461,10 +461,10 @@ def main() -> int:
              {NAME: cell("takes", "consumers", "video-ads:prod; kol:prod")})
     cp.plant("the skeleton is a consumer too", "extra takes: 2 independent consumers (skeleton, video-ads)",
              {NAME: cell("takes", "consumers", "video-ads:prod; skeleton:skeleton")})
-    cp.plant("a module nobody uses, its note silent", "guards.evals: nothing imports it",
-             {NAME: cell("guards.evals", "note", "A removal candidate.")})
-    cp.plant("a module nobody uses, in stack", "guards.evals: nothing imports it",
-             {NAME: cell("guards.evals", "tier", "stack")})
+    cp.plant("a module nobody uses, its note silent", "testing.xlsx: nothing imports it",
+             {NAME: cell("testing.xlsx", "note", "A removal candidate.")})
+    cp.plant("a module nobody uses, in stack", "testing.xlsx: nothing imports it",
+             {NAME: cell("testing.xlsx", "tier", "stack")})
     cp.plant("a module only a fork knows, its note silent", "retry: nothing imports it",
              {NAME: cell("retry", "consumers", "outreach:fork")})
     cp.holds("tests, tools and forks never count: an extra row may list any number of them",

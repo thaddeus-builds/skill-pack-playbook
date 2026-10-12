@@ -37,7 +37,7 @@ The files a new harness starts from. The build workflow, [BUILD.md](../BUILD.md)
 | [doctor-checks.md](doctor-checks.md) | B1, B9 | `docs/doctor-checks.md` | What the doctor checks: when each row warns, the fix it names, the bug it caught. The kit's `doctor` implements most rows |
 | [SKILL.md](SKILL.md) | B8 | `SKILL.md` | The agent's rules and the skill's scope: read, pending writes, out of scope |
 | [third-party-consent.md](third-party-consent.md) | B3, B7 | a consent record per person + the letter | A real person in a marketing output (AI twin, voice, testimonial, creator clip): the record, confirmed only through the gate and bound to its content; revoke is free |
-| [claim-scope.md](claim-scope.md) | B3, B6, B10 | a claims record per product + `ssot/claim_terms.tsv` + a phrase library per product | Regulated copy says only what the approved document allows: the claims record confirmed at the gate, the claims lexicon, the checks at script, asset and render, waivers, the phrase library, and every rejection as a recall test beside a false-alarm test |
+| [claim-scope.md](claim-scope.md) | B3, B6, B10 | a claims record per product + `ssot/claim_terms.tsv` + a phrase library per product | Regulated copy says only what the approved document allows: the claims record confirmed at the gate, the claims lexicon, the checks at script, asset and render, what stops and what warns, waivers, the phrase library, and every rejection as a recall test beside a false-alarm test |
 | [owner-review-loop.md](owner-review-loop.md) | B6, B10 | `docs/owner-review-loop.md` | One published page the owner decides on per item; the next session reads the decisions back and logs each change against its note |
 | [outcome-learning.md](outcome-learning.md) | B10 | `docs/winning-factors.md` | Learning from what performed: one factor catalog measured on winners and the rest; the owner defines "winner"; rules stay pending until a variant confirms them |
 | [ROADMAP.md](ROADMAP.md) | all | `docs/ROADMAP.md` | The one roadmap format: Now, Waiting on owner (each row names what it unblocks), Next, Done (with its reference), Parked, Decisions (the owner's words), Links; one dated row per item with an id; `tests/test_roadmap.py` holds it (`kit.guards.roadmap`) |
@@ -93,6 +93,7 @@ The scaffolder generates exactly these files, each one call into the vendored ki
 | `tests/test_changelog.py` | `CHANGELOG.md` starts with Unreleased, its releases are in order, and `SKILL.md`'s version is the newest of them |
 | `tests/test_roadmap.py` | `docs/ROADMAP.md` keeps the one roadmap format: the seven sections in order, one `- [ID] YYYY-MM-DD text` row per item with the section's letter and a unique id, at most one Now row, every Waiting row naming the rows it unblocks, Done rows with a reference, Decisions in the owner's words |
 | `tests/test_kit_drift.py` | `scripts/kit/` and `console/` match their `MANIFEST.sha256` and `VERSION` |
+| `tests/test_never_table.py` | `SKILL.md`'s first section is `## Never`, and its table names exactly the verbs only a person runs: every `gated` verb of `scripts/verbs.py`, and each verb `[guards.evals].extra` names |
 
 The playbook's own check of this page, BUILD.md and the build skill: [tests/test_docs_build.py](../tests/test_docs_build.py).
 
@@ -100,7 +101,7 @@ The playbook's own check of this page, BUILD.md and the build skill: [tests/test
 
 Three folders are not rendered by the scaffolder. Each is a module a harness copies, and each has its own tests, kept out of the generated set above. The copy is the module only (from `tests/golden/`, just `engine.py` and `cases.py`; from `workflows/`, the scripts and `refcheck.py`). The golden and workflow tests run inside this playbook, and their runners import its `kit/` from the playbook root, so they do not travel with the copy.
 
-**`tests/`: the test kit for a repository that does not vendor the kit.** It holds the same rules as ten of the twelve generated tests (the changelog and roadmap ones exist only in the generated set), for the layout of the source project (`src/` beside a `common/` package at the root), with the rules as constants at the top of each file. A scaffolded harness does not copy it: the generated tests call the vendored kit, and `scripts/kit/` and its manifest keep every harness on one copy of each rule. The overlap, rule by rule:
+**`tests/`: the test kit for a repository that does not vendor the kit.** It holds the same rules as ten of the thirteen generated tests (the changelog, roadmap and Never-table ones exist only in the generated set), for the layout of the source project (`src/` beside a `common/` package at the root), with the rules as constants at the top of each file. A scaffolded harness does not copy it: the generated tests call the vendored kit, and `scripts/kit/` and its manifest keep every harness on one copy of each rule. The overlap, rule by rule:
 
 | Rule | Generated test, from the vendored kit | Standalone copy |
 | --- | --- | --- |
