@@ -48,7 +48,7 @@ Trust `doctor` over this guide if they disagree.
 
 ## What needs a human
 
-The harness never raises trust on its own. An agent may write a pending value or propose an action; only a human makes it effective, by a retype at a real terminal, a click in the console, or a one-time code sent back from chat (`{{env_prefix}}_CONFIRM_CODE_SECRET`, set in the process env of what runs the gate: the harness never loads it from a `.env`).
+The harness never raises trust on its own. An agent may write a pending value or propose an action; only a human can put it into effect, by a retype at a real terminal, a click in the console, or a one-time code sent back from chat (`{{env_prefix}}_CONFIRM_CODE_SECRET`, set in the process env of what runs the gate: the harness never loads it from a `.env`).
 
 | Command | What it needs a human for |
 | --- | --- |
