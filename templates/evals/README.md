@@ -75,6 +75,7 @@ extra = ["facts init"]        # a verb of the table (kind human, say) the eval a
 families = ["queue"]          # everything under `queue`, whatever its kind
 uncovered = ["Do not fix listings"]
 # also: dir = "evals", skill = "SKILL.md", rules = "Rules" (the heading of the list),
+# never = "Never" (the heading of SKILL.md's person-only table, below),
 # entries = ["shop", "shop.py"], kinds = ["gated", "external"], flags = ["--apply"],
 # skip = ["fixture", "results"]
 ```
@@ -83,7 +84,7 @@ A value that does not match the table (a kind that is not one, a family that sta
 
 ### Wire it in
 
-The scaffolder does not generate this test (the day-one tests are the ones templates/README.md lists); add one of your own, a `test_agent_evals.py` in the harness's `tests/` folder:
+The scaffolder does not generate this test (the day-one tests are the ones templates/README.md lists, and a new harness has no case yet); add one of your own, a `test_agent_evals.py` in the harness's `tests/` folder:
 
 ```python
 import sys
@@ -102,6 +103,10 @@ raise SystemExit(finish())
 After a verb changes, regenerate the graders and commit them:
 
     python3 -c 'import sys; sys.path.insert(0, "scripts"); from kit.guards import evals; print(*evals.regenerate("."), sep="\n")'
+
+### The Never table
+
+`extra` also says which verbs only a person runs, besides the gated ones. SKILL.md's first section is `## Never`, a table (a `Verb` column, and one that says why only a person runs it) that names each of them in code font, and nothing else: `evals.check_never_table()` fails on a gated or extra verb with no row, on a row for a verb an agent may run or for no verb, and on the section moved below another. Every scaffolded harness runs it (`tests/test_never_table.py`); it needs no case. A code span with a flag is a flag-level gate (`claims --confirm`: the agent's verb, a person's flag; `any --code`: the flag on every verb); its verb must be one of the table, or `any`. The kind `external` is not person-only by itself (an external read, a pull, is the agent's own; an eval forbids it because the run is offline), so an external write only a person runs (`execute apply`) goes in `extra`.
 
 ### What the pattern cannot see
 
