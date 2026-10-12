@@ -10,8 +10,9 @@
       README.md names, plus tests/run.py; harness.toml and the ssot
       headers carry what the kit reads; the vendored copies match their
       manifests
-  [3] `git init`, commit, and its own suite through its own CLI
-      (`scripts/acme.py test`): RESULT with 0 failed
+  [3] `git init`, the leak guard installed as the next steps print it
+      (a push with no term list is refused), commit, and its own suite
+      through its own CLI (`scripts/acme.py test`): RESULT with 0 failed
   [4] every CODEOWNERS path exists
   [5] every item of the day-one checklist (docs/stages.md) maps to a
       generated file (scaffold/new_harness.py DAY_ONE)
@@ -212,9 +213,22 @@ def test_tree(root: Path) -> None:
 
 # ------------------------------------------------------------------ [3]
 
-def test_suite(root: Path) -> None:
+def test_suite(root: Path, out: str) -> None:
     print("\n[3] its own suite, through its own CLI")
     git(root, "init", "-q")
+    m = re.search(r"&& (install -m 755 \S+ \S+) &&", out)
+    check("the next steps install the pre-push hook from the vendored kit",
+          m is not None and (root / nh.HOOK).is_file(), out[-500:])
+    if m:
+        subprocess.run(m.group(1).split(), cwd=root, check=True, timeout=60)
+    hook = root / ".git" / "hooks" / "pre-push"
+    path = f"{Path(sys.executable).parent}{os.pathsep}{ENV.get('PATH', '')}"
+    r = subprocess.run(["sh", str(hook), "origin", "url"], cwd=root,
+                       capture_output=True, text=True, timeout=60,
+                       stdin=subprocess.DEVNULL, env={**ENV, "PATH": path})
+    check("the hook is executable and, with no term list, refuses (exit 2)",
+          os.access(hook, os.X_OK) and r.returncode == 2
+          and "no term list configured" in r.stderr, (r.returncode, r.stderr))
     git(root, "add", "-A")
     git(root, "commit", "-qm", "S00 scaffold")
     rc, out, err = cli(root, "test")
@@ -347,10 +361,10 @@ def main() -> int:
                                   "@boss", "--repo-home",
                                   "the team's git host"))
     check("generated: exit 0, the next steps printed",
-          rc == 0 and "next: cd " in out and "acme.py test" in out,
-          (out[-500:], err[-500:]))
+          rc == 0 and "next: cd " in out and "acme.py test" in out
+          and "ACME_CLIENT_TERMS" in out, (out[-500:], err[-500:]))
     test_tree(root)
-    test_suite(root)
+    test_suite(root, out)
     test_codeowners(root)
     test_day_one(root)
     test_cli(root)
