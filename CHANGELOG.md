@@ -24,6 +24,30 @@ scaffold, console, docs, conformance.
   keep the harness, data and virtualenv on the internal disk. Each seen once, in the video-ads
   harness. Tested in `tests/test_docs_build.py`.
 
+## [0.15.0] - 2026-10-12
+### Changed
+- `env.py`: the env chain never loads a gate secret or a test seam from a file, only from the
+  process env: any `*CONFIRM_CODE_SECRET` (kit.human's relayed-code key, any harness's prefix),
+  `CONSOLE_SECRET`, `KIT_TTY`, `PYTEST_CURRENT_TEST`, `KIT_HARNESS_ROOT`, and `DYLD_*`, `LD_*`,
+  `PYTHON*`, plus a harness's own `[env].never_from_file` names. Such a line is skipped by
+  `load`, `resolve`, `get` and `load_into_environ`; `is_gate_secret()`, `never_from_file()`,
+  `EnvChain.refused()` (file and name, never the value). An agent can read or write a .env;
+  with the secret or the seam it could mint its own approval. From the video-ads harness
+  (seen once). **A harness that loaded one of these from a .env must set it in the process
+  env instead** (the console's, or the agent's that relays codes through chat).
+### Added
+- `doctor.py`: `env_files` warns for each such line, naming the file and the name, never the
+  value (`doctor_env_gate_secret_in_file`, `doctor_env_file_unsafe_name`); `console_secret`
+  warns when `CONSOLE_SECRET`, which the console withholds from every harness call, is in
+  the harness's own process env (`doctor_console_secret_in_env`). `<P>_CONFIRM_CODE_SECRET`
+  there is not warned: the harness process issues and checks the code.
+
+### Other
+- Scaffold: a client's `bin/console` no longer appends `<P>_CONFIRM_CODE_SECRET` to
+  `workspace/.env`; it exports a fresh random one into its own process env at each start. An
+  existing client's `workspace/.env` line is now ignored and named by doctor: delete it.
+  `.env.example`, `templates/harness.toml` and the operator README say where the secret goes.
+
 ## [0.14.0] - 2026-10-12
 ### Added
 - `kit/guards/roadmap.py` and `kit.testing.suites.roadmap`: one ROADMAP.md format. The title,
