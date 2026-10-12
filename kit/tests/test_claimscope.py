@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claim scope (kit/claimscope.py) holds each of its guards, in two
 domains: an OTC throat product whose approved indication reads
-急慢性咽炎引起的咽干、咽痛 (a harness with its own kind words, mapped), and
+用嗓过度引起的咽干、咽痛 (a harness with its own kind words, mapped), and
 an investment fund whose prospectus allows capital growth and
 diversification (the default kinds).
 
@@ -79,10 +79,10 @@ THROAT_ROWS = [
     ("A099", "widener", "an old rule", "(unclosed", "error"),
 ]
 THROAT_RECORD = {"subject": "本品", "category": "otc_drug",
-                 "scope_text": "急慢性咽炎引起的咽干、咽痛",
+                 "scope_text": "用嗓过度引起的咽干、咽痛",
                  "allowed": ["咽干", "咽痛", "咽炎"],
                  "source": "package insert, photo of the printed leaflet"}
-THROAT_APPROVED = ["本品用于急慢性咽炎引起的咽干、咽痛",
+THROAT_APPROVED = ["本品用于用嗓过度引起的咽干、咽痛",
                    "嗓子干、嗓子痛，请按说明书服用",
                    "清热利咽，用于急性咽炎"]
 # rejection reasons as a reviewer writes them (product name replaced)
