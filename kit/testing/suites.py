@@ -243,8 +243,16 @@ def ssot(root: Path | str) -> Results:
     return [("the ssot index, owner files and ids keep their rules",
              g.check_index(root)),
             ("every owner row names its decided answer (the trail)", trail),
-            ("no stage is signed before a step it comes after", stages),
-            ("the ssot write rule catches each planted write",
+            ("no stage is signed before a step it comes after", stages)
+            ] + ssot_writes(root)
+
+
+def ssot_writes(root: Path | str) -> Results:
+    """The ssot write rule alone (it reads no index): a harness with its own
+    tests/test_ssot.py adds `run(ssot_writes(ROOT))` to it."""
+    bind(root)
+    from kit.guards import ssot as g
+    return [("the ssot write rule catches each planted write",
              g.writes_self_test()),
             ("no harness code writes under ssot/ (it is the builder's; a "
              "client's own value goes to its database)", g.check_writes(root))]
