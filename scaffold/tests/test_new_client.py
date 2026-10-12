@@ -8,7 +8,8 @@
   [3] the gate verbs come from the harness's own `verbs --json`: every
       `gated` verb is denied through the wrapper in .claude/settings.json,
       hand edits under workspace/ are denied, and the console relays the
-      gated verbs ending in confirm / approve / answer (not restore)
+      gated verbs ending in confirm / approve / answer (not restore); the
+      console's confirm-code secret is in its own env, never in a file
   [4] bin/<cli> pins <PREFIX>_DATA_DIR to the workspace and runs
       <PREFIX>_PYTHON; every wrapper refuses an interpreter older than
       3.11 (or none), set or found as python3, in one line naming
@@ -116,6 +117,11 @@ def main() -> int:
     check("the console relays confirm / approve / answer, not restore",
           '--relay-verbs "facts confirm,plan answer,queue approve"'
           in texts[f / "bin" / "console"], texts[f / "bin" / "console"])
+    console = texts[f / "bin" / "console"]
+    check("the console's confirm-code secret lives in its own process env, "
+          "never in workspace/.env (the kit never loads it from a file)",
+          "export ACME_CONFIRM_CODE_SECRET" in console
+          and ".env" not in console and ">>" not in console, console)
     launch = json.loads(texts[f / ".claude" / "launch.json"])
     check("the console is a preview on its port",
           launch["configurations"][0]["port"] == 8771
