@@ -14,7 +14,8 @@ each `test_*` function as one check (it passes when it returns without
 raising), refusing `python -O`, which would skip every assert. The call
 must come after the file's last test: a `test_*` the file defines below
 it would never run (under pytest it would, so nothing looked wrong), and
-run_functions fails the file naming it.
+run_functions fails the file naming it (as it does a test that a
+decorator without functools.wraps hid from it).
 
 Importing this module marks the process as a test (`KIT_TEST_RUN=1`,
 kit.config.TEST_RUN_ENV), so a file run on its own sees what it sees
@@ -88,17 +89,21 @@ def run_functions(g: dict) -> int:
             check(name, True)
         except (Exception, SystemExit):
             check(name, False, traceback.format_exc().rstrip())
-    late = _defined_below(g, {n for n, _ in tests})
-    if late:
-        check("every test_* is defined above the run_functions() call", False,
-              f"never run, defined below it: {', '.join(late)}; end the "
-              f"file with the call")
+    missed = _not_collected(g, {n for n, _ in tests})
+    if missed:
+        check("every top-level test_* ran", False,
+              f"{', '.join(missed)}: {NEVER}")
     return finish()
 
 
-def _defined_below(g: dict, ran: set[str]) -> list[str]:
-    """The top-level `test_*` functions of g's source file that were not
-    in g when run_functions was called: defined below the call."""
+NEVER = ("never ran (defined below the call, or decorated away without "
+         "functools.wraps)")
+
+
+def _not_collected(g: dict, ran: set[str]) -> list[str]:
+    """The top-level `test_*` functions of g's source file that
+    run_functions did not collect: defined below the call (not in g yet),
+    or replaced by a decorator that did not keep the name and module."""
     path = g.get("__file__")
     if not path:
         return []

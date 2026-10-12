@@ -54,7 +54,7 @@ from kit.config import TEST_RUN_ENV
 
 RESULT_LINE = re.compile(
     r"^\s*RESULT:\s+(\d+)\s+passed(?:\s*,\s*(\d+)\s+failed)?\b", re.MULTILINE)
-BUDGET = re.compile(r"#\s*kit-timeout:\s*(\d+(?:\.\d+)?)\s*$")
+BUDGET = re.compile(r"#\s*kit-timeout:\s*(\d+(?:\.\d+)?)\s*(?:#.*)?$")
 IGNORE_LEAKS = ("uv-*.lock",)
 TAIL = 40
 
