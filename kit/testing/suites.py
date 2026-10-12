@@ -1,4 +1,4 @@
-"""The day-one guards of a harness, as library calls: the ten tests a new
+"""The day-one guards of a harness, as library calls: the tests a new
 harness is generated with (templates/README.md, "The tests a new harness
 starts with") are each one thin call into this module.
 
@@ -41,6 +41,9 @@ reports them through kit.testing.check. A generated test is
                 ssot/stages.agent.tsv is signed (or on a release tag,
                 CI_COMMIT_TAG), no shipped file holds a fill marker (the
                 build's "<<" + "fill:" placeholder)
+  roadmap       kit.guards.roadmap.check_roadmap: docs/ROADMAP.md (or
+                [guards.roadmap] file) keeps the one format, and its planted
+                self-test
   kit_drift     kit.guards.drift.check_harness
 
 Test: kit/tests/test_suites.py (every suite green on a generated harness,
@@ -626,6 +629,16 @@ def changelog(root: Path | str) -> Results:
     return [("the changelog rule catches each planted fault", g.self_test()),
             ("CHANGELOG.md is whole, and SKILL.md's version is its newest "
              "release", g.check_changelog(root))]
+
+
+# ---- roadmap -------------------------------------------------------------------------
+
+def roadmap(root: Path | str) -> Results:
+    bind(root)
+    from kit.guards import roadmap as g
+    return [("the roadmap rule catches each planted break", g.self_test()),
+            ("the roadmap keeps the one format (sections, dated rows, ids, "
+             "what each wait unblocks)", g.check_roadmap(root))]
 
 
 # ---- release -------------------------------------------------------------------------

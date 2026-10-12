@@ -6,11 +6,19 @@ Context windows end mid-project. Each session closes one turn of the build loop 
 
 | File | Holds | Written by |
 | --- | --- | --- |
-| `docs/ROADMAP.md` in the harness ([template](ROADMAP.md)) | The loop diagram, where things are, the **session start checklist**, **status** (dated), **next sessions** (one turn each, with what is needed from the owner), backlog, when to use sub-agents | the session, at its end |
+| `docs/ROADMAP.md` in the harness ([template](ROADMAP.md), the one format, held by `tests/test_roadmap.py`) | One dated row per item: **Now** (the one turn in progress), **Waiting on owner** (each row names what it unblocks), **Next** (one turn each, in order), **Done** (with its commit or merge request), **Parked**, **Decisions** (the owner's words, quoted), **Links** (where things are) | the session, at its end |
 | `<project>/CHANGELOG.md` | Each plan revision: what changed and which owner note or decision asked for it | the session, as it applies feedback |
 | `<project>/feedback/<date>.json` | A dated copy of the owner's decisions read from the review page | the session, at its start |
 | The agent's memory notes | Only what isn't in the repo: the owner's preferences, account facts (which token is which group), links (review page URL) | the session, when learned |
 | `SKILL.md` | How an agent operates the harness: the loop, the verbs, the rules | when a verb or rule changes |
+
+## Start on a new machine
+
+1. Clone the harness and every repository the roadmap's **Links** name. A folder with no remote cannot move: give it one first.
+2. Install `uv` and Python 3.11 or newer. Run the harness tests: `python3 tests/run.py` must end `RESULT: N passed`.
+3. Recreate what git does not carry: each data dir's `.env` (chmod 600, never committed), the console secrets, tokens from their owners. Each is a **Links** row of the roadmap (where it lives, who owns it), never its value.
+4. Run `{{cli}} doctor --strict` in each client workspace; it names every missing setting.
+5. Start the consoles and read the open asks before asking anything new.
 
 ## Session start checklist
 
@@ -22,7 +30,7 @@ Context windows end mid-project. Each session closes one turn of the build loop 
 ## Session end checklist
 
 1. Run tests green, then republish the review page to the same URL.
-2. Update ROADMAP **Status** (what is done, dated) and **Next sessions** (the next turn and what it needs from the owner).
+2. Update the roadmap: set `Updated`, move what finished to **Done** with its reference, put the next turn in **Now**, and give everything it needs from the owner a **Waiting on owner** row that names what it unblocks. An id is never reused.
 3. Update memory notes only for facts the repo can't hold.
 4. Refresh the owner's progress page from ROADMAP ([skills/progress-page](../skills/progress-page/SKILL.md)); the page is a view, the roadmap is the source.
 5. Tell the owner, in one screen: what they can look at now, what you need from them, what the next session will do.

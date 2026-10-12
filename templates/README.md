@@ -40,10 +40,10 @@ The files a new harness starts from. The build workflow, [BUILD.md](../BUILD.md)
 | [claim-scope.md](claim-scope.md) | B3, B6, B10 | a claims record per product + `ssot/claim_terms.tsv` + a phrase library per product | Regulated copy says only what the approved document allows: the claims record confirmed at the gate, the claims lexicon, the checks at script, asset and render, waivers, the phrase library, and every rejection as a recall test beside a false-alarm test |
 | [owner-review-loop.md](owner-review-loop.md) | B6, B10 | `docs/owner-review-loop.md` | One published page the owner decides on per item; the next session reads the decisions back and logs each change against its note |
 | [outcome-learning.md](outcome-learning.md) | B10 | `docs/winning-factors.md` | Learning from what performed: one factor catalog measured on winners and the rest; the owner defines "winner"; rules stay pending until a variant confirms them |
-| [ROADMAP.md](ROADMAP.md) | all | `docs/ROADMAP.md` | Where things are, how to start on a new machine, dated status, the next turns and what each needs first, backlog and open decisions |
+| [ROADMAP.md](ROADMAP.md) | all | `docs/ROADMAP.md` | The one roadmap format: Now, Waiting on owner (each row names what it unblocks), Next, Done (with its reference), Parked, Decisions (the owner's words), Links; one dated row per item with an id; `tests/test_roadmap.py` holds it (`kit.guards.roadmap`) |
 | [client/CLAUDE.md](client/CLAUDE.md) | B9, every client | `<clients>/<client>/CLAUDE.md` (rendered by `scaffold/new_client.py`) | The agent's brief for one client: the wrapper pinned to its data folder, the first call, the console round, the gate verbs it may not run, the Distil rule |
 | [client-handoff.md](client-handoff.md) | every client session | `<clients>/<client>/reports/handoff-YYYY-MM-DD.md` | What the database can't hold, and the Distil list: each insight tagged harness MR, proposed story, method question or client-only; a rule stays proposed until a second client confirms it |
-| [session-handoff.md](session-handoff.md) | all | `docs/session-handoff.md` (the harness keeps its own `docs/ROADMAP.md`) | Each session closes one turn and leaves the next ready: roadmap status and next turn, changelog, dated feedback copies, memory only for what the repo can't hold |
+| [session-handoff.md](session-handoff.md) | all | `docs/session-handoff.md` (the harness keeps its own `docs/ROADMAP.md`) | Each session closes one turn and leaves the next ready: starting on a new machine, the session start and end checklists, the roadmap's rows moved, changelog, dated feedback copies, memory only for what the repo can't hold |
 | [README-operator.md](README-operator.md) | B8 | `README.md` | Install, configure, daily loop, what needs a human, which command answers which question |
 | [workflows.md](workflows.md) | B8 | `references/workflows.md` | Recipes: the daily check, why a number moved, a client meeting |
 | [install-checklist.md](install-checklist.md) | B9 | `docs/install-checklist.md` | The install message, what the host agent reports after every install, scheduled tasks, and what a host agent can reach |
@@ -62,6 +62,7 @@ The files a new harness starts from. The build workflow, [BUILD.md](../BUILD.md)
 | `{{env_prefix}}` | The environment prefix, for example `ACME` | `harness.toml` `env_prefix` |
 | `{{owner}}` | The owner's handle, for example `@owner` | the builder owner's answer (B0.6) |
 | `{{repo_home}}` | Where the repository lives | the builder owner's answer (B0.6) |
+| `{{today}}` | The day the harness is generated, `YYYY-MM-DD` (the roadmap's `Updated` and its example rows) | the scaffolder's clock |
 | `{{harness_name}}` | The harness's name, in a client brief | `harness.toml` `name`, read by `scaffold/new_client.py` |
 | `{{harness_dir}}` | The harness checkout the client's wrappers run | `new_client.py --harness` |
 | `{{client}}` | The client's folder id, for example `acme-us` | `new_client.py --client` |
@@ -90,6 +91,7 @@ The scaffolder generates exactly these files, each one call into the vendored ki
 | `tests/test_gate.py` | Confirm and approve need a human; a code is bound to what was shown; a replayed or swapped code is refused; no bypass flag; the scope enters only through init |
 | `tests/test_release.py` | `git archive` leaves out the internal files, ships the kit and the console, and no shipped file holds `<<fill:` |
 | `tests/test_changelog.py` | `CHANGELOG.md` starts with Unreleased, its releases are in order, and `SKILL.md`'s version is the newest of them |
+| `tests/test_roadmap.py` | `docs/ROADMAP.md` keeps the one roadmap format: the seven sections in order, one `- [ID] YYYY-MM-DD text` row per item with the section's letter and a unique id, at most one Now row, every Waiting row naming the rows it unblocks, Done rows with a reference, Decisions in the owner's words |
 | `tests/test_kit_drift.py` | `scripts/kit/` and `console/` match their `MANIFEST.sha256` and `VERSION` |
 
 The playbook's own check of this page, BUILD.md and the build skill: [tests/test_docs_build.py](../tests/test_docs_build.py).
@@ -98,7 +100,7 @@ The playbook's own check of this page, BUILD.md and the build skill: [tests/test
 
 Three folders are not rendered by the scaffolder. Each is a module a harness copies, and each has its own tests, kept out of the generated set above. The copy is the module only (from `tests/golden/`, just `engine.py` and `cases.py`; from `workflows/`, the scripts and `refcheck.py`). The golden and workflow tests run inside this playbook, and their runners import its `kit/` from the playbook root, so they do not travel with the copy.
 
-**`tests/`: the test kit for a repository that does not vendor the kit.** It holds the same rules as the first ten of the eleven generated tests (the changelog one exists only in the generated set), for the layout of the source project (`src/` beside a `common/` package at the root), with the rules as constants at the top of each file. A scaffolded harness does not copy it: the generated tests call the vendored kit, and `scripts/kit/` and its manifest keep every harness on one copy of each rule. The overlap, rule by rule:
+**`tests/`: the test kit for a repository that does not vendor the kit.** It holds the same rules as ten of the twelve generated tests (the changelog and roadmap ones exist only in the generated set), for the layout of the source project (`src/` beside a `common/` package at the root), with the rules as constants at the top of each file. A scaffolded harness does not copy it: the generated tests call the vendored kit, and `scripts/kit/` and its manifest keep every harness on one copy of each rule. The overlap, rule by rule:
 
 | Rule | Generated test, from the vendored kit | Standalone copy |
 | --- | --- | --- |
