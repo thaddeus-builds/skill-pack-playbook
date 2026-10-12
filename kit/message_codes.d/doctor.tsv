@@ -6,6 +6,9 @@ doctor_env_var	name,value,source	{name} = {value} [{source}]	{name} = {value}（
 doctor_token_source	mode	token source (every API): {mode}	令牌来源（所有接口）：{mode}
 doctor_home_secrets	names,file,var	{names} came from {file} (HOME-level: shared by every client of this user) — export them in the process env instead and set {var}=none	{names} 来自 {file}（用户主目录级文件：这个用户的所有客户共用）——请改为在进程环境变量里设置，并设 {var}=none
 doctor_env_file_loose	path	{path} is readable by other users	{path} 其他用户也能读取
+doctor_env_gate_secret_in_file	file,name	{name} is written in {file}: the harness never loads a gate secret from a file (an agent that can read or write the file could make its own approval codes). Remove the line; set it only in the process env of what runs the gate	{file} 里写了 {name}：工具从不从文件读取确认用的密钥（能读写这个文件的助手就能自己生成批准码）。请删掉这一行，只在运行确认流程的进程环境变量里设置它
+doctor_env_file_unsafe_name	file,name	{name} is written in {file}: the harness never loads it from a file (it would change who the gate thinks is at the terminal, which harness is bound, or the code that runs). Remove the line	{file} 里写了 {name}：工具从不从文件读取它（它会改变确认流程认为谁在终端前、绑定哪个工具，或运行哪段代码）。请删掉这一行
+doctor_console_secret_in_env	var	{var} is set in the environment this harness runs in: it is the owner console's own secret, which the console withholds from every harness call; an agent here could sign the console's answers. Unset it; it belongs only to the console process	运行这个工具的环境里设置了 {var}：这是负责人控制台自己的密钥，控制台调用工具时从不传给它；这里的助手可以冒签控制台的回答。请取消设置，它只属于控制台进程
 doctor_path	var,path	{var} -> {path}	{var} -> {path}
 doctor_data_dir_from_home	var,file	{var} came from {file} (HOME-level: any client that leaves it unset lands in this data dir)	{var} 来自 {file}（用户主目录级文件：任何没设置它的客户都会落到这个数据目录）
 doctor_inside_repo	var,path	{var} -> {path} is inside the harness checkout: client data would ship in a release or leak into a commit	{var} -> {path} 在工具的代码目录里：客户数据可能随发布版本发出，或被提交进仓库

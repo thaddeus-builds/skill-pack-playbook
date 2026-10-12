@@ -124,7 +124,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/stages.md](docs/stages.md) | Stage 0 (client meetings), the ten stages one line each, the day-one checklist |
 | [docs/rules.md](docs/rules.md) | Data layers and their guards, the human-in-the-loop rules, stories that prove themselves, registries |
 | [docs/consoles.md](docs/consoles.md) | The owner console, the client console, one workspace per client |
-| [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, hosting |
+| [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a harness small, hosting |
 | [docs/channels.md](docs/channels.md) | Reusing a harness for other channels; generated creative and real people |
 | [docs/kit-and-tools.md](docs/kit-and-tools.md) | What this repository holds, the kit's admission rule, every template |
 | [docs/lessons.md](docs/lessons.md) | Lessons kept after their code was removed |
