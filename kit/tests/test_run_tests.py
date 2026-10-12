@@ -12,7 +12,12 @@ process with a TMPDIR we then inspect:
     not a leak; a sandbox from check.tmp_dir() is not a leak;
   * the last RESULT line counts; one bad file fails the run; the filter
     is a substring (several = any); no match fails;
-  * check.finish() and check.run_functions() files pass through the gate.
+  * check.finish() and check.run_functions() files pass through the gate;
+    a test_* defined below the run_functions() call fails its file, named;
+  * a file's own `# kit-timeout: S` is its budget: a slow file with a
+    larger one passes under a short default, a file past a smaller one is
+    killed; `--timeout S` sets the run's default, and a bad one fails;
+  * every file sees KIT_TEST_RUN=1.
 """
 
 import os
@@ -33,7 +38,8 @@ ROOT = str(_shop.PLAYBOOK)
 def gate(files: dict[str, str], *args: str, timeout_s: float = 60
          ) -> tuple[int, str, list[str]]:
     """Run the gate over {name: body}: (exit, output, what it left in the
-    TMPDIR it was given)."""
+    TMPDIR it was given). The gate starts unmarked: KIT_TEST_RUN, which
+    importing check set here, is not passed on."""
     d = Path(tmp_dir("gate-"))
     (d / "tests").mkdir()
     for name, body in files.items():
@@ -44,9 +50,16 @@ def gate(files: dict[str, str], *args: str, timeout_s: float = 60
             "from kit.testing import run_tests\n"
             "sys.exit(run_tests.main(%r, root=%r, timeout_s=%r))\n"
             % (ROOT, list(args), str(d), timeout_s))
+    env = {k: v for k, v in os.environ.items() if k != "KIT_TEST_RUN"}
     p = subprocess.run([sys.executable, "-B", "-c", shim], capture_output=True,
-                       text=True, env={**os.environ, "TMPDIR": str(tmp)})
+                       text=True, env={**env, "TMPDIR": str(tmp)})
     return p.returncode, p.stdout + p.stderr, sorted(os.listdir(tmp))
+
+
+def _planted(body: str) -> Path:
+    f = Path(tmp_dir("budget-")) / "test_b.py"
+    f.write_text(body, encoding="utf-8")
+    return f
 
 
 def parse(text):
@@ -69,6 +82,15 @@ FUNCS = (HEADER + "from kit.testing.check import run_functions\n"
          "def test_two():\n    assert 'a'.upper() == 'A'\n"
          "raise SystemExit(run_functions(globals()))\n")
 FUNCS_BAD = FUNCS.replace("== 'A'", "== 'B'")
+FUNCS_LATE = (FUNCS.replace("raise SystemExit", "if __name__ == '__main__':\n"
+                             "    raise SystemExit")
+              + "\n\ndef test_appended_later():\n    assert False\n")
+SLOW_OWN = "# kit-timeout: 30\nimport time; time.sleep(2)\n" + PASS
+SLOW_OVER = "# kit-timeout: 1\nimport time; time.sleep(30)\n" + PASS
+SLOW_IN_TEXT = ('"""\n# kit-timeout: 30\n"""\nimport time; time.sleep(30)\n'
+                + PASS)
+MARKER = ("import os\nprint(os.environ.get('KIT_TEST_RUN'))\n"
+          "assert os.environ.get('KIT_TEST_RUN') == '1'\n" + PASS)
 GREEN_LIE = "print('RESULT: 3 passed, 2 failed')\n"     # exit 0
 ZERO = "print('RESULT: 0 passed')\n"
 NO_LINE = "print('did some work')\n"
@@ -103,6 +125,9 @@ def main() -> int:
     rc, out, _ = gate({"test_funcs.py": FUNCS})
     check("run_functions(): each test_* function is one check",
           rc == 0 and "RESULT: 2 passed" in out, out)
+    rc, out, _ = gate({"test_marker.py": MARKER})
+    check("every file runs with KIT_TEST_RUN=1 (a harness tells a test by it)",
+          rc == 0, out)
     rc, out, _ = gate({"test_uv.py": UV_LOCK})
     check("uv's own lock file is not the test's leak", rc == 0, out)
 
@@ -130,6 +155,11 @@ def main() -> int:
     check("a file past its timeout is killed and fails",
           rc == 1 and "tests/test_slow.py: timed out after 1s" in out
           and left == [], out)
+    rc, out, _ = gate({"test_late.py": FUNCS_LATE})
+    check("a test_* defined below the run_functions() call fails its file, "
+          "named", rc == 1 and "tests/test_late.py: exit 1" in out
+          and "defined below it: test_appended_later" in out
+          and "PASS  test_one" in out, out)
     rc, out, _ = gate({"test_ok.py": PASS, "test_lie.py": GREEN_LIE})
     check("one bad file fails the whole run; the good one still counts",
           rc == 1 and "RESULT: 1 passed, 1 failed" in out, out)
@@ -137,7 +167,33 @@ def main() -> int:
     check("a nested failure line followed by the file's own pass line passes",
           rc == 0, out)
 
-    print("\n[4] the filter")
+    print("\n[4] a file's own budget")
+    check("budget(): the file's comment, else the default",
+          run_tests.budget(_planted(SLOW_OWN), 5) == 30
+          and run_tests.budget(_planted(PASS), 5) == 5)
+    check("budget(): text in a string is not a comment; 0 is no budget",
+          run_tests.budget(_planted(SLOW_IN_TEXT), 5) == 5
+          and run_tests.budget(_planted("# kit-timeout: 0\n" + PASS), 5) == 5)
+    rc, out, left = gate({"test_own.py": SLOW_OWN, "test_ok.py": PASS},
+                         timeout_s=1)
+    check("a slow file with its own larger budget passes a 1 s default",
+          rc == 0 and out.rstrip().endswith("RESULT: 2 passed"), out)
+    rc, out, left = gate({"test_over.py": SLOW_OVER}, timeout_s=60)
+    check("a file past its own smaller budget is killed and fails",
+          rc == 1 and "tests/test_over.py: timed out after 1s" in out
+          and left == [], out)
+    rc, out, _ = gate({"test_slow.py": SLOW}, "--timeout", "1")
+    check("--timeout S sets the run's default",
+          rc == 1 and "tests/test_slow.py: timed out after 1s" in out, out)
+    rc, out, _ = gate({"test_own.py": SLOW_OWN}, "--timeout=1")
+    check("… and a file's own budget still wins over it", rc == 0, out)
+    for bad in ("0", "x", "inf"):
+        rc, out, _ = gate({"test_ok.py": PASS}, f"--timeout={bad}")
+        check(f"--timeout={bad} is refused, nothing run",
+              rc == 1 and "--timeout needs a positive number" in out
+              and "test_ok" not in out, out)
+
+    print("\n[5] the filter")
     files = {"test_alpha.py": PASS, "test_beta.py": PASS, "test_gamma.py": ZERO}
     rc, out, _ = gate(files, "alpha")
     check("a substring picks files", rc == 0 and "test_beta" not in out
