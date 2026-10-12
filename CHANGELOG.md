@@ -10,6 +10,20 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-12
+### Added
+- `tools/leak_guard.py` and `tools/pre-push.sample` (testkit): a push whose added lines, file paths
+  or commit messages hold a client term is refused; `--range A..B` and `--tree` check by hand. A
+  term matches case- and whitespace-insensitively (`re:` for a regular expression), and a hit names
+  the term's line and list, never the term. The lists are client data and stay outside the
+  repository: `[guards.leak] terms` in harness.toml (paths or globs, one list per client workspace)
+  and `<PREFIX>_CLIENT_TERMS`. Fail closed: no list, a named list missing, an empty or unreadable
+  list, a bad pattern or a git error refuses the push. Generalised from the video-ads harness's own
+  guard and its local hook, which read every client workspace's list (seen once).
+### Other
+- BUILD.md B1: install the hook before the first push; `templates/harness.toml` shows
+  `[guards.leak]`. `kit-tiers.tsv`: `tools.leak_guard`, extra, no consumer yet.
+
 ## [0.14.0] - 2026-10-12
 ### Added
 - `kit/guards/roadmap.py` and `kit.testing.suites.roadmap`: one ROADMAP.md format. The title,
