@@ -53,7 +53,7 @@ Install these before the first feature; each costs an hour now and saved days in
 
 - [ ] Meeting intake: consent, recording, transcript in the client's data folder, the organizer prompt ([template](../templates/meeting-intake.md))
 - [ ] A review page before the first paid batch: the owner decides per item and the next session reads the decisions back ([loop](../templates/owner-review-loop.md)); paid vendor APIs pinned down cheaply first and every request preflighted against the vendor's published schema ([discovery](../templates/vendor-api-discovery.md))
-- [ ] `docs/ROADMAP.md` with a session start and end checklist from day one ([handoff](../templates/session-handoff.md))
+- [ ] `docs/ROADMAP.md` in the one roadmap format from day one, held by `tests/test_roadmap.py` ([template](../templates/ROADMAP.md)), with the session start and end checklists ([handoff](../templates/session-handoff.md))
 - [ ] The test kit before the first feature: a runner that fails a missing RESULT line, a reported failure, `0 passed` or a leaked temp file; one clock; layering rules; a release-archive test ([kit](../templates/tests/)). Every rule in the agent instructions names its test ([template](../templates/AGENT_INSTRUCTIONS.md))
 - [ ] An empty registry index with its lint test; ids are never reused; owner files linted for engineering words ([template](../templates/ssot/))
 - [ ] CI from the first commit: one pipeline per change with every job in the MR pipeline, the story-id check on every MR title, the offline suite, a secret scan ([fuller template](../templates/ci/gitlab-ci.yml); its short form, [templates/gitlab-ci.yml](../templates/gitlab-ci.yml), is what the scaffolder renders into every harness), plus a few guarantee stories for refactors to name

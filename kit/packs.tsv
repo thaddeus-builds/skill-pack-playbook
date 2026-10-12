@@ -48,12 +48,13 @@ guards.evals	testkit	no consumer yet
 guards.json_contract	testkit	
 guards.layering	testkit	
 guards.release	testkit	
+guards.roadmap	testkit	
 guards.ssot	testkit	
 testing.__init__	testkit	
 testing.check	testkit	
 testing.run_tests	testkit	
 testing.sandbox	testkit	
-testing.suites	testkit	the ten day-one tests
+testing.suites	testkit	the day-one tests
 testing.xlsx	testkit	a small xlsx writer, so a test builds the workbook it reads
 tools.manifest	testkit	the fingerprint, read by guards.drift
 tools.vendor	testkit	playbook tooling
