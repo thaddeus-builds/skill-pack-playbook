@@ -44,7 +44,7 @@ guards.boundary	testkit
 guards.changelog	testkit	
 guards.clock	testkit	
 guards.drift	testkit	
-guards.evals	testkit	no consumer yet
+guards.evals	testkit	eval cases: no consumer yet; the Never table: suites.never_table
 guards.json_contract	testkit	
 guards.layering	testkit	
 guards.release	testkit	
