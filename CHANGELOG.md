@@ -9,6 +9,22 @@ are the merge day. Everything under *Other* is outside the kit: templates, build
 scaffold, console, docs, conformance.
 
 ## [Unreleased]
+
+## [0.17.0] - 2026-10-12
+### Added
+- `kit.workbook_patch` (pack `workbook`, slice 4 of `docs/workbook-and-browser-ops.md`): cells set
+  in a copy of a client's xlsx, stdlib only. Every part it does not set stays byte for byte (a
+  sheet with cells to set is edited as text, cell by cell; texts inline, styles kept); the workbook
+  part gains full recalculation on open; the same inputs give the same bytes. A formula, a value
+  the client entered (not the harness's previous copy, `ours`), a merged cell or a missing sheet is
+  never set, listed by ref. `table_sets` places a harness's results by the map (a table's `out` and
+  `both` columns by key, new columns after the header block with their header); `cell_sets` fills
+  the map's new `cells.tsv`. First consumer: the KOL harness (meta-ads-retail-harness X39), which
+  tried it on the client's real workbook: two parts changed, every other part identical.
+- `kit.workbook_map`: an optional `cells.tsv` (`field, sheet, cell, owner, status, note`), where a
+  harness writes outside a table's rows (a month's figure across a row); a cell written by two rows
+  is refused (`workbook_map_cell_twice`); `confirmed()`, `pending()` and `confirmed_rows()` carry
+  it, so the file gate binds it; a map without it keeps its version.
 ### Other
 - `templates/claim-scope.md`: "What stops, what warns". A harness picks per channel whether an
   open compliance finding stops the step or warns a person (one switch, `warn` or `block`); where

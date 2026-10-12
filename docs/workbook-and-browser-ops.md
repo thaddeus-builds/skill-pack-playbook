@@ -75,6 +75,8 @@ No column names a business field, and none is called `date` (kit.db's default pe
 
 Three rules, tested: **an outgoing column has one owner** (one `out` or `both` row per workbook, sheet, anchor and header, whichever harness writes it); **every field is the harness's** (in its vocabulary, when it gives one); **nothing unconfirmed is read** (`confirmed()` and `pending()`). Shape problems (columns, closed values, unknown tables, a missing owner or reason, a key header with no column row) are reported first, as one coded refusal.
 
+`cells.tsv` (optional, kit 0.17.0): `field, sheet, cell, owner, status, note`, where a harness writes outside a table's rows (a month's actual spending across `F33:Q33`): a field of the harness, one cell or a range along one row or column filled in order, the owning harness. A cell is written by one row only. It passes the same gate as the rest of the map.
+
 `values.tsv` (optional, kit 0.12.0): `key, market, value, sheet, cell, status, note`, the numbers the agent read from single cells or ranges (a rate in `F14`, a target across `F32:Q32`), each a fact key of the harness. A map without it keeps its version.
 
 **One gate per file** (`kit.file_gate`, #66): the agent stages the map with its new rows `proposed`; `kit.pending` lists the staged bundle as one ask; the harness's confirm verb runs `plan()` then `confirm()`: one retype or one relayed code, bound to the staged and the confirmed bundle's versions, the row count and every value, after which the values are confirmed facts (`kit.facts.apply_file`) and the confirmed bundle is the one in force. The owner says yes once per version of the file, never once per number.
@@ -99,7 +101,7 @@ A test also holds that no sheet or header name of either client is in the pack's
 ### Companion export and patch (later slices)
 
 - **Slice 2, companion export.** A new xlsx built from rows, with the client's own sheet names and header texts from the map, so the client can open it beside the workbook, compare it and paste. Nothing is shared with the original file. `kit.testing.xlsx` is the seed; the export is its own module.
-- **Slice 4, patch.** A copy of the latest workbook with a listed set of cells set. Everything else is carried byte for byte (the part hashes on `wb_file` prove it). Rules: never overwrite a cell holding a formula; never overwrite a cell `wb_change` shows the client changed since the import the patch is based on (listed, not resolved); set full recalculation on open; a fixed zip order and time stamp so the same inputs give the same bytes.
+- **Slice 4, patch (kit 0.17.0, `kit.workbook_patch`; built before slice 2 because the KOL harness's owner chose a copy of the client's own file).** A copy of the latest workbook with a listed set of cells set. Everything else is carried byte for byte (the part hashes on `wb_file` prove it). Rules: never overwrite a cell holding a formula; never overwrite a cell `wb_change` shows the client changed since the import the patch is based on (listed, not resolved); set full recalculation on open; a fixed zip order and time stamp so the same inputs give the same bytes.
 
 ## `browser-ops` (pack `browser`, policy only, no driver)
 
