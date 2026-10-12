@@ -9,7 +9,10 @@
     sourced (quotes stripped, `|` and `$` kept, `export ` dropped);
   * sources are named; require() raises a coded EnvError; credential
     prefixes default; load_into_environ() never overrides and remembers
-    where each value came from; chain() follows the bound harness.
+    where each value came from; chain() follows the bound harness;
+  * a gate secret, the gate's test seam, a test marker, the binding, a
+    loader variable or a harness's own listed name in a file is never
+    loaded, and refused() names it (an ordinary key still loads).
 """
 
 import os
@@ -183,6 +186,64 @@ def main() -> int:
           c2 is not c and c2.paths_var == "OTHER_AUTH_ENV_PATHS"
           and c2.home_file == "~/.other.env"
           and c2.default_prefixes == {"OTHER_API_PREFIX": "API"})
+    _shop.use()
+
+    print("\n[9] a gate secret, the seam, a binding: never from a file")
+    planted = ("SHOP_CONFIRM_CODE_SECRET", "OTHER_CONFIRM_CODE_SECRET",
+               "CONSOLE_SECRET", "KIT_TTY", "PYTEST_CURRENT_TEST",
+               "KIT_HARNESS_ROOT", "PYTHONPATH", "DYLD_INSERT_LIBRARIES",
+               "LD_PRELOAD", "SHOP_TEST_SEAM")
+    forms = ("{n}=planted-{i}\n", "export {n}=planted-{i}\n",
+             "  {n} = 'planted-{i}'\n", "export  {n}  =planted-{i}\n")
+    write(data / ".env", "".join(forms[i % len(forms)].format(n=n, i=i)
+                                 for i, n in enumerate(planted))
+          + "X_OK=ordinary\n")
+    seamed = env.EnvChain(paths_var="SHOP_AUTH_ENV_PATHS",
+                          data_dir_var="SHOP_DATA_DIR", home_file=None,
+                          never=("SHOP_TEST_SEAM",))
+    keep = {n: os.environ.pop(n, None) for n in planted}
+    try:
+        added = seamed.load_into_environ()
+        check("an ordinary key in the data-dir .env still loads",
+              added == {"X_OK": str(data / ".env")}
+              and os.environ.get("X_OK") == "ordinary", added)
+        check("no planted name reaches os.environ",
+              not any(os.environ.get(n) for n in planted),
+              [n for n in planted if os.environ.get(n)])
+        check("get/resolve/load see none of them either",
+              all(seamed.resolve(n) == (None, None) for n in planted)
+              and set(seamed.load()) == {"X_OK"})
+        check("refused() names each (plain, `export `, spaced and quoted "
+              "forms), with its file, never a value",
+              seamed.refused() == [(str(data / ".env"), n) for n in planted]
+              and "planted" not in repr(seamed.refused()))
+        check("the harness's own name is refused only when it lists it",
+              "SHOP_TEST_SEAM" in ch.load() and "SHOP_TEST_SEAM" not in
+              seamed.load())
+        os.environ["SHOP_CONFIRM_CODE_SECRET"] = "from-process"
+        check("the process env still sets a gate secret",
+              seamed.get("SHOP_CONFIRM_CODE_SECRET") == "from-process")
+        check("is_gate_secret: the confirm-code keys and the console's",
+              all(env.is_gate_secret(n) for n in planted[:3])
+              and not any(env.is_gate_secret(n) for n in
+                          ("SHOP_API_KEY", "SECRET_SAUCE", "KIT_TTY")))
+    finally:
+        os.environ.pop("X_OK", None)
+        for n, v in keep.items():
+            if v is None:
+                os.environ.pop(n, None)
+            else:
+                os.environ[n] = v
+    write(other / "harness.toml", '[harness]\nname = "o"\ncli = "o"\n'
+          'env_prefix = "OTHER"\n[env]\nnever_from_file = ["OTHER_SEAM"]\n')
+    config.use(other)
+    check("chain() takes [env].never_from_file",
+          env.chain().never == ("OTHER_SEAM",))
+    write(other / "harness.toml", '[harness]\nname = "o"\ncli = "o"\n'
+          'env_prefix = "OTHER"\n[env]\nnever_from_file = "OTHER_SEAM"\n')
+    config.use(other)
+    check("… and refuses one that is not a list of names",
+          raises(env.chain, config.ConfigError) is not None)
     _shop.use()
     return finish()
 

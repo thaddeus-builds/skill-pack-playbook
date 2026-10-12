@@ -11,7 +11,18 @@ names its fix in `next`):
   token_source   `<P>_TOKEN_SOURCE` is env or command
   home_secrets   a secret or the data dir that came from the HOME-level file
                  (shared by every client of this user) warns
-  env_files      a chain file readable by group or other warns (chmod 600)
+  env_files      a chain file readable by group or other warns (chmod 600);
+                 a line the chain never loads (kit.env.never_from_file)
+                 warns, naming the file and the name, never the value: a
+                 gate secret (doctor_env_gate_secret_in_file) or a seam,
+                 test marker, binding or loader variable
+                 (doctor_env_file_unsafe_name)
+  console_secret CONSOLE_SECRET (the owner console's own secret, which the
+                 console withholds from every harness call) set in the
+                 process env this harness runs in warns. The confirm-code
+                 secret there does not: the harness process issues and
+                 checks the relayed code, so whoever runs the gate (the
+                 console, or an agent relaying through chat) holds it
   data_dir       `<P>_DATA_DIR` set, absolute, outside the harness checkout;
                  the DB path too
   db             no DB yet (info); a DB stamped by a newer harness, human
@@ -238,6 +249,47 @@ def check_env_files(ctx: Context) -> None:
             ctx.warn("env_files", msg("doctor_env_file_loose", f"{p} is "
                                       f"readable by other users", path=p),
                      [f"chmod 600 {p}"])
+    for p, name in env.chain().refused():
+        fix = [f"delete the {name} line from {p}"]
+        if env.is_gate_secret(name):
+            if name.endswith("CONFIRM_CODE_SECRET"):
+                fix += _console_secret_fix(name)
+            ctx.warn("env_files", msg(
+                "doctor_env_gate_secret_in_file", f"{name} is written in {p}: "
+                f"the harness never loads a gate secret from a file (an agent "
+                f"that can read or write the file could make its own approval "
+                f"codes). Remove the line; set it only in the process env of "
+                f"what runs the gate", file=p, name=name), fix)
+        else:
+            ctx.warn("env_files", msg(
+                "doctor_env_file_unsafe_name", f"{name} is written in {p}: the "
+                f"harness never loads it from a file (it would change who the "
+                f"gate thinks is at the terminal, which harness is bound, or "
+                f"the code that runs). Remove the line", file=p, name=name),
+                fix)
+
+
+def _console_secret_fix(name: str) -> list[str]:
+    """The deployment step for a client console made before kit 0.15.0
+    (scaffold/new_client.py's bin/console), which appends the confirm-code
+    secret to workspace/.env at each start; no harness code changes."""
+    return [f"if a client's bin/console wrote it: in bin/console, replace the "
+            f"4 lines from `envf=\"$root/workspace/.env\"` through `fi` with "
+            f"these 2, then restart the console:",
+            f'{name}="$(openssl rand -hex 32)"',
+            f"export {name}"]
+
+
+def check_console_secret(ctx: Context) -> None:
+    from kit import env
+    if os.environ.get(env.CONSOLE_SECRET):
+        ctx.warn("console_secret", msg(
+            "doctor_console_secret_in_env", f"{env.CONSOLE_SECRET} is set in "
+            f"the environment this harness runs in: it is the owner console's "
+            f"own secret, which the console withholds from every harness "
+            f"call; an agent here could sign the console's answers. Unset it; "
+            f"it belongs only to the console process", var=env.CONSOLE_SECRET),
+            [f"unset {env.CONSOLE_SECRET}"])
 
 
 def check_data_dir(ctx: Context) -> None:
@@ -417,7 +469,8 @@ def check_kit_tty(ctx: Context) -> None:
 
 BUILTIN: tuple[Check, ...] = (check_harness, check_env_chain,
                               check_token_source, check_home_secrets,
-                              check_env_files, check_data_dir, check_db,
+                              check_env_files, check_console_secret,
+                              check_data_dir, check_db,
                               check_markets, check_writes)
 
 
