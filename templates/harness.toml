@@ -45,6 +45,12 @@ writer_importers = ["execute_actions"]
 clients = []                           # API client modules, for example ["_lib/api_client"]; they never import the database
 spawn_allowed = ["compute_stories"]    # the one compute that may run other read verbs
 
+# Optional, read by kit/env.py: the harness's own variables no env file may set
+# (only the process env), besides the kit's (gate secrets, KIT_TTY, the binding,
+# loader variables); doctor names such a line in a .env.
+# [env]
+# never_from_file = ["{{env_prefix}}_TEST_SEAM"]
+
 # Optional, read by tests/test_clock.py: the code it lints defaults to the
 # scripts dir, minus the vendored kit. A harness that adopts the kit late lists
 # the calendar reads it has not moved to kit.dates yet, as "path::function" =
