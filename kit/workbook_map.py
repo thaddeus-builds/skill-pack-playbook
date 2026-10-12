@@ -44,8 +44,15 @@ texts_confirmed() is a staged bundle with every row confirmed (what the
 owner's one yes turns it into), gate_rows() what a bundle confirms that
 the one before it did not: exactly what that gate must show and bind.
 
-The version is the hash of the files' texts; a map without values.tsv
-keeps the version it had before values existed.
+cells.tsv (optional): where a harness writes into the workbook outside a
+table's rows (a month's actual spending across a row, a total in one
+cell): field (a field id of the harness's vocabulary), sheet, cell (one
+cell, or a range along one row or one column, filled in order), owner
+(the harness that writes it), status, note. kit.workbook_patch sets these
+cells in a copy of the client's file; nothing is read from them.
+
+The version is the hash of the files' texts; a map without values.tsv or
+cells.tsv keeps the version it had before they existed.
 
 What it guards (problems() -> [Msg], check() raises them as one):
 
@@ -60,7 +67,10 @@ What it guards (problems() -> [Msg], check() raises them as one):
     table's column rows;
   * values: a key (one of the harness's fact keys, when it gives them),
     a market, a value, a sheet and a cell or range for every row, one row
-    per key and market.
+    per key and market;
+  * cells: a field of the vocabulary, a sheet, a cell or a range along one
+    row or column, and an owner for every row; no cell written by two
+    rows.
 
 PERSONAL types (email, person, url) mark columns whose values a harness
 never prints (kit.workbook_store masks them).
@@ -96,9 +106,11 @@ NO_PLACE = "-"
 # (kit.guards.release takes a string literal that is only a file name ending
 # in .tsv for a registry the harness must ship;
 # these are the client's, in its data folder)
-TABLES_FILE, COLUMNS_FILE, VALUES_FILE = (
-    f"{n}.tsv" for n in ("tables", "columns", "values"))
+TABLES_FILE, COLUMNS_FILE, VALUES_FILE, CELLS_FILE = (
+    f"{n}.tsv" for n in ("tables", "columns", "values", "cells"))
+OPTIONAL = (VALUES_FILE, CELLS_FILE)
 VALUE_COLUMNS = ("key", "market", "value", "sheet", "cell", "status", "note")
+CELL_COLUMNS = ("field", "sheet", "cell", "owner", "status", "note")
 _CELL = re.compile(r"^[A-Z]{1,3}[1-9][0-9]{0,6}(?::[A-Z]{1,3}[1-9][0-9]{0,6})?$")
 CONFIRMED = "confirmed"
 
@@ -109,6 +121,7 @@ class Map:
     columns: list[dict] = field(default_factory=list)
     version: str = ""
     values: list[dict] = field(default_factory=list)
+    cells: list[dict] = field(default_factory=list)
 
     def table(self, table_id: str) -> dict | None:
         return next((t for t in self.tables if t["table_id"] == table_id),
@@ -166,38 +179,47 @@ def _rows(name: str, text: str, want: tuple[str, ...]
 
 
 def version_of(tables_text: str, columns_text: str,
-               values_text: str | None = None) -> str:
-    """The bundle's version: the hash of its texts (values.tsv only when
-    there is one, so an older map keeps its version)."""
+               values_text: str | None = None,
+               cells_text: str | None = None) -> str:
+    """The bundle's version: the hash of its texts (values.tsv and
+    cells.tsv only when there is one, so an older map keeps its
+    version)."""
     body = tables_text + "\0" + columns_text
     if values_text is not None:
         body += "\0" + values_text
+    if cells_text is not None:
+        body += "\0cells\0" + cells_text
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
 
 
 def parse(tables_text: str, columns_text: str,
-          values_text: str | None = None) -> tuple[Map, list[Msg]]:
-    """The map from its files' texts (values.tsv optional), and the shape
-    problems met while reading it (problems() adds the rules)."""
+          values_text: str | None = None,
+          cells_text: str | None = None) -> tuple[Map, list[Msg]]:
+    """The map from its files' texts (values.tsv and cells.tsv optional),
+    and the shape problems met while reading it (problems() adds the
+    rules)."""
     tables, p1 = _rows(TABLES_FILE, tables_text, TABLE_COLUMNS)
     columns, p2 = _rows(COLUMNS_FILE, columns_text, COLUMN_COLUMNS)
     values, p3 = ([], []) if values_text is None else \
         _rows(VALUES_FILE, values_text, VALUE_COLUMNS)
+    cells, p4 = ([], []) if cells_text is None else \
+        _rows(CELLS_FILE, cells_text, CELL_COLUMNS)
     return Map(tables=tables, columns=columns,
-               version=version_of(tables_text, columns_text, values_text),
-               values=values), p1 + p2 + p3
+               version=version_of(tables_text, columns_text, values_text,
+                                  cells_text),
+               values=values, cells=cells), p1 + p2 + p3 + p4
 
 
 def texts(folder: Path | str) -> dict[str, str]:
-    """{file name: text} of the map's files in `folder` (values.tsv only
-    when it is there); workbook_map_missing for a missing table or column
-    file."""
+    """{file name: text} of the map's files in `folder` (values.tsv and
+    cells.tsv only when they are there); workbook_map_missing for a missing
+    table or column file."""
     d = Path(folder).expanduser()
     out = {}
-    for name in (TABLES_FILE, COLUMNS_FILE, VALUES_FILE):
+    for name in (TABLES_FILE, COLUMNS_FILE, *OPTIONAL):
         p = d / name
         if not p.is_file():
-            if name == VALUES_FILE:
+            if name in OPTIONAL:
                 continue
             raise HarnessError(msg(
                 "workbook_map_missing",
@@ -211,11 +233,11 @@ def texts(folder: Path | str) -> dict[str, str]:
 def parse_texts(files: dict[str, str]) -> tuple[Map, list[Msg]]:
     """parse() of a {file name: text} bundle (texts(), or a stored one)."""
     return parse(files.get(TABLES_FILE, ""), files.get(COLUMNS_FILE, ""),
-                 files.get(VALUES_FILE))
+                 files.get(VALUES_FILE), files.get(CELLS_FILE))
 
 
 def load(folder: Path | str) -> Map:
-    """The map's files from `folder` (values.tsv when there is one),
+    """The map's files from `folder` (values.tsv, cells.tsv when there),
     checked for shape and for the rules without a field vocabulary
     (check() again with one)."""
     m, probs = parse_texts(texts(folder))
@@ -235,7 +257,7 @@ def problems(m: Map, fields: set[str] | None = None,
              keys: set[str] | None = None) -> list[Msg]:
     """Everything wrong with the map; empty when it holds. `fields` is the
     harness's field vocabulary, `keys` its fact keys (values.tsv)."""
-    out: list[Msg] = _value_problems(m, keys)
+    out: list[Msg] = _value_problems(m, keys) + _cell_problems(m, fields)
     seen: dict[str, dict] = {}
     for t in m.tables:
         n = t["_line"]
@@ -357,6 +379,57 @@ def _value_problems(m: Map, keys: set[str] | None) -> list[Msg]:
     return out
 
 
+def cells_of(text: str) -> list[tuple[int, int]]:
+    """(row, column) of a cell or a range along one row or one column, in
+    order; ValueError otherwise."""
+    if not _CELL.match(text or ""):
+        raise ValueError(text)
+    a, _, b = text.partition(":")
+    (r1, c1), (r2, c2) = _rc(a), _rc(b or a)
+    if r1 != r2 and c1 != c2 or r2 < r1 or c2 < c1:
+        raise ValueError(text)
+    return [(r, c) for r in range(r1, r2 + 1) for c in range(c1, c2 + 1)]
+
+
+def _rc(ref: str) -> tuple[int, int]:
+    letters = ref.rstrip("0123456789")
+    return int(ref[len(letters):]), col_number(letters)
+
+
+def _cell_problems(m: Map, fields: set[str] | None) -> list[Msg]:
+    out: list[Msg] = []
+    taken: dict[tuple[str, int, int], int] = {}
+    for c in m.cells:
+        n = c["_line"]
+        for col in ("field", "sheet", "owner"):
+            if not c[col]:
+                out.append(_bad(CELLS_FILE, n, col, "", "a text"))
+        if c["status"] not in STATUSES:
+            out.append(_bad(CELLS_FILE, n, "status", c["status"],
+                            " | ".join(STATUSES)))
+        if fields is not None and c["field"] and c["field"] not in fields:
+            out.append(msg("workbook_map_field_unknown",
+                           f"cells.tsv line {n}: field {c['field']} is not "
+                           f"in the harness's field vocabulary", line=n,
+                           field=c["field"]))
+        try:
+            spots = cells_of(c["cell"])
+        except ValueError:
+            out.append(_bad(CELLS_FILE, n, "cell", c["cell"],
+                            "a cell (F36) or a range along one row or "
+                            "column (F36:Q36)"))
+            continue
+        for r, k in spots:
+            first = taken.setdefault((norm(c["sheet"]), r, k), n)
+            if first != n:
+                out.append(msg("workbook_map_cell_twice",
+                               f"cells.tsv lines {first} and {n} both "
+                               f"write {c['sheet']} {c['cell']}", first=first,
+                               line=n, sheet=c["sheet"], cell=c["cell"]))
+                break
+    return out
+
+
 def check(m: Map, fields: set[str] | None = None, *,
           keys: set[str] | None = None,
           extra: list[Msg] | None = None) -> None:
@@ -367,8 +440,8 @@ def check(m: Map, fields: set[str] | None = None, *,
             f"the workbook map has {len(probs)} problem(s); nothing was "
             f"read through it: " + "; ".join(probs),
             count=len(probs), problems=joined(probs)),
-            ["fix the map's tables.tsv / columns.tsv / values.tsv, then "
-             "import it again"])
+            ["fix the map's tables.tsv / columns.tsv / values.tsv / "
+             "cells.tsv, then import it again"])
 
 
 def confirmed(m: Map) -> Map:
@@ -380,7 +453,8 @@ def confirmed(m: Map) -> Map:
     cols = [c for c in m.columns
             if c["status"] == CONFIRMED and c["table_id"] in ids]
     return Map(tables=tabs, columns=cols, version=m.version,
-               values=[v for v in m.values if v["status"] == CONFIRMED])
+               values=[v for v in m.values if v["status"] == CONFIRMED],
+               cells=[c for c in m.cells if c["status"] == CONFIRMED])
 
 
 def pending(m: Map) -> list[dict]:
@@ -396,6 +470,9 @@ def pending(m: Map) -> list[dict]:
     out += [{"file": VALUES_FILE, "line": v["_line"], "table_id": "",
              "header": f"{v['key']} [{v['market']}]", "direction": ""}
             for v in m.values if v["status"] != CONFIRMED]
+    out += [{"file": CELLS_FILE, "line": c["_line"], "table_id": "",
+             "header": f"{c['sheet']}!{c['cell']}", "direction": "out"}
+            for c in m.cells if c["status"] != CONFIRMED]
     return out
 
 
@@ -427,8 +504,9 @@ def _content(row: dict, cols: tuple[str, ...]) -> str:
 
 def confirmed_rows(m: Map) -> dict[str, str]:
     """{row id: content} of every row the map says confirmed: `table:<id>`,
-    `column:<table>|<header>|<field>`, `value:<key>|<market>`; the content
-    is every column but status and note."""
+    `column:<table>|<header>|<field>`, `value:<key>|<market>`,
+    `cell:<sheet>!<cell>`; the content is every column but status and
+    note."""
     out = {}
     for t in m.tables:
         if t["status"] == CONFIRMED:
@@ -441,6 +519,9 @@ def confirmed_rows(m: Map) -> dict[str, str]:
         if v["status"] == CONFIRMED:
             out[f"value:{v['key']}|{v['market']}"] = \
                 _content(v, VALUE_COLUMNS)
+    for c in m.cells:
+        if c["status"] == CONFIRMED:
+            out[f"cell:{c['sheet']}!{c['cell']}"] = _content(c, CELL_COLUMNS)
     return out
 
 
