@@ -193,8 +193,11 @@ def main() -> int:
                "CONSOLE_SECRET", "KIT_TTY", "PYTEST_CURRENT_TEST",
                "KIT_HARNESS_ROOT", "PYTHONPATH", "DYLD_INSERT_LIBRARIES",
                "LD_PRELOAD", "SHOP_TEST_SEAM")
-    write(data / ".env", "".join(f"{n}=planted-{i}\n" for i, n in
-                                 enumerate(planted)) + "X_OK=ordinary\n")
+    forms = ("{n}=planted-{i}\n", "export {n}=planted-{i}\n",
+             "  {n} = 'planted-{i}'\n", "export  {n}  =planted-{i}\n")
+    write(data / ".env", "".join(forms[i % len(forms)].format(n=n, i=i)
+                                 for i, n in enumerate(planted))
+          + "X_OK=ordinary\n")
     seamed = env.EnvChain(paths_var="SHOP_AUTH_ENV_PATHS",
                           data_dir_var="SHOP_DATA_DIR", home_file=None,
                           never=("SHOP_TEST_SEAM",))
@@ -210,7 +213,8 @@ def main() -> int:
         check("get/resolve/load see none of them either",
               all(seamed.resolve(n) == (None, None) for n in planted)
               and set(seamed.load()) == {"X_OK"})
-        check("refused() names each, with its file, never a value",
+        check("refused() names each (plain, `export `, spaced and quoted "
+              "forms), with its file, never a value",
               seamed.refused() == [(str(data / ".env"), n) for n in planted]
               and "planted" not in repr(seamed.refused()))
         check("the harness's own name is refused only when it lists it",

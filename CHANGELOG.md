@@ -15,24 +15,44 @@ scaffold, console, docs, conformance.
 - `env.py`: the env chain never loads a gate secret or a test seam from a file, only from the
   process env: any `*CONFIRM_CODE_SECRET` (kit.human's relayed-code key, any harness's prefix),
   `CONSOLE_SECRET`, `KIT_TTY`, `PYTEST_CURRENT_TEST`, `KIT_HARNESS_ROOT`, and `DYLD_*`, `LD_*`,
-  `PYTHON*`, plus a harness's own `[env].never_from_file` names. Such a line is skipped by
-  `load`, `resolve`, `get` and `load_into_environ`; `is_gate_secret()`, `never_from_file()`,
-  `EnvChain.refused()` (file and name, never the value). An agent can read or write a .env;
-  with the secret or the seam it could mint its own approval. From the video-ads harness
-  (seen once). **A harness that loaded one of these from a .env must set it in the process
-  env instead** (the console's, or the agent's that relays codes through chat).
+  `PYTHON*`, plus a harness's own `[env].never_from_file` names. Such a line (plain, `export `
+  or spaced) is skipped by `load`, `resolve`, `get` and `load_into_environ`;
+  `is_gate_secret()`, `never_from_file()`, `EnvChain.refused()` (file and name, never the
+  value). An agent can read or write a .env; with the secret or the seam it could mint its own
+  approval. From the video-ads harness (seen once). No harness code changes; a deployment that
+  kept one of these in a .env sets it in the process env of what runs the gate instead (the
+  steps for a client console and a Zylos host are under Other).
 ### Added
 - `doctor.py`: `env_files` warns for each such line, naming the file and the name, never the
-  value (`doctor_env_gate_secret_in_file`, `doctor_env_file_unsafe_name`); `console_secret`
-  warns when `CONSOLE_SECRET`, which the console withholds from every harness call, is in
-  the harness's own process env (`doctor_console_secret_in_env`). `<P>_CONFIRM_CODE_SECRET`
-  there is not warned: the harness process issues and checks the code.
+  value (`doctor_env_gate_secret_in_file`, `doctor_env_file_unsafe_name`); its `next` says to
+  delete the line and, for the confirm-code secret, the `bin/console` edit below.
+  `console_secret` warns when `CONSOLE_SECRET`, which the console withholds from every harness
+  call, is in the harness's own process env (`doctor_console_secret_in_env`).
+  `<P>_CONFIRM_CODE_SECRET` there is not warned: the harness process issues and checks the code.
 
 ### Other
-- Scaffold: a client's `bin/console` no longer appends `<P>_CONFIRM_CODE_SECRET` to
-  `workspace/.env`; it exports a fresh random one into its own process env at each start. An
-  existing client's `workspace/.env` line is now ignored and named by doctor: delete it.
+- Scaffold: a new client's `bin/console` exports a fresh random `<P>_CONFIRM_CODE_SECRET` into
+  its own process env at each start instead of appending it to `workspace/.env`. **Deployment
+  step for an existing client** (its generated `bin/console` is not regenerated): in
+  `bin/console`, replace these 4 lines
+
+      envf="$root/workspace/.env"
+      if ! grep -qs '^<P>_CONFIRM_CODE_SECRET=' "$envf"; then
+        (umask 077; printf '<P>_CONFIRM_CODE_SECRET=%s\n' "$(openssl rand -hex 32)" >> "$envf")
+      fi
+
+  with these 2, delete the `<P>_CONFIRM_CODE_SECRET=` line from `workspace/.env`, and restart
+  the console; until then a console click ends in the no-terminal refusal.
+
+      <P>_CONFIRM_CODE_SECRET="$(openssl rand -hex 32)"
+      export <P>_CONFIRM_CODE_SECRET
+
   `.env.example`, `templates/harness.toml` and the operator README say where the secret goes.
+- `hosts/zylos` 0.2.0: `bin/console.js` exports a fresh random `<PREFIX>_CONFIRM_CODE_SECRET`
+  into the console's process env at each start (its relay read it from `<data dir>/.env`,
+  which the kit no longer loads); the configure hook refuses a gate secret
+  (`*CONFIRM_CODE_SECRET`, `CONSOLE_SECRET`) and writes nothing; the manifest and `SKILL.md`
+  config may not name one. Re-vendor `zylos/` and delete the line from `<data dir>/.env`.
 
 ## [0.14.0] - 2026-10-12
 ### Added

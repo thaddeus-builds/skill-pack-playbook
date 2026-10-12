@@ -250,19 +250,34 @@ def check_env_files(ctx: Context) -> None:
                                       f"readable by other users", path=p),
                      [f"chmod 600 {p}"])
     for p, name in env.chain().refused():
+        fix = [f"delete the {name} line from {p}"]
         if env.is_gate_secret(name):
+            if name.endswith("CONFIRM_CODE_SECRET"):
+                fix += _console_secret_fix(name)
             ctx.warn("env_files", msg(
                 "doctor_env_gate_secret_in_file", f"{name} is written in {p}: "
                 f"the harness never loads a gate secret from a file (an agent "
                 f"that can read or write the file could make its own approval "
                 f"codes). Remove the line; set it only in the process env of "
-                f"what runs the gate", file=p, name=name))
+                f"what runs the gate", file=p, name=name), fix)
         else:
             ctx.warn("env_files", msg(
                 "doctor_env_file_unsafe_name", f"{name} is written in {p}: the "
                 f"harness never loads it from a file (it would change who the "
                 f"gate thinks is at the terminal, which harness is bound, or "
-                f"the code that runs). Remove the line", file=p, name=name))
+                f"the code that runs). Remove the line", file=p, name=name),
+                fix)
+
+
+def _console_secret_fix(name: str) -> list[str]:
+    """The deployment step for a client console made before kit 0.15.0
+    (scaffold/new_client.py's bin/console), which appends the confirm-code
+    secret to workspace/.env at each start; no harness code changes."""
+    return [f"if a client's bin/console wrote it: in bin/console, replace the "
+            f"4 lines from `envf=\"$root/workspace/.env\"` through `fi` with "
+            f"these 2, then restart the console:",
+            f'{name}="$(openssl rand -hex 32)"',
+            f"export {name}"]
 
 
 def check_console_secret(ctx: Context) -> None:
