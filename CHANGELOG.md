@@ -10,6 +10,19 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `templates/claim-scope.md`: "What stops, what warns". A harness picks per channel whether an
+  open compliance finding stops the step or warns a person (one switch, `warn` or `block`); where
+  the platform's own review stops a bad ad at no cost to the ad, the default is `warn`. Unconfirmed
+  spend, the spend gate, consent and technical QC always stop. Seen once, an owner decision in the
+  video-ads harness. Tested in `tests/test_docs_build.py`.
+- `docs/operating.md`, "Keeping a harness small as it grows": slim before features (an inventory
+  by loop stage, one home per concept, a `_parked/` folder with no verbs, docs or tests and a way
+  back, no new features while slimming), code filters and the agent judges (candidates listed
+  unranked, a skill picks with a `why` the code checks), and a newcomer-agent acceptance test
+  (`templates/client-handoff.md` rule 4 points at it). `docs/lessons.md`: a detached job that
+  vanished without its end gets one notice on the next listing; `templates/install-checklist.md`:
+  keep the harness, data and virtualenv on the internal disk. Each seen once, in the video-ads
+  harness. Tested in `tests/test_docs_build.py`.
 - Scaffold: the next steps `scaffold/new_harness.py` prints end with the leak guard, in order:
   create the client-term list outside the repository (seeded with the client's name from the
   intake), name it in `[guards.leak] terms`, install `scripts/kit/tools/pre-push.sample` as the
@@ -36,6 +49,74 @@ scaffold, console, docs, conformance.
 ### Other
 - BUILD.md B1: install the hook before the first push; `templates/harness.toml` shows
   `[guards.leak]`. `kit-tiers.tsv`: `tools.leak_guard`, extra, no consumer yet.
+
+## [0.16.0] - 2026-10-12
+### Added
+- `kit.testing.run_tests`: a file's own budget, a `# kit-timeout: S` comment (a comment may follow
+  it), and `--timeout S` for
+  one run's default (still 300 s), so a slow end-to-end file need not make every hang wait as long
+  as it does (#56; the video-ads harness's files that build whole outputs take 3-5 minutes, every
+  other file under 40 s, and it raised its one timeout to 600 s).
+- `KIT_TEST_RUN=1` (`kit.config.TEST_RUN_ENV`) marks a process as a test: the runner exports it to
+  every file, importing `kit.testing.check` sets it, `sandbox_env()` hands it to every child. A
+  harness that honours the `KIT_TTY` seam only in a test checks it, not pytest's variable (#56; the
+  video-ads harness's seam was refused under the runner and passed under pytest). It tells a test
+  from a run; any process can export it, so it is no security boundary.
+### Fixed
+- `run_functions()` fails a file with a top-level `test_*` it never collected, naming it (defined
+  below the call, or hidden by a decorator without functools.wraps): such a test never ran, and the
+  file still printed `RESULT: N passed` (#56; the video-ads harness, 38 tests in 8 files).
+- `sandbox_env()` drops every credential-looking variable (a name ending in TOKEN, _KEY, _KEY_ID,
+  PASSWORD or _API, or holding SECRET), as the video-ads harness's own test setup does; a test
+  passes the one it needs as an extra.
+### Other
+- Console: `tests/_t.py`'s `main(globals())` fails a file the same way (#56).
+### Changed
+- `kit/env.py`: `KIT_TEST_RUN` joins the names never loaded from an env file (with 0.15.0's list).
+
+## [0.15.0] - 2026-10-12
+### Changed
+- `env.py`: the env chain never loads a gate secret or a test seam from a file, only from the
+  process env: any `*CONFIRM_CODE_SECRET` (kit.human's relayed-code key, any harness's prefix),
+  `CONSOLE_SECRET`, `KIT_TTY`, `PYTEST_CURRENT_TEST`, `KIT_HARNESS_ROOT`, and `DYLD_*`, `LD_*`,
+  `PYTHON*`, plus a harness's own `[env].never_from_file` names. Such a line (plain, `export `
+  or spaced) is skipped by `load`, `resolve`, `get` and `load_into_environ`;
+  `is_gate_secret()`, `never_from_file()`, `EnvChain.refused()` (file and name, never the
+  value). An agent can read or write a .env; with the secret or the seam it could mint its own
+  approval. From the video-ads harness (seen once). No harness code changes; a deployment that
+  kept one of these in a .env sets it in the process env of what runs the gate instead (the
+  steps for a client console and a Zylos host are under Other).
+### Added
+- `doctor.py`: `env_files` warns for each such line, naming the file and the name, never the
+  value (`doctor_env_gate_secret_in_file`, `doctor_env_file_unsafe_name`); its `next` says to
+  delete the line and, for the confirm-code secret, the `bin/console` edit below.
+  `console_secret` warns when `CONSOLE_SECRET`, which the console withholds from every harness
+  call, is in the harness's own process env (`doctor_console_secret_in_env`).
+  `<P>_CONFIRM_CODE_SECRET` there is not warned: the harness process issues and checks the code.
+
+### Other
+- Scaffold: a new client's `bin/console` exports a fresh random `<P>_CONFIRM_CODE_SECRET` into
+  its own process env at each start instead of appending it to `workspace/.env`. **Deployment
+  step for an existing client** (its generated `bin/console` is not regenerated): in
+  `bin/console`, replace these 4 lines
+
+      envf="$root/workspace/.env"
+      if ! grep -qs '^<P>_CONFIRM_CODE_SECRET=' "$envf"; then
+        (umask 077; printf '<P>_CONFIRM_CODE_SECRET=%s\n' "$(openssl rand -hex 32)" >> "$envf")
+      fi
+
+  with these 2, delete the `<P>_CONFIRM_CODE_SECRET=` line from `workspace/.env`, and restart
+  the console; until then a console click ends in the no-terminal refusal.
+
+      <P>_CONFIRM_CODE_SECRET="$(openssl rand -hex 32)"
+      export <P>_CONFIRM_CODE_SECRET
+
+  `.env.example`, `templates/harness.toml` and the operator README say where the secret goes.
+- `hosts/zylos` 0.2.0: `bin/console.js` exports a fresh random `<PREFIX>_CONFIRM_CODE_SECRET`
+  into the console's process env at each start (its relay read it from `<data dir>/.env`,
+  which the kit no longer loads); the configure hook refuses a gate secret
+  (`*CONFIRM_CODE_SECRET`, `CONSOLE_SECRET`) and writes nothing; the manifest and `SKILL.md`
+  config may not name one. Re-vendor `zylos/` and delete the line from `<data dir>/.env`.
 
 ## [0.14.0] - 2026-10-12
 ### Added

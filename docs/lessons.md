@@ -61,3 +61,9 @@ The rules:
 - When a download fails, test the host before resuming: a local proxy can route one storage host to a dead exit while
   the API host works.
 - A command handed to a person is one complete line they can paste, including the environment it needs.
+- A detached job that vanished without its end is still told. A job writes an exit marker and a notice when it ends; one
+  killed from outside writes neither. So the next listing of jobs checks each job with no marker: when its pid is gone,
+  or belongs to another process now (its start time differs from the one recorded), it writes one notice once,
+  "stopped without an end", with no exit code. *Seen once (2026-10-11):* the harness, its data and its virtualenv sat
+  on an external disk that the OS unmounted at screen lock; a queued paid job died two minutes after it started and
+  nobody was told. Keep all three on the internal disk ([install checklist](../templates/install-checklist.md#scheduled-tasks-and-long-jobs)).

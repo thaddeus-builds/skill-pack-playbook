@@ -104,6 +104,9 @@ def test_bad_values_are_named():
         bad(lambda x: x["tasks"][1].update(name=x["tasks"][0]["name"]), "tasks[1].name", "used twice")
         bad(lambda x: x["tasks"][0].update(miss_threshold="4h"), "tasks[0].miss_threshold", "whole number")
         bad(lambda x: x["tasks"][0].update(requires=["api key"]), "tasks[0].requires[0]", "env var name")
+        bad(lambda x: x["tasks"][0].update(requires=["SHOP_CONFIRM_CODE_SECRET"]), "tasks[0].requires[0]",
+            "a gate secret")
+        bad(lambda x: x["reply"].update(endpoint="CONSOLE_SECRET"), "reply.endpoint", "a gate secret")
         bad(lambda x: x["tasks"][2].update(prompt="run {cli_path} now"), "tasks[2].prompt", "{cli_path}")
         bad(lambda x: x["tasks"][2].update(prompt="tail {log}"), "tasks[2].prompt", "unknown placeholder {log}")
         bad(lambda x: x.update(defaults={"REGION": {"value": "us"}}), "defaults.REGION.when", "missing")
@@ -163,6 +166,10 @@ def test_check_ties_skill_md_to_the_manifest():
         ("a hook elsewhere", good.replace("configure: zylos/hooks/configure.js", "configure: hooks/c.js"), "hooks.configure"),
         ("an undeclared config key", good.replace("    - name: SHOP_REPLY_CHANNEL\n", "    - name: OTHER\n"), "declare SHOP_REPLY_CHANNEL"),
         ("a secret not sensitive", good.replace("      sensitive: true\n", ""), "SHOP_API_KEY looks secret"),
+        ("a gate secret as config", good.replace("    - name: SHOP_API_KEY\n",
+                                                 "    - name: SHOP_CONFIRM_CODE_SECRET\n      sensitive: true\n"
+                                                 "    - name: SHOP_API_KEY\n"),
+         "SHOP_CONFIRM_CODE_SECRET is a gate secret"),
         ("next-steps without the extras", good.replace("10-minute", "long"), "next-steps must mention \"10-minute\""),
         ("a version that is not semver", good.replace("version: 0.1.0", "version: v0.1"), "plain X.Y.Z"),
         ("no frontmatter", "# no frontmatter\n", "no --- frontmatter"),

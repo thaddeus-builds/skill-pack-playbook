@@ -1,12 +1,16 @@
 """The test convention every harness (and the kit itself) keeps.
 
   * check.py      check(), finish(), tmp_dir(), capture(), one_doc(),
-                  clean_env(), raises(), run_functions()
+                  clean_env(), raises(), run_functions() (which fails a
+                  file that defines a test below its call)
   * run_tests.py  the gate: each file in its own process with a private
-                  TMPDIR; a file passes only if it exits 0, prints
-                  `RESULT: N passed` with N > 0 and no `, M failed` > 0,
-                  and leaves its TMPDIR empty
-  * sandbox.py    the env a harness CLI runs under in a test
+                  TMPDIR, KIT_TEST_RUN=1 and its own time budget
+                  (`# kit-timeout: S`, else the run's); a file passes
+                  only if it exits 0, prints `RESULT: N passed` with
+                  N > 0 and no `, M failed` > 0, and leaves its TMPDIR
+                  empty
+  * sandbox.py    the env a harness CLI runs under in a test: no
+                  operator vars, no credentials, KIT_TEST_RUN=1
   * suites.py     the day-one tests of a new harness, as library
                   calls (each generated test is one call)
 
