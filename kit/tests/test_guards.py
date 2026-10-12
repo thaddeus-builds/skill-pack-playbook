@@ -12,6 +12,13 @@ vendored into scripts/kit, a git repository with a generated
       or test, a bad id column, a missing code symbol, a banned term, the
       held ratchet, a deleted id (vs git HEAD), a Chinese index header;
       an agent-only row proposed or asked is fine, accepted is not
+  [1c] ssot writes: a harness file writing ssot/ is reported by file and
+      line (never what it writes), by every form and through a name another
+      module binds; reading it, writing a row's file elsewhere, a test file
+      and the vendored kit are not; a builder's tool in writers passes, and
+      a writers row with no reason or that writes nothing fails; a helper
+      named in write_calls, a file that does not parse, a code path that
+      finds nothing; the rule's planted self-test
   [2] release: an archive shipping tests/, a planning file or dropping
       SKILL.md, a registry with a reader left out, an opened .tsv not
       shipped, a stale internal entry, the vendored kit made internal
@@ -349,6 +356,7 @@ def clean(label: str, problems: list[str]) -> None:
 
 def everything(root: Path, data: Path) -> dict[str, list[str]]:
     return {"ssot": ssot.check_index(root),
+            "ssot writes": ssot.check_writes(root),
             "release": release.check_release(root),
             "changelog": changelog.check_changelog(root),
             "layering": layering.check_layers(root),
@@ -489,6 +497,122 @@ def test_ssot(root: Path) -> None:
                    "HEAD")
     else:
         check("skipped: the git HEAD comparison (no git)", True)
+
+
+# --------------------------------------------------------- [1c] ssot writes
+
+SPACE_SET = """\"\"\"A client's own threshold, the wrong way: into the builder's ssot/.\"\"\"
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+CONSTANTS = ROOT / "ssot" / "constants.tsv"
+
+
+def set_value(value):
+    text = CONSTANTS.read_text(encoding="utf-8")
+    CONSTANTS.write_text(text + "low_stock_units\\tclient-secret-42\\n")
+"""
+SPACE_READ = """\"\"\"A client's own threshold, the right way: ssot/ is only read.\"\"\"
+import json
+import shutil
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SSOT = ROOT / "ssot"
+
+
+def show(data: Path):
+    rows = (SSOT / "constants.tsv").read_text(encoding="utf-8").splitlines()
+    for line in rows[1:]:
+        name = line.split("\\t")[0]
+        (data / f"{name}.json").write_text(json.dumps({"name": name}))
+    with open(SSOT / "constants.tsv", encoding="utf-8") as f:
+        f.read()
+    shutil.copy(SSOT / "constants.tsv", data / "defaults.tsv")
+"""
+EDITOR = """\"\"\"The builder's registry editor (runs in the builder's checkout).\"\"\"
+import os
+
+SSOT_DIR = "ssot"
+
+
+def save(tmp, name):
+    os.replace(tmp, os.path.join(SSOT_DIR, name))
+"""
+
+
+def test_ssot_writes(root: Path) -> None:
+    print("\n[1c] ssot writes: ssot/ is the builder's, never a client's "
+          "setting")
+    check("the rule's planted self-test: every write caught, the reads "
+          "and the other writes beside it not", ssot.writes_self_test() == [],
+          ssot.writes_self_test())
+    clean("the clean copy writes nothing under ssot/", ssot.check_writes(root))
+    with planted(root, "scripts/space_set.py", SPACE_SET):
+        got = ssot.check_writes(root)
+        caught("a harness file writing ssot/constants.tsv, by file and line",
+               got, "scripts/space_set.py:10: .write_text() CONSTANTS "
+                    "writes under ssot/", "a client's own value goes to its "
+                                          "database")
+        check("…and never what it writes", got and not any(
+            "client-secret-42" in p or "low_stock_units" in p for p in got),
+            got)
+    with planted(root, "scripts/space_read.py", SPACE_READ):
+        clean("reading ssot/, copying from it and writing a row's own file "
+              "elsewhere is not a write under it", ssot.check_writes(root))
+    with planted(root, "scripts/_lib/paths.py", "from pathlib import Path\n"
+                 "VALUES = Path(__file__).parents[2] / 'ssot' / 'v.tsv'\n"), \
+            planted(root, "scripts/compute_v.py", "from _lib.paths import "
+                    "VALUES\n\n\ndef f(t):\n    VALUES.write_text(t)\n"):
+        caught("a module-level ssot path another module imports",
+               ssot.check_writes(root), "scripts/compute_v.py:5: "
+                                        ".write_text() VALUES")
+    for rel in ("tests/test_space.py", "scripts/test_space.py",
+                "scripts/tests/space.py", "scripts/conftest.py"):
+        with planted(root, rel, SPACE_SET):
+            clean(f"a test file is not harness code: {rel}",
+                  ssot.check_writes(root))
+    with planted(root, "scripts/kit/space.py", SPACE_SET):
+        clean("the vendored kit is left out (its own tests and the drift "
+              "guard hold it)", ssot.check_writes(root))
+    toml = (root / "harness.toml").read_text(encoding="utf-8")
+    writers = toml + ('\n[guards.ssot.writers]\n"tools/edit_registry.py" = '
+                      '"the builder\'s registry editor, run in the builder\'s '
+                      'checkout"\n')
+    with planted(root, "tools/edit_registry.py", EDITOR):
+        caught("a builder's tool not in writers is reported",
+               ssot.check_writes(root), "tools/edit_registry.py:8: "
+                                        "os.replace os.path.join(SSOT_DIR")
+        with planted(root, "harness.toml", writers):
+            clean("…and passes once writers names it with its reason",
+                  ssot.check_writes(root))
+        with planted(root, "harness.toml", toml + '\n[guards.ssot.writers]'
+                     '\n"tools/" = "the builder\'s tools"\n'):
+            clean("a writers row may name a folder", ssot.check_writes(root))
+        with planted(root, "harness.toml", toml + '\n[guards.ssot.writers]'
+                     '\n"tools/edit_registry.py" = " "\n'):
+            caught("a writers row with no reason", ssot.check_writes(root),
+                   "[guards.ssot].writers 'tools/edit_registry.py': give its "
+                   "reason")
+    with planted(root, "harness.toml", writers):
+        caught("a writers row whose file writes nothing (or is gone)",
+               ssot.check_writes(root), "[guards.ssot].writers "
+               "'tools/edit_registry.py': writes nothing under ssot/ any more")
+    save = ("from pathlib import Path\nSSOT = Path('ssot')\n\n\ndef f(rows):\n"
+            "    save_tsv(SSOT / 'x.tsv', rows)\n")
+    with planted(root, "scripts/compute_x.py", save):
+        clean("a harness's own helper is not known…", ssot.check_writes(root))
+        with planted(root, "harness.toml", toml + 'write_calls = '
+                     '["save_tsv"]\n'):
+            caught("…until write_calls names it", ssot.check_writes(root),
+                   "scripts/compute_x.py:6: save_tsv SSOT / 'x.tsv'")
+    with planted(root, "scripts/compute_x.py", "def f(:\n"):
+        caught("a file that does not parse is not a pass",
+               ssot.check_writes(root), "scripts/compute_x.py:1: does not "
+                                        "parse")
+    with planted(root, "harness.toml", toml + 'write_code = ["nowhere"]\n'):
+        caught("a code path that finds nothing is not a pass",
+               ssot.check_writes(root), "no code to read under nowhere")
 
 
 # ------------------------------------------------------------- [2] release
@@ -902,6 +1026,7 @@ def main() -> int:
           rc == 0 and out.count("  PASS  ") >= 5, out)
 
     test_ssot(root)
+    test_ssot_writes(root)
     test_changelog(root)
     test_release(root)
     test_layering(root)
