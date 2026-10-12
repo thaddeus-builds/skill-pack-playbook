@@ -70,27 +70,37 @@ write_json_atomic / write_bytes_atomic, and the harness's own helpers
 named in `write_calls` (the path is their first argument). A path is
 under the ssot dir when its expression holds a string with the dir as
 path segments ("ssot", "ssot/x.tsv", f"{root}/ssot/x"), an identifier
-with the word `ssot` (SSOT, cfg.ssot, ssot_dir), or a name bound to such
-an expression in the same scope, an enclosing one, or (as a module-level
-name) in another scanned module it imports. A path goes through `/`,
-f-strings, IfExp and the calls that build or list paths (PATH_CALLS,
-PATH_METHODS: Path(), os.path.join, str, sorted, .with_suffix, .glob,
-…); any other call's value is data, so what is read from an ssot file is
-not a path under it. Reading ssot is never a hit, nor copying from it,
-nor writing a row's own file elsewhere. A path the code builds out of
-sight (a parameter, a function's return) is not seen: the rule catches
-the plain case, not every case.
+with the word `ssot` (SSOT, cfg.ssot, ssot_dir) unless the name is bound
+only to data (`ssot_rows = read_tsv(...)`), or a name bound to such an
+expression: in the same scope (by its last binding above the line), an
+enclosing one, a class body (`self.p`, keyed by the class), or another
+scanned module's top level, imported by name (`from m import NAME`, a
+re-export followed) or reached through the module (`m.NAME`). A path goes
+through `/`, f-strings, IfExp and the calls that build or list paths
+(PATH_CALLS, PATH_METHODS: Path(), os.path.join, os.walk, str, sorted,
+.with_suffix, .glob, …); any other call's value is data, so what is read
+from an ssot file is not a path under it, and a path's words (`.name`,
+`.stem`, `.suffix`) are not a path either. os.open writes unless its
+flags are the literal 0 or O_RDONLY with no writing flag. Reading ssot
+is never a hit, nor copying from it, nor writing a row's own file
+elsewhere. A path the code builds out of sight (a parameter, a
+function's return) is not seen: the rule catches the plain case, not
+every case.
 
-The code is every .py under `write_code` (default: the whole harness),
-`write_skip` left out (default: the vendored kit), and never a test
-(a `tests` folder, test_*.py, *_test.py, conftest.py), a hidden folder,
-__pycache__ or node_modules. `writers` = {path or folder: reason} is the
-builder's own tools that may write ssot (a registry editor run in the
-builder's checkout): each needs its reason, and an entry that writes
-nothing under ssot any more is itself a problem, so the list stays
-true. A file that does not parse is a problem: what the rule cannot
-read is never a pass. `writes_self_test()` scans a planted module with
-every write form and the reads beside them.
+The code is every .py under `write_code` (default: the whole harness;
+each entry must find code), never the vendored kit, a test (a `tests`
+folder, test_*.py, *_test.py, conftest.py), a hidden folder,
+__pycache__, node_modules, a virtualenv (a folder with pyvenv.cfg) or
+site-packages. `write_skip` = {folder: reason} leaves out more, each row
+with its reason, a row whose folder is gone being a problem. `writers` =
+{path or folder: reason} is the builder's own tools that may write ssot
+(a registry editor run in the builder's checkout): each needs its
+reason, and an entry that writes nothing under ssot any more is itself a
+problem, so the list stays true. A file that does not parse (read as
+bytes, so a BOM or coding cookie holds) or is too deeply nested to read
+is a problem: what the rule cannot read is never a pass.
+`writes_self_test()` scans a planted module with every write form and
+the reads beside them, and each form the rule once read wrong.
 
 Test: kit/tests/test_guards.py.
 """
@@ -480,7 +490,7 @@ PATH_CALLS = ("Path", "PurePath", "PosixPath", "PurePosixPath", "join",
               "abspath", "realpath", "normpath", "expanduser", "dirname",
               "fspath", "str", "sorted", "list", "tuple", "set", "frozenset",
               "reversed", "enumerate", "zip", "iter", "next", "filter", "map",
-              "min", "max", "glob", "iglob")
+              "min", "max", "glob", "iglob", "walk", "scandir")
 # methods whose value is still a path when the receiver or an argument is
 PATH_METHODS = ("with_suffix", "with_name", "with_stem", "joinpath",
                 "relative_to", "resolve", "absolute", "expanduser", "glob",
@@ -488,6 +498,9 @@ PATH_METHODS = ("with_suffix", "with_name", "with_stem", "joinpath",
                 "strip", "rstrip", "lstrip", "removesuffix", "removeprefix",
                 "get", "items", "keys", "values")
 # kit.atomic's writers (any module's function of that name): the path first
+# a path's attributes that are words of it (a name, a suffix), not a path
+FILENAME_ATTRS = ("name", "stem", "suffix", "suffixes", "parts", "anchor",
+                  "drive")
 ATOMIC = ("open_atomic", "write_json_atomic", "write_bytes_atomic")
 MODULES = ("os", "io", "codecs", "gzip", "bz2", "lzma", "shutil")
 WriteHit = tuple[int, str]          # (line, what: the call and its path)
@@ -570,19 +583,40 @@ def _bound_names(nodes) -> set[str]:
     return out
 
 
+def _is_call(node: ast.AST) -> bool:
+    return isinstance(node, ast.Call) or (isinstance(node, ast.Await)
+                                          and isinstance(node.value, ast.Call))
+
+
+def _module_keys(rel: str) -> set[str]:
+    """The dotted names a file is imported by: every tail of its path
+    (`scripts/_lib/paths.py` -> `paths`, `_lib.paths`,
+    `scripts._lib.paths`); a package's `__init__.py` is the package."""
+    parts = rel.removesuffix(".py").split("/")
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return {".".join(parts[i:]) for i in range(len(parts))}
+
+
 class _Writes:
     """The writes under the ssot dir in one module."""
 
-    def __init__(self, d: str, known: set[str], calls: tuple[str, ...]):
+    def __init__(self, d: str, known: dict[str, set[str]],
+                 calls: tuple[str, ...], rel: str = ""):
         self.d = _segments(d)
-        self.known = known              # module-level ssot names elsewhere
+        self.known = known      # scanned module -> its module-level ssot names
+        self.pkg = rel.split("/")[:-1]
         self.calls = set(ATOMIC) | set(calls)
         self.alias: dict[str, str] = {}
-        self.attrs: set[str] = set()    # tainted attribute targets: "self.p"
+        self.mods: dict[str, str] = {}      # local name -> scanned module
+        self.attrs: set[tuple[str | None, str]] = set()  # (class, "self.p")
         self.attr_names: set[str] = set()                         # "p"
+        self.methods: dict[int, str] = {}   # id(method) -> its class
+        self.cls: str | None = None         # the class of the method scanned
+        self.data: set[str] = set()     # names bound only to data (a read)
+        self.flow: dict[str, list[tuple[int, bool]]] | None = None
         self.hits: list[WriteHit] = []
         self.module: set[str] = set()   # its module-level ssot names
-        self.imported: set[str] = set()     # names any `from x import` takes
 
     # -- what an expression names --
 
@@ -590,16 +624,30 @@ class _Writes:
         """Whether `node` is a path under the ssot dir. A call keeps a path
         only when it builds or lists paths (PATH_CALLS, PATH_METHODS) or is
         named for ssot: what is read from an ssot file is data, not a path
-        under it."""
+        under it. A name holds what its last binding above the line put in
+        it; the word ssot makes a path of a name only when the name is not
+        bound to data (`ssot_rows = read_tsv(...)` is rows)."""
         if isinstance(node, ast.Constant):
             return isinstance(node.value, str) and _ssot_text(node.value,
                                                               self.d)
         if isinstance(node, ast.Name):
-            return node.id in names or _ssot_word(node.id)
+            if self.flow and node.id in self.flow:
+                before = [t for line, t in self.flow[node.id]
+                          if line < node.lineno]
+                if before:
+                    return before[-1]
+            return node.id in names or (node.id not in self.data
+                                        and _ssot_word(node.id))
         if isinstance(node, ast.Attribute):
-            return (_ssot_word(node.attr)
-                    or (node.attr in self.attr_names
-                        and ast.unparse(node) in self.attrs)
+            if node.attr in FILENAME_ATTRS:     # a path's words, not a path
+                return False
+            if _ssot_word(node.attr):
+                return True
+            mod = self.module_of(node.value)
+            if mod is not None:
+                return node.attr in self.known.get(mod, ())
+            return ((node.attr in self.attr_names
+                     and (self.cls, ast.unparse(node)) in self.attrs)
                     or self.tainted(node.value, names))
         if isinstance(node, ast.Call):
             f = node.func
@@ -639,6 +687,26 @@ class _Writes:
             return ""
         return ".".join([self.alias.get(func.id, func.id), *parts])
 
+    def module_of(self, node: ast.AST) -> str | None:
+        """The scanned module `node` names (`paths`, `_lib.paths`), if any."""
+        parts: list[str] = []
+        while isinstance(node, ast.Attribute):
+            parts.insert(0, node.attr)
+            node = node.value
+        if not isinstance(node, ast.Name) or node.id not in self.mods:
+            return None
+        mod = ".".join([self.mods[node.id], *parts])
+        return mod if mod in self.known else None
+
+    def source(self, node: ast.ImportFrom) -> str:
+        """The module a `from … import` reads, a relative one resolved
+        against this file's folder."""
+        if not node.level:
+            return node.module or ""
+        up = node.level - 1
+        base = self.pkg[:len(self.pkg) - up] if up <= len(self.pkg) else []
+        return ".".join([*base, *([node.module] if node.module else [])])
+
     # -- the scopes --
 
     def run(self, tree: ast.Module) -> list[WriteHit]:
@@ -647,14 +715,25 @@ class _Writes:
                 for a in node.names:
                     if a.name in MODULES:
                         self.alias[a.asname or a.name] = a.name
+                    if a.asname:
+                        self.mods[a.asname] = a.name
+                    else:                       # `import a.b` binds a
+                        top = a.name.split(".")[0]
+                        self.mods[top] = top
             elif isinstance(node, ast.ImportFrom):
-                self.imported |= {a.name for a in node.names}
+                src = self.source(node)
                 for a in node.names:
+                    local = a.asname or a.name
                     if not node.level and node.module in MODULES:
-                        self.alias[a.asname or a.name] = \
-                            f"{node.module}.{a.name}"
+                        self.alias[local] = f"{node.module}.{a.name}"
                     elif a.name in self.calls:
-                        self.alias[a.asname or a.name] = a.name
+                        self.alias[local] = a.name
+                    if f"{src}.{a.name}".strip(".") in self.known:
+                        self.mods[local] = f"{src}.{a.name}".strip(".")
+            elif isinstance(node, ast.ClassDef):
+                for s in node.body:
+                    if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        self.methods[id(s)] = node.name
         before = None
         while before != self.attrs:          # attributes cross methods
             before = set(self.attrs)
@@ -676,30 +755,62 @@ class _Writes:
         local: set[str] = set()
         for n in own:                        # imported from a scanned module
             if isinstance(n, ast.ImportFrom):
+                ssot_names = self.known.get(self.source(n), ())
                 local |= {a.asname or a.name for a in n.names
-                          if a.name in self.known}
+                          if a.name in ssot_names}
         pairs = _bindings(own)
+        in_class = {id(t): c.name for c in own if isinstance(c, ast.ClassDef)
+                    for s in c.body if isinstance(s, (ast.Assign,
+                                                      ast.AnnAssign))
+                    for t in (s.targets if isinstance(s, ast.Assign)
+                              else [s.target]) if isinstance(t, ast.Name)}
+        values: dict[str, list[ast.AST]] = {}
+        for t, v in pairs:
+            if isinstance(t, ast.Name):
+                values.setdefault(t.id, []).append(v)
+        saved, outer_data = (self.data, self.flow), self.data - bound
+        self.flow = None
         while True:
             names = (outer - bound) | local
+            self.data = outer_data | {
+                k for k, vs in values.items()
+                if all(_is_call(v) and not self.tainted(v, names)
+                       for v in vs)}
             grow = set()
             for target, value in pairs:
                 if not self.tainted(value, names):
                     continue
-                if isinstance(target, ast.Name):
+                if isinstance(target, ast.Name) and id(target) in in_class:
+                    c, n = in_class[id(target)], target.id
+                    self.attrs |= {(c, f"self.{n}"), (c, f"cls.{n}"),
+                                   (c, f"{c}.{n}"), (None, f"{c}.{n}")}
+                    self.attr_names.add(n)
+                elif isinstance(target, ast.Name):
                     grow.add(target.id)
                 elif isinstance(target, ast.Attribute):
-                    self.attrs.add(ast.unparse(target))
+                    self.attrs.add((self.cls, ast.unparse(target)))
                     self.attr_names.add(target.attr)
             if grow <= local:
                 break
             local |= grow
         names = (outer - bound) | local
+        self.flow = {}
+        for t, v in pairs:
+            if isinstance(t, ast.Name):
+                self.flow.setdefault(t.id, []).append(
+                    (t.lineno, self.tainted(v, names)))
+        for k in self.flow:
+            self.flow[k].sort(key=lambda x: x[0])
         for n in own:
             if isinstance(n, ast.Call):
                 self.call(n, names)
             elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef,
                                 ast.Lambda)):
+                cls = self.cls
+                self.cls = self.methods.get(id(n), cls)
                 self.scope(n, names)
+                self.cls = cls
+        self.data, self.flow = saved
         return local if top else names
 
     # -- the writes --
@@ -726,8 +837,7 @@ class _Writes:
             if _write_mode(arg(1, "mode")):
                 check(f"{q or 'open'}(…, write)", arg(0, "file"))
         elif q == "os.open":
-            flags = arg(1, "flags")
-            if flags is None or any(o in ast.unparse(flags) for o in OS_FLAGS):
+            if not _read_flags(arg(1, "flags")):
                 check("os.open(…, write)", arg(0, "path"))
         elif q in WRITES_AT:
             at, keys = WRITES_AT[q]
@@ -753,12 +863,27 @@ def _write_mode(mode: ast.AST | None) -> bool:
     return True
 
 
+def _read_flags(flags: ast.AST | None) -> bool:
+    """os.open flags that only read: the literal 0, or O_RDONLY with no
+    writing flag beside it. A flags value the scan cannot read counts as a
+    write."""
+    if flags is None:
+        return False
+    if isinstance(flags, ast.Constant):
+        return flags.value == 0
+    s = ast.unparse(flags)
+    return "O_RDONLY" in s and not any(o in s for o in OS_FLAGS)
+
+
 def scan_writes(source: str, ssot_dir: str = "ssot",
-                known: set[str] | frozenset = frozenset(),
-                calls: tuple[str, ...] = ()) -> list[WriteHit]:
+                known: dict[str, set[str]] | None = None,
+                calls: tuple[str, ...] = (), rel: str = "") -> list[WriteHit]:
     """The writes under `ssot_dir` in one module's source, (line, what);
-    `known` = module-level ssot names of other modules it may import."""
-    return _Writes(ssot_dir, set(known), calls).run(ast.parse(source))
+    `known` = {scanned module: its module-level ssot names}, for the
+    modules it may import; `rel` = its harness-relative path (for its
+    relative imports)."""
+    return _Writes(ssot_dir, dict(known or {}), calls, rel).run(
+        ast.parse(source))
 
 
 def _is_test(rel: str) -> bool:
@@ -769,16 +894,21 @@ def _is_test(rel: str) -> bool:
 
 
 def write_settings(cfg: HarnessConfig) -> tuple[tuple[str, ...],
-                                                tuple[str, ...], dict,
+                                                tuple[str, ...], dict, dict,
                                                 tuple[str, ...]]:
-    """(code folders, skipped folders, writers {path: reason}, the
-    harness's own write helpers)."""
+    """(code folders, skipped folders, the skip rows {path: reason},
+    writers {path: reason}, the harness's own write helpers). The vendored
+    kit is always skipped; any other skip needs its reason (a list gives
+    none, so each of its entries is reported)."""
     g = section(cfg, "guards", "ssot")
     scripts = cfg.scripts_dir.strip("/") or "."
     kit = "kit" if scripts == "." else f"{scripts}/kit"
-    writers = g.get("writers", {})
+    writers, skips = g.get("writers", {}), g.get("write_skip", {})
+    if isinstance(skips, (list, tuple)):
+        skips = {str(k): "" for k in skips}
+    skips = dict(skips) if isinstance(skips, dict) else {}
     return (strs(g.get("write_code"), ["."]),
-            strs(g.get("write_skip"), [kit]),
+            (kit, *(k for k in skips if k.strip("/") != kit)), skips,
             dict(writers) if isinstance(writers, dict) else {},
             strs(g.get("write_calls"), []))
 
@@ -792,20 +922,30 @@ def _under(rel: str, folders) -> str | None:
     return None
 
 
+def _third_party(folder: Path) -> bool:
+    """A virtualenv or an installed-packages folder: not the harness's."""
+    return folder.name == "site-packages" or (folder / "pyvenv.cfg").is_file()
+
+
 def write_files(root: Path, code: tuple[str, ...], skip: tuple[str, ...]
                 ) -> list[str]:
     """The .py files the rule reads (harness-relative, sorted)."""
     out: set[str] = set()
+    skip = tuple(s for s in skip if s.strip("/") not in ("", "."))
     for d in code:
         base = root / d.strip("/") if d.strip("/") not in ("", ".") else root
         for dirpath, dirnames, filenames in os.walk(base):
+            here = Path(dirpath)
             dirnames[:] = sorted(
                 n for n in dirnames if not n.startswith(".")
-                and n not in SKIP_DIRS and n != "tests")
+                and n not in SKIP_DIRS and n != "tests"
+                and not _third_party(here / n)
+                and _under((here / n).relative_to(root).as_posix(),
+                           skip) is None)
             for name in filenames:
                 if not name.endswith(".py"):
                     continue
-                rel = (Path(dirpath) / name).relative_to(root).as_posix()
+                rel = (here / name).relative_to(root).as_posix()
                 if not _is_test(rel) and _under(rel, skip) is None:
                     out.add(rel)
     return sorted(out)
@@ -818,37 +958,57 @@ def check_writes(root: Path | str | None = None) -> list[str]:
     cfg = harness(root)
     base = Path(root) if root is not None else cfg.root
     d = cfg.ssot.get("dir", "ssot").strip("/")
-    code, skip, writers, calls = write_settings(cfg)
+    code, skip, skips, writers, calls = write_settings(cfg)
     out: list[str] = []
-    files = write_files(base, code, skip)
-    if not files:
-        out.append(f"no code to read under {', '.join(code)}: a wrong path "
-                   f"is never a pass")
+    for k, why in sorted(skips.items()):
+        if not isinstance(why, str) or not why.strip():
+            out.append(f"[guards.ssot].write_skip {k!r}: give its reason "
+                       f"(why the ssot write rule may not read it)")
+        if not (base / k.strip("/")).exists():
+            out.append(f"[guards.ssot].write_skip {k!r}: is gone: drop the "
+                       f"row")
+    for c in code:
+        if not write_files(base, (c,), skip):
+            out.append(f"no code to read under {c}: a wrong path is never a "
+                       f"pass")
     trees: dict[str, ast.Module] = {}
-    hits: dict[str, list[WriteHit]] = {}
-    takes: dict[str, set[str]] = {}
-    known: set[str] = set()
-    for rel in files:
+    for rel in write_files(base, code, skip):
         try:
-            trees[rel] = ast.parse(read(base / rel))
-        except SyntaxError as e:
-            out.append(f"{rel}:{e.lineno}: does not parse, so the ssot write "
-                       f"rule cannot read it")
-            continue
-        w = _Writes(d, set(), calls)
-        hits[rel] = w.run(trees[rel])
-        known |= w.module
-        takes[rel] = w.imported
-    for rel, names in takes.items():     # again, with the names it imports
-        if names & known:
-            hits[rel] = _Writes(d, known, calls).run(trees[rel])
+            trees[rel] = ast.parse((base / rel).read_bytes(), filename=rel)
+        except (SyntaxError, ValueError, RecursionError, MemoryError) as e:
+            out.append(f"{rel}:{getattr(e, 'lineno', None) or 1}: does not "
+                       f"parse, so the ssot write rule cannot read it")
+    known: dict[str, set[str]] = {}
+    hits: dict[str, list[WriteHit]] = {}
+    deep: set[str] = set()
+    for _ in range(len(trees) + 1):      # until no module's ssot names grow
+        grew = False
+        for rel, tree in trees.items():
+            if rel in deep:
+                continue
+            w = _Writes(d, known, calls, rel)
+            try:
+                hits[rel] = w.run(tree)
+            except RecursionError:
+                deep.add(rel)
+                hits.pop(rel, None)
+                out.append(f"{rel}: too deeply nested for the ssot write "
+                           f"rule to read (never a pass)")
+                continue
+            for key in _module_keys(rel):
+                if not w.module <= known.get(key, set()):
+                    known.setdefault(key, set()).update(w.module)
+                    grew = True
+        if not grew:
+            break
     used: set[str] = set()
     for rel, found in sorted(hits.items()):
         if not found:
             continue
-        w = _under(rel, [k for k in writers if k.strip("/") not in ("", ".")])
-        if w is not None:
-            used.add(w)
+        keys = [k.strip("/") for k in writers if k.strip("/") not in ("", ".")
+                and _under(rel, [k]) is not None]
+        if keys:
+            used.update(keys)
             continue
         out += [f"{rel}:{line}: {what} writes under {d}/ (ssot/ is the "
                 f"builder's: a client's own value goes to its database; a "
@@ -902,23 +1062,52 @@ class Store:
 '''
 
 
+# (source, known, a write expected): each a way the rule once read wrong
+_WRITE_CASES: tuple[tuple[str, dict, bool], ...] = (
+    ("from paths import CONST\nCONST.write_text('x')\n",
+     {"paths": {"CONST"}}, True),
+    ("from out import CONST\nCONST.write_text('x')\n",
+     {"paths": {"CONST"}}, False),
+    ("from _lib import paths\npaths.CONST.write_text('x')\n",
+     {"_lib.paths": {"CONST"}}, True),
+    ("import _lib.paths as p\nopen(p.CONST, 'w')\n",
+     {"_lib.paths": {"CONST"}}, True),
+    ("P = SSOT / 'x.json'\ndef f():\n    P = DATA / 'y.json'\n"
+     "    P.write_text('x')\n", {}, False),
+    ("C = Path('ssot') / 'c.json'\nshutil.copy(C, DATA / C.name)\n"
+     "for p in Path('ssot').glob('*.tsv'):\n"
+     "    (DATA / f'{p.stem}.json').write_text('x')\n", {}, False),
+    ("class S:\n    p = Path('ssot/c')\n    def f(self):\n"
+     "        self.p.write_text('x')\n", {}, True),
+    ("class A:\n    def __init__(self):\n        self.path = Path('ssot/a')\n"
+     "class B:\n    def __init__(self):\n        self.path = Path('data/b')\n"
+     "    def f(self):\n        self.path.write_text('x')\n", {}, False),
+    ("ssot_rows = read_tsv(Path('ssot/c.json'))\nfor row in ssot_rows:\n"
+     "    (Path('data') / row['f']).write_text('x')\n", {}, False),
+    ("p = Path('ssot/c')\np.read_text()\np = Path('data/c')\n"
+     "p.write_text('x')\n", {}, False),
+    ("import os\nos.open(Path('ssot/x'), flags)\n", {}, True),
+    ("import os\nos.open(Path('ssot/x'), os.O_RDONLY)\n", {}, False),
+    ("import os\nfor d, _, fs in os.walk(Path('ssot')):\n    for f in fs:\n"
+     "        os.remove(os.path.join(d, f))\n", {}, True),
+)
+
+
 def writes_self_test() -> list[str]:
-    """The write rule tried on a planted module: [] when every write
-    under ssot is caught and the reads and other writes beside it are not."""
+    """The write rule tried on a planted module and on each form it once
+    read wrong: [] when every write under ssot is caught and the reads and
+    other writes beside it are not."""
     got = [n for n, _ in scan_writes(_PLANTED_WRITES)]
     want = [10, 11, 13, 14, 15, 16, 19, 30, 35]
     out = []
     if got != want:
         out.append(f"planted writes: expected lines {want}, the scan found "
                    f"{got}")
-    if scan_writes("from paths import CONST\nCONST.write_text('x')\n",
-                   known={"CONST"}) == []:
-        out.append("a module-level ssot name imported from another module "
-                   "is not followed")
-    if scan_writes("P = SSOT / 'x.json'\ndef f():\n    P = DATA / 'y.json'\n"
-                   "    P.write_text('x')\n") != []:
-        out.append("a local name that shadows a module-level ssot one was "
-                   "flagged")
+    for source, known, write in _WRITE_CASES:
+        if bool(scan_writes(source, known=known)) != write:
+            out.append(f"{'missed' if write else 'flagged'}: "
+                       f"{source.splitlines()[-1].strip()!r} in "
+                       f"{source!r}")
     return out
 
 
