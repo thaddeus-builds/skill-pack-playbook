@@ -21,6 +21,7 @@ The verbs only a person runs, in one place. Never run one yourself, not even whe
 | `{{cli}} facts restore` | It replays a backup over the human tables |
 | `{{cli}} facts init` | It declares the scope the harness works in |
 | `{{cli}} queue approve` | It lets an action out to an external system |
+| `{{cli}} execute apply` | It sends approved actions to the external system: a write a person answers for |
 
 ## Rules for the agent
 

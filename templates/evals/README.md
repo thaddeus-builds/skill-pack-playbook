@@ -106,7 +106,7 @@ After a verb changes, regenerate the graders and commit them:
 
 ### The Never table
 
-`extra` also says which verbs only a person runs, besides the gated ones. SKILL.md's first section is `## Never`, a table (a `Verb` column, and one that says why only a person runs it) that names each of them in code font, and nothing else: `evals.check_never_table()` fails on a gated or extra verb with no row, on a row for a verb an agent may run or for no verb, and on the section moved below another. Every scaffolded harness runs it (`tests/test_never_table.py`); it needs no case. The kind `external` is not person-only (a pull is the agent's own read; an eval forbids it because the run is offline), so an external verb only a person runs goes in `extra`.
+`extra` also says which verbs only a person runs, besides the gated ones. SKILL.md's first section is `## Never`, a table (a `Verb` column, and one that says why only a person runs it) that names each of them in code font, and nothing else: `evals.check_never_table()` fails on a gated or extra verb with no row, on a row for a verb an agent may run or for no verb, and on the section moved below another. Every scaffolded harness runs it (`tests/test_never_table.py`); it needs no case. A code span with a flag is a flag-level gate (`claims --confirm`: the agent's verb, a person's flag; `any --code`: the flag on every verb); its verb must be one of the table, or `any`. The kind `external` is not person-only by itself (an external read, a pull, is the agent's own; an eval forbids it because the run is offline), so an external write only a person runs (`execute apply`) goes in `extra`.
 
 ### What the pattern cannot see
 

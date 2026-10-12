@@ -384,7 +384,7 @@ def test_harness_toml_parses_and_holds_what_the_kit_reads():
     with open(os.path.join(REPO, "templates/harness.toml"), "rb") as f:
         cfg = tomllib.load(f)
     assert set(cfg) == {"harness", "kit", "ssot", "release", "layers", "guards"}
-    assert cfg["guards"] == {"evals": {"extra": ["facts init"]}}, "the person-only verb besides the gated ones (SKILL.md's Never)"
+    assert cfg["guards"] == {"evals": {"extra": ["facts init", "execute apply"]}}, "the person-only verbs besides the gated ones (SKILL.md's Never)"
     assert cfg["kit"] == {"packs": []}, "a new harness takes base and testkit; --packs adds more"
     assert {"name", "cli", "env_prefix", "db_file", "scripts_dir", "languages", "markets", "home_env_file"} \
         <= set(cfg["harness"])

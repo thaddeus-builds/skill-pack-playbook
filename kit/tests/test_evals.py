@@ -27,7 +27,9 @@ fake "shop" harness with a SKILL.md, an evals folder and four cases.
   [5] after every plant was undone, the harness is clean again
   [5b] the Never table of SKILL.md: clean on the shop; a gated verb added to
       the table with no row, a row dropped (a gated verb, the extra verb), a
-      row for a read verb or for no verb, the section moved below another, the
+      row for a read verb or for no verb, a flag on no verb (a flag-level gate on
+      a verb of the table, and `any --code`, are accepted; YAML front matter is
+      skipped), the section moved below another, the
       heading renamed (and `never` in [guards.evals] that follows it), a typo
       in extra, no SKILL.md: each is reported, and undone
   [6] the fixture builder of templates/evals/, run in a scratch git repository:
@@ -406,6 +408,19 @@ def main() -> None:
     e2()
     check("[5b] `never` in [guards.evals] names the heading", evals.check_never_table(root) == [], evals.check_never_table(root))
     u2()
+    u()
+    e, u = swap(sk, "| `facts init` |", "| `facts init`, `shop facts set --confirm`, `any --code` |")
+    e()
+    check("[5b] flag-level gates: an agent's verb with a person's flag, and `any --code`, are accepted",
+          evals.check_never_table(root) == [], evals.check_never_table(root))
+    u()
+    never("a flag on no verb of the table", "names a flag of no verb of the table",
+          *swap(sk, "| `facts init` |", "| `facts init`, `shop facts burn --confirm` |"))
+    never("a flag on a gated verb does not stand for the verb's row", "does not name `shop decisions confirm`",
+          *swap(sk, "| `shop decisions confirm` |", "| `shop decisions confirm --code` |"))
+    e, u = swap(sk, "# Shop skill", "---\nname: shop\n## a YAML comment, not a section\n---\n# Shop skill")
+    e()
+    check("[5b] the YAML front matter is not read for the first section", evals.check_never_table(root) == [], evals.check_never_table(root))
     u()
     never("a typo in [guards.evals].extra", "is not a verb of the table", *swap(root / "harness.toml", 'extra = ["facts init"]', 'extra = ["fact init"]'))
     stext = sk.read_text(encoding="utf-8")

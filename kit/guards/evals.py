@@ -45,11 +45,14 @@ One more rule holds SKILL.md itself, with or without cases (the generated
      declares an agent must never run, `facts init` style). A verb is named in
      code font, with or without the cli word (`<cli> facts confirm`); a cell
      may name several. A gated verb added to the table with no row fails, and
-     so does a row for a verb an agent may run, or for no verb at all. The
-     kind external is not person-only: a pull is an external read the agent
-     runs itself (the template SKILL.md's Read scope), and an eval forbids it
-     only because an eval run is offline; an external verb that only a person
-     runs is named in `extra`.
+     so does a row for a verb an agent may run, or for no verb at all. A code
+     span with a flag is a flag-level gate (`claims --confirm`: the agent's
+     verb, a person's flag; `any --code`: the flag on every verb): its verb
+     must be a verb of the table, or `any`, and need not be gated. The kind
+     external is not person-only by itself: an external read (a pull) is the
+     agent's own (the template SKILL.md's Read scope; an eval forbids it only
+     because an eval run is offline), and an external write (`execute apply`)
+     is a person's once the harness names it in `extra`.
 
 What the pattern cannot see (and the template README says): a verb whose name
 is only inside a quoted or echoed string is blocked when it follows a space
@@ -116,6 +119,7 @@ SEP = r"[\s/;&|(`]"                  # what may stand right before a command nam
 WRAP = r"(?:-\w*c|eval)"             # `bash -c '...'`, `sh -c "..."`, `eval '...'`
 SCAN = 1000                          # how far a --help may sit from its verb
 NEVER = "Never"                      # the heading of SKILL.md's person-only table
+ANY = "any"                          # `any --code` in the Never table: a flag on every verb
 
 
 # ---- the forbidden-command pattern ----------------------------------------
@@ -547,8 +551,9 @@ def regenerate(root: Path | str | None = None) -> list[str]:
 
 def person_only(verbs: Iterable[Any], extra: Iterable[str] = ()) -> list[Any]:
     """The verbs only a person runs, in table order: every verb of kind gated,
-    and every verb `extra` names. Not external: a pull is the agent's own
-    read, forbidden to an eval only because the run is offline."""
+    and every verb `extra` names. Not external by itself: an external read (a
+    pull) is the agent's own, forbidden to an eval only because the run is
+    offline; an external write is a person's once `extra` names it."""
     named = {tuple(e.split()) for e in extra}
     return [v for v in verbs if v.kind == "gated" or tuple(v.words) in named]
 
@@ -558,12 +563,16 @@ def never_table(skill: str, heading: str = NEVER) -> dict[str, Any] | None:
     heading word): None when there is none, else {"first": it is the first
     `##` section, "rows": [(the Verb cell, the other cells)] of the first table
     in it whose header has a Verb column, or None when it has no such table}.
-    Fenced blocks are not read."""
+    Fenced blocks and the YAML front matter are not read."""
     seen = 0
     found: dict[str, Any] | None = None
     col: int | None = None
     fence = in_table = False
-    for ln in skill.lstrip("﻿").replace("\r\n", "\n").split("\n"):
+    lines = skill.lstrip("﻿").replace("\r\n", "\n").split("\n")
+    if lines and lines[0].strip() == "---":                # front matter: a `## ` there is a YAML comment
+        end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), 0)
+        lines = lines[end + 1:]
+    for ln in lines:
         if re.match(r"^\s{0,3}(?:```|~~~)", ln):
             fence = not fence
             continue
@@ -633,6 +642,13 @@ def never_problems(skill: str, verbs: Iterable[Any], entries: Iterable[str],
             words = s.split()
             if words and words[0].rsplit("/", 1)[-1].removesuffix(".py") in heads:
                 words = words[1:]
+            flag = next((i for i, w in enumerate(words) if w.startswith("-")), None)
+            if flag is not None:                         # a flag-level gate: `claims --confirm`, `any --code`
+                verb = words[:flag]
+                if verb != [ANY] and (not verb or kverbs.match(verb, table) is None):
+                    p.append(f"SKILL.md {title}: `{s}` names a flag of no verb of the table "
+                             f"(a flag on every verb is `{ANY} {words[flag]}`)")
+                continue
             v = kverbs.match(words, table)
             if v is None:
                 p.append(f"SKILL.md {title}: `{s}` is not a verb of the table")
@@ -781,7 +797,7 @@ def never_self_test() -> list[str]:
     got = never_problems(_NEVER, _TABLE, **kw)
     if got:
         out.append(f"a sound Never table is refused: {got}")
-    if never_problems(_NEVER.replace("| `facts init` |", "| `./shop facts init --market x`, `shop.py facts confirm` |"), _TABLE, **kw):
+    if never_problems(_NEVER.replace("| `facts init` |", "| `./shop facts init US`, `shop.py facts confirm` |"), _TABLE, **kw):
         out.append("a cell that names two verbs, by path and with arguments, is refused")
     if never_problems("# Shop\n\n## Rules\n\n- x\n", [v for v in _TABLE if v.kind == "read"], ["shop"]):
         out.append("a harness with no person-only verb is asked for a Never table")
@@ -808,6 +824,18 @@ def never_self_test() -> list[str]:
             out.append(f"the Never-table rule misses: {what} ({got})")
     if never_problems(_NEVER.replace("| `facts init` | declares the scope |\n", ""), _TABLE, entries=["shop"]):
         out.append("a verb of kind human is asked for when [guards.evals].extra does not name it")
+    flags = _NEVER.replace("| `facts init` |", "| `facts init`, `shop facts list --apply`, `any --code`, `queue list K -y` |")
+    if never_problems(flags, _TABLE, **kw):
+        out.append(f"a flag-level gate (a read verb with a person's flag, `any --code`) is refused: {never_problems(flags, _TABLE, **kw)}")
+    for bad in ("`shop facts burn --apply`", "`--apply`", "`every --code`"):
+        got = never_problems(_NEVER.replace("| `facts init` |", f"| `facts init`, {bad} |"), _TABLE, **kw)
+        if not any("names a flag of no verb of the table" in g for g in got):
+            out.append(f"the Never-table rule misses: a flag on no verb, {bad} ({got})")
+    if not any("does not name `shop facts confirm`" in g for g in never_problems(
+            _NEVER.replace("| `shop facts confirm` |", "| `shop facts confirm --code` |"), _TABLE, **kw)):
+        out.append("a flag on a gated verb is taken for the verb's own row")
+    if never_problems("---\nname: x\n## not a heading: a YAML comment\n---\n" + _NEVER, _TABLE, **kw):
+        out.append("a `##` line in the YAML front matter is read as the first section")
     return out
 
 
