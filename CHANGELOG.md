@@ -9,6 +9,12 @@ are the merge day. Everything under *Other* is outside the kit: templates, build
 scaffold, console, docs, conformance.
 
 ## [Unreleased]
+### Other
+- `templates/claim-scope.md`: "What stops, what warns". A harness picks per channel whether an
+  open compliance finding stops the step or warns a person (one switch, `warn` or `block`); where
+  the platform's own review stops a bad ad at no cost to the ad, the default is `warn`. Unconfirmed
+  spend, the spend gate, consent and technical QC always stop. Seen once, an owner decision in the
+  video-ads harness. Tested in `tests/test_docs_build.py`.
 
 ## [0.14.0] - 2026-10-12
 ### Added
