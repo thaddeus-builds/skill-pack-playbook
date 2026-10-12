@@ -29,6 +29,18 @@ scaffold, console, docs, conformance.
   pre-push hook, push. The hook is installed only once a list is named, since it refuses a push
   without one.
 
+## [0.19.0] - 2026-10-12
+### Added
+- `doctor.py`: `checkout` warns (`doctor_checkout_differs`) when the cwd is in another git
+  checkout of the same harness (a `harness.toml` of the same name at or above it) than the
+  bound one whose code runs, and the two differ: other HEADs, or docs or code (`*.md`, `*.py`,
+  `*.toml`, `*.tsv`, `*.js`, `*.sh`) changed and not committed in either. Several sessions
+  work in worktrees; an agent read SKILL.md in one and ran another's harness. Silent outside
+  git, without git, in the bound checkout and in another harness's checkout. `git_head()`
+  (HEAD plus the uncommitted docs and code; git's optional locks never taken; inherited
+  `GIT_*` variables dropped, so a hook's `GIT_DIR` cannot point both at one repository).
+  From the video-ads harness (seen once, a newcomer-agent audit).
+
 ## [0.18.0] - 2026-10-12
 ### Added
 - A "Never" table of the verbs only a person runs, first in a harness's SKILL.md, held to the
