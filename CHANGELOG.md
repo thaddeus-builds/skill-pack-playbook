@@ -24,6 +24,27 @@ scaffold, console, docs, conformance.
   keep the harness, data and virtualenv on the internal disk. Each seen once, in the video-ads
   harness. Tested in `tests/test_docs_build.py`.
 
+## [0.17.0] - 2026-10-12
+### Added
+- `tools/leak_guard.py` and `tools/pre-push.sample` (testkit): a push whose added lines, file paths
+  or commit messages hold a client term is refused; `--range A..B` and `--tree` check by hand. A
+  term matches case- and whitespace-insensitively (`re:` for a regular expression), and a hit names
+  the term's line and list, never the term. The lists are client data and stay outside the
+  repository: `[guards.leak] terms` in harness.toml (paths or globs, one list per client workspace)
+  and `<PREFIX>_CLIENT_TERMS`. Fail closed: no list, a named list missing, an empty or unreadable
+  list, a bad pattern, one matching the empty string, or a git error refuses the push. Generalised
+  from the video-ads harness's own guard and its local hook, which read every client workspace's
+  list (seen once). Fixed here, and still open in that harness's copy: a non-ASCII path was read
+  as git's octal escape, so a CJK term in a file name passed; a path hit printed the path, which
+  holds the term; full-width and zero-width spellings passed (terms and text are now NFKC-normalised
+  without format characters); a binary or empty file's path and a merge's own resolution lines
+  were not read; an added line starting `++ ` was taken for a file header. Two `git log` runs read
+  every commit, and all terms are tried as one pattern first: 125 commits and 200 terms take about
+  0.1 s, not seconds.
+### Other
+- BUILD.md B1: install the hook before the first push; `templates/harness.toml` shows
+  `[guards.leak]`. `kit-tiers.tsv`: `tools.leak_guard`, extra, no consumer yet.
+
 ## [0.16.0] - 2026-10-12
 ### Added
 - `kit.testing.run_tests`: a file's own budget, a `# kit-timeout: S` comment (a comment may follow

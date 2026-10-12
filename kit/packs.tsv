@@ -60,3 +60,4 @@ tools.manifest	testkit	the fingerprint, read by guards.drift
 tools.vendor	testkit	playbook tooling
 tools.packs	testkit	the pack table reader, used by tools.vendor
 tools.skill_upload	testkit	the upload copy of SKILL.md (claude.ai, the Skills API)
+tools.leak_guard	testkit	the pre-push guard: no client term in what is pushed
