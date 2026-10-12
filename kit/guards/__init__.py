@@ -16,7 +16,8 @@ kit.testing.check.
   boundary.py       the core never names an adapter; a consumer only reads
   drift.py          a vendored kit/ or console/ matches its MANIFEST.sha256
   roadmap.py        the one ROADMAP.md format: seven sections, dated rows with ids, what each wait unblocks
-  evals.py          agent evals, the offline half: sound cases, and the forbidden-command pattern generated from the verb table
+  evals.py          agent evals, the offline half: sound cases, and the forbidden-command pattern generated from the verb table;
+                    SKILL.md's Never table names exactly the verbs only a person runs
 
 Every rule is also tried on a planted violation, so a guard cannot pass by
 looking at nothing. This file holds the helpers they share.

@@ -39,7 +39,7 @@ ACTIONS_EXPR = re.compile(r"\$\{\{[^}]*\}\}")     # a GitHub Actions expression,
 STEPS = ["B0", "B0.5", "B0.6", "B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "B10"]
 GENERATED = {"test_ssot.py", "test_layering.py", "test_clock.py", "test_json_contract.py", "test_release.py", "test_kit_drift.py",
              "test_human_tables.py", "test_gate.py", "test_boundary.py", "test_run_tests.py", "test_changelog.py",
-             "test_roadmap.py"}
+             "test_roadmap.py", "test_never_table.py"}
 
 
 def doc(rel: str) -> str:
@@ -158,7 +158,7 @@ def test_every_template_is_listed_in_the_templates_readme():
 
 
 ROW = re.compile(r"^\| \[([^\]]+)\]\([^)]*\) \| [^|]* \| `([^`]+)`[^|]*\|", re.M)   # | [template](link) | step | `target` ... | ...
-NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen"]
 
 
 def rendered_problems(rendered: dict[str, str], readme: str) -> list[str]:
@@ -190,7 +190,7 @@ def test_the_docs_say_how_many_tests_a_new_harness_starts_with_and_it_is_the_rea
     for rel, n in (("docs/kit-and-tools.md", 2), (BUILD, 1)):
         said = stated_test_counts(doc(rel))
         assert len(said) == n and set(said) == {want}, (rel, said, want)
-    assert set(stated_test_counts(doc("docs/kit-and-tools.md").replace("the twelve tests", "the nine tests"))) != {want}   # a stale count shows
+    assert set(stated_test_counts(doc("docs/kit-and-tools.md").replace("the thirteen tests", "the nine tests"))) != {want}   # a stale count shows
 
 
 def test_every_harness_test_named_is_one_the_scaffolder_generates():
@@ -383,7 +383,8 @@ def test_every_placeholder_is_one_the_templates_readme_explains():
 def test_harness_toml_parses_and_holds_what_the_kit_reads():
     with open(os.path.join(REPO, "templates/harness.toml"), "rb") as f:
         cfg = tomllib.load(f)
-    assert set(cfg) == {"harness", "kit", "ssot", "release", "layers"}
+    assert set(cfg) == {"harness", "kit", "ssot", "release", "layers", "guards"}
+    assert cfg["guards"] == {"evals": {"extra": ["facts init", "execute apply"]}}, "the person-only verbs besides the gated ones (SKILL.md's Never)"
     assert cfg["kit"] == {"packs": []}, "a new harness takes base and testkit; --packs adds more"
     assert {"name", "cli", "env_prefix", "db_file", "scripts_dir", "languages", "markets", "home_env_file"} \
         <= set(cfg["harness"])
@@ -723,6 +724,66 @@ def test_decision_rights_keeps_the_lanes_and_the_digest():
                     "The risky list (owner merges)", "Channels that count", "The digest"):
         assert section(text, heading), heading
     assert "Deciders and advisers" not in text and "Dissent" not in text
+
+
+ALWAYS_STOPS = ("Unconfirmed spend", "The spend gate", "Consent", "Technical QC")
+
+
+def stop_mode_problems(text: str) -> list[str]:
+    """What claim-scope.md's "What stops, what warns" fails to say: the switch and its two modes, the default where the
+    platform's own review stops a bad ad, each item of the always-stops list (a bold bullet), and where it was seen;
+    and no line left that says an open error always blocks."""
+    body = section(text, "What stops, what warns")
+    out = [w for w in ("`compliance_stop`", "`warn`", "`block`", "the default", "Seen once, an owner decision")
+           if w not in body]
+    out += [item for item in ALWAYS_STOPS if not re.search(r"^- \*\*" + re.escape(item) + r":\*\*", body, re.M)]
+    if "An open error blocks the spend." in text:
+        out.append("blocks unconditionally")
+    return out
+
+
+def test_claim_scope_names_the_stop_switch_and_what_always_stops():
+    text = doc("templates/claim-scope.md")
+    assert stop_mode_problems(text) == [], stop_mode_problems(text)
+    for item in ALWAYS_STOPS:                                                    # the check would notice each one gone
+        assert stop_mode_problems(text.replace(f"- **{item}:**", "- ")) == [item], item
+    assert stop_mode_problems(text.replace("`compliance_stop`", "a switch")) == ["`compliance_stop`"]
+    assert "blocks unconditionally" in stop_mode_problems(text + "\nAn open error blocks the spend.\n")
+    assert stop_mode_problems("# t\n") == ["`compliance_stop`", "`warn`", "`block`", "the default",
+                                           "Seen once, an owner decision", *ALWAYS_STOPS]
+SMALL = "Keeping a harness small as it grows"
+SMALL_METHODS = ("Slim before features.", "Code filters; the agent judges.", "A newcomer-agent acceptance test.")
+
+
+def small_problems(operating: str, handoff: str) -> list[str]:
+    """What the methods for keeping a harness small fail to say: each is a numbered item that says it was seen once,
+    the parked folder has no verbs, docs or tests and says how to come back, and the handoff's replay points at the
+    newcomer test (the replay tests the deliverable, not whether an agent can use the harness)."""
+    items = re.split(r"^\d+\. ", section(operating, SMALL), flags=re.M)[1:]
+    out = []
+    for title in SMALL_METHODS:
+        item = next((i for i in items if i.startswith(f"**{title}**")), None)
+        if item is None or "*Seen once:*" not in item:
+            out.append(title)
+    if not re.search(r"`_parked/`.*no verb.*no doc.*no test.*bring each piece back", section(operating, SMALL)):
+        out.append("_parked/")
+    if f"`docs/operating.md`, \"{SMALL}\", item 3" not in handoff:
+        out.append("handoff pointer")
+    return out
+
+
+def test_the_methods_for_keeping_a_harness_small_are_whole_and_the_handoff_points_at_the_newcomer_test():
+    operating, handoff = doc("docs/operating.md"), doc("templates/client-handoff.md")
+    assert small_problems(operating, handoff) == [], small_problems(operating, handoff)
+    for title in SMALL_METHODS:                                                  # the check would notice each one gone
+        assert small_problems(operating.replace(f"**{title}**", "**x**"), handoff) == [title], title
+    seen = operating.split(f"**{SMALL_METHODS[1]}**")[1].split("*Seen once:*")[0]
+    assert small_problems(operating.replace(seen + "*Seen once:*", seen + "*Seen:*"), handoff) == [SMALL_METHODS[1]]
+    assert small_problems(operating.replace("no test runs it", "tests still run"), handoff) == ["_parked/"]
+    assert small_problems(operating, handoff.replace("item 3", "item 2")) == ["handoff pointer"]
+    assert "internal disk" in doc("templates/install-checklist.md")
+    assert "stopped without an end" in section(doc("docs/lessons.md"), "Paid generation jobs (from adcut-harness, "
+                                                                       "its first real batch, 2026-10-06)")
 
 
 CALL = re.compile(r"ask\.py (?:--\S+ \S+ )*([a-z]+)\b")
