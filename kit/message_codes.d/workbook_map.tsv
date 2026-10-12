@@ -12,3 +12,4 @@ workbook_map_key_unknown	table_id,header	tables.tsv: {table_id} names {header} (
 workbook_map_refused	count,problems	the workbook map has {count} problem(s); nothing was read through it	工作簿映射有 {count} 个问题；没有按它读取任何内容
 workbook_map_value_key_unknown	line,key	values.tsv line {line}: {key} is not one of the harness's fact keys	values.tsv 第 {line} 行：{key} 不是本 harness 的事实键
 workbook_map_value_duplicate	key,market	values.tsv: {key} [{market}] is stated twice	values.tsv：{key} [{market}] 写了两次
+workbook_map_cell_twice	first,line,sheet,cell	cells.tsv lines {first} and {line} both write {sheet} {cell}	cells.tsv 第 {first} 行和第 {line} 行都写入 {sheet} {cell}

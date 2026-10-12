@@ -9,6 +9,34 @@ are the merge day. Everything under *Other* is outside the kit: templates, build
 scaffold, console, docs, conformance.
 
 ## [Unreleased]
+
+## [0.22.0] - 2026-10-12
+### Added
+- `human.py`: `relay_audit(..., relay_quote, need_quote=True)` and `add_gate_args(quote=True)`
+  (`--relay-quote`). A verb whose write leaves the harness on a person's chat yes asks for the
+  confirming person's own words, as sent, beside `--relay-user` and `--relay-at`; a relay
+  without them is refused (`confirm_relay_quote_missing`), and the words are kept on the
+  history reason as ` [quote="…"]`, one JSON string that cannot close the suffix. The code
+  proves the person saw the summary; the words show what they said to it. Off by default:
+  existing callers are unchanged, and the console (which relays a click, not words) never
+  confirms such a verb. From the SEO harness (seen once, an owner decision on its store write,
+  2026-10-12).
+
+## [0.21.0] - 2026-10-12
+### Added
+- `kit.workbook_patch` (pack `workbook`, slice 4 of `docs/workbook-and-browser-ops.md`): cells set
+  in a copy of a client's xlsx, stdlib only. Every part it does not set stays byte for byte (a
+  sheet with cells to set is edited as text, cell by cell; texts inline, styles kept); the workbook
+  part gains full recalculation on open; the same inputs give the same bytes. A formula, a value
+  the client entered (not the harness's previous copy, `ours`), a merged cell or a missing sheet is
+  never set, listed by ref. `table_sets` places a harness's results by the map (a table's `out` and
+  `both` columns by key, new columns in the first column after the header block that is empty on the header row and every row of the table, never under the client's own data, found again by header on the next copy); `cell_sets` fills
+  the map's new `cells.tsv`. First consumer: the KOL harness (meta-ads-retail-harness X39), which
+  tried it on the client's real workbook: two parts changed, every other part identical.
+- `kit.workbook_map`: an optional `cells.tsv` (`field, sheet, cell, owner, status, note`), where a
+  harness writes outside a table's rows (a month's figure across a row); a cell written by two rows
+  is refused (`workbook_map_cell_twice`); `confirmed()`, `pending()` and `confirmed_rows()` carry
+  it, so the file gate binds it; a map without it keeps its version.
 ### Other
 - `templates/claim-scope.md`: "What stops, what warns". A harness picks per channel whether an
   open compliance finding stops the step or warns a person (one switch, `warn` or `block`); where
@@ -30,16 +58,13 @@ scaffold, console, docs, conformance.
   without one.
 
 ## [0.20.0] - 2026-10-12
-### Added
-- `human.py`: `relay_audit(..., relay_quote, need_quote=True)` and `add_gate_args(quote=True)`
-  (`--relay-quote`). A verb whose write leaves the harness on a person's chat yes asks for the
-  confirming person's own words, as sent, beside `--relay-user` and `--relay-at`; a relay
-  without them is refused (`confirm_relay_quote_missing`), and the words are kept on the
-  history reason as ` [quote="…"]`, one JSON string that cannot close the suffix. The code
-  proves the person saw the summary; the words show what they said to it. Off by default:
-  existing callers are unchanged, and the console (which relays a click, not words) never
-  confirms such a verb. From the SEO harness (seen once, an owner decision on its store write,
-  2026-10-12).
+### Fixed
+- `messages.lint_registry()` (and so `check_registry_closed()`) refuses a registry param named
+  after one of `msg()`'s own arguments (`code`, `text`): `msg(code, text, **params)` cannot be
+  called with it, a TypeError at the one moment the message is needed. The names are read from
+  `msg()`'s signature (`messages.MSG_ARGS`), so they cannot drift. Seen once: in the video-ads
+  harness a param named `text` crashed `msg()`, and that harness has held the rule in its own
+  contract test since.
 
 ## [0.19.0] - 2026-10-12
 ### Added
