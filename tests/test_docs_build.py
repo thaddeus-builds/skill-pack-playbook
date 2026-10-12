@@ -1000,6 +1000,35 @@ def test_every_link_in_the_readme_and_docs_resolves():
     assert len(doc("README.md").split()) <= 2000, "the README is the overview; the detail goes in docs/"
 
 
+TIERS = ("One chat yes is one code for one summary.",
+         "A gate the human clicks through proves nothing: tier changes by what the harness can see.")
+THREAT = "Put the owner's threat model in every reviewer prompt, and stop when only out-of-model findings remain."
+
+
+def rubber_stamp_problems(rules: str, operating: str) -> list[str]:
+    """What the rubber-stamp lessons fail to say: each a numbered bold item where it belongs, saying where it was seen;
+    the tier rule names the live diff, the caps, the expiry and the unticked checkboxes."""
+    out = []
+    pairs = [(t, section(rules, "Human-in-the-loop rules")) for t in TIERS]
+    pairs.append((THREAT, section(operating, "Building with many agents")))
+    for title, body in pairs:
+        item = next((i for i in re.split(r"^\d+\. ", body, flags=re.M) if i.startswith(f"**{title}**")), None)
+        if item is None or "*Seen once" not in item:
+            out.append(title)
+        elif title == TIERS[1]:
+            out += [w for w in ("diff", "capped", "expires", "unticked") if w not in item]
+    return out
+
+
+def test_the_rubber_stamp_lessons_are_whole():
+    rules, operating = doc("docs/rules.md"), doc("docs/operating.md")
+    assert rubber_stamp_problems(rules, operating) == [], rubber_stamp_problems(rules, operating)
+    for title in (*TIERS, THREAT):                                               # the check would notice each one gone
+        assert rubber_stamp_problems(rules.replace(f"**{title}**", "**x**"),
+                                     operating.replace(f"**{title}**", "**x**")) == [title], title
+    assert rubber_stamp_problems(rules.replace("start unticked", "start blank"), operating) == ["unticked"]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
