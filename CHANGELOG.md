@@ -10,9 +10,11 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
-- Scaffold: the next steps `scaffold/new_harness.py` prints install the leak guard
-  (`scripts/kit/tools/pre-push.sample`) as the new harness's pre-push hook, and say it refuses
-  every push until a client-term list is named.
+- Scaffold: the next steps `scaffold/new_harness.py` prints end with the leak guard, in order:
+  create the client-term list outside the repository (seeded with the client's name from the
+  intake), name it in `[guards.leak] terms`, install `scripts/kit/tools/pre-push.sample` as the
+  pre-push hook, push. The hook is installed only once a list is named, since it refuses a push
+  without one.
 
 ## [0.17.0] - 2026-10-12
 ### Added

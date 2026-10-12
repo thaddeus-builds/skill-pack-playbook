@@ -38,9 +38,13 @@ no data path; it leaves no `{{` behind. `--dry-run`
 prints the file list and writes nothing. `--update-kit` vendors the kit
 and the console again into an existing harness and touches nothing else.
 
-Next: `git init`, install the leak guard as the pre-push hook (HOOK), commit,
-`python3 scripts/<cli>.py test` (the suite is green before the first
-feature; CI runs the same), name the client-term lists, push.
+Next: `git init`, commit, `python3 scripts/<cli>.py test` (the suite is
+green before the first feature; CI runs the same); then, before the first
+push and in this order: create the client-term list outside the
+repository, seeded with the client's name from the intake; name it in
+harness.toml (`[guards.leak] terms`); install the leak guard as the
+pre-push hook (HOOK); push. The hook refuses a push while no list is
+named, so it is installed only once one is.
 
 Test: scaffold/tests/test_new_harness.py.
 """
@@ -419,13 +423,28 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{values['name']}: {len(files) + 1} files written to {d}, the kit "
           f"and the console vendored")
     print(f"  still to fill by the build (B2, B8): {', '.join(fills)}")
-    print(f"next: cd {d} && git init && install -m 755 {HOOK} "
-          f".git/hooks/pre-push && git add -A && git commit -m 'scaffold' "
-          f"&& python3 scripts/{values['cli']}.py test")
-    print(f"  the hook refuses every push until a client-term list is named: "
-          f"[guards.leak] terms in harness.toml or "
-          f"{values['env_prefix']}_CLIENT_TERMS (BUILD.md, B1)")
+    for line in next_steps(d, values):
+        print(line)
     return 0
+
+
+def next_steps(d: Path, values: dict) -> list[str]:
+    """What to run after the scaffold, in order: the client-term list
+    exists and is named before the leak guard's hook is installed, so the
+    hook never stands between a new harness and its first push."""
+    lists = f"~/<workspaces>/{values['name']}/*/data/client_terms.txt"
+    return [
+        f"next: cd {d} && git init && git add -A && git commit -m "
+        f"'scaffold' && python3 scripts/{values['cli']}.py test",
+        "then, before the first push (BUILD.md, B1):",
+        f"  1. create the client-term list outside this repository, seeded "
+        f"with the client's name from the intake (one term per line), e.g. "
+        f"{lists.replace('*', '<client>')}",
+        f"  2. name it in harness.toml: [guards.leak] terms = [\"{lists}\"]",
+        f"  3. install the leak guard as the pre-push hook: install -m 755 "
+        f"{HOOK} .git/hooks/pre-push",
+        "  4. push",
+    ]
 
 
 if __name__ == "__main__":
