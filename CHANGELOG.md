@@ -45,6 +45,8 @@ scaffold, console, docs, conformance.
   passes the one it needs as an extra.
 ### Other
 - Console: `tests/_t.py`'s `main(globals())` fails a file the same way (#56).
+### Changed
+- `kit/env.py`: `KIT_TEST_RUN` joins the names never loaded from an env file (with 0.15.0's list).
 
 ## [0.15.0] - 2026-10-12
 ### Changed
