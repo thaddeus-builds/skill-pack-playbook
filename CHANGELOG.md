@@ -9,6 +9,13 @@ are the merge day. Everything under *Other* is outside the kit: templates, build
 scaffold, console, docs, conformance.
 
 ## [Unreleased]
+### Other
+- `docs/rules.md`, "Writing into someone else's system": six rules for a write door whose content
+  is made after the approval (only approved work of one kind; the gate binds the file's sha256,
+  or the live object as read just before a change of state; stage hidden, preview in place,
+  then publish; archive every write under raw; read back and say so; revert is the inverse
+  write, never a delete). Approve rule 5 points at it. Seen once, the SEO harness's store write
+  (`scripts/apply_shopify.py`). Tested in `tests/test_docs_build.py`.
 
 ## [0.21.0] - 2026-10-12
 ### Added
