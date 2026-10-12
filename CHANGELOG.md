@@ -10,6 +10,20 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-12
+### Added
+- A "Never" table of the verbs only a person runs, first in a harness's SKILL.md, held to the
+  verb table (`kit/guards/evals.py`; seen once: a newcomer agent found the video-ads harness's
+  person-only rules scattered over five places, and that harness gathered them in one table at
+  the top of its SKILL.md). `never_problems()` and `check_never_table()` fail when a verb of
+  kind `gated`, or one `[guards.evals].extra` names, has no row; when a row names a verb an agent
+  may run, or no verb of the table, or does not say why; and when `## Never` is not the first
+  `##` section. A cell names verbs in code font, with or without the cli word. The kind
+  `external` is not person-only (a pull is the agent's own read; an eval forbids it only because
+  the run is offline): an external verb only a person runs goes in `extra`. `[guards.evals].never`
+  renames the heading. `never_self_test()` plants each fault, `check_never()` reports, and
+  `kit.testing.suites.never_table(root)` is the suite a harness's test calls.
+
 ## [0.14.0] - 2026-10-12
 ### Added
 - `kit/guards/roadmap.py` and `kit.testing.suites.roadmap`: one ROADMAP.md format. The title,

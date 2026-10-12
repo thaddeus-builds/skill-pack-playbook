@@ -35,6 +35,22 @@ harness's own (templates/evals/README.md shows the twelve lines):
      is being built (CI_COMMIT_TAG set).
   5. Every `scaffold_script` a case names exists.
 
+One more rule holds SKILL.md itself, with or without cases (the generated
+`tests/test_never_table.py`, kit.testing.suites.never_table):
+
+  6. SKILL.md's first `##` section is `## Never`, and its table (a `Verb`
+     column, and a column that says why only a person runs it) names exactly
+     the person-only verbs of the table: every verb of kind gated, and every
+     verb `[guards.evals].extra` names (a verb of another kind the harness
+     declares an agent must never run, `facts init` style). A verb is named in
+     code font, with or without the cli word (`<cli> facts confirm`); a cell
+     may name several. A gated verb added to the table with no row fails, and
+     so does a row for a verb an agent may run, or for no verb at all. The
+     kind external is not person-only: a pull is an external read the agent
+     runs itself (the template SKILL.md's Read scope), and an eval forbids it
+     only because an eval run is offline; an external verb that only a person
+     runs is named in `extra`.
+
 What the pattern cannot see (and the template README says): a verb whose name
 is only inside a quoted or echoed string is blocked when it follows a space
 (`echo "run shop facts confirm"`), so is reading the source of a forbidden
@@ -44,7 +60,10 @@ script (`cat scripts/pull_orders.py`: use the Read tool); a verb hidden behind
 Paid for: an agent-behaviour suite kept its forbidden-command pattern by hand,
 a long regular expression that began to miss a verb the moment one was added;
 and 4 of its 9 first cases passed with their rule cut out of the skill: the
-model already behaved that way, so they measured nothing.
+model already behaved that way, so they measured nothing. The Never table:
+a newcomer agent found the video-ads harness's person-only rules scattered over
+five places of its docs (seen once); that harness then gathered them in one
+table at the top of its SKILL.md.
 
 The grader files are the eval runner's own format (templates/evals/README.md
 names the runner): a folder per case with `case.yaml`, `prompt.md` (front
@@ -61,6 +80,7 @@ harness.toml `[guards.evals]`, all optional:
   dir          the evals folder (default `evals`)
   skill        the skill file (default `SKILL.md`)
   rules        heading of the rule list in it (default `Rules`)
+  never        heading of the person-only verbs' table in it (default `Never`)
   entries      names an agent may type for the harness (default: the cli and
                `<cli>.py`)
   kinds        verb kinds an eval agent must never run (default gated, external)
@@ -95,6 +115,7 @@ GRADER_FILE = "forbidden-verbs.md"
 SEP = r"[\s/;&|(`]"                  # what may stand right before a command name
 WRAP = r"(?:-\w*c|eval)"             # `bash -c '...'`, `sh -c "..."`, `eval '...'`
 SCAN = 1000                          # how far a --help may sit from its verb
+NEVER = "Never"                      # the heading of SKILL.md's person-only table
 
 
 # ---- the forbidden-command pattern ----------------------------------------
@@ -106,6 +127,7 @@ def settings(cfg: HarnessConfig) -> dict[str, Any]:
         "dir": str(g.get("dir", "evals")).strip("/"),
         "skill": str(g.get("skill", "SKILL.md")),
         "rules": str(g.get("rules", "Rules")),
+        "never": str(g.get("never", NEVER)),
         "entries": tuple(dict.fromkeys(entries)),
         "kinds": strs(g.get("kinds"), DEFAULT_KINDS),
         "extra": strs(g.get("extra")),
@@ -521,6 +543,125 @@ def regenerate(root: Path | str | None = None) -> list[str]:
     return out
 
 
+# ---- the Never table of SKILL.md ----------------------------------------------
+
+def person_only(verbs: Iterable[Any], extra: Iterable[str] = ()) -> list[Any]:
+    """The verbs only a person runs, in table order: every verb of kind gated,
+    and every verb `extra` names. Not external: a pull is the agent's own
+    read, forbidden to an eval only because the run is offline."""
+    named = {tuple(e.split()) for e in extra}
+    return [v for v in verbs if v.kind == "gated" or tuple(v.words) in named]
+
+
+def never_table(skill: str, heading: str = NEVER) -> dict[str, Any] | None:
+    """The `## <heading>` section of a SKILL.md (its title starts with the
+    heading word): None when there is none, else {"first": it is the first
+    `##` section, "rows": [(the Verb cell, the other cells)] of the first table
+    in it whose header has a Verb column, or None when it has no such table}.
+    Fenced blocks are not read."""
+    seen = 0
+    found: dict[str, Any] | None = None
+    col: int | None = None
+    fence = in_table = False
+    for ln in skill.lstrip("﻿").replace("\r\n", "\n").split("\n"):
+        if re.match(r"^\s{0,3}(?:```|~~~)", ln):
+            fence = not fence
+            continue
+        if fence:
+            continue
+        h = re.match(r"^(#{1,6})\s+(.*)$", ln)
+        if h:
+            if found is not None and len(h.group(1)) <= 2:
+                break
+            if len(h.group(1)) == 2:
+                seen += 1
+                if found is None and norm(h.group(2)).startswith(heading.lower()):
+                    found = {"first": seen == 1, "rows": None}
+            continue
+        if found is None:
+            continue
+        if not ln.strip().startswith("|"):
+            if col is not None:
+                break                                   # the first Verb table has ended
+            in_table = False
+            continue
+        cells = _cells(ln)
+        if col is None:
+            low = [norm(c) for c in cells]
+            if not in_table and any(c.startswith("verb") for c in low):   # a header row
+                col = next(i for i, c in enumerate(low) if c.startswith("verb"))
+                found["rows"] = []
+            in_table = True
+            continue
+        if set("".join(cells)) <= set("-: "):
+            continue
+        found["rows"].append((cells[col] if col < len(cells) else "",
+                              [c for i, c in enumerate(cells) if i != col]))
+    return found
+
+
+def never_problems(skill: str, verbs: Iterable[Any], entries: Iterable[str],
+                   extra: Iterable[str] = (), heading: str = NEVER) -> list[str]:
+    """What is wrong with SKILL.md's Never table against the verb table: a
+    person-only verb with no row, a row that names a verb an agent may run or
+    no verb at all, a row that does not say why, a section that is not first."""
+    table = list(verbs)
+    want = person_only(table, extra)
+    heads = [e.removesuffix(".py") for e in entries] or [""]
+    title = f"`## {heading}`"
+    sec = never_table(skill, heading)
+    if sec is None:
+        if not want:
+            return []
+        return [f"SKILL.md has no {title} section: the verbs only a person runs "
+                f"({', '.join(' '.join(v.words) for v in want)}) are listed there, in one table, first"]
+    p: list[str] = []
+    if not sec["first"]:
+        p.append(f"SKILL.md: {title} is not the first `##` section: the agent reads what only a person runs before anything else")
+    rows = sec["rows"]
+    if rows is None:
+        return p + ([f"SKILL.md: {title} has no table with a Verb column"] if want else [])
+    only = {tuple(v.words) for v in want}
+    named: set[tuple[str, ...]] = set()
+    for cell, rest in rows:
+        spans = re.findall(r"`([^`]+)`", cell)
+        if not spans:
+            p.append(f"SKILL.md {title}: the row {cell!r} names no verb in code font")
+        if not any(c.strip() for c in rest):
+            p.append(f"SKILL.md {title}: the row {cell!r} does not say why only a person runs it")
+        for s in spans:
+            words = s.split()
+            if words and words[0].rsplit("/", 1)[-1].removesuffix(".py") in heads:
+                words = words[1:]
+            v = kverbs.match(words, table)
+            if v is None:
+                p.append(f"SKILL.md {title}: `{s}` is not a verb of the table")
+            elif tuple(v.words) not in only:
+                p.append(f"SKILL.md {title}: `{s}` is {' '.join(v.words)!r}, kind {v.kind}, which an agent may run: "
+                         f"only a gated verb or one [guards.evals].extra names belongs there")
+            else:
+                named.add(tuple(v.words))
+    for v in want:
+        if tuple(v.words) not in named:
+            p.append(f"SKILL.md {title} does not name `{heads[0]} {' '.join(v.words)}` (kind {v.kind}"
+                     f"{'' if v.kind == 'gated' else ', in [guards.evals].extra'}): add its row, and why only a person runs it")
+    return p
+
+
+def check_never_table(root: Path | str | None = None) -> list[str]:
+    """never_problems() for the harness at `root` (else the bound one), after
+    its `[guards.evals]` values are checked against the verb table."""
+    cfg = harness(root)
+    base = Path(root) if root is not None else cfg.root
+    s = settings(cfg)
+    table = kverbs.load(base / cfg.scripts_dir / "verbs.py")
+    problems = config_problems(s, table, cfg.cli)
+    skill = base / s["skill"]
+    if not skill.is_file():
+        return problems + [f"{s['skill']} is missing: its {s['never']} table names the verbs only a person runs"]
+    return problems + never_problems(_read(skill), table, s["entries"], s["extra"], s["never"])
+
+
 # ---- the rules, tried on planted input --------------------------------------
 
 class _V:
@@ -621,6 +762,52 @@ def self_test() -> list[str]:
         out.append(f"table_rows read {rows} {dupes}")
     if frontmatter("---\nrule: 'don''t confirm'\nx: \"a\\\"b\"\n---\n") != {"rule": "don't confirm", "x": 'a"b'}:
         out.append("front matter quotes are not decoded as YAML does")
+    return out + never_self_test()
+
+
+_NEVER = ("# Shop\n\nIntro.\n\n## Never\n\nOnly a person runs these.\n\n"
+          "| Verb | Why only a person |\n|---|---|\n"
+          "| `shop facts confirm` | a confirmed value is the client's word |\n"
+          "| `facts init` | declares the scope |\n"
+          "| `shop queue approve` | sends money out |\n\n"
+          "## Rules\n\n- Say the window.\n")
+
+
+def never_self_test() -> list[str]:
+    """[] when the Never-table rule accepts a sound table and catches each
+    planted fault."""
+    out: list[str] = []
+    kw = dict(entries=["shop", "shop.py"], extra=["facts init"])
+    got = never_problems(_NEVER, _TABLE, **kw)
+    if got:
+        out.append(f"a sound Never table is refused: {got}")
+    if never_problems(_NEVER.replace("| `facts init` |", "| `./shop facts init --market x`, `shop.py facts confirm` |"), _TABLE, **kw):
+        out.append("a cell that names two verbs, by path and with arguments, is refused")
+    if never_problems("# Shop\n\n## Rules\n\n- x\n", [v for v in _TABLE if v.kind == "read"], ["shop"]):
+        out.append("a harness with no person-only verb is asked for a Never table")
+    plants = {
+        "a gated verb with no row": (_NEVER.replace("| `shop queue approve` | sends money out |\n", ""), kw, "does not name `shop queue approve`"),
+        "an extra verb with no row": (_NEVER.replace("| `facts init` | declares the scope |\n", ""), kw, "does not name `shop facts init`"),
+        "a row for a read verb": (_NEVER.replace("| `facts init` |", "| `facts init`, `shop facts list` |"), kw, "which an agent may run"),
+        "a row for an external verb not in extra": (_NEVER.replace("| `facts init` |", "| `facts init`, `shop pull orders` |"), kw,
+                                                    "kind external, which an agent may run"),
+        "a row for no verb of the table": (_NEVER.replace("| `facts init` |", "| `facts init`, `shop facts burn` |"), kw, "is not a verb of the table"),
+        "a row with no verb in code font": (_NEVER.replace("| `facts init` |", "| `facts init` |\n| facts restore |"), kw, "names no verb in code font"),
+        "a row that does not say why": (_NEVER.replace("| declares the scope |", "|  |"), kw, "does not say why"),
+        "the section is not first": (_NEVER.replace("## Never", "## Before\n\nx\n\n## Never"), kw, "is not the first `##` section"),
+        "no Never section": (_NEVER.replace("## Never", "## Gates"), kw, "has no `## Never` section"),
+        "no table with a Verb column": (_NEVER.replace("| Verb |", "| Command |"), kw, "has no table with a Verb column"),
+        "an example table in a fence": (_NEVER.replace("| Verb |", "```\n| Verb |").replace("out |\n\n", "out |\n```\n\n"), kw,
+                                        "has no table with a Verb column"),
+        "an extra verb is person-only too": (_NEVER.replace("| `facts init` | declares the scope |\n", ""), {**kw, "extra": ["facts init"]},
+                                             "in [guards.evals].extra"),
+    }
+    for what, (text, args, frag) in plants.items():
+        got = never_problems(text, _TABLE, **args)
+        if not any(frag in g for g in got):
+            out.append(f"the Never-table rule misses: {what} ({got})")
+    if never_problems(_NEVER.replace("| `facts init` | declares the scope |\n", ""), _TABLE, entries=["shop"]):
+        out.append("a verb of kind human is asked for when [guards.evals].extra does not name it")
     return out
 
 
@@ -629,3 +816,10 @@ def check_evals(root: Path | str | None = None) -> bool:
     ok = report("evals: every rule catches its planted violation", self_test())
     return report("evals: the cases are sound and match the verb table",
                   check_cases(root)) and ok
+
+
+def check_never(root: Path | str | None = None) -> bool:
+    """never_self_test() + check_never_table() as kit.testing.check lines."""
+    ok = report("never: the Never-table rule catches each planted fault", never_self_test())
+    return report("never: SKILL.md's Never table names exactly the verbs only a person runs",
+                  check_never_table(root)) and ok
