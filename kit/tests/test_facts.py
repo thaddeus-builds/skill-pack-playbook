@@ -650,6 +650,20 @@ def test_numeric_contract() -> None:
                         "--reason", "r", "--json"])
     check("a threshold within bounds: stored canonical (0.30 -> 0.3)",
           rc == 0 and fact("threshold_max_step")[:2] == ("0.3", 1), out)
+    c = con()                    # set under a wider bound, since narrowed
+    c.execute("UPDATE client_facts SET value='1.5' WHERE market='US' AND "
+                "key='threshold_max_step'")
+    c.commit()
+    c.close()
+    before = rows()
+    rc, out, err = run(["confirm", "threshold_max_step", "--reason", "r",
+                        "--json"], tty=["1.5"])
+    check("confirm checks the pending value against today's bound: "
+          "fact_value_out_of_range, nothing written",
+          rc == 2 and coded(out)[0] == "fact_value_out_of_range"
+          and rows() == before, (rc, out))
+    run(["set", "threshold_max_step", "0.3", "--source", "s", "--reason",
+         "r"])
     if fact("fee_pct")[1] == 0:
         run(["unconfirm", "fee_pct", "--reason", "bounds check"])
     for value in ("0", "100", "0.5"):

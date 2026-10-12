@@ -50,7 +50,9 @@ Additions: FactKeys.validate(…, thresholds=) routes `threshold_<name>`
 keys to Thresholds (the reference's SETTABLE_FACT_KEYS held both);
 DecisionRegistry(entity_ids={et: regex}) + check_entity_id() port the
 reference's per-entity-type id check; `confirm = harness` (above);
-Thresholds(superseded={old: new}) + superseded_overrides() for doctor.
+Thresholds(superseded={old: new}) + superseded_overrides() for doctor;
+out_of_bounds() for doctor too: a confirmed client value today's min..max
+refuses, so the default stands until someone asks the client again.
 Registry file problems are coded (registry_file_missing,
 registry_file_invalid), so doctor and fail() can say them.
 
@@ -655,7 +657,9 @@ class Thresholds:
     def confirmed(self, con: sqlite3.Connection | None, market: str | None,
                   names: Iterable[str] | None = None) -> dict[str, float]:
         """name -> the market's CONFIRMED `threshold_<name>` fact (a pending
-        or non-numeric one is not in effect), for `names` (default: all)."""
+        or non-numeric one is not in effect, nor one outside the TSV's
+        current min..max: a bound may have moved since it was confirmed,
+        and the default then stands), for `names` (default: all)."""
         if con is None or not market or not _has_facts(con):
             return {}
         want = set(self._rows if names is None else names)
@@ -665,7 +669,8 @@ class Thresholds:
                 "is_assumption=0 AND key GLOB ?", (market, FACT_PREFIX + "*")):
             name = key.removeprefix(FACT_PREFIX)
             d = _decimal(str(value)) if value is not None else None
-            if name in want and name in self._rows and d is not None:
+            if name in want and name in self._rows and d is not None \
+                    and self._within(name, d):
                 out[name] = float(d)
         return {n: out[n] for n in self._rows if n in out}
 
@@ -729,9 +734,36 @@ class Thresholds:
                 "is_assumption": pending, "source": source,
                 "updated_at": updated,
                 "effective": live.get(name, r["_default"]),
-                "in_effect": "client" if name in live else "default",
+                "in_effect": "client" if name in live else
+                "default (outside min..max)" if pending == 0 and d is not None
+                and not self._within(name, d) else "default",
                 "group": r["group"], "explain": r["explain"],
                 **{c: r[c] for c in _labels()}})
+        return out
+
+    def _within(self, name: str, d: Decimal) -> bool:
+        lo, hi = self._rows[name]["_lo"], self._rows[name]["_hi"]
+        return not ((lo is not None and d < lo) or (hi is not None and d > hi))
+
+    def out_of_bounds(self, con: sqlite3.Connection | None) -> list[dict]:
+        """{market, key, value, min, max} for each CONFIRMED client fact
+        `threshold_<name>` that today's min..max refuses (a bound moved since
+        it was confirmed): not in effect, the default stands; doctor says so,
+        so the client is asked again. Read-only."""
+        if con is None or not _has_facts(con):
+            return []
+        out = []
+        for m, k, v in con.execute(
+                "SELECT market, key, value FROM client_facts WHERE "
+                "is_assumption=0 AND key GLOB ? ORDER BY market, key",
+                (FACT_PREFIX + "*",)):
+            name = k.removeprefix(FACT_PREFIX)
+            d = _decimal(str(v)) if v is not None else None
+            if name in self._rows and d is not None and not self._within(
+                    name, d):
+                r = self._rows[name]
+                out.append({"market": m, "key": k, "value": v,
+                            "min": _num(r["_lo"]), "max": _num(r["_hi"])})
         return out
 
     def superseded_overrides(self, con: sqlite3.Connection | None

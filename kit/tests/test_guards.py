@@ -613,6 +613,71 @@ def test_ssot_writes(root: Path) -> None:
     with planted(root, "harness.toml", toml + 'write_code = ["nowhere"]\n'):
         caught("a code path that finds nothing is not a pass",
                ssot.check_writes(root), "no code to read under nowhere")
+    with planted(root, "harness.toml", toml + 'write_code = ["scripts", '
+                 '"nowhere"]\n'):
+        caught("…nor is one misspelled next to a good one",
+               ssot.check_writes(root), "no code to read under nowhere")
+    with planted(root, "scripts/compute_bom.py", "\ufeff" + SPACE_READ):
+        clean("a file with a UTF-8 BOM parses (Python runs it)",
+              ssot.check_writes(root))
+    with planted(root, "scripts/compute_nul.py", "x = 1\x00\n"):
+        caught("a NUL byte is reported, never a crash",
+               ssot.check_writes(root), "scripts/compute_nul.py:1: does not "
+                                        "parse")
+    deep = "x = " + " + ".join(["'a'"] * 3000) + "\n"
+    with planted(root, "scripts/compute_deep.py", deep):
+        got = ssot.check_writes(root)
+        check("an expression too deep to read is reported, never a crash",
+              any(p.startswith("scripts/compute_deep.py") for p in got), got)
+    with planted(root, "scripts/venv/pyvenv.cfg", "home = /usr/bin\n"), \
+            planted(root, "scripts/venv/lib/site.py", "def f(:\n"), \
+            planted(root, "scripts/venv/lib/w.py", SPACE_SET):
+        clean("a virtualenv inside the harness is not its code",
+              ssot.check_writes(root))
+    with planted(root, "scripts/vendor/w.py", SPACE_SET):
+        got = _with(root, toml + '\n[guards.ssot.write_skip]\n'
+                    '"scripts/vendor" = ""\n')
+        caught("write_skip without its reason is reported", got,
+               "[guards.ssot].write_skip 'scripts/vendor': give its reason")
+        check("…and its folder is still left out",
+              not any(p.startswith("scripts/vendor/w.py") for p in got), got)
+        clean("…and passes with it",
+              _with(root, toml + '\n[guards.ssot.write_skip]\n'
+                    '"scripts/vendor" = "a vendored client library, read by '
+                    'its own tests"\n'))
+    caught("a write_skip row whose folder is gone",
+           _with(root, toml + '\n[guards.ssot.write_skip]\n"scripts/gone" '
+                 '= "old"\n'), "'scripts/gone': is gone")
+    with planted(root, "scripts/_lib/paths.py", "from pathlib import Path\n"
+                 "VALUES = Path(__file__).parents[2] / 'ssot' / 'v.tsv'\n"):
+        with planted(root, "scripts/compute_v.py", "from _lib import paths\n"
+                     "\n\ndef f(t):\n    paths.VALUES.write_text(t)\n"):
+            caught("a module-level ssot path reached as module.NAME",
+                   ssot.check_writes(root), "scripts/compute_v.py:5: "
+                                            ".write_text() paths.VALUES")
+        with planted(root, "scripts/_lib/again.py", "from _lib.paths import "
+                     "VALUES as V\n"), \
+                planted(root, "scripts/compute_v.py", "from _lib.again import"
+                        " V\n\n\ndef f(t):\n    V.write_text(t)\n"):
+            caught("…and re-exported through a second module",
+                   ssot.check_writes(root), "scripts/compute_v.py:5: "
+                                            ".write_text() V")
+        with planted(root, "scripts/compute_v.py", "from _lib.out import "
+                     "VALUES\n\n\ndef f(t):\n    VALUES.write_text(t)\n"), \
+                planted(root, "scripts/_lib/out.py", "VALUES = 'data/v'\n"):
+            clean("…but a same-named data path from another module is not",
+                  ssot.check_writes(root))
+    with planted(root, "tools/edit_registry.py", EDITOR), \
+            planted(root, "harness.toml", toml + '\n[guards.ssot.writers]\n'
+                    '"tools/" = "the builder\'s tools"\n'
+                    '"tools/edit_registry.py" = "its registry editor"\n'):
+        clean("a file row under a folder row is used too, not stale",
+              ssot.check_writes(root))
+
+
+def _with(root: Path, toml: str) -> list[str]:
+    with planted(root, "harness.toml", toml):
+        return ssot.check_writes(root)
 
 
 # ------------------------------------------------------------- [2] release
