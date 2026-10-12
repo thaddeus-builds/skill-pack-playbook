@@ -69,7 +69,7 @@ Each module's docstring says what it guards and names its test; this is the map.
 | `auth.py` | Where a token comes from (`env` or a host `command`); expiry; a token never printed | `test_auth.py` |
 | `retry.py` | Reads only are retried; `Retry-After` honoured; `call` waits at least the quota's refill period, one budget per endpoint, and `GaveUp` carries the last reason | `test_retry.py` |
 | `db.py`, `schema_base.py` | Human tables are never dropped, never migrated, never shrink; triggers in the file; backups before a rebuild; a lossy rebuild and a newer file are refused | `test_db.py` |
-| `human.py` | The gate: a retype at `/dev/tty`, or a relayed one-time code bound to exactly what was shown; relay audit; no bypass flag | `test_human.py` |
+| `human.py` | The gate: a retype at `/dev/tty`, or a relayed one-time code bound to exactly what was shown; relay audit (who, when, and for a write that leaves the harness on a chat yes, the person's own words); no bypass flag | `test_human.py` |
 | `market.py` | A market is always named, never assumed; the declaration is the one door | `test_market.py` |
 | `registry.py` | Fact keys, decision keys and thresholds are closed; values checked where they are typed | `test_registry.py` |
 | `facts.py`, `decisions.py` | The one write path for each human table: pending until a person confirms, history for every change; a client file's values are confirmed with that file's gate (`plan_file`, `apply_file`) | `test_facts.py`, `test_decisions.py` |
