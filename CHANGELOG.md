@@ -9,6 +9,10 @@ are the merge day. Everything under *Other* is outside the kit: templates, build
 scaffold, console, docs, conformance.
 
 ## [Unreleased]
+### Other
+- Scaffold: the next steps `scaffold/new_harness.py` prints install the leak guard
+  (`scripts/kit/tools/pre-push.sample`) as the new harness's pre-push hook, and say it refuses
+  every push until a client-term list is named.
 
 ## [0.17.0] - 2026-10-12
 ### Added

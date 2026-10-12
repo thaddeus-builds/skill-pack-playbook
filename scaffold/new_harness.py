@@ -38,8 +38,9 @@ no data path; it leaves no `{{` behind. `--dry-run`
 prints the file list and writes nothing. `--update-kit` vendors the kit
 and the console again into an existing harness and touches nothing else.
 
-Next: `git init`, commit, push, and `python3 scripts/<cli>.py test` (the
-suite is green before the first feature; CI runs the same).
+Next: `git init`, install the leak guard as the pre-push hook (HOOK), commit,
+`python3 scripts/<cli>.py test` (the suite is green before the first
+feature; CI runs the same), name the client-term lists, push.
 
 Test: scaffold/tests/test_new_harness.py.
 """
@@ -59,6 +60,9 @@ SKELETON = Path(__file__).resolve().parent / "skeleton"
 sys.path.insert(0, str(PLAYBOOK))
 
 from kit.tools import packs as kit_packs, vendor  # noqa: E402
+
+# the pre-push hook the next steps install (kit/tools/leak_guard.py)
+HOOK = "scripts/kit/tools/pre-push.sample"
 
 # template (under templates/) -> target (under the harness)
 RENDERED = {
@@ -415,8 +419,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{values['name']}: {len(files) + 1} files written to {d}, the kit "
           f"and the console vendored")
     print(f"  still to fill by the build (B2, B8): {', '.join(fills)}")
-    print(f"next: cd {d} && git init && git add -A && git commit -m "
-          f"'scaffold' && python3 scripts/{values['cli']}.py test")
+    print(f"next: cd {d} && git init && install -m 755 {HOOK} "
+          f".git/hooks/pre-push && git add -A && git commit -m 'scaffold' "
+          f"&& python3 scripts/{values['cli']}.py test")
+    print(f"  the hook refuses every push until a client-term list is named: "
+          f"[guards.leak] terms in harness.toml or "
+          f"{values['env_prefix']}_CLIENT_TERMS (BUILD.md, B1)")
     return 0
 
 
