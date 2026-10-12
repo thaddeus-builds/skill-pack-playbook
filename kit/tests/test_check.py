@@ -8,7 +8,9 @@
     stdin for the call only, and feeds tty answers through KIT_TTY;
   * one_doc() accepts exactly one JSON document;
   * clean_env() / sandbox_env() drop every inherited <P>_* var and KIT_TTY;
-    sandbox.run() gives the child no stdin.
+    sandbox_env() drops every credential-looking var and marks the child
+    KIT_TEST_RUN=1; sandbox.run() gives the child no stdin;
+  * importing check marks the process KIT_TEST_RUN=1.
 """
 
 import os
@@ -28,8 +30,9 @@ HEADER = "import sys; sys.path.insert(0, %r)\n" % str(_shop.PLAYBOOK)
 
 
 def script(body: str, *flags: str) -> tuple[int, str]:
+    env = {k: v for k, v in os.environ.items() if k != "KIT_TEST_RUN"}
     p = subprocess.run([sys.executable, "-B", *flags, "-c", HEADER + body],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=env)
     return p.returncode, p.stdout + p.stderr
 
 
@@ -138,6 +141,32 @@ def main() -> int:
           and env["EXTRA"] == "x" and "SHOPPING" not in env)
     for k in ("SHOP_DATA_DIR", "SHOP_DB", "SHOPPING", "KIT_TTY"):
         del os.environ[k]
+    creds = ("FAKE_TOKEN", "FAKE_API_KEY", "FAKE_ACCESS_KEY_ID",
+             "FAKE_PASSWORD", "FAKE_SECRET_ACCESS", "FAKE_H3_API")
+    os.environ.update({k: "planted" for k in creds}
+                      | {"FAKE_TOKENIZER_PATH": "kept", "MONKEY": "kept"})
+    senv = sandbox.sandbox_env(data, SHOP_CONFIRM_CODE_SECRET="s3cret")
+    check("sandbox_env: no credential-looking var (TOKEN, _KEY, _KEY_ID, "
+          "PASSWORD, _API, *SECRET*); others kept; a test's own on top",
+          not any(k in senv for k in creds)
+          and senv["FAKE_TOKENIZER_PATH"] == "kept" and senv["MONKEY"] == "kept"
+          and senv["SHOP_CONFIRM_CODE_SECRET"] == "s3cret",
+          [k for k in creds if k in senv])
+    os.environ.pop("KIT_TEST_RUN")
+    rc, out, err = sandbox.run(
+        [sys.executable, "-c", "import os; print(os.environ.get('KIT_TEST_RUN'),"
+         " os.environ.get('FAKE_TOKEN'))"], sandbox.sandbox_env(data))
+    check("sandbox: the child sees KIT_TEST_RUN=1 and not a planted "
+          "FAKE_TOKEN, even from an unmarked parent",
+          rc == 0 and out == "1 None\n", (rc, out, err))
+    for k in creds + ("FAKE_TOKENIZER_PATH", "MONKEY"):
+        del os.environ[k]
+    rc, out = script("import os\nprint(os.environ.get('KIT_TEST_RUN'))\n"
+                     "import kit.testing.check\n"
+                     "print(os.environ.get('KIT_TEST_RUN'))\n")
+    check("importing kit.testing.check marks the process a test",
+          rc == 0 and out == "None\n1\n", out)
+    os.environ["KIT_TEST_RUN"] = "1"
     rc, out, err = sandbox.run(
         [sys.executable, "-c", "import sys, os; print(repr(sys.stdin.read()),"
          " os.environ['SHOP_DATA_DIR'])"], env)

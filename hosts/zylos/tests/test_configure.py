@@ -46,6 +46,17 @@ def test_writes_0600_into_a_0700_data_dir_and_prints_no_value():
         assert not os.path.exists(os.path.join(host.zylos, ".env")), "the Zylos root .env is never written"
 
 
+def test_a_gate_secret_refuses_the_whole_input():
+    with Host() as host:
+        host.configure({"SHOP_API_KEY": "one"})
+        before = open(env_file(host)).read()
+        for key in ("SHOP_CONFIRM_CODE_SECRET", "OTHER_CONFIRM_CODE_SECRET", "CONSOLE_SECRET"):
+            r = host.configure({"SHOP_API_KEY": "two", key: "s3cret-value"})
+            assert r.returncode != 0 and f"{key} (a gate secret" in r.stderr, (key, r.stdout, r.stderr)
+            assert "s3cret-value" not in r.stdout + r.stderr
+            assert open(env_file(host)).read() == before, "nothing written"
+
+
 def test_merge_only():
     with Host() as host:
         host.configure({"SHOP_API_KEY": "one", "SHOP_REPLY_CHANNEL": "lark"})

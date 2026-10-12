@@ -726,6 +726,66 @@ def test_decision_rights_keeps_the_lanes_and_the_digest():
     assert "Deciders and advisers" not in text and "Dissent" not in text
 
 
+ALWAYS_STOPS = ("Unconfirmed spend", "The spend gate", "Consent", "Technical QC")
+
+
+def stop_mode_problems(text: str) -> list[str]:
+    """What claim-scope.md's "What stops, what warns" fails to say: the switch and its two modes, the default where the
+    platform's own review stops a bad ad, each item of the always-stops list (a bold bullet), and where it was seen;
+    and no line left that says an open error always blocks."""
+    body = section(text, "What stops, what warns")
+    out = [w for w in ("`compliance_stop`", "`warn`", "`block`", "the default", "Seen once, an owner decision")
+           if w not in body]
+    out += [item for item in ALWAYS_STOPS if not re.search(r"^- \*\*" + re.escape(item) + r":\*\*", body, re.M)]
+    if "An open error blocks the spend." in text:
+        out.append("blocks unconditionally")
+    return out
+
+
+def test_claim_scope_names_the_stop_switch_and_what_always_stops():
+    text = doc("templates/claim-scope.md")
+    assert stop_mode_problems(text) == [], stop_mode_problems(text)
+    for item in ALWAYS_STOPS:                                                    # the check would notice each one gone
+        assert stop_mode_problems(text.replace(f"- **{item}:**", "- ")) == [item], item
+    assert stop_mode_problems(text.replace("`compliance_stop`", "a switch")) == ["`compliance_stop`"]
+    assert "blocks unconditionally" in stop_mode_problems(text + "\nAn open error blocks the spend.\n")
+    assert stop_mode_problems("# t\n") == ["`compliance_stop`", "`warn`", "`block`", "the default",
+                                           "Seen once, an owner decision", *ALWAYS_STOPS]
+SMALL = "Keeping a harness small as it grows"
+SMALL_METHODS = ("Slim before features.", "Code filters; the agent judges.", "A newcomer-agent acceptance test.")
+
+
+def small_problems(operating: str, handoff: str) -> list[str]:
+    """What the methods for keeping a harness small fail to say: each is a numbered item that says it was seen once,
+    the parked folder has no verbs, docs or tests and says how to come back, and the handoff's replay points at the
+    newcomer test (the replay tests the deliverable, not whether an agent can use the harness)."""
+    items = re.split(r"^\d+\. ", section(operating, SMALL), flags=re.M)[1:]
+    out = []
+    for title in SMALL_METHODS:
+        item = next((i for i in items if i.startswith(f"**{title}**")), None)
+        if item is None or "*Seen once:*" not in item:
+            out.append(title)
+    if not re.search(r"`_parked/`.*no verb.*no doc.*no test.*bring each piece back", section(operating, SMALL)):
+        out.append("_parked/")
+    if f"`docs/operating.md`, \"{SMALL}\", item 3" not in handoff:
+        out.append("handoff pointer")
+    return out
+
+
+def test_the_methods_for_keeping_a_harness_small_are_whole_and_the_handoff_points_at_the_newcomer_test():
+    operating, handoff = doc("docs/operating.md"), doc("templates/client-handoff.md")
+    assert small_problems(operating, handoff) == [], small_problems(operating, handoff)
+    for title in SMALL_METHODS:                                                  # the check would notice each one gone
+        assert small_problems(operating.replace(f"**{title}**", "**x**"), handoff) == [title], title
+    seen = operating.split(f"**{SMALL_METHODS[1]}**")[1].split("*Seen once:*")[0]
+    assert small_problems(operating.replace(seen + "*Seen once:*", seen + "*Seen:*"), handoff) == [SMALL_METHODS[1]]
+    assert small_problems(operating.replace("no test runs it", "tests still run"), handoff) == ["_parked/"]
+    assert small_problems(operating, handoff.replace("item 3", "item 2")) == ["handoff pointer"]
+    assert "internal disk" in doc("templates/install-checklist.md")
+    assert "stopped without an end" in section(doc("docs/lessons.md"), "Paid generation jobs (from adcut-harness, "
+                                                                       "its first real batch, 2026-10-06)")
+
+
 CALL = re.compile(r"ask\.py (?:--\S+ \S+ )*([a-z]+)\b")
 FLAG = re.compile(r"(?<![\w-])--[a-z][a-z-]*")
 
