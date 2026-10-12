@@ -415,6 +415,16 @@ def test_thresholds() -> None:
           th.overridden(con, "US") == {"min_orders": {"value": 5.0,
                                                       "default": 3.0}}
           and th.overridden(con, "CA") == {}, th.overridden(con, "US"))
+    moved = facts_db()       # confirmed under wider bounds, read under these
+    moved.executemany(
+        "INSERT INTO client_facts (market, key, value, is_assumption, source) "
+        "VALUES ('GB', ?, ?, 0, 'test')",
+        [("threshold_max_step", "1.5"), ("threshold_min_orders", "-2")])
+    check("a confirmed fact outside the TSV's bounds now is not in effect: "
+          "the default stands, and it is not reported as an override",
+          th.get("max_step", moved, "GB") == 0.2
+          and th.get("min_orders", moved, "GB") == 3.0
+          and th.overridden(moved, "GB") == {}, th.load(moved, "GB"))
     empty = sqlite3.connect(":memory:")
     check("a DB without client_facts: the defaults",
           th.load(empty, "US") == th.overridable())

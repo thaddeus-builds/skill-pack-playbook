@@ -45,10 +45,35 @@ scaffold, console, docs, conformance.
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
 
+## [0.26.0] - 2026-10-13
+### Added
+- `kit.testing.suites.ssot_writes(root)`: the ssot write rule alone (its self-test and `check_writes`), reading no
+  ssot index; `suites.ssot` ends with it. A harness that uses `suites.ssot` already runs it; one with its own
+  `tests/test_ssot.py` adds `suites.run(suites.ssot_writes(ROOT))` (0.25.0 said every ssot test ran it on re-vendoring:
+  only the generated one did).
+### Changed
+- `[guards.ssot.write_skip]` is a {folder: reason} table: each row needs its reason, and a row whose folder is gone is a
+  problem (a list gives no reasons, so each entry is reported). The vendored kit is always left out, with no row.
+### Fixed
+- `check_writes` read some paths wrong. Now a path's words (`.name`, `.stem`, `.suffix`) are not a path, so
+  `shutil.copy(CONST, DATA / CONST.name)` passes; a name the word `ssot` is in is a path only when it is not bound to
+  data (`ssot_rows = read_tsv(...)` is rows); a name holds what its last binding above the line put in it; `self.p` is
+  keyed by its class, and a class attribute (`p = Path(...)` in the class body, then `self.p`) is followed; another
+  module's ssot name is followed as `m.NAME` and `from pkg import m`, through a re-export, and only from the module
+  that defines it (a same-named data path elsewhere passes); os.open writes unless its flags only read; os.walk and
+  os.scandir keep a path. Each entry of `write_code` must find code (a misspelled one beside a good one was silent); a
+  file is parsed as bytes (a UTF-8 BOM parses; a NUL byte is reported, never a crash); an expression too deep to read
+  is reported, never a crash; a virtualenv or `site-packages` inside the harness is not its code; a writers file row
+  under a folder row is used, not stale. `writes_self_test()` tries each form.
+- `Thresholds.confirmed()` (and `load`, `get`, `overridden`) drops a confirmed `threshold_<name>` fact outside the
+  TSV's current min..max, so the default stands; `facts confirm` without `--value` checks the pending threshold value
+  against today's bounds (`fact_value_out_of_range`). Both are what `docs/rules.md` "Registries" item 9 says: a value
+  the bounds refuse is refused when written and again when read, since a bound may have moved.
+
 ## [0.25.0] - 2026-10-13
 ### Added
-- `kit.guards.ssot.check_writes` (run by `kit.testing.suites.ssot`, so every harness's `tests/test_ssot.py` runs it
-  on re-vendoring): `ssot/` is the builder's, and what a client sets or decides through its agent lives in that
+- `kit.guards.ssot.check_writes` (run by `kit.testing.suites.ssot`; a harness with its own `tests/test_ssot.py` adds
+  it, see 0.26.0): `ssot/` is the builder's, and what a client sets or decides through its agent lives in that
   client's own database (`docs/rules.md`, "Registries", item 9). The check fails on harness code that writes under the
   ssot dir, by AST, as `path:line` and never what is written: Path `write_text` / `write_bytes` / `touch` / `unlink` /
   `mkdir` / `rename` / `replace`, `open` (builtin, Path, io, codecs, gzip, bz2, lzma, os) with a write mode (a mode that
@@ -61,8 +86,7 @@ scaffold, console, docs, conformance.
   default the vendored kit), never a test, a hidden folder or `node_modules`. `[guards.ssot.writers]` = {path or folder:
   reason} names the builder's own tools that may write there: a row with no reason, or one that writes nothing any
   more, fails. A file that does not parse, or a code path that finds nothing, is not a pass. `writes_self_test()` is
-  its planted self-test, also in the suite. A harness whose code writes ssot today fails its ssot test once it
-  re-vendors: move the client's value to its database, or name a builder's tool in `writers` with its reason. Seen
+  its planted self-test, also in the suite. A harness whose code writes ssot fails the check: move the client's value to its database, or name a builder's tool in `writers` with its reason. Seen
   once, in the video-ads harness (owner decision 2026-10-13: a client's space thresholds go through a `set` verb into
   an append-only table of its database, over the ssot default).
 

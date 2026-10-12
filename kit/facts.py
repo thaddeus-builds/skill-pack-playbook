@@ -469,6 +469,9 @@ def cmd_confirm(run: _Run) -> dict | None:
         raise _not_found(a.key, m)
     old = existing["value"] if existing else None
     value = old if typed is None else typed
+    if typed is None and old is not None and run.thresholds is not None \
+            and a.key.startswith(FACT_PREFIX):  # its bound may have moved
+        value = run.thresholds.validate(a.key, str(old))
     if existing is not None and old == value and not existing["is_assumption"]:
         return _done(run, msg(
             "fact_already_confirmed", f"{a.key} [{m}] = {value}: already "

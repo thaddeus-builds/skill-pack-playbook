@@ -655,7 +655,9 @@ class Thresholds:
     def confirmed(self, con: sqlite3.Connection | None, market: str | None,
                   names: Iterable[str] | None = None) -> dict[str, float]:
         """name -> the market's CONFIRMED `threshold_<name>` fact (a pending
-        or non-numeric one is not in effect), for `names` (default: all)."""
+        or non-numeric one is not in effect, nor one outside the TSV's
+        current min..max: a bound may have moved since it was confirmed,
+        and the default then stands), for `names` (default: all)."""
         if con is None or not market or not _has_facts(con):
             return {}
         want = set(self._rows if names is None else names)
@@ -665,8 +667,12 @@ class Thresholds:
                 "is_assumption=0 AND key GLOB ?", (market, FACT_PREFIX + "*")):
             name = key.removeprefix(FACT_PREFIX)
             d = _decimal(str(value)) if value is not None else None
-            if name in want and name in self._rows and d is not None:
-                out[name] = float(d)
+            if name not in want or name not in self._rows or d is None:
+                continue
+            lo, hi = self._rows[name]["_lo"], self._rows[name]["_hi"]
+            if (lo is not None and d < lo) or (hi is not None and d > hi):
+                continue
+            out[name] = float(d)
         return {n: out[n] for n in self._rows if n in out}
 
     def load(self, con: sqlite3.Connection | None = None,

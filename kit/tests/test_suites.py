@@ -196,6 +196,13 @@ def main() -> int:
     undo()
     check("…and green again once it is undone",
           not failing(suites.ssot(root)), failing(suites.ssot(root)))
+    undo = planted(root, "scripts/space_set.py", SPACE_SET)
+    undo_index = planted(root, "ssot/index.tsv", "not\tan index\n")
+    caught("ssot_writes alone (a harness's own test_ssot.py) reads no index "
+           "and still catches the write", suites.ssot_writes(root),
+           "no harness code writes under ssot/")
+    undo_index()
+    undo()
 
     print("\n[4] layering")
     undo = planted(root, "scripts/compute_x.py", "from _lib import writer\n")
