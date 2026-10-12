@@ -9,6 +9,22 @@ are the merge day. Everything under *Other* is outside the kit: templates, build
 scaffold, console, docs, conformance.
 
 ## [Unreleased]
+
+## [0.21.0] - 2026-10-12
+### Added
+- `kit.workbook_patch` (pack `workbook`, slice 4 of `docs/workbook-and-browser-ops.md`): cells set
+  in a copy of a client's xlsx, stdlib only. Every part it does not set stays byte for byte (a
+  sheet with cells to set is edited as text, cell by cell; texts inline, styles kept); the workbook
+  part gains full recalculation on open; the same inputs give the same bytes. A formula, a value
+  the client entered (not the harness's previous copy, `ours`), a merged cell or a missing sheet is
+  never set, listed by ref. `table_sets` places a harness's results by the map (a table's `out` and
+  `both` columns by key, new columns in the first column after the header block that is empty on the header row and every row of the table, never under the client's own data, found again by header on the next copy); `cell_sets` fills
+  the map's new `cells.tsv`. First consumer: the KOL harness (meta-ads-retail-harness X39), which
+  tried it on the client's real workbook: two parts changed, every other part identical.
+- `kit.workbook_map`: an optional `cells.tsv` (`field, sheet, cell, owner, status, note`), where a
+  harness writes outside a table's rows (a month's figure across a row); a cell written by two rows
+  is refused (`workbook_map_cell_twice`); `confirmed()`, `pending()` and `confirmed_rows()` carry
+  it, so the file gate binds it; a map without it keeps its version.
 ### Other
 - `docs/rules.md`, "Writing into someone else's system": six rules for a write door whose content
   is made after the approval (only approved work of one kind; the gate binds the file's sha256,
@@ -34,6 +50,15 @@ scaffold, console, docs, conformance.
   intake), name it in `[guards.leak] terms`, install `scripts/kit/tools/pre-push.sample` as the
   pre-push hook, push. The hook is installed only once a list is named, since it refuses a push
   without one.
+
+## [0.20.0] - 2026-10-12
+### Fixed
+- `messages.lint_registry()` (and so `check_registry_closed()`) refuses a registry param named
+  after one of `msg()`'s own arguments (`code`, `text`): `msg(code, text, **params)` cannot be
+  called with it, a TypeError at the one moment the message is needed. The names are read from
+  `msg()`'s signature (`messages.MSG_ARGS`), so they cannot drift. Seen once: in the video-ads
+  harness a param named `text` crashed `msg()`, and that harness has held the rule in its own
+  contract test since.
 
 ## [0.19.0] - 2026-10-12
 ### Added
