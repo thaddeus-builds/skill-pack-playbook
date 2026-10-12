@@ -38,6 +38,7 @@ workbook	workbook	a client's xlsx read as it is, stdlib only
 workbook_map	workbook	the client's map: tables, columns, one owner per outgoing column
 workbook_store	workbook	the generic store: tables by anchor, keyed rows, the change record
 file_gate	workbook	one human gate per client file
+workbook_patch	workbook	cells set in a copy of the client's xlsx, everything else byte for byte
 patternstore	learning	a per-client pattern store: closed rows, two-coder floor, shrunk rates
 guards.__init__	testkit	
 guards.boundary	testkit	
