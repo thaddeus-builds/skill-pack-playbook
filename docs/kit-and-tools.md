@@ -60,6 +60,7 @@ Reading the registry: one row per module with its tier, its consumers as `who:ki
 | [`templates/vendor-api-discovery.md`](../templates/vendor-api-discovery.md) | 0, 4, 8 | Pinning down a paid vendor API cheaply, and preflighting every request against its published schema |
 | [`templates/third-party-consent.md`](../templates/third-party-consent.md) | 5, 8 | A real person in a marketing output: the record, confirmed only through the gate, bound to its content |
 | [`templates/claim-scope.md`](../templates/claim-scope.md) | 5, 7, 10 | Regulated copy names only what the approved document allows: the claims record at the gate, the lexicon, waivers, the phrase library, rejections as recall tests |
+| [`templates/design-first.md`](../templates/design-first.md) | 7, 10 | Before a feature an owner steers: research, one design page with the asks and what it stores, a synthetic demo drawn by the harness's own renderer, the owner's yes, then the code |
 | [`templates/owner-review-loop.md`](../templates/owner-review-loop.md) | 7, 10 | One published page the owner decides on per item, read back by the next session |
 | [`templates/outcome-learning.md`](../templates/outcome-learning.md) | 10 | Winners against the rest on one factor catalog; rules stay pending until a variant confirms them |
 | [`templates/session-handoff.md`](../templates/session-handoff.md) | all | Each session closes one turn and leaves the next one ready |
