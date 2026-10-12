@@ -40,6 +40,7 @@ workbook_store	workbook	the generic store: tables by anchor, keyed rows, the cha
 file_gate	workbook	one human gate per client file
 workbook_patch	workbook	cells set in a copy of the client's xlsx, everything else byte for byte
 patternstore	learning	a per-client pattern store: closed rows, two-coder floor, shrunk rates
+pathweights	learning	path weights for variants: posteriors down a partition, states, the next batch, twins
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	
