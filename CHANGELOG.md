@@ -29,6 +29,33 @@ scaffold, console, docs, conformance.
   pre-push hook, push. The hook is installed only once a list is named, since it refuses a push
   without one.
 
+## [0.18.0] - 2026-10-12
+### Added
+- A "Never" table of the verbs only a person runs, first in a harness's SKILL.md, held to the
+  verb table (`kit/guards/evals.py`; seen once: a newcomer agent found the video-ads harness's
+  person-only rules scattered over five places, and that harness gathered them in one table at
+  the top of its SKILL.md). `never_problems()` and `check_never_table()` fail when a verb of
+  kind `gated`, or one `[guards.evals].extra` names, has no row; when a row names a verb an agent
+  may run, or no verb of the table, or does not say why; and when `## Never` is not the first
+  `##` section. A cell names verbs in code font, with or without the cli word; a code span with
+  a flag is a flag-level gate (`claims --confirm`, an agent's verb with a person's flag, or
+  `any --code`, a flag on every verb): its verb must exist (or be `any`) and need not be gated.
+  YAML front matter is skipped. The kind `external` is not person-only by itself (an external
+  read, a pull, is the agent's own; an eval forbids it only because the run is offline): an
+  external write only a person runs (`execute apply`) goes in `extra`. `[guards.evals].never`
+  renames the heading. `never_self_test()` plants each fault, `check_never()` reports, and
+  `kit.testing.suites.never_table(root)` is the suite a harness's test calls.
+
+### Other
+- Template `SKILL.md`: a `## Never` section first, the table of the verbs only a person runs
+  (`facts confirm`, `decisions confirm`, `facts restore`, `facts init`, `queue approve`,
+  `execute apply`), each with why; "Out of scope" points to it instead of listing them again.
+  `templates/harness.toml` sets `[guards.evals] extra = ["facts init", "execute apply"]`.
+- Scaffold: a thirteenth generated test, `tests/test_never_table.py` (`suites.never_table`), so a
+  new harness's Never table stays the verb table's. A harness scaffolded before adds the table
+  and the file (any generated test, calling `suites.never_table`) by hand; until then nothing
+  changes for it.
+
 ## [0.17.0] - 2026-10-12
 ### Added
 - `tools/leak_guard.py` and `tools/pre-push.sample` (testkit): a push whose added lines, file paths

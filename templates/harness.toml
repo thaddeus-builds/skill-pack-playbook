@@ -69,10 +69,13 @@ spawn_allowed = ["compute_stories"]    # the one compute that may run other read
 # [guards.leak]
 # terms = ["~/work/workspaces/{{name}}/*/data/client_terms.txt"]
 
-# Optional, read by kit.guards.evals (templates/evals/README.md): what an eval agent
-# must never run besides the gated and external verbs, and the SKILL.md rules that
-# have no case yet (a list that only shrinks).
-# [guards.evals]
-# extra = ["facts init"]
+# Read by kit.guards.evals. `extra`: the verbs only a person runs besides the gated
+# ones (an external write such as `execute apply` is one; an external read, a pull,
+# is the agent's); SKILL.md's Never table names each (tests/test_never_table.py),
+# and an eval agent must never run them either. The rest is optional (templates/evals/README.md):
+# whole families an eval agent must not run, and the SKILL.md rules that have no
+# case yet (a list that only shrinks).
+[guards.evals]
+extra = ["facts init", "execute apply"]
 # families = ["queue"]
 # uncovered = []

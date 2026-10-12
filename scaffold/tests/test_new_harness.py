@@ -6,7 +6,7 @@
       a bad or taken name and bad languages are refused with one line,
       exit 2
   [2] the generated tree (markets HK, TW): no `{{` left; fill markers only
-      in the files the build fills; exactly the twelve tests templates/
+      in the files the build fills; exactly the thirteen tests templates/
       README.md names, plus tests/run.py; harness.toml and the ssot
       headers carry what the kit reads; the vendored copies match their
       manifests
@@ -156,8 +156,8 @@ def test_tree(root: Path) -> None:
     table = (PLAYBOOK / "templates" / "README.md").read_text(encoding="utf-8")
     named = set(re.findall(r"^\| `tests/(test_\w+\.py)` \|", table, re.M))
     tests = {p.name for p in (root / "tests").glob("*.py")}
-    check("exactly the twelve tests templates/README.md names, plus run.py",
-          tests == named | {"run.py"} and len(named) == 12
+    check("exactly the thirteen tests templates/README.md names, plus run.py",
+          tests == named | {"run.py"} and len(named) == 13
           and set(nh.GENERATED_TESTS) == named, sorted(tests ^ named))
     for t in sorted(named):
         text = (root / "tests" / t).read_text(encoding="utf-8")

@@ -25,6 +25,13 @@ fake "shop" harness with a SKILL.md, an evals folder and four cases.
       SKILL.md rules, no cases at all
   [4] the front matter, rule list and table readers on their edge cases
   [5] after every plant was undone, the harness is clean again
+  [5b] the Never table of SKILL.md: clean on the shop; a gated verb added to
+      the table with no row, a row dropped (a gated verb, the extra verb), a
+      row for a read verb or for no verb, a flag on no verb (a flag-level gate on
+      a verb of the table, and `any --code`, are accepted; YAML front matter is
+      skipped), the section moved below another, the
+      heading renamed (and `never` in [guards.evals] that follows it), a typo
+      in extra, no SKILL.md: each is reported, and undone
   [6] the fixture builder of templates/evals/, run in a scratch git repository:
       it builds the workspace, the entry it writes wipes the environment and
       points the data dir at the copy, litter (__pycache__, .DS_Store, a
@@ -50,6 +57,15 @@ from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 
 FAKE = Path(__file__).resolve().parent / "fake_harness"
 SKILL = """# Shop skill
+
+## Never (read this first)
+
+| Verb | Why only a person |
+|---|---|
+| `shop facts confirm`, `shop facts restore` | a confirmed value is the client's word; a restore replays a backup |
+| `facts init` | declares the scope |
+| `shop decisions confirm` | puts a decision in force |
+| `shop queue approve` | lets an action out |
 
 ## Scope
 
@@ -365,6 +381,58 @@ def main() -> None:
 
     print("\n[5] restored")
     check("[5] the harness is clean again", problems(root) == [], problems(root))
+
+    print("\n[5b] the Never table of SKILL.md")
+    check("[5b] the shop's Never table names exactly its person-only verbs", evals.check_never_table(root) == [], evals.check_never_table(root))
+
+    def never(label: str, frag: str, edit, undo) -> None:
+        edit()
+        got = evals.check_never_table(root)
+        check(f"[5b] {label}", any(frag in g for g in got), got)
+        undo()
+        check(f"[5b] ... and clean once undone ({label})", evals.check_never_table(root) == [], evals.check_never_table(root))
+    sk = root / "SKILL.md"
+    never("a gated verb added to the table with no row", "does not name `shop audit sign` (kind gated)",
+          lambda: vt.write_text(vtext.rstrip().rstrip("]") + '    Verb(("audit", "sign"), "audit.py", "gated", answers="sign"),\n]\n', encoding="utf-8"),
+          lambda: vt.write_text(vtext, encoding="utf-8"))
+    never("a gated verb's row dropped", "does not name `shop decisions confirm`", *swap(sk, "| `shop decisions confirm` | puts a decision in force |\n", ""))
+    never("the extra verb's row dropped", "in [guards.evals].extra", *swap(sk, "| `facts init` | declares the scope |\n", ""))
+    never("a row for a read verb", "kind read, which an agent may run", *swap(sk, "| `facts init` |", "| `facts init`, `shop facts list` |"))
+    never("a row for an external verb that extra does not name", "kind external", *swap(sk, "| `facts init` |", "| `facts init`, `shop execute apply` |"))
+    never("a row for no verb", "is not a verb of the table", *swap(sk, "| `facts init` |", "| `facts init`, `shop facts burn` |"))
+    never("the section below another", "is not the first `##` section", *swap(sk, "## Never (read this first)", "## Intro\n\nx\n\n## Never"))
+    never("the heading renamed", "has no `## Never` section", *swap(sk, "## Never (read this first)", "## Gates"))
+    e, u = swap(sk, "## Never (read this first)", "## Gates")
+    e()
+    e2, u2 = swap(root / "harness.toml", 'extra = ["facts init"]', 'extra = ["facts init"]\nnever = "Gates"')
+    e2()
+    check("[5b] `never` in [guards.evals] names the heading", evals.check_never_table(root) == [], evals.check_never_table(root))
+    u2()
+    u()
+    e, u = swap(sk, "| `facts init` |", "| `facts init`, `shop facts set --confirm`, `any --code` |")
+    e()
+    check("[5b] flag-level gates: an agent's verb with a person's flag, and `any --code`, are accepted",
+          evals.check_never_table(root) == [], evals.check_never_table(root))
+    u()
+    never("a flag on no verb of the table", "names a flag of no verb of the table",
+          *swap(sk, "| `facts init` |", "| `facts init`, `shop facts burn --confirm` |"))
+    never("a flag on a gated verb does not stand for the verb's row", "does not name `shop decisions confirm`",
+          *swap(sk, "| `shop decisions confirm` |", "| `shop decisions confirm --code` |"))
+    e, u = swap(sk, "# Shop skill", "---\nname: shop\n## a YAML comment, not a section\n---\n# Shop skill")
+    e()
+    check("[5b] the YAML front matter is not read for the first section", evals.check_never_table(root) == [], evals.check_never_table(root))
+    u()
+    never("a typo in [guards.evals].extra", "is not a verb of the table", *swap(root / "harness.toml", 'extra = ["facts init"]', 'extra = ["fact init"]'))
+    stext = sk.read_text(encoding="utf-8")
+    never("no SKILL.md", "SKILL.md is missing", lambda: sk.unlink(), lambda: sk.write_text(stext, encoding="utf-8"))
+    recorded = []
+    real_report = evals.report
+    evals.report = lambda label, probs: recorded.append((label, list(probs))) or not probs
+    try:
+        ok = evals.check_never(root)
+    finally:
+        evals.report = real_report
+    check("[5b] check_never reports the self test and the table", ok is True and [r[1] for r in recorded] == [[], []], recorded)
 
     print("\n[6] the fixture builder template")
     if shutil.which("bash") and shutil.which("git"):

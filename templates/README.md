@@ -93,6 +93,7 @@ The scaffolder generates exactly these files, each one call into the vendored ki
 | `tests/test_changelog.py` | `CHANGELOG.md` starts with Unreleased, its releases are in order, and `SKILL.md`'s version is the newest of them |
 | `tests/test_roadmap.py` | `docs/ROADMAP.md` keeps the one roadmap format: the seven sections in order, one `- [ID] YYYY-MM-DD text` row per item with the section's letter and a unique id, at most one Now row, every Waiting row naming the rows it unblocks, Done rows with a reference, Decisions in the owner's words |
 | `tests/test_kit_drift.py` | `scripts/kit/` and `console/` match their `MANIFEST.sha256` and `VERSION` |
+| `tests/test_never_table.py` | `SKILL.md`'s first section is `## Never`, and its table names exactly the verbs only a person runs: every `gated` verb of `scripts/verbs.py`, and each verb `[guards.evals].extra` names |
 
 The playbook's own check of this page, BUILD.md and the build skill: [tests/test_docs_build.py](../tests/test_docs_build.py).
 
@@ -100,7 +101,7 @@ The playbook's own check of this page, BUILD.md and the build skill: [tests/test
 
 Three folders are not rendered by the scaffolder. Each is a module a harness copies, and each has its own tests, kept out of the generated set above. The copy is the module only (from `tests/golden/`, just `engine.py` and `cases.py`; from `workflows/`, the scripts and `refcheck.py`). The golden and workflow tests run inside this playbook, and their runners import its `kit/` from the playbook root, so they do not travel with the copy.
 
-**`tests/`: the test kit for a repository that does not vendor the kit.** It holds the same rules as ten of the twelve generated tests (the changelog and roadmap ones exist only in the generated set), for the layout of the source project (`src/` beside a `common/` package at the root), with the rules as constants at the top of each file. A scaffolded harness does not copy it: the generated tests call the vendored kit, and `scripts/kit/` and its manifest keep every harness on one copy of each rule. The overlap, rule by rule:
+**`tests/`: the test kit for a repository that does not vendor the kit.** It holds the same rules as ten of the thirteen generated tests (the changelog, roadmap and Never-table ones exist only in the generated set), for the layout of the source project (`src/` beside a `common/` package at the root), with the rules as constants at the top of each file. A scaffolded harness does not copy it: the generated tests call the vendored kit, and `scripts/kit/` and its manifest keep every harness on one copy of each rule. The overlap, rule by rule:
 
 | Rule | Generated test, from the vendored kit | Standalone copy |
 | --- | --- | --- |
