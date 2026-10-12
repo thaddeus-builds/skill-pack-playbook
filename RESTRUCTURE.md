@@ -167,7 +167,7 @@ Each of these is a separate decision, not part of this restructure:
 
 - **Copier for templates.** Run a one-day spike: turn `scaffold/skeleton/` and `templates/` into a Copier template, and try `copier update` on one harness. Copier runs on the builder's machine, so harnesses still install nothing. Adopt it only if it handles updates to the CI file and CLAUDE.md, which `--update-kit` cannot, better than the current scaffold.
 - **Rename `market` to `scope`.** This breaks the gate subject and the human tables, so it needs a **major** kit version and a migration for each harness. Do it only if a non-market harness, such as SEO or KOL, actually needs it.
-- **The console and the Zylos adapter in their own repositories.** Do this when decision 2 of ROADMAP.md (which console copy stays) is made and the console has users beyond this owner. Until then, one repository is cheaper.
+- **The console and the Zylos adapter in their own repositories.** Do this when decision 2 of ROADMAP.md (which console copy stays, now its R1) is made and the console has users beyond this owner. Until then, one repository is cheaper.
 - **SEO and outreach onto the kit (#26).** Once packs exist, migrating SEO means `base` plus whatever it needs, instead of all 49 modules.
 
 ## Out of scope: per-channel work this plan makes easier

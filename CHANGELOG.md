@@ -10,6 +10,25 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-12
+### Added
+- `kit/guards/roadmap.py` and `kit.testing.suites.roadmap`: one ROADMAP.md format. The title,
+  `Updated: YYYY-MM-DD`, then exactly Now, Waiting on owner, Next, Done, Parked, Decisions,
+  Links; every item `- [ID] YYYY-MM-DD text`, the id's letter naming its section (N, W, X, D, P,
+  R) and unique, the date a real day not after `Updated`; at most one Now row; a Waiting row ends
+  `unblocks: <ids of the file>`; a Done row ends in a parenthesised reference; a decision quotes
+  the owner; Links are `name: where`. `problems(text)`, `check_file(path)`, `check_roadmap(root)`
+  (`[guards.roadmap] file`, else `docs/ROADMAP.md` or `ROADMAP.md`; both is a problem), and a
+  self-test that plants each break. From the video-ads harness, which has kept its roadmap in this
+  format, held by its own test, since 2026-10-01; a second harness adopted the format.
+### Other
+- A new harness is generated with `docs/ROADMAP.md` (from `templates/ROADMAP.md`, now the format
+  as a short skeleton, `{{today}}` filled by the scaffolder) and `tests/test_roadmap.py`: twelve
+  day-one tests, not eleven. `templates/AGENT_INSTRUCTIONS.md` gains the **Roadmap** invariant.
+  Starting on a new machine moves to `templates/session-handoff.md`.
+- The playbook's own `ROADMAP.md` is in the format (`tests/test_playbook_roadmap.py`), its stale
+  status (kit 0.7.0, 2026-10-05) refreshed as dated Done rows through kit 0.14.0.
+
 ## [0.13.0] - 2026-10-12
 ### Added
 - Pack `learning` (new; a harness takes it with `[kit] packs = ["learning"]`): `patternstore.py`, a
