@@ -29,6 +29,15 @@ scaffold, console, docs, conformance.
   pre-push hook, push. The hook is installed only once a list is named, since it refuses a push
   without one.
 
+## [0.20.0] - 2026-10-12
+### Fixed
+- `messages.lint_registry()` (and so `check_registry_closed()`) refuses a registry param named
+  after one of `msg()`'s own arguments (`code`, `text`): `msg(code, text, **params)` cannot be
+  called with it, a TypeError at the one moment the message is needed. The names are read from
+  `msg()`'s signature (`messages.MSG_ARGS`), so they cannot drift. Seen once: in the video-ads
+  harness a param named `text` crashed `msg()`, and that harness has held the rule in its own
+  contract test since.
+
 ## [0.19.0] - 2026-10-12
 ### Added
 - `doctor.py`: `checkout` warns (`doctor_checkout_differs`) when the cwd is in another git
