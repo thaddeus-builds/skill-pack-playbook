@@ -32,13 +32,18 @@ scaffold, console, docs, conformance.
   a clickable demo drawn by the harness's own renderer from a synthetic world, wait for the owner's
   yes, then write the code, after which the harness redraws the demo from a synthetic fixture to the
   same private link. The demo's guard is one Python block a harness copies (`demo_problems()`: the
-  world marked synthetic, `DEMO` ids, `kit.pagestyle`'s synthetic badge and `problems()`, never in
-  the client's review folder, no client term by `kit/tools/leak_guard.py`, failing closed); and a
+  world marked `"synthetic": true` and nothing else, `DEMO` ids, `kit.pagestyle`'s synthetic badge
+  with its words in the page's first header before the decision, `problems()` with the harness's
+  own style and command patterns, never in any client's data folder, no client term by
+  `kit/tools/leak_guard.py` in any form the page reaches a reader (as written, unescaped, as shown
+  with its tags gone, and the page data's JSON escapes read back), failing closed); and a
   checklist. `docs/lessons.md` keeps what it paid for; a new harness's `CLAUDE.md`
   (`templates/AGENT_INSTRUCTIONS.md`), the prior-art scan's "When to scan" and BUILD.md's B0.5
   point at it. Seen once, in adcut-harness (its ROADMAP X45). Tested in
   `tests/test_design_first.py`, which runs the template's guard on a synthetic page drawn with
-  `kit.pagestyle` and tries each way a demo can break the rule.
+  `kit.pagestyle` and tries each way a demo can break the rule (a term in the page data or split by
+  a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
+  folder among them).
 
 ## [0.24.0] - 2026-10-13
 ### Added

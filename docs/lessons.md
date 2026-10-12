@@ -90,7 +90,8 @@ The rules:
 - The demo is the real page, drawn by the harness's own renderer from a synthetic world. A hand-made mock-up shows a
   page the code will not write.
 - A demo is shared only when it is synthetic (marked, `DEMO` ids) and a scan for client terms that fails closed found
-  nothing; a client's real page is never shared.
+  nothing in any form the page reaches a reader, its page data too; it is never written into a client's data, and a
+  client's real page is never shared.
 - Once the code exists, the harness draws the demo itself, from a synthetic fixture to the same link, so the picture
   never drifts from the code.
 
