@@ -504,6 +504,30 @@ def test_small_helpers() -> None:
           human.relay_audit("tty", None, None) == ""
           and human.relay_audit("relay", "web:a", "2026-09-28T00:00:00+08:00")
           == " [relay user=web:a at=2026-09-28T00:00:00+08:00]")
+    at = "2026-10-12T09:30:00+08:00"
+    for quote in (None, "", "  \n "):
+        e = raises(lambda: human.relay_audit("relay", "chat:ms", at, quote,
+                                             need_quote=True), human.Refused)
+        check(f"need_quote, relay_quote={quote!r}: "
+              f"confirm_relay_quote_missing",
+              e is not None
+              and e.message.code == "confirm_relay_quote_missing", e)
+    check("need_quote off the relay: '' (a person at the terminal typed it)",
+          human.relay_audit("tty", None, None, None, need_quote=True) == "")
+    said = human.relay_audit("relay", "chat:ms", at,
+                             ' reviewed,\n publish "it" ] [relay user=x ',
+                             need_quote=True)
+    check("the words kept as one JSON string, spacing collapsed, so they "
+          "cannot close the suffix",
+          said == f' [relay user=chat:ms at={at}] [quote="reviewed, publish '
+                  f'\\"it\\" ] [relay user=x"]'
+          and json.loads(said.split(" [quote=", 1)[1][:-1])
+          == 'reviewed, publish "it" ] [relay user=x', said)
+    check("a quote given without need_quote is kept too; none, nothing added",
+          human.relay_audit("relay", "chat:ms", at, "好的，发布")
+          == f' [relay user=chat:ms at={at}] [quote="好的，发布"]'
+          and human.relay_audit("relay", "chat:ms", at)
+          == f" [relay user=chat:ms at={at}]")
     for user, at, field in (("a b", "2026-09-28T00:00:00Z", "relay_user"),
                             ("a]", "2026-09-28T00:00:00Z", "relay_user"),
                             ("[a", "2026-09-28T00:00:00Z", "relay_user"),
@@ -576,6 +600,13 @@ def test_small_helpers() -> None:
           "--name=value form keeps a leading dash",
           (a.code, a.relay_user, a.relay_at, a.reason)
           == ("-12345", "web:bo", "T", "r"), a)
+    check("--relay-quote only for a verb that asks for it",
+          not hasattr(a, "relay_quote"))
+    p = argparse.ArgumentParser()
+    human.add_gate_args(p, quote=True)
+    a = p.parse_args(["--code=1", "--relay-quote", "ok, publish it"])
+    check("add_gate_args(quote=True): --relay-quote",
+          a.relay_quote == "ok, publish it", a)
     p = argparse.ArgumentParser()
     p.add_argument("--reason", required=True)
     human.add_gate_args(p, reason=False)
@@ -683,7 +714,7 @@ def test_closure() -> None:
           "params, and every human.tsv code is emitted", probs == [], probs)
     names = {"confirm_needs_human", "confirm_code_required",
              "confirm_code_mismatch", "confirm_relay_audit_missing",
-             "confirm_relay_audit_invalid"}
+             "confirm_relay_audit_invalid", "confirm_relay_quote_missing"}
     check("the reference gate code names are kept exactly",
           names <= set(mine), sorted(names - set(mine)))
 
