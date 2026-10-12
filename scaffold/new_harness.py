@@ -12,11 +12,11 @@ What it writes (BUILD.md, B1):
   * every template with a rendered target (RENDERED below; templates/README.md
     lists the others as used, not copied, or written by a later build step),
     placeholders filled ({{name}}, {{cli}}, {{env_prefix}}, {{owner}},
-    {{repo_home}}): harness.toml, CLAUDE.md, SKILL.md, README.md,
+    {{repo_home}}, {{today}}): harness.toml, CLAUDE.md, SKILL.md, README.md,
     references/workflows.md, .gitignore, .gitlab-ci.yml, .gitlab/CODEOWNERS,
     docs/ (decision rights, the install and triage checklists, the data bug
     classes, the doctor's checks, the owner review loop, vendor API
-    discovery, the session handoff), ssot/README.md.
+    discovery, the session handoff, the roadmap), ssot/README.md.
     `<<fill: …>>` stays only in the files the build fills later (FILLED);
   * ssot/: every registry and owner file as its header row, plus the
     constants row the kit's write path reads (approval_ttl_hours), the
@@ -25,7 +25,7 @@ What it writes (BUILD.md, B1):
     Dispatcher), scripts/verbs.py, the kit's facts, decisions, pending,
     compute stories, queue and execute verbs, scripts/_lib/ (the schema:
     human tables only; the one writer: an empty allowlist), .env.example,
-    evals/, .claude/, and exactly the eleven tests templates/README.md
+    evals/, .claude/, and exactly the twelve tests templates/README.md
     names, each a thin call into kit.testing.suites, plus tests/run.py;
   * the kit and the console vendored (kit/tools/vendor.py) into
     scripts/kit/ and console/, each with its VERSION and MANIFEST.sha256;
@@ -49,6 +49,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -78,6 +79,7 @@ RENDERED = {
     "owner-review-loop.md": "docs/owner-review-loop.md",
     "vendor-api-discovery.md": "docs/vendor-api-discovery.md",
     "session-handoff.md": "docs/session-handoff.md",
+    "ROADMAP.md": "docs/ROADMAP.md",
     "ssot/README.md": "ssot/README.md",
 }
 # the files the build writes later (B2, B8): `<<fill: …>>` may stay there
@@ -98,7 +100,7 @@ KEPT_CONSTANTS = ("approval_ttl_hours",)
 GENERATED_TESTS = ("test_run_tests.py", "test_ssot.py", "test_layering.py",
                    "test_clock.py", "test_boundary.py", "test_json_contract.py",
                    "test_human_tables.py", "test_gate.py", "test_release.py",
-                   "test_changelog.py", "test_kit_drift.py")
+                   "test_changelog.py", "test_roadmap.py", "test_kit_drift.py")
 
 # The day-one checklist in docs/stages.md, item by item (the item's first
 # words), and the generated file(s) that answer it. A new checklist item
@@ -107,7 +109,8 @@ DAY_ONE = {
     "Meeting intake": ["ssot/stages.agent.tsv"],
     "A review page before the first paid batch": ["docs/owner-review-loop.md",
                                                   "docs/vendor-api-discovery.md"],
-    "`docs/ROADMAP.md`": ["docs/session-handoff.md"],
+    "`docs/ROADMAP.md`": ["docs/ROADMAP.md", "tests/test_roadmap.py",
+                          "docs/session-handoff.md"],
     "The test kit before the first feature": [
         "tests/run.py", "tests/test_run_tests.py", "tests/test_clock.py",
         "tests/test_layering.py", "tests/test_release.py", "CLAUDE.md"],
@@ -348,7 +351,8 @@ def values_of(a: argparse.Namespace) -> tuple[dict[str, str], list[str],
         raise Refused(f"--packs {a.packs!r}: distinct names of "
                       f"{', '.join(sorted(names))} (base and testkit always come)")
     return ({"name": a.name, "cli": a.cli, "env_prefix": a.prefix,
-             "owner": owner, "repo_home": home}, markets, langs, packs)
+             "owner": owner, "repo_home": home,
+             "today": date.today().isoformat()}, markets, langs, packs)
 
 
 def parser() -> argparse.ArgumentParser:

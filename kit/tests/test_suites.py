@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""kit.testing.suites: the ten day-one suites, on a harness the playbook's
+"""kit.testing.suites: the day-one suites, on a harness the playbook's
 scaffolder generates (scaffold/new_harness.py, run as a subprocess), and
 each on a planted violation, so no suite can pass by looking at nothing.
 
@@ -18,6 +18,8 @@ each on a planted violation, so no suite can pass by looking at nothing.
   [9] release: B8 signed while shipped files still hold fill markers; a
       stale .gitattributes
   [10] kit_drift: a local edit to the vendored kit
+  [10b] roadmap: a Waiting row that names no row it unblocks; a second
+      roadmap at the root
   [11] a harness without markets: the gate and the json contract hold
 """
 
@@ -110,7 +112,7 @@ def spec_of(root: Path):
 
 
 ALL = ("run_tests", "ssot", "layering", "clock", "boundary", "json_contract",
-       "human_tables", "gate", "release", "kit_drift")
+       "human_tables", "gate", "release", "kit_drift", "roadmap")
 
 
 def every(root: Path) -> dict:
@@ -267,6 +269,16 @@ def main() -> int:
     undo()
     check("…and green again once it is undone",
           not failing(suites.kit_drift(root)))
+
+    print("\n[10b] roadmap")
+    undo = planted(root, "docs/ROADMAP.md", replace=("unblocks: X1", "unblocks: X9"))
+    caught("a Waiting row that unblocks no row", suites.roadmap(root),
+           "keeps the one format")
+    undo()
+    undo = planted(root, "ROADMAP.md", (root / "docs" / "ROADMAP.md").read_text(encoding="utf-8"))
+    caught("a second roadmap at the root", suites.roadmap(root), "keeps the one format")
+    undo()
+    check("…and green again once it is undone", not failing(suites.roadmap(root)))
 
     print("\n[11] a harness without markets")
     flat = generate()

@@ -83,7 +83,7 @@ A value that does not match the table (a kind that is not one, a family that sta
 
 ### Wire it in
 
-The scaffolder does not generate this test (the ten day-one tests stay ten); add one of your own, a `test_agent_evals.py` in the harness's `tests/` folder:
+The scaffolder does not generate this test (the day-one tests are the ones templates/README.md lists); add one of your own, a `test_agent_evals.py` in the harness's `tests/` folder:
 
 ```python
 import sys
