@@ -17,7 +17,9 @@ reports them through kit.testing.check. A generated test is
   ssot          kit.guards.ssot.check_index, plus the trail: every owner row
                 has an agent sibling that is accepted or retired with a
                 `decided` answer; asked needs ask; a stage is never signed
-                before a step it comes after
+                before a step it comes after; and check_writes: no harness
+                code writes under ssot/ but the builder's `writers`, with
+                its planted self-test
   layering      kit.guards.layering.check_layers, and its planted self-test
   clock         kit.guards.clock: no calendar read in the harness's code
                 but kit.dates.now() (by AST: datetime.now/today/utcnow, a
@@ -241,7 +243,11 @@ def ssot(root: Path | str) -> Results:
     return [("the ssot index, owner files and ids keep their rules",
              g.check_index(root)),
             ("every owner row names its decided answer (the trail)", trail),
-            ("no stage is signed before a step it comes after", stages)]
+            ("no stage is signed before a step it comes after", stages),
+            ("the ssot write rule catches each planted write",
+             g.writes_self_test()),
+            ("no harness code writes under ssot/ (it is the builder's; a "
+             "client's own value goes to its database)", g.check_writes(root))]
 
 
 # ---- layering, boundary, drift ---------------------------------------------------

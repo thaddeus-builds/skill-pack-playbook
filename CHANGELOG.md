@@ -45,6 +45,27 @@ scaffold, console, docs, conformance.
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
 
+## [0.25.0] - 2026-10-13
+### Added
+- `kit.guards.ssot.check_writes` (run by `kit.testing.suites.ssot`, so every harness's `tests/test_ssot.py` runs it
+  on re-vendoring): `ssot/` is the builder's, and what a client sets or decides through its agent lives in that
+  client's own database (`docs/rules.md`, "Registries", item 9). The check fails on harness code that writes under the
+  ssot dir, by AST, as `path:line` and never what is written: Path `write_text` / `write_bytes` / `touch` / `unlink` /
+  `mkdir` / `rename` / `replace`, `open` (builtin, Path, io, codecs, gzip, bz2, lzma, os) with a write mode (a mode that
+  is not a literal counts), `os.replace` / `rename` / `remove` / `makedirs` …, `shutil.copy*` into it, `move`,
+  `rmtree`, `kit.atomic`'s writers, and the harness's own helpers named in `[guards.ssot] write_calls`. A path is under
+  ssot when its expression holds the dir as path segments, an identifier with the word `ssot` (`SSOT`, `cfg.ssot`,
+  `ssot_dir`), or a name bound to such a path in the same or an enclosing scope, or at module level in another module
+  it imports; a value read from an ssot file is data, not a path, so reading ssot, copying from it and writing a row's
+  own file elsewhere pass. It reads every .py of the harness (`write_code`, default the whole tree; `write_skip`,
+  default the vendored kit), never a test, a hidden folder or `node_modules`. `[guards.ssot.writers]` = {path or folder:
+  reason} names the builder's own tools that may write there: a row with no reason, or one that writes nothing any
+  more, fails. A file that does not parse, or a code path that finds nothing, is not a pass. `writes_self_test()` is
+  its planted self-test, also in the suite. A harness whose code writes ssot today fails its ssot test once it
+  re-vendors: move the client's value to its database, or name a builder's tool in `writers` with its reason. Seen
+  once, in the video-ads harness (owner decision 2026-10-13: a client's space thresholds go through a `set` verb into
+  an append-only table of its database, over the ssot default).
+
 ## [0.24.0] - 2026-10-13
 ### Added
 - `kit.pagestyle` (new pack `pages`, `[kit] packs = ["pages"]`; `docs/page-style.md`): one look for the pages a harness

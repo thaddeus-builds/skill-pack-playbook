@@ -872,6 +872,35 @@ def test_the_seo_harness_read_side_lessons_are_whole():
                                                  "no stays a row", f"{JUDGE}: seen once", *READ_SIDE, FORM]
 
 
+SETTINGS = "`ssot/` is the builder's; what a client sets lives in that client's database."
+
+
+def settings_problems(rules: str, guard: str, suites: str) -> list[str]:
+    """What the client-settings rule fails to say or to check: a numbered bold item of the registries section that
+    names both ways a harness reads a client's value, the bounds on write and on read, its check and the allowlist,
+    and where it was seen; the check exists in the ssot guard and the day-one ssot suite runs it."""
+    body = section(rules, "Registries: one place per value")
+    item = next((i for i in re.split(r"^\d+\. ", body, flags=re.M) if i.startswith(f"**{SETTINGS}**")), "")
+    out = [] if item else [SETTINGS]
+    out += [w for w in ("`threshold_<name>`", "append-only", "when it is written and again when it is read",
+                        "`check_writes`", "`[guards.ssot].writers`", "*Seen once:*") if item and w not in item]
+    if "def check_writes(" not in guard:
+        out.append("the guard")
+    if "g.check_writes(root)" not in suites:
+        out.append("the suite")
+    return out
+
+
+def test_the_client_settings_rule_is_whole_and_checked():
+    rules, guard, suites = doc("docs/rules.md"), doc("kit/guards/ssot.py"), doc("kit/testing/suites.py")
+    assert settings_problems(rules, guard, suites) == [], settings_problems(rules, guard, suites)
+    assert settings_problems(rules.replace(f"**{SETTINGS}**", "**x**"), guard, suites) == [SETTINGS]
+    assert settings_problems(rules.replace("`check_writes` in", "the check in"), guard, suites) == ["`check_writes`"]
+    assert settings_problems(rules.replace("*Seen once:* a video-ads", "a video-ads"), guard, suites) == [
+        "*Seen once:*"]
+    assert settings_problems(rules, "", "") == ["the guard", "the suite"]
+
+
 CALL = re.compile(r"ask\.py (?:--\S+ \S+ )*([a-z]+)\b")
 FLAG = re.compile(r"(?<![\w-])--[a-z][a-z-]*")
 

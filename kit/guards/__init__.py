@@ -8,7 +8,8 @@ verb, so its findings are for the developer and are not coded messages.
 Each module also has a `check_*()` convenience that reports through
 kit.testing.check.
 
-  ssot.py           the ssot index, the owner-file lint, ids kept not deleted
+  ssot.py           the ssot index, the owner-file lint, ids kept not deleted;
+                    no harness code writes under ssot/ (it is the builder's)
   release.py        what `git archive` ships, and .gitattributes from config
   layering.py       the import graph: pull / ingest / compute / one writer
   clock.py          one clock: no calendar read but kit.dates.now(), by AST
