@@ -823,6 +823,55 @@ def test_the_write_door_into_someone_elses_system_is_whole():
                                        "`scripts/apply_shopify.py`", "`tests/test_apply_shopify.py`", "rule 5 pointer"]
 
 
+JUDGE = "What an agent judges"
+JUDGE_RULES = ("A judgement quotes its evidence, and the harness checks the quote.",
+               "Classify an outside party by where it sits in the value chain, apart from the switch that analyses it.",
+               "A large group competes on a segment, not as a whole.")
+READ_SIDE = ("A partial pull is filed apart and flagged.", "An overview runs each report's own build and adds nothing to it.")
+FORM = "A form the client fills offline is exported from the key registry."
+
+
+def judge_problems(rules: str, consoles: str) -> list[str]:
+    """What the SEO harness's read-side lessons fail to say: each judgement rule a numbered bold item, the quote rule
+    with what it normalises and what it paid for, a "no" kept findable; the two read-side paragraphs in the data
+    layers; the client form as a numbered item of the client console; each says where it was seen."""
+    body = section(rules, JUDGE)
+    items = re.split(r"^\d+\. ", body, flags=re.M)[1:]
+    out = [t for t in JUDGE_RULES if not any(i.startswith(f"**{t}**") for i in items)]
+    quote = next((i for i in items if i.startswith(f"**{JUDGE_RULES[0]}**")), "")
+    out += [w for w in ("without a space", "*Paid for:*", "`check_quotes`") if w not in quote]
+    if 'a "no" stays a row' not in body.lower():
+        out.append("no stays a row")
+    if "*Seen once:*" not in body:
+        out.append(f"{JUDGE}: seen once")
+    layers = section(rules, "Data layers and their guards")
+    for title in READ_SIDE:
+        para = next((p for p in layers.split("\n\n") if p.startswith(f"**{title}**")), None)
+        if para is None or "*Seen once:*" not in para:
+            out.append(title)
+    item = next((i for i in re.split(r"^\d+\. ", section(consoles, "The client console is where clients answer"),
+                                     flags=re.M) if i.startswith(f"**{FORM}**")), None)
+    if item is None or "*Seen once:*" not in item or "pending value" not in item:
+        out.append(FORM)
+    return out
+
+
+def test_the_seo_harness_read_side_lessons_are_whole():
+    rules, consoles = doc("docs/rules.md"), doc("docs/consoles.md")
+    assert judge_problems(rules, consoles) == [], judge_problems(rules, consoles)
+    for title in JUDGE_RULES[1:]:                                                # the check would notice each one gone
+        assert judge_problems(rules.replace(f"**{title}**", "**x**"), consoles) == [title], title
+    assert judge_problems(rules.replace(f"**{JUDGE_RULES[0]}**", "**x**"), consoles) == [
+        JUDGE_RULES[0], "without a space", "*Paid for:*", "`check_quotes`"]
+    assert judge_problems(rules.replace("dropped without a space", "dropped"), consoles) == ["without a space"]
+    assert judge_problems(rules.replace('A "no" stays a row.', ""), consoles) == ["no stays a row"]
+    for title in READ_SIDE:
+        assert judge_problems(rules.replace(f"**{title}**", "**x**"), consoles) == [title], title
+    assert judge_problems(rules, consoles.replace(f"**{FORM}**", "**x**")) == [FORM]
+    assert judge_problems("# t\n", "# t\n") == [*JUDGE_RULES, "without a space", "*Paid for:*", "`check_quotes`",
+                                                 "no stays a row", f"{JUDGE}: seen once", *READ_SIDE, FORM]
+
+
 CALL = re.compile(r"ask\.py (?:--\S+ \S+ )*([a-z]+)\b")
 FLAG = re.compile(r"(?<![\w-])--[a-z][a-z-]*")
 

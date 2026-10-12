@@ -122,7 +122,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | Read | For |
 | --- | --- |
 | [docs/stages.md](docs/stages.md) | Stage 0 (client meetings), the ten stages one line each, the day-one checklist |
-| [docs/rules.md](docs/rules.md) | Data layers and their guards, the human-in-the-loop rules, writing into someone else's system, stories that prove themselves, registries |
+| [docs/rules.md](docs/rules.md) | Data layers and their guards, the human-in-the-loop rules, writing into someone else's system, what an agent judges, stories that prove themselves, registries |
 | [docs/consoles.md](docs/consoles.md) | The owner console, the client console, one workspace per client |
 | [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a harness small, hosting |
 | [docs/channels.md](docs/channels.md) | Reusing a harness for other channels; generated creative and real people |
