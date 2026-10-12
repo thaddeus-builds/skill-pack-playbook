@@ -26,6 +26,18 @@ scaffold, console, docs, conformance.
   fills offline is exported from the key registry, its answers come back as pending values
   sourced to the file. Each seen once, in the SEO harness. Tested in `tests/test_docs_build.py`.
 
+## [0.22.0] - 2026-10-12
+### Added
+- `human.py`: `relay_audit(..., relay_quote, need_quote=True)` and `add_gate_args(quote=True)`
+  (`--relay-quote`). A verb whose write leaves the harness on a person's chat yes asks for the
+  confirming person's own words, as sent, beside `--relay-user` and `--relay-at`; a relay
+  without them is refused (`confirm_relay_quote_missing`), and the words are kept on the
+  history reason as ` [quote="…"]`, one JSON string that cannot close the suffix. The code
+  proves the person saw the summary; the words show what they said to it. Off by default:
+  existing callers are unchanged, and the console (which relays a click, not words) never
+  confirms such a verb. From the SEO harness (seen once, an owner decision on its store write,
+  2026-10-12).
+
 ## [0.21.0] - 2026-10-12
 ### Added
 - `kit.workbook_patch` (pack `workbook`, slice 4 of `docs/workbook-and-browser-ops.md`): cells set
