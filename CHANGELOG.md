@@ -10,6 +10,15 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-12
+### Fixed
+- `messages.lint_registry()` (and so `check_registry_closed()`) refuses a registry param named
+  after one of `msg()`'s own arguments (`code`, `text`): `msg(code, text, **params)` cannot be
+  called with it, a TypeError at the one moment the message is needed. The names are read from
+  `msg()`'s signature (`messages.MSG_ARGS`), so they cannot drift. Seen once: in the video-ads
+  harness a param named `text` crashed `msg()`, and that harness has held the rule in its own
+  contract test since.
+
 ## [0.14.0] - 2026-10-12
 ### Added
 - `kit/guards/roadmap.py` and `kit.testing.suites.roadmap`: one ROADMAP.md format. The title,
