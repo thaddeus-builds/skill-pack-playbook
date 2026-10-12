@@ -7,7 +7,9 @@ prints `FAIL <name>` and its traceback; the run then exits 1 and prints
 `FAILED: k of N`. Only a run where every test passed prints `RESULT: N passed`
 and exits 0, and `run.py` treats a file without that line as failed. A file
 that defines no test, or runs under `python -O` (asserts would be skipped, so
-nothing could fail), does not pass either.
+nothing could fail), does not pass either, and neither does one with a top-level
+`test_*` that `main` never saw: one defined below the call (it never runs, and
+pytest would still run it) or wrapped by a decorator without functools.wraps.
 
 Helpers: `tmpdir()` (a folder that is removed afterwards), `tmpstore()` (a
 core.Store on one) and `assert_raises(code)` (for core.Refused).
@@ -15,6 +17,7 @@ core.Store on one) and `assert_raises(code)` (for core.Refused).
 
 from __future__ import annotations
 
+import ast
 import os
 import shutil
 import sys
@@ -46,10 +49,33 @@ def main(g: dict) -> None:
             print(f"FAIL {name}")
             traceback.print_exc(file=sys.stdout)
             sys.stdout.flush()
+    missed = not_collected(g, {n for n, _ in tests})
+    for name in missed:
+        print(f"FAIL {name}: %s" % NEVER)
+    failed += len(missed)
     if failed:
-        print(f"FAILED: {failed} of {len(tests)}")
+        print(f"FAILED: {failed} of {len(tests) + len(missed)}")
         sys.exit(1)
     print(f"RESULT: {len(tests)} passed")
+
+
+NEVER = "never ran (defined below the call, or decorated away without functools.wraps)"
+
+
+def not_collected(g: dict, ran: set[str]) -> list[str]:
+    """The top-level `test_*` functions of g's source file that main() did not
+    collect (the same check as kit.testing.check.run_functions)."""
+    path = g.get("__file__")
+    if not path:
+        return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+    except (OSError, SyntaxError, ValueError):
+        return []
+    return [n.name for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name.startswith("test_") and n.name not in ran]
 
 
 @contextmanager

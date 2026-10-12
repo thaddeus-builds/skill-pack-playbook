@@ -24,7 +24,7 @@
     `*CONFIRM_CODE_SECRET`, kit.human's relayed-code key, and the owner
     console's `CONSOLE_SECRET`), since an agent can write or read a .env
     and with the secret could make its own approval codes; kit.human's
-    test seam `KIT_TTY` and the `PYTEST_CURRENT_TEST` marker (a file
+    test seam `KIT_TTY` and the `PYTEST_CURRENT_TEST` and `KIT_TEST_RUN` markers (a file
     standing in for the terminal would pass a piped agent off as a person
     retyping); `KIT_HARNESS_ROOT` (which harness, and so which gate, the
     kit binds); `DYLD_*`, `LD_*` and `PYTHON*` (what code a child loads);
@@ -57,7 +57,7 @@ from kit.messages import msg
 ENV_ONLY = "none"      # <P>_AUTH_ENV_PATHS value that disables the file chain
 PROCESS = "process env"
 CONSOLE_SECRET = "CONSOLE_SECRET"          # the owner console's own secret
-NEVER_FROM_FILE = (TTY_ENV, "PYTEST_CURRENT_TEST", _config.ROOT_ENV)
+NEVER_FROM_FILE = (TTY_ENV, "PYTEST_CURRENT_TEST", _config.TEST_RUN_ENV, _config.ROOT_ENV)
 NEVER_FROM_FILE_PREFIXES = ("DYLD_", "LD_", "PYTHON")
 
 

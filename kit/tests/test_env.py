@@ -192,7 +192,7 @@ def main() -> int:
     planted = ("SHOP_CONFIRM_CODE_SECRET", "OTHER_CONFIRM_CODE_SECRET",
                "CONSOLE_SECRET", "KIT_TTY", "PYTEST_CURRENT_TEST",
                "KIT_HARNESS_ROOT", "PYTHONPATH", "DYLD_INSERT_LIBRARIES",
-               "LD_PRELOAD", "SHOP_TEST_SEAM")
+               "LD_PRELOAD", "SHOP_TEST_SEAM", "KIT_TEST_RUN")
     forms = ("{n}=planted-{i}\n", "export {n}=planted-{i}\n",
              "  {n} = 'planted-{i}'\n", "export  {n}  =planted-{i}\n")
     write(data / ".env", "".join(forms[i % len(forms)].format(n=n, i=i)
