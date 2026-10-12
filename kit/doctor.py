@@ -45,8 +45,8 @@ names its fix in `next`):
   checkout       the cwd is in another checkout of this same harness (a
                  harness.toml of the same name at or above it) than the one
                  whose code runs (the bound root), and the two differ: other
-                 HEADs, or docs or code (*.md, *.py, *.toml) changed and not
-                 committed in either: the docs the agent reads there may not
+                 HEADs, or docs or code (*.md, *.py, *.toml, *.tsv, *.js,
+                 *.sh) changed and not committed in either: the docs the agent reads there may not
                  describe the code that runs (several sessions work in
                  worktrees). Silent outside git, without git, in the bound
                  checkout itself, or in a checkout of another harness
@@ -85,7 +85,8 @@ from kit.messages import Msg, coded, msg
 
 LEVELS = ("ok", "info", "warn", "fail")
 SECRET_WORDS = ("SECRET", "TOKEN", "PASSWORD", "KEY", "CREDENTIAL")
-DOCS_AND_CODE = ("*.md", "*.py", "*.toml")   # what checkout_differs compares
+DOCS_AND_CODE = ("*.md", "*.py", "*.toml", "*.tsv", "*.js", "*.sh")
+HEAD_CHARS = 12                                # a HEAD as checkout_differs shows it
 GIT_TIMEOUT_S = 10
 SHOWN = ("DATA_DIR", "DB", "AUTH_ENV_PATHS", "TOKEN_SOURCE", "ALLOW_WRITES",
          "KILL", "CONFIRM_CODE_SECRET")
@@ -482,16 +483,19 @@ def git_head(path: Path | str) -> tuple[str, list[str]] | None:
     """(HEAD commit, the tracked docs and code under `path` changed and not
     committed) of the git checkout at `path`; None outside git, without
     git, or when git fails. Never takes git's optional locks: doctor
-    writes nothing, not even a refreshed index."""
+    writes nothing, not even a refreshed index. Every inherited GIT_*
+    variable is dropped: a GIT_DIR or GIT_WORK_TREE (set in a git hook)
+    would make every path report that one repository."""
     base = ["git", "--no-optional-locks", "-C", str(path)]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     try:
         head = subprocess.run(base + ["rev-parse", "HEAD"],
-                              capture_output=True, text=True,
+                              capture_output=True, text=True, env=env,
                               timeout=GIT_TIMEOUT_S)
         dirty = subprocess.run(base + ["status", "--porcelain",
                                        "--untracked-files=no", "--",
                                        *DOCS_AND_CODE],
-                               capture_output=True, text=True,
+                               capture_output=True, text=True, env=env,
                                timeout=GIT_TIMEOUT_S)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -518,14 +522,15 @@ def check_checkout(ctx: Context) -> None:
     if a is None or b is None or (a[0] == b[0] and not a[1] and not b[1]):
         return
     docs_dirty, runs_dirty = ", ".join(a[1]) or "-", ", ".join(b[1]) or "-"
+    docs_head, runs_head = a[0][:HEAD_CHARS], b[0][:HEAD_CHARS]
     ctx.warn("checkout", msg(
-        "doctor_checkout_differs", f"the cwd is in {docs} ({a[0][:10]}; "
+        "doctor_checkout_differs", f"the cwd is in {docs} ({docs_head}; "
         f"uncommitted: {docs_dirty}), not the checkout whose code runs "
-        f"({cfg.root}, {b[0][:10]}; uncommitted: {runs_dirty}): the docs "
+        f"({cfg.root}, {runs_head}; uncommitted: {runs_dirty}): the docs "
         f"read there may not describe the code that runs. Read the docs of "
         f"the checkout you run, or run that one", docs=str(docs),
-        docs_head=a[0], docs_dirty=docs_dirty, runs=str(cfg.root),
-        runs_head=b[0], runs_dirty=runs_dirty))
+        docs_head=docs_head, docs_dirty=docs_dirty, runs=str(cfg.root),
+        runs_head=runs_head, runs_dirty=runs_dirty))
 
 
 BUILTIN: tuple[Check, ...] = (check_harness, check_env_chain,
