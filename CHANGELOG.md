@@ -10,6 +10,12 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/rules.md`, "Writing into someone else's system": six rules for a write door whose content
+  is made after the approval (only approved work of one kind; the gate binds the file's sha256,
+  or the live object as read just before a change of state; stage hidden, preview in place,
+  then publish; archive every write under raw; read back and say so; revert is the inverse
+  write, never a delete). Approve rule 5 points at it. Seen once, the SEO harness's store write
+  (`scripts/apply_shopify.py`). Tested in `tests/test_docs_build.py`.
 - `templates/claim-scope.md`: "What stops, what warns". A harness picks per channel whether an
   open compliance finding stops the step or warns a person (one switch, `warn` or `block`); where
   the platform's own review stops a bad ad at no cost to the ad, the default is `warn`. Unconfirmed

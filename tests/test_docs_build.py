@@ -786,6 +786,43 @@ def test_the_methods_for_keeping_a_harness_small_are_whole_and_the_handoff_point
                                                                        "its first real batch, 2026-10-06)")
 
 
+DOOR = "Writing into someone else's system"
+DOOR_RULES = ("Only approved work, of the one kind the door may write.",
+              "The gate binds what the write will change, as it is now.",
+              "Stage hidden, preview in place, then publish.",
+              "Archive every write under raw, never rewritten.",
+              "Read back and say so.",
+              "Revert is the inverse write, never a delete.")
+
+
+def door_problems(rules: str) -> list[str]:
+    """What docs/rules.md's write door fails to say: each rule a numbered bold item; the sha256 binding for content
+    made after the approval and the live-object binding for a change of state; where it was seen and the worked
+    example; and approve rule 5 pointing at the exception."""
+    body = section(rules, DOOR)
+    items = re.split(r"^\d+\. ", body, flags=re.M)[1:]
+    out = [t for t in DOOR_RULES if not any(i.startswith(f"**{t}**") for i in items)]
+    gate = next((i for i in items if i.startswith(f"**{DOOR_RULES[1]}**")), "")
+    out += [w for w in ("sha256", "live object") if w not in gate]
+    out += [w for w in ("*Seen once:*", "`scripts/apply_shopify.py`", "`tests/test_apply_shopify.py`") if w not in body]
+    if "(#writing-into-someone-elses-system), rule 2)" not in section(rules, "Human-in-the-loop rules"):
+        out.append("rule 5 pointer")
+    return out
+
+
+def test_the_write_door_into_someone_elses_system_is_whole():
+    rules = doc("docs/rules.md")
+    assert door_problems(rules) == [], door_problems(rules)
+    for title in DOOR_RULES:                                                     # the check would notice each one gone
+        gone = [title, "sha256", "live object"] if title == DOOR_RULES[1] else [title]
+        assert door_problems(rules.replace(f"**{title}**", "**x**")) == gone, title
+    assert door_problems(rules.replace("file's sha256", "file")) == ["sha256"]
+    assert door_problems(rules.replace("*Seen once:* that harness", "that harness")) == ["*Seen once:*"]
+    assert door_problems(rules.replace("(#writing-into-someone-elses-system), rule 2)", ")")) == ["rule 5 pointer"]
+    assert door_problems("# t\n") == [*DOOR_RULES, "sha256", "live object", "*Seen once:*",
+                                       "`scripts/apply_shopify.py`", "`tests/test_apply_shopify.py`", "rule 5 pointer"]
+
+
 CALL = re.compile(r"ask\.py (?:--\S+ \S+ )*([a-z]+)\b")
 FLAG = re.compile(r"(?<![\w-])--[a-z][a-z-]*")
 
