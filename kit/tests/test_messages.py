@@ -4,6 +4,9 @@
   * the registry = kit base (message_codes.tsv + message_codes.d/*.tsv,
     sorted) + the harness's; a code defined twice, a missing meaning, a
     malformed row = error at load;
+  * lint_registry() refuses a param named after msg()'s own arguments
+    (MSG_ARGS, read from its signature: code, text), planted in a row and in
+    a harness's registry; the kit's own registry passes;
   * a Msg is its text, with a registered code and exactly its params;
   * coded() / failure() / relayed() / joined() place codes one way;
   * a harness's fragments (<ssot dir>/message_codes.d/*.tsv, sorted) load
@@ -158,8 +161,36 @@ def main() -> int:
     check("every kit base row has en + zh meanings",
           all(r["meaning_en"] and r["meaning_zh"]
               for r in messages.base_registry().values()))
-    check("lint: snake_case codes, placeholders ⊆ params",
+    check("lint: snake_case codes, placeholders ⊆ params, no param named "
+          "after msg()'s own arguments (the kit base and the shop's)",
           messages.lint_registry(reg) == [], messages.lint_registry(reg))
+    import inspect
+    sig = {p.name for p in inspect.signature(msg).parameters.values()
+           if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)}
+    check("MSG_ARGS is msg()'s signature: code and text",
+          messages.MSG_ARGS == sig == {"code", "text"}, messages.MSG_ARGS)
+    check("a param named code cannot be passed to msg() (the TypeError the "
+          "lint prevents)", raises(lambda: msg("no_db", "x", **{
+              "code": "c", "path": "p"}), TypeError) is not None)
+    for name in sorted(messages.MSG_ARGS):
+        row = {"t_shadow": {"file": "f.tsv", "params": ("sku", name),
+                            "meaning_en": "{sku}", "origin": "harness"}}
+        got = messages.lint_registry(row)
+        check(f"lint: a param named {name!r} is refused, naming the code",
+              len(got) == 1 and "t_shadow" in got[0] and repr(name) in got[0]
+              and "msg()'s own arguments" in got[0], got)
+    planted = harness("", HEAD + "t_x\tcode\tx {code}\tx\n")
+    config.use(planted)
+    try:
+        got = messages.check_registry_closed(planted, ["*.py"])
+    finally:
+        _shop.use()
+    check("a harness registry row with a param named code: the row loads, "
+          "and check_registry_closed() reports it",
+          any("codes.tsv: t_x: params ['code']" in g for g in got), got)
+    check("lint: a param named params is fine (it lands in **params)",
+          messages.lint_registry({"t_ok": {"file": "f.tsv", "params": (
+              "params",), "meaning_en": "{params}"}}) == [])
     check("kit_files = base then message_codes.d/*.tsv sorted",
           messages.kit_files() == [messages.BASE_TSV]
           + sorted(messages.FRAGMENTS_DIR.glob("*.tsv")))
