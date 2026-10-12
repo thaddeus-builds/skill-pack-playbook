@@ -289,7 +289,7 @@ def test_env_files() -> None:
     secret = CFG.env("CONFIRM_CODE_SECRET")
     planted = Path(tmp_dir("doc-planted-"))
     (planted / ".env").write_text(
-        f"{secret}=v4lue-s3cret\nKIT_TTY=/tmp/v4lue-tty\n"
+        f"export {secret}=v4lue-s3cret\n  KIT_TTY = '/tmp/v4lue-tty'\n"
         "SHOP_API_KEY=ordinary\n", encoding="utf-8")
     (planted / ".env").chmod(0o600)
     e = {k: v for k, v in env(planted).items() if k != paths_var}
@@ -313,6 +313,13 @@ def test_env_files() -> None:
                {"file": str(planted / ".env"), "name": secret}),
               ("doctor_env_file_unsafe_name",
                {"file": str(planted / ".env"), "name": "KIT_TTY"})], ef)
+    check("next: delete the line; for the confirm-code secret also the "
+          "bin/console edit with its two exact lines",
+          ef[0]["next"][0] == f"delete the {secret} line from {planted / '.env'}"
+          and ef[0]["next"][2:] == [f'{secret}="$(openssl rand -hex 32)"',
+                                    f"export {secret}"]
+          and ef[1]["next"] == [f"delete the KIT_TTY line from "
+                                f"{planted / '.env'}"], ef)
     check("never the value; the seam is not live, so no kit_tty warning; "
           "the secret's own line reads unset",
           "v4lue-" not in out and found(doc, "kit_tty") == []

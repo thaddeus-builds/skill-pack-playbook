@@ -222,6 +222,41 @@ def test_console_js_without_relay_verbs_runs_read_only():
         assert r.returncode == 127 and "uv not found" in r.stderr, r.stderr
 
 
+# Writes the confirm-code secret the console's process got.
+FAKE_UV_SECRET = """#!/bin/sh
+echo "SECRET=$SHOP_CONFIRM_CODE_SECRET" > "$FAKE_UV_LOG"
+"""
+
+
+def test_console_js_makes_the_confirm_code_secret_at_each_start_never_in_a_file():
+    """The relay's harness runs need <PREFIX>_CONFIRM_CODE_SECRET; the kit never
+    loads it from <data dir>/.env, so console.js exports a fresh one itself."""
+    with Host(uv=FAKE_UV_SECRET) as host:
+        os.makedirs(host.data, exist_ok=True)
+        with open(os.path.join(host.data, ".env"), "w") as fh:
+            fh.write("SHOP_CONFIRM_CODE_SECRET=from-the-file\n")
+
+        def secret():
+            host.reset_uv_log()
+            r = host.node(os.path.join(host.adapter, "bin", "console.js"), cwd=host.data)
+            assert r.returncode == 0, r.stderr
+            with open(host.uv_log) as fh:
+                return fh.read().strip().removeprefix("SECRET="), r.stdout + r.stderr
+        one, out1 = secret()
+        two, out2 = secret()
+        assert len(one) == 64 and int(one, 16) and one != two, (one, two)
+        assert one not in out1 and two not in out2, "never printed"
+        for root, _, files in os.walk(host.home):
+            for f in files:
+                with open(os.path.join(root, f), "rb") as fh:
+                    body = fh.read()
+                assert one.encode() not in body or os.path.join(root, f) == host.uv_log, \
+                    f"the secret is in {os.path.join(root, f)}"
+        with open(os.path.join(host.data, ".env"), "w") as fh:
+            fh.write("")
+        assert secret()[0] != "from-the-file"
+
+
 def free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
