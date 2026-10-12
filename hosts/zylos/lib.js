@@ -65,6 +65,12 @@ const CONSOLE_OWNED = ['--dir', '--host', '--port', '--user', '--user-header', '
 const NOT_ALIASES = ['uv', 'node', 'sh', 'python', 'python3'];
 // A config key whose name says it holds a secret must be `sensitive: true`.
 const SECRET_KEY = /SECRET|TOKEN|PASSWORD|ACCESS_KEY|API_KEY|PRIVATE_KEY/;
+// A gate secret (the kit's kit/env.py is_gate_secret): the harness never loads
+// it from an env file, so it is never a config key; console.js makes the
+// confirm-code secret itself.
+const isGateSecret = (k) => k === 'CONSOLE_SECRET' || k.endsWith('CONFIRM_CODE_SECRET');
+const GATE_SECRET_WHY = 'a gate secret: the harness never loads it from an env file '
+  + '(zylos/bin/console.js makes the confirm-code secret at each start)';
 
 function relPath(v) {
   return typeof v === 'string' && v !== '' && !path.isAbsolute(v) && /^[A-Za-z0-9_.\/-]+$/.test(v)
@@ -108,7 +114,10 @@ function validate(m) {
       fail(key, `must be a whole number from ${lo} to ${hi}, got ${JSON.stringify(v)}`);
     }
   };
-  const envName = (v, key) => str(v, key, re(RE.env), 'an env var name (A-Z, 0-9, _)');
+  const envName = (v, key) => {
+    str(v, key, re(RE.env), 'an env var name (A-Z, 0-9, _)');
+    if (isGateSecret(v)) fail(key, `${v} is ${GATE_SECRET_WHY}`);
+  };
   const word = (v, key) => str(v, key, text, 'a non-empty string');
 
   shape(m, '', ['name', 'min_zylos', 'cli', 'env', 'runtime', 'endpoints', 'scope', 'reply',
@@ -243,6 +252,7 @@ const NAME = M.name;
 const BIN_NAME = M.cli.bin;
 const MIN_ZYLOS = M.min_zylos;
 const PREFIX = M.env.prefix;
+const CONFIRM_SECRET_VAR = `${PREFIX}_CONFIRM_CODE_SECRET`;
 const DATA_VAR = M.env.data_dir;
 const SERVICE = `zylos-${NAME}`;              // = SKILL.md lifecycle.service.name = the pm2 app name
 const PYTHON_VERSION = M.runtime.python;
@@ -356,7 +366,8 @@ function envValue(key) {
 
 // The env every harness run gets: the data dir (unless the caller set one),
 // and bytecode caches under it, so nothing is written into the skill dir
-// (which `zylos upgrade` backs up and merges).
+// (which `zylos upgrade` backs up and merges). console.js adds the
+// confirm-code secret (CONFIRM_SECRET_VAR) for its relay's harness runs.
 function harnessEnv(base = process.env) {
   const dataDir = base[DATA_VAR] || DATA_DIR;
   return { ...base, [DATA_VAR]: dataDir,
@@ -919,6 +930,7 @@ function skillProblems(text) {
                        ...Object.keys(M.defaults || {}).filter((k) => k !== '_comment')].filter(Boolean);
   for (const k of new Set(adapterKeys)) want(names.has(k), `SKILL.md config must declare ${k} (read by zylos/)`);
   for (const i of items) {
+    want(!isGateSecret(i.name), `SKILL.md config ${i.name} is ${GATE_SECRET_WHY}`);
     want(!SECRET_KEY.test(i.name) || i.sensitive === 'true',
          `SKILL.md config ${i.name} looks secret: mark it sensitive: true`);
     const d = M.defaults && M.defaults[i.name];
@@ -952,8 +964,8 @@ function checkProblems() {
 }
 
 module.exports = {
-  ManifestError, loadManifest, validate, M, MANIFEST_FILE, PLACEHOLDERS, SECRET_KEY,
-  NAME, BIN_NAME, MIN_ZYLOS, PREFIX, DATA_VAR, SERVICE, PYTHON_VERSION, UV_VERSION, UV_INSTALLER, UV_SHA256,
+  ManifestError, loadManifest, validate, M, MANIFEST_FILE, PLACEHOLDERS, SECRET_KEY, isGateSecret,
+  CONFIRM_SECRET_VAR, NAME, BIN_NAME, MIN_ZYLOS, PREFIX, DATA_VAR, SERVICE, PYTHON_VERSION, UV_VERSION, UV_INSTALLER, UV_SHA256,
   ENDPOINTS, TEST_MODE, testKnob,
   ADAPTER_DIR, SKILL_DIR, ZYLOS_DIR, DATA_DIR, LOGS_DIR, CONSOLE_DIR, ENTRY, CONSOLE_ENTRY, CLI_JS, DETACH_JS,
   CONSOLE_JS, POST_INSTALL, SCHEDULER_CLI, BIN_LINK, TASK_STATE, USERS_FILE, CADDYFILE, CADDY_MARKER,
