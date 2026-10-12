@@ -10,6 +10,27 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-12
+### Added
+- Pack `learning` (new; a harness takes it with `[kit] packs = ["learning"]`): `patternstore.py`, a
+  per-client pattern store, generalised from the video-ads harness's own (which keeps its copy for
+  now). Each client's evidence stays in its own database; nothing crosses clients. Docs:
+  `docs/pattern-store.md`.
+  - The row: context x ICP archetype x playbook, the fields the harness's `Shape` names, every value
+    an id of a vocabulary the harness passes or null, with `n`, hashed family tokens and outcome
+    counts; `group()` pools items into rows, `row_id()` is the content id. `validate()` never raises
+    and refuses free text, a trailing newline, unknown or missing keys, wrong types, a bad sum, an
+    outcome on a presence-only source and an id that does not recompute; a problem never quotes the
+    value. `shape_problems()` for the harness's own test.
+  - Two coders: `agreement()`, `meets_floor()` (0.70, from the counts), `agreed_values()`.
+  - The shrinkage: `prior()` (mean anchored off the edges, method-of-moments kappa clipped to 5-10
+    tests; none for fewer than two labelled cells, `prior_reason()`), `shrunk()`, `ranks()` (ties
+    share), `shrink()`; a stdlib Beta CDF and quantile.
+  - The store: `TABLES` and `APPEND_ONLY` in kit.db's format (extra human tables), `state()`,
+    `live_rows()` (a row retracted by hand in any scope is out of the all-scopes union), `plan()` (an
+    export supersedes every live record of what it no longer makes; a duplicate id is inserted once
+    and counted), `apply()` (refuses a row whose id does not recompute), `retract()`.
+
 ## [0.12.0] - 2026-10-11
 ### Added
 - One human gate per client file (#66; the KOL harness's R34, owner's option B): the map of a
