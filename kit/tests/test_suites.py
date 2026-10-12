@@ -7,7 +7,8 @@ each on a planted violation, so no suite can pass by looking at nothing.
   [2] run_tests: tests/run.py replaced by something else
   [3] ssot: an owner row with no agent sibling; a stage signed before the
       step it comes after; an agent-only row asked is green with its ask,
-      caught without one
+      caught without one; a script that writes a client's value into
+      ssot/constants.tsv
   [4] layering: a compute importing the writer
   [4b] clock: a script that reads datetime.now(), one that binds
       `from kit.dates import now`, a vendored clock that reads it twice
@@ -131,6 +132,16 @@ BAD_COMPUTE = """\"\"\"A read verb that talks prose.\"\"\"
 import json
 print(json.dumps({"meta": None, "message": "Everything looks fine today"}))
 """
+SPACE_SET = """\"\"\"A client's own threshold, into the builder's ssot/.\"\"\"
+from pathlib import Path
+
+CONSTANTS = Path(__file__).resolve().parents[1] / "ssot" / "constants.tsv"
+
+
+def set_value(line):
+    with open(CONSTANTS, "a", encoding="utf-8") as f:
+        f.write(line)
+"""
 FORCE = """\"\"\"Confirm, the quick way.\"\"\"
 import argparse
 p = argparse.ArgumentParser(prog="acme facts force-confirm")
@@ -179,6 +190,12 @@ def main() -> int:
     caught("an agent-only row asked with no ask", suites.ssot(root),
            "every owner row names its decided answer")
     undo()
+    undo = planted(root, "scripts/space_set.py", SPACE_SET)
+    caught("a script that writes a client's value into ssot/constants.tsv",
+           suites.ssot(root), "no harness code writes under ssot/")
+    undo()
+    check("…and green again once it is undone",
+          not failing(suites.ssot(root)), failing(suites.ssot(root)))
 
     print("\n[4] layering")
     undo = planted(root, "scripts/compute_x.py", "from _lib import writer\n")
