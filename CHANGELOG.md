@@ -56,17 +56,16 @@ scaffold, console, docs, conformance.
   problem (a list gives no reasons, so each entry is reported). The vendored kit is always left out, with no row.
 ### Fixed
 - `check_writes` read some paths wrong. Now a path's words (`.name`, `.stem`, `.suffix`) are not a path, so
-  `shutil.copy(CONST, DATA / CONST.name)` passes; a name the word `ssot` is in is a path only when it is not bound to
-  data (a call that builds no path and reads one under ssot: `ssot_rows = read_tsv(SSOT / name)` is rows, while
-  `ssot = Path(sys.argv[1])` or `ssot_dir = find_dir(root)` is still a path); a
-  name bound only by plain assignments in its scope's own statements holds what the last one above the line put in it
-  (under a branch, loop, try, augmented assignment or comprehension any binding still counts); `self.p` is keyed by its
-  class and matched in any class linked to it by inheritance in the module (a base, a subclass, a mixin beside it; any
-  class when a base is out of sight; any other attribute by its text, as before), and a class attribute (`p = Path(...)`
-  in the class body, even built from another, then `self.p`) is followed; another
-  module's ssot name is followed as `m.NAME` and `from pkg import m`, through a re-export, and only from the module
-  that defines it (a same-named data path elsewhere passes); os.open writes unless its flags only read; os.walk keeps
-  its dirpath a path (not the file names, so copying them out passes) and os.scandir its entries. Each entry of `write_code` must find code (a misspelled one beside a good one was silent); a
+  `shutil.copy(CONST, DATA / CONST.name)` passes; a name the word `ssot` is in is a path unless it is bound only to what a
+  call named for reading returns from an ssot path (`ssot_rows = read_tsv(SSOT / name)` is rows; `ssot_dir =
+  find_dir(root)` or `ensure_dir(SSOT)` is still a path); a class attribute (`p = Path(...)` in the class body, even built
+  from another, then `self.p`) is followed; another module's ssot name is followed as `m.NAME` and `from pkg import m`,
+  through a re-export, and only from the module that defines it (a same-named data path elsewhere passes); os.open writes
+  unless its flags only read; os.walk keeps its dirpath a path (not the file names, so copying them out passes) and
+  os.scandir its entries. Two refinements the review proposed were tried and dropped, as each one missed writes 0.25.0
+  caught: a name holding only its last binding, and `self.p` keyed by its class. A name bound to an ssot path anywhere
+  in its scope, and `self.p` in any class, still count: the rule prefers a false hit, which a writers row answers, to a
+  miss. Each entry of `write_code` must find code (a misspelled one beside a good one was silent); a
   file is parsed as bytes (a UTF-8 BOM parses; a NUL byte is reported, never a crash); an expression too deep to read
   is reported, never a crash; a virtualenv or `site-packages` inside the harness is not its code; a writers file row
   under a folder row is used, not stale. `writes_self_test()` tries each form.
