@@ -10,7 +10,9 @@ on the fake "shop" harness.
   [3] the data dir: unset, relative, inside the checkout (warn, with the
       fix); the token source; KIT_TTY outside a test
   [4] env files: a loose file warns (chmod 600), a 600 one does not; a
-      secret or the data dir from the HOME-level file warns
+      secret or the data dir from the HOME-level file warns; a gate secret
+      or KIT_TTY in the data-dir .env is not loaded and warns by name (an
+      ordinary key still loads); CONSOLE_SECRET in the process env warns
   [5] the DB: current (ok), stale, unknown tables, newer than the harness,
       unreadable; opened read-only (nothing changes, nothing is created)
   [6] markets: pending only (warn + the confirm command), confirmed (ok),
@@ -53,6 +55,7 @@ VERBS = load(SCRIPTS / "verbs.py")
 
 def env(data: Path | str | None, **extra: str) -> dict:
     e = clean_env()
+    e.pop("CONSOLE_SECRET", None)        # the developer's own console's
     if data is not None:
         e[CFG.env("DATA_DIR")] = str(data)
     e[CFG.env("AUTH_ENV_PATHS")] = "none"
@@ -282,6 +285,60 @@ def test_env_files() -> None:
     check("the data dir from the HOME-level file: its own warning",
           "doctor_data_dir_from_home" in codes(doc, "data_dir"))
     check("the token's value is never shown", "t0ken" not in out)
+
+    secret = CFG.env("CONFIRM_CODE_SECRET")
+    planted = Path(tmp_dir("doc-planted-"))
+    (planted / ".env").write_text(
+        f"export {secret}=v4lue-s3cret\n  KIT_TTY = '/tmp/v4lue-tty'\n"
+        "SHOP_API_KEY=ordinary\n", encoding="utf-8")
+    (planted / ".env").chmod(0o600)
+    e = {k: v for k, v in env(planted).items() if k != paths_var}
+    seen = {}
+
+    def go_planted(argv):
+        from kit import env as kenv
+        kenv.chain().load_into_environ()
+        seen.update({n: os.environ.get(n)
+                     for n in (secret, "KIT_TTY", "SHOP_API_KEY")})
+        return doctor.main(argv, spec=SPEC)
+    rc, out, err = capture(go_planted, ["--json"], env=e)
+    doc = one_doc(out)
+    check("the data-dir .env's gate secret and KIT_TTY are not loaded; an "
+          "ordinary key is", seen == {secret: None, "KIT_TTY": None,
+                                      "SHOP_API_KEY": "ordinary"}, seen)
+    ef = found(doc, "env_files", "warn")
+    check("doctor warns for each, naming the file and the name",
+          [(c["message_code"]["code"], c["message_code"]["params"]) for c in ef]
+          == [("doctor_env_gate_secret_in_file",
+               {"file": str(planted / ".env"), "name": secret}),
+              ("doctor_env_file_unsafe_name",
+               {"file": str(planted / ".env"), "name": "KIT_TTY"})], ef)
+    check("next: delete the line; for the confirm-code secret also the "
+          "bin/console edit with its two exact lines",
+          ef[0]["next"][0] == f"delete the {secret} line from {planted / '.env'}"
+          and ef[0]["next"][2:] == [f'{secret}="$(openssl rand -hex 32)"',
+                                    f"export {secret}"]
+          and ef[1]["next"] == [f"delete the KIT_TTY line from "
+                                f"{planted / '.env'}"], ef)
+    check("never the value; the seam is not live, so no kit_tty warning; "
+          "the secret's own line reads unset",
+          "v4lue-" not in out and found(doc, "kit_tty") == []
+          and f"{secret} = unset [unset]" in out, out)
+    check("a warning, not a failure: exit 0", rc == 0 and doc["healthy"])
+    _, out, _, doc = run(planted, "--json", **{paths_var: "none"})
+    check("CONSOLE_SECRET absent: no console_secret line",
+          found(doc, "console_secret") == [])
+    _, out, _, doc = run(planted, "--json", CONSOLE_SECRET="c0nsole-only")
+    cs = found(doc, "console_secret", "warn")
+    check("CONSOLE_SECRET in the process env: a warning naming it, never "
+          "its value", [c["message_code"]["code"] for c in cs]
+          == ["doctor_console_secret_in_env"]
+          and cs[0]["next"] == ["unset CONSOLE_SECRET"]
+          and "c0nsole-only" not in out, cs)
+    _, _, _, doc = run(planted, "--json", **{secret: "process-s3cret"})
+    check("the confirm-code secret in the process env is not warned (the "
+          "harness process issues and checks the code)",
+          found(doc, "console_secret") == [] and found(doc, "env_files") == [])
 
 
 # ------------------------------------------------------------------ [5]

@@ -38,6 +38,7 @@ Rules: no confirm, approve or apply on the owner's behalf; no paid data calls; r
 - The source project's host scheduler sent the agent a prompt, not a command. Write it closed: absolute paths, "run only these commands", what success looks like, "on success report nothing", "on failure send the owner the error lines", a verified reply channel.
 - Find tasks by name (names are not unique), keep exactly one, act on each by its id, and judge each call by its output, not its exit code.
 - On the source host (Zylos), agent tool calls stop at about 10 minutes; check your host's limit. A longer job runs detached: it writes a log ending `EXIT <code>` and a job file with its pid and start time; the agent polls the log. Pulls are read-only and resumable, so a killed job is simply rerun.
+- Keep the harness, its data folder and its virtualenv on the internal disk. An external disk the OS unmounts at screen lock kills a detached job without its exit line (the playbook's `docs/lessons.md`, "Paid generation jobs").
 
 ## New host, or a replaced host agent: what can it reach?
 
