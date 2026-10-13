@@ -803,6 +803,9 @@ def test_past() -> None:
           and all(x["speaks"] == (x["expected"] >= 3.0) for x in allrows))
     check("a total too large for a float is a ValueError", raises(W.past_signal, [
         {"id": "DEMO-a", "spend": 1e308, "conv": 1}, {"id": "DEMO-b", "spend": 1e308, "conv": 1}], {}))
+    check("an absurdly large unit beside a normal one is a ValueError, not a crash", raises(W.past_signal, [
+        {"id": "DEMO-a", "spend": 1e300, "conv": 1e290}, {"id": "DEMO-b", "spend": 1000, "conv": 5}],
+        {"DEMO-g": {"units": ["DEMO-a", "DEMO-b"]}}))
     check("a unit may sit in several groups", len(W.past_signal(past_units(), {
         "DEMO-a": {"units": ["DEMO-p1"]}, "DEMO-b": {"units": ["DEMO-p1", "DEMO-p2"]}})["groups"]) == 2)
     # bad input
