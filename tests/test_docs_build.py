@@ -1084,7 +1084,7 @@ def past_problems(doc_text: str, module: str, test: str) -> list[str]:
     body = section(doc_text, PAST) if f"## {PAST}" in doc_text else ""
     out = [] if body else [PAST]
     out += [w for w in ("Why they stay out of the weights", "never the account's rate", "`gaps`", "`warnings`",
-                        "confirmed by a person", "How much to trust it", "*Seen once:*", "`past_signal(") if body and w not in body]
+                        "for a person to confirm", "How much to trust it", "*Seen once:*", "`past_signal(") if body and w not in body]
     out += [f"threshold {k}" for k in ("past_min_expected_conv", "past_warn_units") if f"| `{k}` |" not in doc_text]
     if "def past_signal(" not in module:
         out.append("the function")
