@@ -70,8 +70,10 @@ scaffold, console, docs, conformance.
   `past_min_expected_conv` at that rate, and reads strong or weak at `promising_p` and `downweight_p`. `gaps` are strong
   groups with none of the plan's own units, `warnings` weak groups with `past_warn_units` or more. Nothing from it is an
   input of `posteriors()`, `judge()` or `pick()`: the test holds that their results do not change when the past is read
-  and that none of their sources names it, and it measures how often an equally good group reads strong or weak (about 1
-  in 6 and 1 in 5). Additive: `settings()` gains two keys, and nothing else changes. Seen once, in the video-ads harness
+  and that none of their sources names it (no module state is left behind), and it measures how often an equally good group
+  reads strong or weak (about 1 in 6 and 1 in 5 with Poisson noise only, a third and 2 in 5 with spread between units).
+  The pool includes the group, so a group that is most of it reads conservatively; `p_better` and `expected` are
+  rounded and the read is decided on the rounded numbers. Additive: `settings()` gains two keys, and nothing else changes. Seen once, in the video-ads harness
   (its ROADMAP D64), which keeps its own copy for now.
 
 ## [0.27.0] - 2026-10-13
