@@ -124,3 +124,19 @@ The rules:
 
 *Seen once* (2026-10-13), in this playbook (PRs 88 and 89).
 
+## A past winner the harness cannot say is studied for its mechanism, never copied
+
+When a harness reads a client's past results ([path-weights.md](path-weights.md#past-results-a-gap-signal-never-a-weight)), the strongest single ad may win on an angle the harness cannot say: no template or direction of the plan states it. The tempting move is to make that ad a template or a next move. The harness learns the mechanism instead and proposes that.
+
+*Why:* the owner of the video-ads harness (2026-10-13), on its first client's strongest past ad, which had a large share of all past conversions: if we are to learn from it, learn the underlying logic, not this specific case. Copying a winner the harness cannot say risks a compliance problem and overfits one ad.
+
+The rules:
+
+- A strong past ad that nothing in the plan can say is not a template and not a move. It is a proposal for a person to confirm.
+- The proposal states a mechanism in the harness's own words, not the ad's: what can be separated from the claim, which is who the ad reached, how it opened, its timing, and why people converted. The ad's id and numbers are its evidence.
+- A strong past ad the harness can say is the other case: its gap is a proposal for a template, and the mechanism is still what is studied.
+- A reference ad the client hands over to be copied, one that already runs on the platform, is neither: it is the client's request, it is built faithfully (even if it is also the strongest past ad), and its risks stay warnings that a person can waive ([claim-scope waivers](../templates/claim-scope.md#waivers)). The harness never promotes a past ad to a template by itself; a reference is the client's choice, not a result.
+
+No code enforces this: it is a judgement the agent makes and a person confirms, and `tests/test_docs_build.py` pins only the lesson's wording.
+
+*Seen once* (2026-10-13), in that harness; its ROADMAP D64 holds the gap signal this feeds.

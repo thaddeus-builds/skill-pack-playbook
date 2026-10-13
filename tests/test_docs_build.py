@@ -1137,6 +1137,39 @@ def test_the_page_rule_is_whole_and_checked():
     assert page_rule_problems(rules, guard, suites, "") == ["the test"]
 
 
+MECHANISM = "A past winner the harness cannot say is studied for its mechanism, never copied"
+MECHANISM_WORDS = ("*Why:*", "not a template and not a move", "a proposal for a person to confirm", "the harness's own words",
+                   "who the ad reached", "how it opened", "its timing", "why people converted", "is the other case",
+                   "already runs on the platform", "even if it is also the strongest past ad", "never promotes a past ad to a template", "that a person can waive",
+                   "claim-scope.md#waivers", "No code enforces this", "*Seen once*")
+
+
+def mechanism_problems(lessons: str, weights: str) -> list[str]:
+    """What the mechanism lesson fails to say: a section of docs/lessons.md with its why, the rules (no template and no
+    move; a proposal in the harness's own words naming who the ad reached, how it opened, its timing and why people
+    converted; the sayable winner as the other case; the client's reference, which already runs on the platform, as
+    neither, with the waiver link), the plain statement that no code enforces it, and where it was seen; and the
+    path-weights section on the past links to it by its real anchor."""
+    heading = next((h for h in re.findall(r"^## (.+)$", lessons, re.M) if h.startswith(MECHANISM)), None)
+    out = [] if heading else [MECHANISM]
+    body = section(lessons, heading) if heading else ""
+    out += [w for w in MECHANISM_WORDS if heading and w not in body]
+    if heading:
+        slug = re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+        if f"(lessons.md#{slug})" not in weights:
+            out.append("the link from path-weights.md")
+    return out
+
+
+def test_the_mechanism_lesson_is_whole_and_linked():
+    lessons, weights = doc("docs/lessons.md"), doc("docs/path-weights.md")
+    assert mechanism_problems(lessons, weights) == [], mechanism_problems(lessons, weights)
+    assert mechanism_problems(lessons.replace(MECHANISM, "x"), weights) == [MECHANISM]
+    for word in MECHANISM_WORDS:                                                  # each phrase is checked on its own
+        assert mechanism_problems(lessons.replace(word, "x"), weights) == [word], word
+    assert mechanism_problems(lessons, weights.replace("(lessons.md#", "(lessons.md?")) == ["the link from path-weights.md"]
+
+
 LEVEL_COLUMNS = ("Who decides each write", "Proof in the manifest", "What the harness checks", "What is revertible",
                  "Default caps", "How it switches down", "Write kinds allowed")
 AUTONOMY_RULES = ("The harness classes each write, never the agent.",
