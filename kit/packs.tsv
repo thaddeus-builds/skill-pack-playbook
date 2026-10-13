@@ -43,6 +43,7 @@ patternstore	learning	a per-client pattern store: closed rows, two-coder floor, 
 pathweights	learning	path weights for variants: posteriors down a partition, states, the next batch, twins; past results as a gap signal
 questions	learning	open questions that name the data which can answer them and what the plan does meanwhile
 pagestyle	pages	one look for pages that guide making: states as colour, word and icon; one decision; the check
+autonomy	autonomy	the autonomy levels: the tier registry, the owner's switch, scoped approvals, caps from the archive, code-free undo, the digest
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	
