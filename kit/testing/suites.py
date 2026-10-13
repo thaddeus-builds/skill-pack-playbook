@@ -46,6 +46,9 @@ reports them through kit.testing.check. A generated test is
   roadmap       kit.guards.roadmap.check_roadmap: docs/ROADMAP.md (or
                 [guards.roadmap] file) keeps the one format, and its planted
                 self-test
+  page_links    kit.guards.pages.check_links: no shipped file links to a
+                hosted artifact (opt-in: a harness adds `run(page_links(ROOT))`
+                to a test of its own), and its planted self-test
   kit_drift     kit.guards.drift.check_harness
   never_table   kit.guards.evals.check_never_table: SKILL.md's first section
                 is `## Never`, whose table names exactly the verbs only a
@@ -256,6 +259,15 @@ def ssot_writes(root: Path | str) -> Results:
              g.writes_self_test()),
             ("no harness code writes under ssot/ (it is the builder's; a "
              "client's own value goes to its database)", g.check_writes(root))]
+
+
+def page_links(root: Path | str) -> Results:
+    """The page rule alone (it reads no index): a harness adds `run(page_links(ROOT))` to a test of its own."""
+    bind(root)
+    from kit.guards import pages as g
+    return [("the page-link rule catches each planted form", g.self_test()),
+            ("no shipped file links to a hosted artifact (a page the harness "
+             "delivers is drawn by one of its verbs)", g.check_links(root))]
 
 
 # ---- layering, boundary, drift ---------------------------------------------------
