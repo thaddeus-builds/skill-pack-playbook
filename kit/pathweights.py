@@ -610,10 +610,13 @@ def past_signal(units: Iterable[Mapping], groups: Mapping[str, Mapping], cfg: Ma
     making).
 
     A group is judged against the past units' own pooled rate R, never the account's: P(its rate > R) under
-    Gamma(prior_conv + conv, prior_conv / R + spend). It speaks once its spend would buy past_min_expected_conv at R;
+    Gamma(prior_conv + conv, prior_conv / R + spend). The pool includes the group, so a group that is most of the pool
+    reads conservatively (its vs_pool is understated). It speaks once its spend would buy past_min_expected_conv at R;
     it reads `strong` when it speaks and P(better) is at least promising_p, `weak` when it speaks and P is at most
     downweight_p, else None. Each group: {key, units, spend, conv, rate, vs_pool (its rate over R; None with no spend),
-    p_better, expected (spend x R), speaks, reads, ours, top (up to three unit ids by conversions)}, the largest by
+    p_better, expected (spend x R), speaks, reads, ours, top (up to three unit ids by conversions)}, p_better and
+    expected rounded to 4 and 2 places and speaks and reads decided on the rounded numbers, so what is shown never
+    contradicts the read (as judge()); a unit with conversions and no spend counts nowhere; the largest by
     conversions first. `gaps`: keys of strong groups with ours == 0, the surest first. `warnings`: keys of weak groups
     with ours >= past_warn_units, the weakest first. With no pool rate (no conversion, or no spend) nothing is judged:
     groups, gaps and warnings are empty.
@@ -633,7 +636,10 @@ def past_signal(units: Iterable[Mapping], groups: Mapping[str, Mapping], cfg: Ma
     _ids(us, "a past unit")
     by_id = {u["id"]: u for u in us if u["spend"] > 0}
     known = {u["id"] for u in us}
-    S, Y = math.fsum(u["spend"] for u in by_id.values()), math.fsum(u["conv"] for u in by_id.values())
+    try:
+        S, Y = math.fsum(u["spend"] for u in by_id.values()), math.fsum(u["conv"] for u in by_id.values())
+    except OverflowError:
+        raise ValueError("past units: the spend or the conversions add up to more than a float holds") from None
     R = Y / S if S > 0 and Y > 0 else None
     out: dict = {"pool": {"units": len(by_id), "spend": S, "conv": Y, "rate": R}, "groups": [], "gaps": [],
                  "warnings": []}
@@ -663,12 +669,13 @@ def past_signal(units: Iterable[Mapping], groups: Mapping[str, Mapping], cfg: Ma
     for key, (ids, ours) in parsed.items():
         members = [by_id[i] for i in ids]
         s, y = math.fsum(u["spend"] for u in members), math.fsum(u["conv"] for u in members)
-        p = p_above(a0 + y, a0 / R + s, R)
-        speaks = s * R >= need
+        p = round(p_above(a0 + y, a0 / R + s, R), 4)           # what is shown decides the read, as judge() does
+        expected = round(s * R, 2)
+        speaks = expected >= need
         top = sorted((u for u in members if u["conv"] > 0), key=lambda u: (-u["conv"], -u["spend"], str(u["id"])))[:3]
         rows.append({"key": key, "units": len(members), "spend": s, "conv": y, "rate": y / s if s > 0 else None,
-                     "vs_pool": round(y / s / R, 2) if s > 0 else None, "p_better": round(p, 4),
-                     "expected": round(s * R, 2), "speaks": speaks,
+                     "vs_pool": round(y / s / R, 2) if s > 0 else None, "p_better": p,
+                     "expected": expected, "speaks": speaks,
                      "reads": "strong" if speaks and p >= hi else "weak" if speaks and p <= lo else None,
                      "ours": ours, "top": [u["id"] for u in top]})
     rows.sort(key=lambda r: (-r["conv"], -r["units"], r["key"]))

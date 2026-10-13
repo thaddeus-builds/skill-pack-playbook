@@ -7,7 +7,8 @@ and a SYNTHETIC term list:
     whitespace, full-width and zero-width spellings do not hide it; a
     removed line and a clean commit pass; no output line holds the term,
     not even as a path; an added line that reads like a diff header is
-    still read;
+    still read; a `re:` term is searched on its own (its backreference
+    and inline flags are its own), only plain terms are joined;
   * the pre-push stdin: only what is pushed, a deletion adds nothing, a
     new branch is what no remote has; --tree reads the working tree;
   * the lists: `[guards.leak] terms` (a glob, `~`) and
@@ -163,6 +164,24 @@ def main() -> int:
     check("a term written full-width in the list is normalised too",
           code == 1 and hits(lines) == ["<sha> h.md:1: term on line 1 of "
                                         "list 1"], lines)
+    own = Path(tmp_dir("leak-own-")) / "t.txt"
+    own.write_text("re:(a)\\1\nre:(b)\\1\nWidgetco\n", encoding="utf-8")
+    commit(r, {"i.md": "bb here\n"}, "i")
+    code, lines, _ = run(r, "--terms", str(own), "--range", "HEAD~1..HEAD")
+    check("a `re:` term's backreference is its own group, whatever terms "
+          "come before it",
+          code == 1 and hits(lines) == ["<sha> i.md:1: term on line 2 of "
+                                        "list 1"], lines)
+    own.write_text("re:X\\wY\nre:(?a)zzz\nWidgetco\nre:(b)\\1\n",
+                   encoding="utf-8")
+    loaded = leak_guard.load_terms([own])
+    check("only plain terms are joined; every `re:` term is searched on its "
+          "own (an inline flag such as (?a) reaches no other term, even on "
+          "Python 3.9)",
+          loaded.any is not None and loaded.any.pattern == "Widgetco"
+          and leak_guard.scan("X示Y", loaded) == ["line 1 of list 1"]
+          and leak_guard.scan("bb", loaded) == ["line 4 of list 1"],
+          (loaded.any and loaded.any.pattern, leak_guard.scan("X示Y", loaded)))
 
     r, terms, base = repo()
     commit(r, {"b.md": "a clean line\n"}, "ship it for Widgetco")
