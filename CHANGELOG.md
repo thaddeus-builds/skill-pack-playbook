@@ -10,6 +10,8 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/rules.md`, data layers: a page the harness delivers is drawn by the harness (code and test: `kit.guards.pages`,
+  kit 0.30.0 below; tested in `tests/test_docs_build.py`).
 - `docs/rules.md`, human-in-the-loop rule 13: an open question never holds the plan (code and test: `kit.questions`,
   kit 0.28.0 below; tested in `tests/test_docs_build.py`).
 - `docs/autonomy.md` (new): autonomy levels L0 to L5, like SAE's driving levels, by what proof a write into
@@ -74,6 +76,23 @@ scaffold, console, docs, conformance.
   `kit.pagestyle` and tries each way a demo can break the rule (a term in the page data or split by
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
+
+## [0.30.0] - 2026-10-13
+### Added
+- `kit.guards.pages` (pack `testkit`) and `suites.page_links(root)`: a page the harness delivers is drawn by the harness
+  (`docs/rules.md`, data layers), so no file the harness ships links to a hosted artifact. `check_links(root)` reads
+  what `git archive` ships (untracked files are not read; nothing tracked is a problem; with no repository the whole
+  tree less .git, virtualenvs, caches and node_modules, never a skip) as text unless it holds a NUL byte (UTF-16 with a
+  byte order mark is decoded) or is over 5 MB, follows no symlink, and
+  names each file and line that holds a hosted-artifact link, never the link. A line is read after HTML-entity,
+  percent (twice), `\uXXXX` and backslash decoding, with a trailing dot or a port on the host and a link wrapped across
+  a line break; a link built from parts is not read. Not read: the vendored kit and console (when they hold a
+  MANIFEST.sha256) and harness.toml's `[guards.pages]` tables. A link in an export-ignore file is fine.
+  `[guards.pages]` takes `hosts` (more hosts) and `allow` ({path: reason} or {path: {reason, max}}; a row with no
+  reason, a gone path, a file that does not ship or holds no such link now, or one over its `max` is a problem; a bad
+  config is a problem). It errs toward a false hit (any text that spells a host, prose included), which an `allow` row
+  answers. `self_test()` plants each form. Seen once, in the video-ads harness (owner decision 2026-10-13). A harness
+  opts in with `run(suites.page_links(ROOT))` in a test; `templates/harness.toml` documents the table.
 
 ## [0.29.0] - 2026-10-13
 ### Added

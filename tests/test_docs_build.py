@@ -1103,6 +1103,40 @@ def test_the_past_results_section_is_whole_and_checked():
     assert past_problems(text, module, "") == ["the test"]
 
 
+PAGES = "A page the harness delivers is drawn by the harness."
+
+
+def page_rule_problems(rules: str, guard: str, suites: str, test: str) -> list[str]:
+    """What the page rule fails to say or to check: a bold item of the data layers that says every page, sample and
+    demo comes from a verb, that a hosted link is for local debugging and never written into anything that ships, why
+    (the cloud agent installs from git), the check, the allowlist and where it was seen; the check exists with its
+    self-test, the day-one suite runs it and its test plants a link."""
+    body = section(rules, "Data layers and their guards")
+    item = next((i for i in re.split(r"^(?=\*\*)", body, flags=re.M) if i.startswith(f"**{PAGES}**")), "")
+    out = [] if item else [PAGES]
+    out += [w for w in ("one of its own verbs", "local", "never the deliverable", "installs the harness from git",
+                        "`kit.guards.pages`", "`suites.page_links`", "`allow` row", "bans the link only", "*Seen once:*") if item and w not in item]
+    if "def check_links(" not in guard or "def self_test(" not in guard:
+        out.append("the guard")
+    if "def page_links(" not in suites:
+        out.append("the suite")
+    if "for what, text in pages.PLANTED.items()" not in test or "is reported by path and line" not in test:
+        out.append("the test")
+    return out
+
+
+def test_the_page_rule_is_whole_and_checked():
+    rules, guard, suites = doc("docs/rules.md"), doc("kit/guards/pages.py"), doc("kit/testing/suites.py")
+    test = doc("kit/tests/test_page_links.py")
+    assert page_rule_problems(rules, guard, suites, test) == [], page_rule_problems(rules, guard, suites, test)
+    assert page_rule_problems(rules.replace(f"**{PAGES}**", "**x**"), guard, suites, test) == [PAGES]
+    assert page_rule_problems(rules.replace("never the deliverable", "fine"), guard, suites, test) == ["never the deliverable"]
+    assert page_rule_problems(rules.replace("`suites.page_links`", "x"), guard, suites, test) == ["`suites.page_links`"]
+    assert page_rule_problems(rules, "", suites, test) == ["the guard"]
+    assert page_rule_problems(rules, guard, "", test) == ["the suite"]
+    assert page_rule_problems(rules, guard, suites, "") == ["the test"]
+
+
 LEVEL_COLUMNS = ("Who decides each write", "Proof in the manifest", "What the harness checks", "What is revertible",
                  "Default caps", "How it switches down", "Write kinds allowed")
 AUTONOMY_RULES = ("The harness classes each write, never the agent.",
