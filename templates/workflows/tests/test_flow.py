@@ -254,7 +254,7 @@ def test_every_agent_gets_its_own_ports_and_temp_dir():
 
 def test_each_role_gets_its_rules_and_only_those():
     doc = everything()
-    want = {"build": {1, 2, 3, 4, 5, 6, 7, 9}, "review": {1, 2, 3, 4, 5, 6, 10},
+    want = {"build": {1, 2, 3, 4, 5, 6, 7, 9}, "review": {1, 2, 3, 4, 5, 6, 10, 11, 14},
             "fix": {1, 2, 3, 4, 5, 6, 7, 8, 9}, "repair": {1, 2, 3, 4, 5, 6, 7, 8, 9},
             "verify": {4, 5, 6, 10}}
     for c in doc["calls"]:
@@ -365,7 +365,7 @@ def test_sweep_prompts_carry_their_rules_and_their_own_ports():
     rep.update({f"skeptic:{d}:{d}{n}": verdict("CONFIRMED") for d in ("dead", "tests") for n in (1, 2)})
     rep["plan"] = {"verdict": "go", "items": [planned("k1"), planned("k2")], "not_now": []}
     doc = run_sweep(["dead", "tests"], rep)
-    want = {"sweep": {1, 4, 5, 10, 11, 13}, "skeptic": {1, 4, 5, 10, 11, 12}, "plan": {1}, "brief": {1, 4, 10}}
+    want = {"sweep": {1, 4, 5, 10, 11, 13, 14}, "skeptic": {1, 4, 5, 10, 11, 12, 14}, "plan": {1}, "brief": {1, 4, 10}}
     for c in doc["calls"]:
         got = {int(n) for n in re.findall(r"^R(\d+)\. ", c["prompt"], re.M)}
         assert got == want[c["label"].split(":")[0]], (c["label"], got)

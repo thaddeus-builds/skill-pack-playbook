@@ -37,6 +37,8 @@ const CFG = {
   commit: 'git -c user.name="Build Agent" -c user.email=agent@example.com commit',
   trailer: '',                                // a line every commit message ends with, if any
   in_flight: 'none',                          // other branches and sessions, and the files they own
+  known: 'none',                              // known and accepted limits: never reported
+  threat: 'what the guard defends against; what is out of scope',   // the owner's threat model, for reviewers
   schema_owner: '',                           // key of the one item that may bump a schema version
   risky: 'the human gate, the write path, contract removals or renames, owner files, threshold values, human-data tables',
   port_base: 8800,                            // each agent gets its own block of 10 ports
@@ -68,6 +70,8 @@ const RULES = {
   R8: c => `Write where you may: you did not create ${c.worktree}, and an edit hook may refuse writes there. Either call EnterWorktree with that path first and work there, or fix in your own detached worktree (git -C ${CFG.repo} worktree add --detach <dir under TMPDIR> <head>) and move the branch with a compare-and-swap: git -C ${CFG.repo} update-ref refs/heads/<branch> <new> <old>. If ${c.worktree} was clean before the move, run git -C ${c.worktree} checkout -f after it. Add commits; never amend or rebase commits the reviewers saw.`,
   R9: () => 'Heads, not pushes: after your last commit, git rev-parse refs/heads/<your branch> must print your commit; return it as head_sha. Never push, open a merge request or move another branch; the orchestrator pushes after checking every ref.',
   R10: () => `Reproduce or drop, read-only: a finding you did not reproduce (the command you ran, what you saw) is not a finding; list what you probed and found fine under checked_and_fine. Edit nothing in any worktree: run things in your own detached worktree (git -C ${CFG.repo} worktree add --detach <dir under TMPDIR> <sha>) and remove it when done.`,
+  R11: () => `Known and accepted, do not report: ${CFG.known}.`,
+  R14: () => `Threat model, set by the owner: ${CFG.threat}. A finding outside it is not a finding: name it under checked_and_fine as an accepted limit, and do not build it.`,
 }
 const rules = (c, ...ids) => 'Rules:\n' + ids.map(id => `${id}. ${RULES[id](c)}`).join('\n')
 
@@ -149,7 +153,7 @@ The builder's summary (verify it, do not trust it): ${b.summary}
 Deviations it reports: ${b.deviations || 'none'}. Planned merge: ${it.owner_merge || b.owner_merge ? 'owner' : 'auto'}.
 Lens: ${lens.text}
 Severity: blocker = wrong result, broken contract or invariant; major = a missing acceptance item or an untested branch that matters; minor = fix before merge; nit = optional.
-${rules(c, 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R10')}`
+${rules(c, 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R10', 'R11', 'R14')}`
 
 const fixPrompt = (it, b, base, findings, c) => `Fix pass for branch ${b.branch} (head ${b.head_sha}, base ${base}). Do not create another branch.
 Fix every real blocker, major and minor finding; nits by judgement. Decline a finding only with evidence (what you ran and what it showed). Commit on ${b.branch}, then rerun the changed tests, the full suite (TMPDIR=${c.tmp} ${CFG.test}) and the golden diff: ${golden(it, base)}.

@@ -33,6 +33,7 @@ const CFG = {
   help: 'python3 tool.py --help',              // the command whose output wins over the docs
   in_flight: 'none',                           // other branches and sessions, and the files they own
   known: 'none',                               // known and accepted limits: never reported
+  threat: 'what the guard defends against; what is out of scope',   // the owner's threat model
   risky: 'the human gate, the write path, contract removals or renames, owner files, threshold values, human-data tables',
   guarantee_story: 'S09',                      // the story a behaviour-preserving refactor names
   max_candidates: 12,
@@ -57,6 +58,7 @@ const RULES = {
   R11: () => `Known and accepted, do not report: ${CFG.known}.`,
   R12: () => 'Skeptic: reproduce the claim yourself from scratch; do not trust the finder\'s quotes. Answer REFUTED when you cannot reproduce it or it is not worth doing, DOCUMENTED_LIMIT when it is real but already accepted or documented as a limit, CONFIRMED only when you reproduced it and the change is safe. List every consumer you opened (other modules, pages, adapters, docs, tests) in consumers_checked.',
   R13: () => 'Evidence and proof: every candidate carries hard evidence (grep counts, call sites, line ranges, sizes) and the way a builder would prove the change safe (tests red on the base first, a golden diff with no difference, a grep). A change to the contract, a flag, a schema or the human gate is not a clean-up: report it as out_of_scope.',
+  R14: () => `Threat model, set by the owner: ${CFG.threat}. A finding outside it is not a finding: name it under checked_and_fine as an accepted limit, and do not build it.`,
 }
 const rules = (c, ...ids) => 'Rules:\n' + ids.map(id => `${id}. ${RULES[id](c)}`).join('\n')
 
@@ -103,11 +105,11 @@ const ctx = (label, s) => { const p = CFG.port_base + 10 * s; return { base: CFG
 const finderPrompt = (d, c) => `READ-ONLY sweep of ${CFG.repo} at ${CFG.base}. Goal: ${CFG.goal}.
 Dimension ${d.key}. ${d.prompt}
 Report at most ${CFG.max_candidates} candidates, strongest first; a few strong ones beat many cosmetic ones.
-${rules(c, 'R1', 'R4', 'R5', 'R10', 'R11', 'R13')}`
+${rules(c, 'R1', 'R4', 'R5', 'R10', 'R11', 'R13', 'R14')}`
 
 const skepticPrompt = (cand, d, c) => `You are a skeptic. A finder (dimension ${d.key}) reported the candidate below against ${CFG.repo} at ${CFG.base}. Try to REFUTE it: show it is not dead (a reader by name, a consumer, a documented contract), not a true duplicate (edge cases, empty or missing values, rounding, scope), not behaviour-preserving (any output byte, error text, exit code or import side effect), or not worth it (it only moves lines).
 CANDIDATE:\n${JSON.stringify(cand, null, 1)}
-${rules(c, 'R1', 'R4', 'R5', 'R10', 'R11', 'R12')}`
+${rules(c, 'R1', 'R4', 'R5', 'R10', 'R11', 'R12', 'R14')}`
 
 const planPrompt = (overviews, confirmed, dropped) => `You are the planner. Group the confirmed candidates below into a short ordered list of SMALL merge requests: one reason each, reviewable in minutes, never a refactor mixed with a behaviour change. Order by value and risk. A request that touches an in-flight branch's files waits for it (waits_for); two requests that touch one file are stacked (stack_on) or ordered. owner_merge when it touches ${CFG.risky}. A behaviour-preserving refactor names the story ${CFG.guarantee_story}. Each spec must be buildable without this run: files, the exact change, what must not change, the tests (red on the base first); each proof names the full suite and a golden diff with no difference for a refactor. Weak ideas go to not_now with why. Give a frank verdict on whether now is the time.
 Overviews: ${JSON.stringify(overviews)}
