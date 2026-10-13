@@ -50,6 +50,7 @@ guards.clock	testkit
 guards.drift	testkit	
 guards.evals	testkit	eval cases: no consumer yet; the Never table: suites.never_table
 guards.json_contract	testkit	
+guards.pages	testkit	no shipped file links to a hosted artifact: a page is drawn by a verb
 guards.layering	testkit	
 guards.release	testkit	
 guards.roadmap	testkit	

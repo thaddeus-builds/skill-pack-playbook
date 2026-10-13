@@ -258,6 +258,15 @@ def ssot_writes(root: Path | str) -> Results:
              "client's own value goes to its database)", g.check_writes(root))]
 
 
+def page_links(root: Path | str) -> Results:
+    """The page rule alone (it reads no index): a harness adds `run(page_links(ROOT))` to a test of its own."""
+    bind(root)
+    from kit.guards import pages as g
+    return [("the page-link rule catches each planted form", g.self_test()),
+            ("no shipped file links to a hosted artifact (a page the harness "
+             "delivers is drawn by one of its verbs)", g.check_links(root))]
+
+
 # ---- layering, boundary, drift ---------------------------------------------------
 
 def layering(root: Path | str) -> Results:
