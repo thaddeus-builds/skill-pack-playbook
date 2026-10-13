@@ -68,7 +68,8 @@ scaffold, console, docs, conformance.
   and `meanwhile` (what the plan does until then: an action, never a wait). `problems(questions, sources)` is the check a
   harness's tests run (a missing or repeated id, a `by_data` outside the kinds, a blank, placeholder or waiting
   `meanwhile`; an answered or dropped question needs neither). The wait test is a floor: it catches the obvious waits
-  (English, a few Chinese, `extra_waits` for a harness's own words) and errs toward a false hit, which a reworded
+  (English, a few Chinese, `extra_waits` for a harness's own words); a word that also opens ordinary actions (hold,
+  pause, stop) counts only in a short text or with an "until" cue, and a short one may be a false hit, which a reworded
   `meanwhile` answers. `groups()` sorts the questions for a page; `readback(questions, held)` lists the unanswered ones
   whose data the harness now holds and has no read record for (the record is the fingerprint the agent read, so a new
   version of the data prompts again; `ask_only` never does); `self_test()` plants each break and the words its problem

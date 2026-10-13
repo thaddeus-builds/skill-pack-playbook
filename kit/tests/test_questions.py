@@ -28,6 +28,14 @@ def row(**over) -> dict:
     return {k: v for k, v in {**base, **over}.items() if v is not None}
 
 
+def _err(fn, *a, **kw) -> Exception | None:
+    try:
+        fn(*a, **kw)
+    except ValueError as e:
+        return e
+    return None
+
+
 def raises(fn, *a, **kw) -> bool:
     try:
         fn(*a, **kw)
@@ -66,11 +74,17 @@ def test_problems() -> None:
     for text in ("TBD", "tbd.", "N/A", "None", "pending", "wait", "Waiting for the client", "wait-and-see", "Hold the batch",
                  "Blocked on Q4", "await the leaflet", "WAIT: nothing to do", "Pending client", "On hold until client replies",
                  "Nothing to do until answer", "None yet", "stay idle", "pause the batch", "stop until answered", "defer",
-                 "to be decided", "TBA", "later", "等待客户回复", "待定", "无", "暂停出片"):
+                 "to be decided", "TBA", "later", "等待客户回复", "待定", "无", "暂停出片", "等到客户回复再说", "待客户确认", "稍后",
+                 "hold the batch until the client replies please", "Do nothing until the client answers"):
         check(f"a wait: {text!r}", len(p(row(meanwhile=text))) == 1, p(row(meanwhile=text)))
     for text in ("write the template, compile it, make nothing", "use the last stated value", "make the batch on the "
                  "known rows; the template waits for the leaflet", "先写模板，不出片", "waiter note: cover the lower band",
-                 "无需等客户，先写模板"):
+                 "无需等客户，先写模板", "stop the leak in the template", "later versions inherit the template",
+                 "pause shots in the first 3 seconds", "Pending changes are written to the template",
+                 "Deferred shadows are skipped in the render", "hold the logo steady for 2 seconds",
+                 "Do nothing about price in the ads, write the template", "Nothing to do but write the template",
+                 "Later: write the template", "No action needed on price? write it", "暂停讲价格，先写模板",
+                 "等待产品信息时，先写模板", "Hold on: write the template, then compile it"):
         check(f"an action: {text!r}", p(row(meanwhile=text)) == [], p(row(meanwhile=text)))
     check("a Chinese extra wait word is a prefix", len(p(row(meanwhile="静候客户回复"), extra_waits=("静候",))) == 1
           and p(row(meanwhile="先写模板"), extra_waits=("静候",)) == [])
@@ -88,6 +102,8 @@ def test_problems() -> None:
                                                                for x in (True, ["Q1"], None)))
     for odd in (["results_file"], {"a": 1}, 3, None):
         check(f"by_data {odd!r} is a problem, not a crash", len(Q.problems([row(by_data=odd)], KINDS)) == 1)
+    check("sources None is refused (ValueError)", raises(Q.problems, [row()], None))
+    check("extra_waits as one string is refused", raises(Q.problems, [row()], KINDS, extra_waits="stand by"))
     check("a blank ask_only is refused", raises(Q.problems, [row()], KINDS, ask_only=" "))
     rows = [row(), row(id="Q2", by_data="gossip")]
     before = copy.deepcopy(rows)
@@ -139,8 +155,10 @@ def test_readback() -> None:
           Q.readback([row(id="Q1")], {"results_file": 123}) == [{"id": "Q1", "by_data": "results_file", "held": "123"}]
           and Q.readback([row(id="Q1", checked=123)], {"results_file": "123"}) == []
           and Q.readback([row(id="Q1", checked="123")], {"results_file": 123}) == [])
-    check("a bool or a list is no fingerprint", Q.readback([row()], {"results_file": True}) == []
-          and Q.readback([row()], {"results_file": ["x"]}) == [])
+    check("a bool, a float or a list is no fingerprint: refused, naming the kind",
+          all("results_file" in str(e) for e in (_err(Q.readback, [row()], {"results_file": v}) for v in (True, 1.5, ["x"]))))
+    check("None and blank are no data", Q.readback([row()], {"results_file": None}) == [])
+    check("a read record of an odd type is unread, not a crash", len(Q.readback([row(checked=1.5)], held)) == 1)
     check("an odd by_data is skipped, not a crash", Q.readback([row(by_data=["results_file"])], held) == [])
 
 

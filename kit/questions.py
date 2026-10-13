@@ -18,8 +18,9 @@ What the kit holds (pure: no file, no database, no clock; stdlib only):
   * `problems(questions, sources)`: every unanswered question that breaks the two fields (a missing or repeated id, a
     `by_data` outside `sources` and `ask_only`, a blank `meanwhile`, a `meanwhile` that is a bare wait). A harness test
     calls it on its rows; whether an old row is refused or only warned about is the harness's. The wait test is a floor,
-    not a proof: it catches the obvious waits (English, plus a few Chinese; `extra_waits` adds a harness's own words)
-    and errs toward a false hit ("Hold on: write the template" is refused: reword it as the action);
+    not a proof: it catches the obvious waits (English, plus a few Chinese; `extra_waits` adds a harness's own words),
+    where a word that also opens ordinary actions (hold, pause, stop) counts only in a short text or with an "until"
+    cue; a short action that opens with one ("idle time scenes") is a false hit: reword it;
   * `groups(questions, sources)`: the questions as a page shows them: `data` (by kind: the data will answer),
     `person` (only a person can), `unnamed` (no data named: the rows `problems` reports), `answered`;
   * `readback(questions, held)`: `held` maps a data kind to a fingerprint of what the harness holds now (a file's
@@ -39,14 +40,22 @@ import re
 from typing import Collection, Iterable, Mapping, Sequence
 
 ASK_ONLY = "ask_only"
-# a `meanwhile` that only waits (compared after lowercasing and cutting punctuation): the whole text is one of BARE, or
-# it begins with a word of WAIT_FIRST or a phrase of WAIT_PHRASES
+# A `meanwhile` that only waits (compared after lowercasing and cutting punctuation). BARE: the whole text is one of
+# these. SURE: it begins with one of these words, whatever follows. SOFT: words that also start ordinary actions ("hold
+# the logo steady", "stop the leak in the template"): a wait only in a short text (three words or fewer) or with a cue
+# (until, or "for the answer"). Chinese: a wait word at the start of a single clause (no comma, semicolon or full stop
+# after it) or with a cue; a clause after a comma is the action ("暂停讲价格，先写模板").
 BARE = frozenset({"", "none", "n a", "na", "tbd", "tba", "todo", "pending", "blocked", "on hold", "hold", "unknown",
-                  "nothing", "no", "later", "无", "暂无", "待定"})
-WAIT_FIRST = ("wait", "waiting", "await", "awaiting", "hold", "blocked", "pending", "idle", "pause", "paused",
-              "defer", "deferred", "postpone", "postponed", "stop", "later", "tba", "tbd")
-WAIT_PHRASES = ("on hold", "to be decided", "to be determined", "nothing to do", "none yet", "stay idle", "do nothing",
-                "no action", "等待", "暂停", "暂缓", "等客户")
+                  "nothing", "no", "later", "无", "暂无", "待定", "稍后"})
+SURE = ("wait", "waiting", "await", "awaiting", "blocked", "tbd", "tba")
+SOFT = ("hold", "pause", "paused", "defer", "deferred", "postpone", "postponed", "stop", "idle", "later", "pending")
+PHRASES = ("on hold", "to be decided", "to be determined", "none yet", "stay idle")
+SOFT_PHRASES = ("do nothing", "nothing to do", "no action")
+CUE = re.compile(r"\b(?:until|till|for (?:the )?(?:answer|client|owner|reply|response|confirmation))\b")
+SHORT = 3
+ZH = ("暂停", "等待", "暂缓", "等客户", "待客户", "等到", "待定")
+ZH_CUE = re.compile("直到|再说|之前|回复后|确认后")
+ZH_CLAUSE = re.compile(r"[，,；;。.！!？?]")
 
 
 def _text(x: object) -> str:
@@ -64,8 +73,13 @@ def _id(x: object) -> str:
     return str(x) if isinstance(x, int) else _text(x)
 
 
-def _fp(x: object) -> str:
-    """A fingerprint as text (a hash string, or a whole-number import id); "" is no data."""
+def _fp(x: object, what: str = "a fingerprint") -> str:
+    """A fingerprint as text: a hash string or a whole-number import id; None and blank are no data. Anything else
+    (a bool, a float, a list) is a ValueError for `what`: a fingerprint that silently never prompts is worse."""
+    if x is None or (isinstance(x, str) and not x.strip()):
+        return ""
+    if isinstance(x, bool) or not isinstance(x, (str, int)):
+        raise ValueError(f"{what}: a string or a whole number, or None for no data")
     return _id(x)
 
 
@@ -77,7 +91,7 @@ def _open(q: Mapping) -> bool:
 
 
 def _kinds(sources: Collection[str], ask_only: str) -> frozenset[str]:
-    if isinstance(sources, str):
+    if sources is None or isinstance(sources, str):
         raise ValueError("sources: give the harness's closed list of data kinds (a collection of names)")
     sources = tuple(sources)
     if not sources or not all(isinstance(s, str) and s.strip() for s in sources) or not _text(ask_only):
@@ -85,19 +99,32 @@ def _kinds(sources: Collection[str], ask_only: str) -> frozenset[str]:
     return frozenset(sources) | {ask_only}
 
 
+def _cjk(x: str) -> bool:
+    return any("\u4e00" <= c <= "\u9fff" for c in x)
+
+
 def waits(meanwhile: object, extra: Iterable[str] = ()) -> bool:
     """True when a `meanwhile` is only a wait: blank, a bare placeholder ("TBD", "none"), or a text that begins by
-    waiting, holding, pausing or deferring (BARE, WAIT_FIRST, WAIT_PHRASES), or by one of `extra`, the harness's own
-    words. A word is matched whole ("waiter" is no wait); an `extra` or phrase in Chinese, which has no spaces, is
-    matched as a prefix."""
-    n = _norm(meanwhile)
-    first = n.split(" ", 1)[0] if n else ""
-    if n in BARE or first in WAIT_FIRST:
+    waiting (BARE, SURE, PHRASES; SOFT and SOFT_PHRASES only in a short text or with a cue; ZH in Chinese, see the
+    constants), or by one of `extra`, the harness's own words (a list of strings; a word is matched whole, so "waiter"
+    is no wait). Errs toward a false hit on SOFT words ("Hold on: write the template"): reword it as the action."""
+    if isinstance(extra, str):
+        raise ValueError("extra_waits: a list of words, not one string")
+    raw, n = _text(meanwhile), _norm(meanwhile)
+    words = n.split()
+    first = words[0] if words else ""
+    cue = bool(CUE.search(n))
+    if n in BARE or first in SURE or any(n == e or n.startswith(e + " ") for e in PHRASES):
         return True
-    for e in (*WAIT_PHRASES, *map(_norm, extra)):
-        if e and (n == e or n.startswith(e + " ") or (not e.isascii() and n.startswith(e))):
-            return True
-    return False
+    if (first in SOFT or any(n == e or n.startswith(e + " ") for e in SOFT_PHRASES)) and (len(words) <= SHORT or cue):
+        return True
+    for e in (*ZH, *(e for e in extra if _cjk(_text(e)))):
+        e = _text(e)
+        if e and raw.startswith(e):
+            rest = raw[len(e):]
+            if not ZH_CLAUSE.search(rest) or ZH_CUE.search(rest):
+                return True
+    return any(n == e or n.startswith(e + " ") for e in map(_norm, extra) if e and not _cjk(e))
 
 
 def problems(questions: Sequence[Mapping], sources: Collection[str], *, ask_only: str = ASK_ONLY,
@@ -168,8 +195,9 @@ def readback(questions: Sequence[Mapping], held: Mapping[str, str | int] | None,
         if not isinstance(q, Mapping) or not _open(q):
             continue
         by = q.get("by_data")
-        fp = _fp(held.get(by)) if isinstance(by, str) and by != ask_only else ""
-        if fp and _fp(q.get(key)) != fp:
+        fp = _fp(held.get(by), f"held[{by!r}]") if isinstance(by, str) and by != ask_only else ""
+        read = q.get(key)
+        if fp and (_id(read) if isinstance(read, (str, int)) and not isinstance(read, bool) else "") != fp:
             out.append({"id": _id(q.get("id")), "by_data": by, "held": fp})
     return out
 
