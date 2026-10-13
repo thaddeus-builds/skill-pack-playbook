@@ -45,6 +45,24 @@ scaffold, console, docs, conformance.
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
 
+## [0.26.1] - 2026-10-13
+### Fixed
+- `kit.guards.ssot.check_writes` missed writes 0.25.0 caught. 0.26.0's refinements are dropped where they cost a hit:
+  a name is a path when any binding of it in its scope is (0.26.0 kept only the last one in straight code); `self.p`
+  is matched by its text in any class (0.26.0 keyed it by the inheritance family); a name imported from any scanned
+  module is matched by the name alone, so a star re-export or an import path with a package prefix is followed again
+  (0.26.0 looked the name up in the one module the import path named); an attribute that holds an ssot path is a path
+  whatever it is called (`self.name`), and only `.name`, `.stem`, `.suffix` and `.suffixes` of a path are its words
+  (`.parts` rebuilds the path); a call returns data only when its name's first word reads (read, reads, reader,
+  readlines, load, loads, parse) or it ends in rows, so `ensure_ready(SSOT)` or `upload_dir(SSOT)` is a path again.
+  0.26.0's additions stay: `m.NAME` and `from pkg import m` are followed, os.walk's file names are not paths, a class
+  attribute is followed into `self.p`. The rule prefers a false hit, which a writers row answers, to a miss
+  (`docs/lessons.md`, "A guard's refinement never costs the recall it had"); each missed write is a must-hit case of
+  `writes_self_test()`, and a test holds the list. Run case by case against 0.25.0, the only hits 0.26.1 no longer
+  reports are three false ones: copying out of ssot under a file's own `.name` or `.stem`, and writing a row's own file
+  with what a read returned from ssot.
+- `facts confirm` without `--value`: a test that it confirms the stored value as stored (0.26.0's behaviour).
+
 ## [0.26.0] - 2026-10-13
 ### Added
 - `kit.testing.suites.ssot_writes(root)`: the ssot write rule alone (its self-test and `check_writes`), reading no

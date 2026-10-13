@@ -664,6 +664,20 @@ def test_numeric_contract() -> None:
           and rows() == before, (rc, out))
     run(["set", "threshold_max_step", "0.3", "--source", "s", "--reason",
          "r"])
+    c = con()                    # stored by hand in a non-canonical form
+    c.execute("UPDATE client_facts SET value='0.30' WHERE market='US' AND "
+              "key='threshold_max_step'")
+    c.commit()
+    c.close()
+    rc, out, err = run(["confirm", "threshold_max_step", "--reason", "r",
+                        "--json"], tty=["0.30"])
+    check("confirm checks the bound but confirms the value as stored (no "
+          "canonical rewrite, no 'replacing')",
+          rc == 0 and fact("threshold_max_step")[:2] == ("0.30", 0)
+          and "replacing" not in out, (rc, out, err))
+    run(["unconfirm", "threshold_max_step", "--reason", "r"])
+    run(["set", "threshold_max_step", "0.3", "--source", "s", "--reason",
+         "r"])
     if fact("fee_pct")[1] == 0:
         run(["unconfirm", "fee_pct", "--reason", "bounds check"])
     for value in ("0", "100", "0.5"):

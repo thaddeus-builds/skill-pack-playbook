@@ -547,6 +547,18 @@ def test_ssot_writes(root: Path) -> None:
     check("the rule's planted self-test: every write caught, the reads "
           "and the other writes beside it not", ssot.writes_self_test() == [],
           ssot.writes_self_test())
+    must = {src for src, _, write in ssot._WRITE_CASES if write}
+    dropped = ("    if args.default:\n", "p += '.tmp'", "for n in ns:",
+               "[p.name for p in", "ensure_dir(SSOT)",
+               "    path = write_json_atomic(\n", "class Saver:",
+               "self.path = Path('data/b')", "p = Path('data/c')",
+               "self.name = SSOT", "Path(*p.parts)", "ensure_ready(SSOT)",
+               "upload_dir(SSOT)", "thread_safe(SSOT", "from out import CONST")
+    check("each write a dropped refinement missed stays a must-hit case "
+          "of the self-test (docs/lessons.md: a guard's refinement never "
+          "costs the recall it had)",
+          all(any(d in src for src in must) for d in dropped),
+          [d for d in dropped if not any(d in src for src in must)])
     clean("the clean copy writes nothing under ssot/", ssot.check_writes(root))
     with planted(root, "scripts/space_set.py", SPACE_SET):
         got = ssot.check_writes(root)
@@ -665,8 +677,17 @@ def test_ssot_writes(root: Path) -> None:
         with planted(root, "scripts/compute_v.py", "from _lib.out import "
                      "VALUES\n\n\ndef f(t):\n    VALUES.write_text(t)\n"), \
                 planted(root, "scripts/_lib/out.py", "VALUES = 'data/v'\n"):
-            clean("…but a same-named data path from another module is not",
-                  ssot.check_writes(root))
+            caught("…and a same-named one from another module (by its name "
+                   "alone, as 0.25.0: a false hit over a miss)",
+                   ssot.check_writes(root), "scripts/compute_v.py:5: "
+                                            ".write_text() VALUES")
+        with planted(root, "scripts/_lib/__init__.py",
+                     "from .paths import *\n"), \
+                planted(root, "scripts/compute_v.py", "from _lib import "
+                        "VALUES\n\n\ndef f(t):\n    VALUES.write_text(t)\n"):
+            caught("…and one re-exported by a star import",
+                   ssot.check_writes(root), "scripts/compute_v.py:5: "
+                                            ".write_text() VALUES")
     with planted(root, "tools/edit_registry.py", EDITOR), \
             planted(root, "harness.toml", toml + '\n[guards.ssot.writers]\n'
                     '"tools/" = "the builder\'s tools"\n'
