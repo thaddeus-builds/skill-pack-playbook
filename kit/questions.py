@@ -6,7 +6,8 @@ A harness keeps its open questions as rows (any mapping, any store): `id`, `text
 
   * `by_data`: which data, once the harness holds it, can answer the question without asking anyone. One of the
     harness's own closed list of kinds (its results file, an audience report, an order export, the comments under its
-    ads), or `ask_only` (default "ask_only") when only a person can. Never blank;
+    ads), or `ask_only` (the default name; a harness may rename it) when only a person can. Never blank and never
+    defaulted: a question that names nothing is a problem;
   * `meanwhile`: what the plan does until the answer is known, an action ("write the template, compile it, make
     nothing"), never a wait. A step that waits for an answer is the fault this rule removes.
 
@@ -14,10 +15,11 @@ and, only when the harness records a read-back, `checked`: the fingerprint of th
 
 What the kit holds (pure: no file, no database, no clock; stdlib only):
 
-  * `problems(questions, sources)`: every unanswered question that breaks the two fields (a missing id, a repeated
-    id, a `by_data` outside `sources` and `ask_only`, a blank `meanwhile`, a `meanwhile` that is a bare wait). A harness
-    test calls it on its rows; an old row may be loaded and only warned about, as the harness chooses. Errs toward a
-    false hit (a `meanwhile` that begins with "wait"): reword it as the action;
+  * `problems(questions, sources)`: every unanswered question that breaks the two fields (a missing or repeated id, a
+    `by_data` outside `sources` and `ask_only`, a blank `meanwhile`, a `meanwhile` that is a bare wait). A harness test
+    calls it on its rows; whether an old row is refused or only warned about is the harness's. The wait test is a floor,
+    not a proof: it catches the obvious waits (English, plus a few Chinese; `extra_waits` adds a harness's own words)
+    and errs toward a false hit ("Hold on: write the template" is refused: reword it as the action);
   * `groups(questions, sources)`: the questions as a page shows them: `data` (by kind: the data will answer),
     `person` (only a person can), `unnamed` (no data named: the rows `problems` reports), `answered`;
   * `readback(questions, held)`: `held` maps a data kind to a fingerprint of what the harness holds now (a file's
@@ -26,9 +28,7 @@ What the kit holds (pure: no file, no database, no clock; stdlib only):
     the fingerprint it read. A new version of the data prompts again; `ask_only` is never prompted;
   * `self_test()`: every rule tried on a planted break; returns the rules that missed theirs (empty is sound).
 
-*Seen once:* the video-ads harness (owner decision, 2026-10-13): its client rarely knows such answers, while the
-results file the client sends back can answer some of them. Each question there now names the data and the action
-meanwhile, and the harness warns once the data it names is held.
+*Seen once:* the video-ads harness (docs/rules.md, rule 13, says how).
 
 Test: kit/tests/test_questions.py.
 """
@@ -39,11 +39,14 @@ import re
 from typing import Collection, Iterable, Mapping, Sequence
 
 ASK_ONLY = "ask_only"
-# a `meanwhile` that only waits (compared after lowercasing and cutting punctuation); the first word of any other
-# text that makes it a wait is in WAIT_FIRST
-BARE = frozenset({"", "none", "n a", "na", "tbd", "todo", "pending", "blocked", "on hold", "hold", "unknown",
-                  "nothing", "no"})
-WAIT_FIRST = ("wait", "waiting", "await", "awaiting", "hold", "blocked")
+# a `meanwhile` that only waits (compared after lowercasing and cutting punctuation): the whole text is one of BARE, or
+# it begins with a word of WAIT_FIRST or a phrase of WAIT_PHRASES
+BARE = frozenset({"", "none", "n a", "na", "tbd", "tba", "todo", "pending", "blocked", "on hold", "hold", "unknown",
+                  "nothing", "no", "later", "无", "暂无", "待定"})
+WAIT_FIRST = ("wait", "waiting", "await", "awaiting", "hold", "blocked", "pending", "idle", "pause", "paused",
+              "defer", "deferred", "postpone", "postponed", "stop", "later", "tba", "tbd")
+WAIT_PHRASES = ("on hold", "to be decided", "to be determined", "nothing to do", "none yet", "stay idle", "do nothing",
+                "no action", "等待", "暂停", "暂缓", "等客户")
 
 
 def _text(x: object) -> str:
@@ -54,27 +57,47 @@ def _norm(x: object) -> str:
     return " ".join(re.sub(r"[^\w]+", " ", _text(x).lower()).split())
 
 
+def _id(x: object) -> str:
+    """A question's id as text: a non-blank string, or a whole number (not a bool) written out; else ""."""
+    if isinstance(x, bool):
+        return ""
+    return str(x) if isinstance(x, int) else _text(x)
+
+
+def _fp(x: object) -> str:
+    """A fingerprint as text (a hash string, or a whole-number import id); "" is no data."""
+    return _id(x)
+
+
 def _open(q: Mapping) -> bool:
-    """Unanswered and not dropped: the questions this module reads."""
+    """Open: no answer (None or blank text; any other value, 0 and False included, is an answer) and not dropped (any
+    truthy `dropped`)."""
     a = q.get("answer")
     return (a is None or (isinstance(a, str) and not a.strip())) and not q.get("dropped")
 
 
 def _kinds(sources: Collection[str], ask_only: str) -> frozenset[str]:
-    if isinstance(sources, str) or not sources:
+    if isinstance(sources, str):
         raise ValueError("sources: give the harness's closed list of data kinds (a collection of names)")
-    bad = [s for s in sources if not _text(s)]
-    if bad or not _text(ask_only):
-        raise ValueError("sources and ask_only: every kind is a non-blank name")
+    sources = tuple(sources)
+    if not sources or not all(isinstance(s, str) and s.strip() for s in sources) or not _text(ask_only):
+        raise ValueError("sources and ask_only: a closed list of data kinds, every kind a non-blank name")
     return frozenset(sources) | {ask_only}
 
 
 def waits(meanwhile: object, extra: Iterable[str] = ()) -> bool:
     """True when a `meanwhile` is only a wait: blank, a bare placeholder ("TBD", "none"), or a text that begins by
-    waiting or holding (or by one of `extra`, the harness's own words, lowercase)."""
+    waiting, holding, pausing or deferring (BARE, WAIT_FIRST, WAIT_PHRASES), or by one of `extra`, the harness's own
+    words. A word is matched whole ("waiter" is no wait); an `extra` or phrase in Chinese, which has no spaces, is
+    matched as a prefix."""
     n = _norm(meanwhile)
     first = n.split(" ", 1)[0] if n else ""
-    return n in BARE or first in WAIT_FIRST or any(n == e or n.startswith(e + " ") for e in map(_norm, extra))
+    if n in BARE or first in WAIT_FIRST:
+        return True
+    for e in (*WAIT_PHRASES, *map(_norm, extra)):
+        if e and (n == e or n.startswith(e + " ") or (not e.isascii() and n.startswith(e))):
+            return True
+    return False
 
 
 def problems(questions: Sequence[Mapping], sources: Collection[str], *, ask_only: str = ASK_ONLY,
@@ -87,10 +110,10 @@ def problems(questions: Sequence[Mapping], sources: Collection[str], *, ask_only
         if not isinstance(q, Mapping):
             out.append(f"question #{i + 1}: not a mapping")
             continue
-        qid = _text(q.get("id"))
+        qid = _id(q.get("id"))
         who = qid or f"question #{i + 1}"
         if not qid:
-            out.append(f"{who}: has no id")
+            out.append(f"{who}: has no id (a non-blank string or a whole number)")
         elif qid in seen:
             out.append(f"{who}: the id is used twice")
         seen.add(qid)
@@ -109,39 +132,45 @@ def problems(questions: Sequence[Mapping], sources: Collection[str], *, ask_only
 
 
 def groups(questions: Sequence[Mapping], sources: Collection[str], *, ask_only: str = ASK_ONLY) -> dict:
-    """The questions as a page shows them, ids in the order given. `data` maps each kind in `sources` that has any to
-    its unanswered questions; `person` is `ask_only`; `unnamed` has no valid kind; `answered` holds the answered
-    ones (a dropped question is in none)."""
+    """The questions as a page shows them, ids in the order given (an id is text; a question with none is listed as
+    ""). `data` maps each kind in `sources` that has any to its unanswered questions; `person` is `ask_only`;
+    `unnamed` has no valid kind (the rows `problems` reports); `answered` holds the answered ones (a dropped question
+    is in none)."""
     kinds = _kinds(sources, ask_only)
     out: dict = {"data": {}, "person": [], "unnamed": [], "answered": []}
     for q in questions:
         if not isinstance(q, Mapping) or q.get("dropped"):
             continue
-        qid = _text(q.get("id"))
+        qid, by = _id(q.get("id")), q.get("by_data")
         if not _open(q):
             out["answered"].append(qid)
-        elif q.get("by_data") == ask_only:
+        elif isinstance(by, str) and by == ask_only:
             out["person"].append(qid)
-        elif q.get("by_data") in kinds:
-            out["data"].setdefault(q["by_data"], []).append(qid)
+        elif isinstance(by, str) and by in kinds:
+            out["data"].setdefault(by, []).append(qid)
         else:
             out["unnamed"].append(qid)
     return out
 
 
-def readback(questions: Sequence[Mapping], held: Mapping[str, str], *, key: str = "checked",
+def readback(questions: Sequence[Mapping], held: Mapping[str, str | int] | None, *, key: str = "checked",
              ask_only: str = ASK_ONLY) -> list[dict]:
     """The unanswered questions the data now held can answer and the agent has not read it for: `{id, by_data,
-    held}`, in the order given. `held` maps a kind to a fingerprint of the data (a blank one means no data of that
-    kind); a question whose `key` equals that fingerprint was read already."""
+    held}`, in the order given. `held` maps a kind to a fingerprint of the data (a hash string or a whole-number
+    import id; blank, None or no entry means no data of that kind; None for `held` means none held); a question whose
+    `key` equals that fingerprint (as text) was read already."""
+    if held is None:
+        held = {}
+    if not isinstance(held, Mapping):
+        raise ValueError("held: a mapping {kind: fingerprint}")
     out = []
     for q in questions:
         if not isinstance(q, Mapping) or not _open(q):
             continue
         by = q.get("by_data")
-        fp = _text(held.get(by)) if isinstance(by, str) and by != ask_only else ""
-        if fp and _text(q.get(key)) != fp:
-            out.append({"id": _text(q.get("id")), "by_data": by, "held": fp})
+        fp = _fp(held.get(by)) if isinstance(by, str) and by != ask_only else ""
+        if fp and _fp(q.get(key)) != fp:
+            out.append({"id": _id(q.get("id")), "by_data": by, "held": fp})
     return out
 
 
@@ -159,26 +188,30 @@ def _plant(**over) -> list[dict]:
     return [row, *_SOUND[1:]]
 
 
+# what is broken -> (the rows, the words the problem must say)
 PLANTED = {
-    "a question with no id": [{**_SOUND[0], "id": ""}],
-    "a repeated id": [*_SOUND, dict(_SOUND[1])],
-    "no by_data": _plant(by_data=None),
-    "a by_data outside the harness's kinds": _plant(by_data="gossip"),
-    "no meanwhile": _plant(meanwhile=None),
-    "a blank meanwhile": _plant(meanwhile="  "),
-    "a bare placeholder meanwhile": _plant(meanwhile="TBD"),
-    "a meanwhile that waits": _plant(meanwhile="Wait for the client to answer"),
-    "a meanwhile that holds": _plant(meanwhile="hold the batch"),
+    "a question with no id": ([{**_SOUND[0], "id": ""}], "has no id"),
+    "a repeated id": ([*_SOUND, dict(_SOUND[1])], "used twice"),
+    "no by_data": (_plant(by_data=None), "names no data"),
+    "a by_data outside the harness's kinds": (_plant(by_data="gossip"), "is not one of"),
+    "no meanwhile": (_plant(meanwhile=None), "says nothing"),
+    "a blank meanwhile": (_plant(meanwhile="  "), "says nothing"),
+    "a bare placeholder meanwhile": (_plant(meanwhile="TBD"), "only waits"),
+    "a meanwhile that waits": (_plant(meanwhile="Wait for the client to answer"), "only waits"),
+    "a meanwhile that holds": (_plant(meanwhile="hold the batch"), "only waits"),
+    "a meanwhile that pauses": (_plant(meanwhile="Pause until answered"), "only waits"),
+    "a meanwhile that waits, in Chinese": (_plant(meanwhile="等待客户回复"), "only waits"),
 }
 
 
 def self_test() -> list[str]:
-    """The rules that missed their planted break, or let the sound rows fail; empty is sound."""
+    """The rules that missed their planted break (the break not reported, or reported as another), or that let the
+    sound rows fail; empty is sound."""
     missed = []
     if problems(_SOUND, _SOURCES):
         missed.append("the sound rows fail")
-    for what, rows in PLANTED.items():
-        if not problems(rows, _SOURCES):
+    for what, (rows, words) in PLANTED.items():
+        if not any(words in p for p in problems(rows, _SOURCES)):
             missed.append(what)
     if problems(_plant(by_data=None, meanwhile=None, answer="done"), _SOURCES):
         missed.append("an answered question needs neither field")

@@ -10,10 +10,8 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
-- `docs/rules.md`, human-in-the-loop rule 13: an open question never holds the plan (each unanswered question names
-  the data that can answer it and what the plan does meanwhile, never a wait; the harness prompts a read-back when
-  that data arrives). Seen once, in the video-ads harness (owner decision 2026-10-13). Code and test: `kit.questions`
-  (kit 0.27.0, below); tested in `tests/test_docs_build.py`.
+- `docs/rules.md`, human-in-the-loop rule 13: an open question never holds the plan (code and test: `kit.questions`,
+  kit 0.27.0 below; tested in `tests/test_docs_build.py`).
 - `docs/rules.md`, Registries item 9: a client's vocabulary is its value too. The options a harness mines or proposes for
   one client (a creative dimension's values, words taken from its own or its competitors' ads) are rows in that client's
   database, confirmed or retired by a person there; `ssot/` keeps the schema (the axes and their code letters) and the
@@ -69,12 +67,13 @@ scaffold, console, docs, conformance.
   plan. A question names `by_data` (the data that can answer it, from the harness's closed list of kinds, or `ask_only`)
   and `meanwhile` (what the plan does until then: an action, never a wait). `problems(questions, sources)` is the check a
   harness's tests run (a missing or repeated id, a `by_data` outside the kinds, a blank, placeholder or waiting
-  `meanwhile`; an answered or dropped question needs neither; it errs toward a false hit, which a reworded `meanwhile`
-  answers); `groups()` sorts the questions for a page (the data will answer, only a person can, no data named,
-  answered); `readback(questions, held)` lists the unanswered ones whose data the harness now holds and has no read
-  record for (the record is the fingerprint the agent read, so a new version of the data prompts again; `ask_only` never
-  does); `self_test()` plants each break. Pure, stdlib only, no message codes. Seen once, in the video-ads harness
-  (its ROADMAP D65), which keeps its own copy for now.
+  `meanwhile`; an answered or dropped question needs neither). The wait test is a floor: it catches the obvious waits
+  (English, a few Chinese, `extra_waits` for a harness's own words) and errs toward a false hit, which a reworded
+  `meanwhile` answers. `groups()` sorts the questions for a page; `readback(questions, held)` lists the unanswered ones
+  whose data the harness now holds and has no read record for (the record is the fingerprint the agent read, so a new
+  version of the data prompts again; `ask_only` never does); `self_test()` plants each break and the words its problem
+  must say. Pure, stdlib only, no message codes. Seen once, in the video-ads harness (its ROADMAP D65), which keeps
+  its own copy for now.
 
 ## [0.26.1] - 2026-10-13
 ### Fixed
