@@ -65,7 +65,8 @@ scaffold, console, docs, conformance.
   os.scandir its entries. Two refinements the review proposed were tried and dropped, as each one missed writes 0.25.0
   caught: a name holding only its last binding, and `self.p` keyed by its class. A name bound to an ssot path anywhere
   in its scope, and `self.p` in any class, still count: the rule prefers a false hit, which a writers row answers, to a
-  miss. Each entry of `write_code` must find code (a misspelled one beside a good one was silent); a
+  miss (`docs/lessons.md`, "A guard's refinement never costs the recall it had"; each missed write stays a must-hit
+  case of `writes_self_test()`). Each entry of `write_code` must find code (a misspelled one beside a good one was silent); a
   file is parsed as bytes (a UTF-8 BOM parses; a NUL byte is reported, never a crash); an expression too deep to read
   is reported, never a crash; a virtualenv or `site-packages` inside the harness is not its code; a writers file row
   under a folder row is used, not stale. `writes_self_test()` tries each form.

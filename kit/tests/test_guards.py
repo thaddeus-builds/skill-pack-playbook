@@ -547,6 +547,16 @@ def test_ssot_writes(root: Path) -> None:
     check("the rule's planted self-test: every write caught, the reads "
           "and the other writes beside it not", ssot.writes_self_test() == [],
           ssot.writes_self_test())
+    must = {src for src, _, write in ssot._WRITE_CASES if write}
+    dropped = ("    if args.default:\n", "p += '.tmp'", "for n in ns:",
+               "[p.name for p in", "ensure_dir(SSOT)",
+               "    path = write_json_atomic(\n", "class Saver:",
+               "self.path = Path('data/b')", "p = Path('data/c')")
+    check("each write a dropped refinement missed stays a must-hit case "
+          "of the self-test (docs/lessons.md: a guard's refinement never "
+          "costs the recall it had)",
+          all(any(d in src for src in must) for d in dropped),
+          [d for d in dropped if not any(d in src for src in must)])
     clean("the clean copy writes nothing under ssot/", ssot.check_writes(root))
     with planted(root, "scripts/space_set.py", SPACE_SET):
         got = ssot.check_writes(root)
