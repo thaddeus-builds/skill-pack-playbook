@@ -63,6 +63,14 @@ spawn_allowed = ["compute_stories"]    # the one compute that may run other read
 # [guards.roadmap]
 # file = "docs/ROADMAP.md"
 
+# Optional, read by kit.guards.pages (a test adds suites.page_links(ROOT)): no shipped file links to a
+# hosted artifact. `hosts`: more hosts to treat so; `allow`: a shipped file that may hold one, with its
+# reason (or {reason, max}: at most `max` lines). docs/rules.md, "A page the harness delivers is drawn by the harness".
+# [guards.pages]
+# hosts = ["pages.example.test/view"]
+# [guards.pages.allow]
+# "docs/page-rules.md" = "the doc that names the rule"
+
 # Optional, read by the leak guard (scripts/kit/tools/leak_guard.py, the pre-push hook):
 # the client-term lists, outside this repository, as paths or globs ("~" expands; a
 # relative one is from the top level, which a worktree moves). None found = push refused.

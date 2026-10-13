@@ -4,14 +4,19 @@ On SYNTHETIC files only (neutral names, a made-up artifact id).
 
   [0] the rule on its planted forms: a markdown link, a bare host, a code-session link, a public share, capitals,
       JSON-escaped and percent-encoded slashes; the sound text and look-alike hosts are no hit
-  [1] a harness on disk (git): a link in a shipped skill, readme, script, page or template is reported by path and line
-      and never by the link; the same link in an export-ignore (internal) file, in the vendored kit or in the console is
-      not; a harness with no git is read whole; a file type that is not text is not read
-  [2] [guards.pages]: allow (with its reason, passing; no reason, a path that is gone, a file that holds no link now,
-      a file that does not ship: each a problem), hosts (a host the harness adds)
+  [1] a harness on disk (git): a link in a shipped file of any text type (every extension, none, upper case) is reported
+      by path and line and never by the link; the same link in an export-ignore (internal) file is not; the vendored kit
+      and the console (only when they hold a MANIFEST.sha256) are not read, a console of the harness's own is; a file
+      with a NUL byte, over 5 MB, a symlink, a file deleted from the disk and a directory named like a file are not read
+      and do not crash; harness.toml is read outside its [guards.pages] tables; a repository with nothing tracked is a
+      problem; a harness with no git is read whole, less dot-directories
+  [2] [guards.pages]: allow (with its reason, passing; with max, a link added later is a problem; no reason, a path that
+      is gone, a file that holds no link now, a file that does not ship: each a problem), hosts (a host the harness
+      adds; a bad one is a problem), a bad allow table is a problem
   [3] the day-one suite runs the rule (suites.page_links)
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -27,7 +32,8 @@ from kit.testing import suites  # noqa: E402
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 
 HAS_GIT = shutil.which("git") is not None
-LINK = "https://claude.ai/artifact/DEMO-abc123"
+H = pages.H
+LINK = f"https://{H}/artifact/DEMO-abc123"
 TOML = """
 [release]
 internal = ["notes", "CLAUDE.md"]
@@ -84,10 +90,12 @@ def test_rule() -> None:
     for what, text in pages.PLANTED.items():
         check(f"planted: {what}", pages.hits(text) != [], text)
     check("the line is named", pages.hits(pages.PLANTED["on a later line"]) == [4])
-    for text in ("https://claude.ai/docs", "claude.ai/new", "an artifact is a build output", "see artifact/abc at example.test"):
+    for text in (f"https://{H}/docs", f"{H}/new", "an artifact is a build output", "see artifact/abc at example.test"):
         check(f"no hit: {text!r}", pages.hits(text) == [], text)
-    check("a path that only begins with a host is a hit (a false hit over a miss)", pages.hits("claude.ai/artifacts-x") == [1])
+    check("a path that only begins with a host is a hit (a false hit over a miss)", pages.hits(f"{H}/artifacts-x") == [1])
     check("two hits on two lines", pages.hits(f"{LINK}\nx\n{LINK}") == [1, 3])
+    check("the line count is the file's: a form feed or a line separator does not start a line",
+          pages.hits(f"a\x0cb\u2028c\n{LINK}") == [2])
 
 
 def test_harness() -> None:
@@ -100,12 +108,17 @@ def test_harness() -> None:
                              ("docs/sample.html", f"<a href='{LINK}'>x</a>\n", "docs/sample.html:1"),
                              ("templates/page.md.tmpl.json", f'{{"u": "{LINK.replace("/", chr(92) + "/")}"}}\n',
                               "templates/page.md.tmpl.json:1"),
+                             ("Makefile", f"open: ; echo {LINK}\n", "Makefile:1"),
+                             ("NOTES.MD", f"{LINK}\n", "NOTES.MD:1"),
+                             ("docs/page.j2", f"{{{{ x }}}} {LINK}\n", "docs/page.j2:1"),
+                             ("app/page.tsx", f"const u = '{LINK}'\n", "app/page.tsx:1"),
+                             ("harness.toml", f"# {LINK}\n", "harness.toml"),
                              ("ssot/links.tsv", f"a\t{LINK}\n", "ssot/links.tsv:1")):
         r = build()
-        put(r, rel, text)
+        put(r, rel, (open(r / rel).read() if rel == "harness.toml" else "") + text)
         got = pages.check_links(r)
         check(f"a link in {rel} is reported by path and line", len(got) == 1 and got[0].startswith(where + ":"), got)
-        check(f"…never by the link itself", all("DEMO-abc123" not in g and "claude.ai/artifact" not in g for g in got), got)
+        check(f"…never by the link itself", all("DEMO-abc123" not in g and f"{H}/artifact" not in g for g in got), got)
     if HAS_GIT:
         r = build()
         put(r, "notes/local.md", f"scratch {LINK}\n")
@@ -113,25 +126,63 @@ def test_harness() -> None:
         check("a link in an export-ignore (internal) file is fine: it never ships", pages.check_links(r) == [],
               pages.check_links(r))
         r = build()
-        put(r, "scripts/kit/guards/pages.py", f"HOSTS = ('claude.ai/artifact', '{LINK}')\n")
+        put(r, "scripts/kit/MANIFEST.sha256", "x\n")
+        put(r, "scripts/kit/guards/pages.py", f"HOSTS = ('{LINK}',)\n")
+        put(r, "console/MANIFEST.sha256", "x\n")
         put(r, "console/README.md", f"{LINK}\n")
-        check("the vendored kit and the console are not read", pages.check_links(r) == [], pages.check_links(r))
+        check("a vendored kit and console (each with its MANIFEST.sha256) are not read", pages.check_links(r) == [],
+              pages.check_links(r))
+        r = build()
+        put(r, "scripts/kit/guards/pages.py", f"HOSTS = ('{LINK}',)\n")
+        put(r, "console/own.md", f"{LINK}\n")
+        check("…but a console or a scripts/kit of the harness's own, with no MANIFEST.sha256, is", len(pages.check_links(r)) == 2,
+              pages.check_links(r))
         r = build()
         put(r, "scripts/other/README.md", f"{LINK}\n")
-        check("…but another folder under scripts/ is", len(pages.check_links(r)) == 1)
+        check("…and another folder under scripts/ is", len(pages.check_links(r)) == 1)
         r = build()
-        put(r, "logo.png", f"{LINK}\n")
-        check("a file that is not text is not read", pages.check_links(r) == [])
+        (r / "logo.bin").write_bytes(b"\x00\x01" + LINK.encode())
+        (r / "big.md").write_text(LINK + "\n" + "x" * 5_000_001)
+        outside = Path(tmp_dir("outside-")) / "o.md"
+        outside.write_text(LINK + "\n")
+        os.symlink(str(outside), r / "alias.md")
+        (r / "dir.md").mkdir()
+        put(r, "dir.md/inner.txt", "no link\n")
+        (r / "ghost.md").write_text(f"{LINK}\n")
+        commit(r)
+        (r / "ghost.md").unlink()
+        os.symlink(str(r / "nowhere"), r / "broken.md")
+        commit(r)
+        check("a file with a NUL byte, one over 5 MB, a symlink, a broken symlink, a file deleted from the disk and a "
+              "directory named like a file are not read, and do not crash", pages.check_links(r) == [], pages.check_links(r))
+        r = build()
+        (r / "u16.txt").write_bytes((LINK + "\n").encode("utf-16"))
+        commit(r)
+        check("a UTF-16 file (NUL bytes) is not read: the docstring says so", pages.check_links(r) == [])
+        r = build(repo=False)
+        git(r, "init", "-q")
+        check("a repository that tracks nothing is a problem, not a pass", len(pages.check_links(r)) == 1
+              and "tracks no file" in pages.check_links(r)[0], pages.check_links(r))
+        r = build()
+        write(r, "untracked.md", f"{LINK}\n")
+        check("an untracked file is not read until `git add` (the docstring says so)", pages.check_links(r) == [])
     else:
-        check("skipped: the export-ignore cases (no git)", True)
+        check("skipped: the git cases", True)
     r = build(repo=False)
     write(r, "notes/local.md", f"scratch {LINK}\n")
     check("with no repository the whole tree is read (never a silent pass)", len(pages.check_links(r)) == 1
           and pages.check_links(r)[0].startswith("notes/local.md:1:"), pages.check_links(r))
     write(r, "notes/local.md", "scratch\n")
-    write(r, "scripts/kit/x.md", LINK)
-    write(r, ".git-not/x", "x")
-    check("…less the vendored kit", pages.check_links(r) == [], pages.check_links(r))
+    write(r, ".venv/lib/x.md", LINK)
+    write(r, "node_modules/p/README.md", LINK)
+    check("…less dot-directories and node_modules", pages.check_links(r) == [], pages.check_links(r))
+    r = build()
+    toml = (r / "harness.toml").read_text()
+    put(r, "harness.toml", toml + f'\n[guards.pages]\nhosts = ["example.test/page"]\n\n[other]\nnote = "{LINK}"\n')
+    got = pages.check_links(r)
+    check("harness.toml is read outside its [guards.pages] tables (a link after them is caught, the host it names is not)",
+          len(got) == 1 and got[0].startswith("harness.toml"), got)
+    check("a link wrapped across lines is reported at its first line", pages.hits(f"x {H}/\nartifact/abc") == [1])
 
 
 def test_config() -> None:
@@ -142,6 +193,19 @@ def test_config() -> None:
     check("an allowed file with its reason passes", pages.check_links(r) == [], pages.check_links(r))
     put(r, "docs/other.md", f"{LINK}\n")
     check("…and only that file", len(pages.check_links(r)) == 1 and pages.check_links(r)[0].startswith("docs/other.md:1:"))
+    r = build('[guards.pages.allow."docs/rule.md"]\nreason = "names the rule"\nmax = 1\n')
+    put(r, "docs/rule.md", f"{LINK}\n")
+    check("an allow row with max passes at max", pages.check_links(r) == [], pages.check_links(r))
+    put(r, "docs/rule.md", f"{LINK}\nand again {LINK}\n")
+    got = pages.check_links(r)
+    check("…and a link added later in the same file is a problem", len(got) == 1 and "lets 1" in got[0], got)
+    r = build('[guards.pages.allow."docs/rule.md"]\nreason = "x"\nmax = 0\n')
+    put(r, "docs/rule.md", f"{LINK}\n")
+    check("a max that is not a whole number of at least 1 is a problem", any("max is a whole number" in g
+                                                                              for g in pages.check_links(r)))
+    r = build('[guards.pages.allow]\n"./docs/rule.md" = "names the rule"\n')
+    put(r, "docs/rule.md", f"{LINK}\n")
+    check("an allow path written ./path is read as path", pages.check_links(r) == [], pages.check_links(r))
     r = build('[guards.pages.allow]\n"docs/rule.md" = ""\n')
     put(r, "docs/rule.md", f"{LINK}\n")
     got = pages.check_links(r)
@@ -167,6 +231,11 @@ def test_config() -> None:
     r = build('[guards.pages]\nhosts = ["example.test/page"]\n')
     put(r, "README.md", f"{LINK}\n")
     check("an added host leaves the default hosts in force", len(pages.check_links(r)) == 1)
+    for bad in ('hosts = 5', 'hosts = ["a"]', 'hosts = ["abc"]', 'hosts = [1]', 'allow = ["README.md"]', 'allow = "README.md"'):
+        r = build(f"[guards.pages]\n{bad}\n")
+        got = pages.check_links(r)
+        check(f"a bad config ({bad}) is a problem, not a crash or a silent pass",
+              len(got) == 1 and "[guards.pages]" in got[0], got)
 
 
 def test_suite() -> None:

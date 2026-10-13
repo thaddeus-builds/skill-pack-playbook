@@ -1115,12 +1115,12 @@ def page_rule_problems(rules: str, guard: str, suites: str, test: str) -> list[s
     item = next((i for i in re.split(r"^(?=\*\*)", body, flags=re.M) if i.startswith(f"**{PAGES}**")), "")
     out = [] if item else [PAGES]
     out += [w for w in ("one of its own verbs", "local", "never the deliverable", "installs the harness from git",
-                        "`kit.guards.pages`", "`suites.page_links`", "`allow` row", "*Seen once:*") if item and w not in item]
+                        "`kit.guards.pages`", "`suites.page_links`", "`allow` row", "bans the link only", "*Seen once:*") if item and w not in item]
     if "def check_links(" not in guard or "def self_test(" not in guard:
         out.append("the guard")
     if "def page_links(" not in suites:
         out.append("the suite")
-    if "a link in SKILL.md" not in test and "reported by path and line" not in test:
+    if "for what, text in pages.PLANTED.items()" not in test or "is reported by path and line" not in test:
         out.append("the test")
     return out
 
