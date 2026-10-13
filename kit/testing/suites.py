@@ -46,6 +46,9 @@ reports them through kit.testing.check. A generated test is
   roadmap       kit.guards.roadmap.check_roadmap: docs/ROADMAP.md (or
                 [guards.roadmap] file) keeps the one format, and its planted
                 self-test
+  page_links    kit.guards.pages.check_links: no shipped file links to a
+                hosted artifact (opt-in: a harness adds `run(page_links(ROOT))`
+                to a test of its own), and its planted self-test
   kit_drift     kit.guards.drift.check_harness
   never_table   kit.guards.evals.check_never_table: SKILL.md's first section
                 is `## Never`, whose table names exactly the verbs only a

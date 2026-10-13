@@ -72,13 +72,17 @@ scaffold, console, docs, conformance.
 ### Added
 - `kit.guards.pages` (pack `testkit`) and `suites.page_links(root)`: a page the harness delivers is drawn by the harness
   (`docs/rules.md`, data layers), so no file the harness ships links to a hosted artifact. `check_links(root)` reads
-  what `git archive` ships (the whole tree when there is no repository, never a skip), less the vendored kit, the
-  console and `harness.toml`, and names each file and line that holds a hosted-artifact link, never the link. A link in
-  an export-ignore file is fine. `[guards.pages]` takes `hosts` (more hosts to treat so) and `allow` ({path: reason}; a
-  row with no reason, a gone path, or a file with no such link now is a problem). It errs toward a false hit (any text
-  that spells a host, prose included), which an `allow` row answers; a link built from parts is not read. `self_test()`
-  plants each form (markdown link, bare host, capitals, JSON-escaped and percent-encoded slashes). Seen once, in the
-  video-ads harness (owner decision 2026-10-13). A harness opts in with `run(suites.page_links(ROOT))` in a test.
+  what `git archive` ships (untracked files are not read; nothing tracked is a problem; with no repository the whole
+  tree less dot-directories, never a skip) as text unless it holds a NUL byte or is over 5 MB, follows no symlink, and
+  names each file and line that holds a hosted-artifact link, never the link. A line is read after HTML-entity,
+  percent (twice), `\uXXXX` and backslash decoding, with a trailing dot or a port on the host and a link wrapped across
+  a line break; a link built from parts is not read. Not read: the vendored kit and console (when they hold a
+  MANIFEST.sha256) and harness.toml's `[guards.pages]` tables. A link in an export-ignore file is fine.
+  `[guards.pages]` takes `hosts` (more hosts) and `allow` ({path: reason} or {path: {reason, max}}; a row with no
+  reason, a gone path, a file that does not ship or holds no such link now, or one over its `max` is a problem; a bad
+  config is a problem). It errs toward a false hit (any text that spells a host, prose included), which an `allow` row
+  answers. `self_test()` plants each form. Seen once, in the video-ads harness (owner decision 2026-10-13). A harness
+  opts in with `run(suites.page_links(ROOT))` in a test; `templates/harness.toml` documents the table.
 
 ## [0.28.0] - 2026-10-13
 ### Added
