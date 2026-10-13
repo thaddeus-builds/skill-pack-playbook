@@ -10,6 +10,10 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/lessons.md`, "A past winner that cannot be said is studied for its mechanism, never copied": a client's strongest past ad
+  that no row of the plan can say is not a template and not a move; the harness proposes the mechanism (who it reached,
+  how it opened, its pace, the worry it answered) for a person to confirm, citing the ad by id and numbers, never by its
+  words. Seen once, in the video-ads harness (owner decision 2026-10-13). Tested in `tests/test_docs_build.py`.
 - `docs/rules.md`, data layers: a page the harness delivers is drawn by the harness (code and test: `kit.guards.pages`,
   kit 0.29.0 below; tested in `tests/test_docs_build.py`).
 - `docs/rules.md`, human-in-the-loop rule 13: an open question never holds the plan (code and test: `kit.questions`,

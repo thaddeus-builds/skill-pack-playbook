@@ -1137,6 +1137,35 @@ def test_the_page_rule_is_whole_and_checked():
     assert page_rule_problems(rules, guard, suites, "") == ["the test"]
 
 
+MECHANISM = "A past winner that cannot be said is studied for its mechanism, never copied"
+
+
+def mechanism_problems(lessons: str, weights: str) -> list[str]:
+    """What the mechanism lesson fails to say: a section of docs/lessons.md that says why, the rules (a
+    strong ad no row can say is no template and no move; a mechanism is what separates from the claim; cite by id and
+    numbers, never by words; the faithful-copy reference is the other case) and where it was seen; and the path-weights
+    section on the past links to it by its real anchor."""
+    heading = next((h for h in re.findall(r"^## (.+)$", lessons, re.M) if h.startswith(MECHANISM)), None)
+    out = [] if heading else [MECHANISM]
+    body = section(lessons, heading) if heading else ""
+    out += [w for w in ("*Why:*", "not a template and not a move", "what can be separated from the claim",
+                        "never by its words", "request", "*Seen once*") if heading and w not in body]
+    if heading:
+        slug = re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+        if f"(lessons.md#{slug})" not in weights:
+            out.append("the link from path-weights.md")
+    return out
+
+
+def test_the_mechanism_lesson_is_whole_and_linked():
+    lessons, weights = doc("docs/lessons.md"), doc("docs/path-weights.md")
+    assert mechanism_problems(lessons, weights) == [], mechanism_problems(lessons, weights)
+    assert mechanism_problems(lessons.replace(MECHANISM, "x"), weights) == [MECHANISM]
+    assert mechanism_problems(lessons.replace("never by its words", "x"), weights) == ["never by its words"]
+    assert mechanism_problems(lessons.replace("*Why:*", "x"), weights) == ["*Why:*"]
+    assert mechanism_problems(lessons, weights.replace("(lessons.md#", "(lessons.md?")) == ["the link from path-weights.md"]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
