@@ -10,6 +10,20 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/autonomy.md` (new): autonomy levels L0 to L5, like SAE's driving levels, by what proof a write into
+  someone else's system carries: L0 hand-carried, L1 per-change consent (`tty`, `relay`, or the approve of a known
+  payload), L2 scoped approval (rule 12), L3 an owner-switched mode over a closed registry of revertible kinds,
+  L4 rule-started work and L5 full autonomy (neither built; what L4 would need and why no harness is at L5). Per
+  level: who decides, the proof recorded, the checks, what is revertible, the default caps, how it switches down
+  and the write kinds allowed; eight rules at every level (the harness classes each write; a level is a ceiling
+  per kind; raising takes a person, lowering anyone; expiry and caps counted from the archive; only revertible
+  kinds above L1 and a code-free undo at L3; a stop issues no code; the digest; the approve still required through
+  L3); the judgement that a retype and a relayed code are one level and the item's approve is the destination,
+  so the owner's S46/S47 sit at L2/L3, not L3/L4; the SEO harness as the worked example; what the Amazon Ads
+  harness must add. `docs/rules.md`: rule 8 admits an owner's mode switch retyped on a page; rule 12 points at the
+  levels; the write door's rule 3 lets an L3 mode draft and publish in one step where nobody can preview in place.
+  Seen once, in the SEO harness (S46, S47; owner decisions 2026-10-13). Tested in `tests/test_docs_build.py`,
+  which holds the doc to `kit/autonomy.py`'s levels and proof labels.
 - `docs/rules.md`, Registries item 9: a client's vocabulary is its value too. The options a harness mines or proposes for
   one client (a creative dimension's values, words taken from its own or its competitors' ads) are rows in that client's
   database, confirmed or retired by a person there; `ssot/` keeps the schema (the axes and their code letters) and the
@@ -58,6 +72,20 @@ scaffold, console, docs, conformance.
   `kit.pagestyle` and tries each way a demo can break the rule (a term in the page data or split by
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
+
+## [0.27.0] - 2026-10-13
+### Added
+- `kit.autonomy` (new pack `autonomy`; imports nothing from the kit): the autonomy levels' shared mechanics, pure over
+  data the harness passes. The tier registry under the harness's own column names (`canon`) and its check
+  (`check_tiers`: a tier-B or auto row names its undo, an auto row's undo is a registered code-free undo, no orphan
+  undo row); `tier_of`, `eligible`, `ids_of`. The owner's switch, one fact `YYYY-MM-DD:ID,…` (`switch_value`,
+  `parse_switch`), on only while its latest history row is a person's confirm, clamped to `max_days`, its ids frozen
+  so a registry edit narrows and never widens (`mode`), an agent's write only ever off (`may_set`). The verdicts:
+  `approval_why` (L2, a fixed order) and `auto_verdict` (L3: a cap, an unverified last write or a mixed run is a
+  stop, no code issued). Caps from the archive (`used`, `tighten` only lowers, `lock`). The record (`gate`,
+  `suffix`, `proof_level`), code-free undo (`undo_free`, `undone_by`) and the digest. No harness imports it yet: the
+  SEO harness keeps its own copy (`scripts/apply_shopify.py`), so it is extra with no consumer (`kit-tiers.tsv`).
+  Test: `kit/tests/test_autonomy.py`.
 
 ## [0.26.2] - 2026-10-13
 ### Fixed
