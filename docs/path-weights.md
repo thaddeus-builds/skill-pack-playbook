@@ -46,6 +46,25 @@ So the tree is a partition: a unit on no leaf (its template unknown, say) still 
    - **Always:** a group takes at most half a batch, rounded down (2 of 5, at least 1), and a move bigger than that only into an empty group, then alone. Two moves never both hold a key when either holds it `exclusive`; `shared` holders fit together (several moves may build on a template, one may remake it, never both in one batch). The seed comes from the moves (their keys sorted) and the account, or the harness's `seed`, so the same data gives the same batch, in any process.
 7. **Twins are a clue, never proof** (`twins()`). Units of one group with the same tags whose settled rates differ by `twin_ratio` with probability `twin_p` under a weak prior, once the group has `twin_min_conv` settled conversions and each compared unit spend worth `twin_min_expected_conv`: at most three, the largest gap first, with what the harness knows to differ (`known`). A tag nobody records may hide there, or the two were bought differently; the agent proposes the tag and tests it on new units, never on the numbers that raised it.
 
+## Past results: a gap signal, never a weight
+
+A client who starts with a harness has usually run ads before. Those past units (another period, bought by another hand, never made from this plan) are evidence about the plan's design: a direction the plan leans on that the past read badly, an angle that worked and that no template serves. `past_signal(units, groups, cfg)` reads them. It is the only door they have, and it is a report, not an input.
+
+**Why they stay out of the weights.** Rule 1 counts only settled numbers, and every number the partition holds is the plan's own, the account's included. Pour past numbers into a leaf, the account or a prior and four things go wrong: every state would then mean "better than the account, as it was bought by someone else"; a close, which a person confirms against the leaf's own numbers, would rest on spend nobody here chose; a unit that is both a past one and one of the plan's would count twice; and the platform's steering of that older spend (to what it predicted would respond) would read as the variant's quality. Rule 3 lets outside evidence move a prior; this does not even do that.
+
+**What it does.**
+
+- A past unit is `{id, spend, conv}` (conversions may be fractional); a group is `{units: [ids], ours?: how many units of the harness's own sit in it}`. The harness decides what a group is: a cut of the pool by audience, by angle, by script family, by direction. A unit may sit in several.
+- The pool is every past unit with spend, and its rate R is its own conversions over its own spend. A group is judged against **R, never the account's rate**: P(its rate > R) under a Gamma-Poisson posterior whose prior is R worth `prior_conv` conversions. It speaks once its spend would buy `past_min_expected_conv` at R. It reads `strong` at `promising_p` or more, `weak` at `downweight_p` or less, else nothing.
+- `gaps` are strong groups the plan has no unit on (`ours == 0`); `warnings` are weak groups the plan has `past_warn_units` or more units on. With no pool rate nothing is judged. Each group also carries its unit count, spend, conversions, `vs_pool` (its rate over R), `expected`, and the top three units by conversions, so the agent can study them.
+- It returns lists of keys and numbers for people to read. Nothing in the result is an input of `posteriors()`, `judge()` or `pick()`; the test holds that those functions' results do not change when the past is read, and that none of their sources names it.
+
+**What a gap or a warning leads to.** A person-facing proposal, each confirmed by a person: a new row or template for an angle the plan does not serve, a look at a direction the plan leans on, the order of a cold plan's first moves. Whether a gap can be acted on is the harness's (can the client say it, is the audience right): a strong group nothing can say is a proposal for the agent to raise, never a move. The past's winners are studied for the mechanism that worked, never copied ([lessons](lessons.md)).
+
+**How much to trust it.** With every group equally good, groups of about five units read strong about 1 time in 6 and weak about 1 time in 5 (measured by the test, which prints it). So a strong or weak read is a pointer to look at the design, not a finding, and among many groups some will read strong by chance: look at the ones with a reason, and let the plan's own numbers decide.
+
+*Seen once:* the video-ads harness (its ROADMAP D64, owner decision 2026-10-13), on its first client's past ads: it flagged a direction the plan leaned on that the past read weak, and angles no template served, and kept the plan's weights and closes untouched. It keeps its own copy for now (it adds which rows can say an angle); this function is that part with the channel taken out. Test: [`kit/tests/test_pathweights.py`](../kit/tests/test_pathweights.py), section 8.
+
 ## Thresholds
 
 Every threshold is in `DEFAULTS`; `settings(over)` lays the harness's defaults or a client's own values (kept in that client's database) over them and refuses one that is not a value of it, naming the key: an unknown key, not a finite number, a count not whole, a probability or share not strictly between 0 and 1, a `close_ratio` outside (0, 1], a `prior_shift_max` below 1, a `twin_ratio` not above 1, anything else not above 0. Across keys it refuses a `downweight_p` not below `promising_p` (one P(better) would be both down and promising), so a client who moves one line past the other moves both.
@@ -68,6 +87,8 @@ Every threshold is in `DEFAULTS`; `settings(over)` lays the harness's defaults o
 | `twin_ratio` | 2 | how many times better the best twin must be (above 1) |
 | `twin_p` | 0.9 | the probability of that ratio before twins are flagged |
 | `prior_shift_max` | 1.5 | the most a leaf's shift moves its prior mean (and 1 / it, the least) |
+| `past_min_expected_conv` | 3 | a group of past units speaks once its settled spend buys this many conversions at the past pool's own rate |
+| `past_warn_units` | 3 | units of the harness's own on a group the past reads weak before it is warned about |
 
 ## What the harness supplies
 
@@ -76,6 +97,7 @@ Every threshold is in `DEFAULTS`; `settings(over)` lays the harness's defaults o
 - **Its moves:** what each one makes (`n`), its group, its kind, the posterior it stands on, its keys, and the coverage order for a cold account.
 - **Its records and its gate:** the closes and reopens a person made, the tables they live in, the shown digest a close is bound to, and how a person sees all of it.
 - **Its thresholds:** its defaults and where a client's own values are kept.
+- **Its past units and their groups,** if it has any: the cuts it makes of them and what `ours` counts.
 
 ## What it cannot say
 

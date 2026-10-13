@@ -33,6 +33,11 @@ ancestors (any depth: a direction, then a template, then one value per variable,
     batch, in any process;
   * `twins()`: units of one group with the same tags whose settled rates differ by twin_ratio with probability twin_p,
     past two count thresholds; at most three, the largest gap first, with what is known to differ. A clue, never proof;
+  * `past_signal()`: units the harness did not make in this plan (a client's past ads, another period, bought by
+    another hand) read as a signal about the plan's design, never as numbers in it. A group of them is judged against
+    the past units' own pooled rate: P(better than the pool), strong or weak once its spend speaks. A strong group the
+    plan has no unit on is a gap; a weak group it has units on is a warning. Nothing from it is an input of
+    `posteriors()`, `judge()` or `pick()`: no leaf, account, shift, state, close or batch moves;
   * every threshold is in DEFAULTS (SETTINGS says what each is); `settings()` lays a harness's or a client's own values
     over them and refuses one that is not a value of that threshold (`setting()`, ValueError), and a downweight_p not
     below promising_p (one P(better) would then be both promising and down).
@@ -73,6 +78,9 @@ SETTINGS = (
     ("twin_ratio", 2.0, float, "how many times better the best twin must be"),
     ("twin_p", 0.9, float, "the probability of that ratio before twins are flagged"),
     ("prior_shift_max", 1.5, float, "the most a leaf's factor moves its prior mean (and 1 / it, the least)"),
+    ("past_min_expected_conv", 3.0, float,
+     "settled spend of a group of past units, in conversions at the past pool's own rate, before the group speaks"),
+    ("past_warn_units", 3, int, "units of the harness's own on a group the past reads weak before it is warned about"),
 )
 DEFAULTS: dict[str, float | int] = {k: d for k, d, _, _ in SETTINGS}
 TYPES = {k: t for k, _, t, _ in SETTINGS}
@@ -589,3 +597,84 @@ def twins(units: Iterable[Mapping], acct: Mapping, cfg: Mapping | None = None) -
     out.sort(key=lambda t: (-(t["ratio"] if t["ratio"] is not None else math.inf), t["group"],
                             sorted(t["tags"].items())))
     return out[:TWINS_MAX]
+
+
+# ---------------------------------------------------------------- the past: a gap signal, never a weight
+
+def past_signal(units: Iterable[Mapping], groups: Mapping[str, Mapping], cfg: Mapping | None = None) -> dict:
+    """What units the plan did not make say about its design: {pool, groups, gaps, warnings}. A unit is {id, spend,
+    conv}: its settled numbers in another period, bought by another hand (a client's past ads, say); one with no spend
+    has no rate and counts nowhere. `groups` maps a non-empty key to {units: [ids of the units above], ours?: how
+    many units of the harness's own sit in it, default 0}; a unit may sit in several groups (one cut of the pool by
+    audience, another by angle). The harness decides what a group is and what `ours` counts (units made or in the
+    making).
+
+    A group is judged against the past units' own pooled rate R, never the account's: P(its rate > R) under
+    Gamma(prior_conv + conv, prior_conv / R + spend). It speaks once its spend would buy past_min_expected_conv at R;
+    it reads `strong` when it speaks and P(better) is at least promising_p, `weak` when it speaks and P is at most
+    downweight_p, else None. Each group: {key, units, spend, conv, rate, vs_pool (its rate over R; None with no spend),
+    p_better, expected (spend x R), speaks, reads, ours, top (up to three unit ids by conversions)}, the largest by
+    conversions first. `gaps`: keys of strong groups with ours == 0, the surest first. `warnings`: keys of weak groups
+    with ours >= past_warn_units, the weakest first. With no pool rate (no conversion, or no spend) nothing is judged:
+    groups, gaps and warnings are empty.
+
+    This is a signal for the agent and the owner, never a number in the plan: the result is no input of posteriors(),
+    judge() or pick(), so no leaf, account, shift, state, close or batch moves on it (the past is observational, from
+    another period and another hand; a platform steers spend to what it predicts will respond). A gap or a warning is
+    where to look at the plan's design, a proposal for a person to confirm."""
+    cfg = settings(cfg)
+    us = []
+    for u in units:
+        if not isinstance(u, Mapping):
+            raise ValueError("a past unit is a mapping")
+        what = f"past unit {u.get('id')!r}"
+        us.append({"id": u.get("id"), "spend": _amount(u.get("spend"), f"{what}: spend"),
+                   "conv": _amount(u.get("conv"), f"{what}: conv")})
+    _ids(us, "a past unit")
+    by_id = {u["id"]: u for u in us if u["spend"] > 0}
+    known = {u["id"] for u in us}
+    S, Y = math.fsum(u["spend"] for u in by_id.values()), math.fsum(u["conv"] for u in by_id.values())
+    R = Y / S if S > 0 and Y > 0 else None
+    out: dict = {"pool": {"units": len(by_id), "spend": S, "conv": Y, "rate": R}, "groups": [], "gaps": [],
+                 "warnings": []}
+    if not isinstance(groups, Mapping):
+        raise ValueError("groups: a mapping {key: {units, ours?}}")
+    parsed = {}
+    for key, g in groups.items():
+        if not (isinstance(key, str) and key):
+            raise ValueError("groups: every key is a non-empty string")
+        if not isinstance(g, Mapping) or isinstance(g.get("units"), str) \
+                or not isinstance(g.get("units"), (list, tuple, set, frozenset)):
+            raise ValueError(f"group {key!r}: units is a list of past unit ids")
+        if not all(isinstance(i, str) for i in g["units"]):
+            raise ValueError(f"group {key!r}: units are past unit ids, strings")
+        ids = sorted(set(g["units"]))
+        if len(ids) != len(list(g["units"])):
+            raise ValueError(f"group {key!r}: a unit is listed twice")
+        missing = [i for i in ids if i not in known]
+        if missing:
+            raise ValueError(f"group {key!r}: no past unit {missing[0]!r}")
+        parsed[key] = ([i for i in ids if i in by_id], _count(g.get("ours", 0), f"group {key!r}: ours"))
+    if R is None:
+        return out
+    a0, need = cfg["prior_conv"], cfg["past_min_expected_conv"]
+    hi, lo, warn = cfg["promising_p"], cfg["downweight_p"], cfg["past_warn_units"]
+    rows = []
+    for key, (ids, ours) in parsed.items():
+        members = [by_id[i] for i in ids]
+        s, y = math.fsum(u["spend"] for u in members), math.fsum(u["conv"] for u in members)
+        p = p_above(a0 + y, a0 / R + s, R)
+        speaks = s * R >= need
+        top = sorted((u for u in members if u["conv"] > 0), key=lambda u: (-u["conv"], -u["spend"], str(u["id"])))[:3]
+        rows.append({"key": key, "units": len(members), "spend": s, "conv": y, "rate": y / s if s > 0 else None,
+                     "vs_pool": round(y / s / R, 2) if s > 0 else None, "p_better": round(p, 4),
+                     "expected": round(s * R, 2), "speaks": speaks,
+                     "reads": "strong" if speaks and p >= hi else "weak" if speaks and p <= lo else None,
+                     "ours": ours, "top": [u["id"] for u in top]})
+    rows.sort(key=lambda r: (-r["conv"], -r["units"], r["key"]))
+    out["groups"] = rows
+    out["gaps"] = [r["key"] for r in sorted((r for r in rows if r["reads"] == "strong" and r["ours"] == 0),
+                                            key=lambda r: (-r["p_better"], r["key"]))]
+    out["warnings"] = [r["key"] for r in sorted((r for r in rows if r["reads"] == "weak" and r["ours"] >= warn),
+                                                key=lambda r: (r["p_better"], r["key"]))]
+    return out
