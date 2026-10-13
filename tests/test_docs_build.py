@@ -1039,6 +1039,70 @@ def test_the_rubber_stamp_lessons_are_whole():
     assert rubber_stamp_problems(rules, operating.replace("([R14]", "([R1]")) == ["R14"]
 
 
+OPEN_Q = "An open question never holds the plan."
+
+
+def open_question_problems(rules: str, module: str, test: str) -> list[str]:
+    """What the open-question rule fails to say or to check: a numbered bold item of the human-in-the-loop rules that
+    names both fields (`by_data`, `meanwhile`), that a wait is no `meanwhile`, the read-back, the owner asked only what
+    no data can answer, its check and where it was seen; the check exists in kit/questions.py with its self-test, and
+    its test runs that self-test."""
+    body = section(rules, "Human-in-the-loop rules")
+    item = next((i for i in re.split(r"^\d+\. ", body, flags=re.M) if i.startswith(f"**{OPEN_Q}**")), "")
+    out = [] if item else [OPEN_Q]
+    out += [w for w in ("`by_data`", "`meanwhile`", "never a wait", "read-back", "only what no data can answer",
+                        "`kit.questions`", "`problems()`", "`readback()`", "*Seen once:*") if item and w not in item]
+    out += [f"kit/questions.py: def {f}(" for f in ("problems", "readback", "groups", "self_test")
+            if f"def {f}(" not in module]
+    if "Q.self_test() == []" not in test:
+        out.append("the test")
+    return out
+
+
+def test_the_open_question_rule_is_whole_and_checked():
+    rules, module, test = doc("docs/rules.md"), doc("kit/questions.py"), doc("kit/tests/test_questions.py")
+    assert open_question_problems(rules, module, test) == [], open_question_problems(rules, module, test)
+    assert open_question_problems(rules.replace(f"**{OPEN_Q}**", "**x**"), module, test) == [OPEN_Q]
+    assert open_question_problems(rules.replace("never a wait", "fine"), module, test) == ["never a wait"]
+    assert open_question_problems(rules.replace("only what no data can answer", "x"), module, test) == [
+        "only what no data can answer"]
+    assert open_question_problems(rules.replace("`readback()`", "x"), module, test) == ["`readback()`"]
+    assert open_question_problems(rules, module.replace("def readback(", "def other("), test) == [
+        "kit/questions.py: def readback("]
+    assert open_question_problems(rules, module, "") == ["the test"]
+
+
+PAST = "Past results: a gap signal, never a weight"
+
+
+def past_problems(doc_text: str, module: str, test: str) -> list[str]:
+    """What the past-results section of docs/path-weights.md fails to say or to check: the section exists; it says why
+    the past stays out of the weights, that a group is judged against the past pool's own rate (never the account's),
+    what gaps and warnings are, that a person confirms what follows, how far to trust it, and where it was seen; both
+    thresholds are in its table; the function exists, and its test holds that the plan's results do not change when the
+    past is read."""
+    body = section(doc_text, PAST) if f"## {PAST}" in doc_text else ""
+    out = [] if body else [PAST]
+    out += [w for w in ("Why they stay out of the weights", "never the account's rate", "`gaps`", "`warnings`",
+                        "for a person to confirm", "How much to trust it", "*Seen once:*", "`past_signal(") if body and w not in body]
+    out += [f"threshold {k}" for k in ("past_min_expected_conv", "past_warn_units") if f"| `{k}` |" not in doc_text]
+    if "def past_signal(" not in module:
+        out.append("the function")
+    if "are the same before and after the past is read" not in test:
+        out.append("the test")
+    return out
+
+
+def test_the_past_results_section_is_whole_and_checked():
+    text, module, test = doc("docs/path-weights.md"), doc("kit/pathweights.py"), doc("kit/tests/test_pathweights.py")
+    assert past_problems(text, module, test) == [], past_problems(text, module, test)
+    assert past_problems(text.replace(f"## {PAST}", "## x"), module, test) == [PAST]
+    assert past_problems(text.replace("never the account's rate", "x"), module, test) == ["never the account's rate"]
+    assert past_problems(text.replace("| `past_warn_units` |", "| x |"), module, test) == ["threshold past_warn_units"]
+    assert past_problems(text, module.replace("def past_signal(", "def other("), test) == ["the function"]
+    assert past_problems(text, module, "") == ["the test"]
+
+
 LEVEL_COLUMNS = ("Who decides each write", "Proof in the manifest", "What the harness checks", "What is revertible",
                  "Default caps", "How it switches down", "Write kinds allowed")
 AUTONOMY_RULES = ("The harness classes each write, never the agent.",
