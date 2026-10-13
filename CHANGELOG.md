@@ -10,13 +10,15 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
-- `docs/rules.md`, human-in-the-loop rules 12 and 13: one chat yes is one code for one summary;
-  a gate the human clicks through proves nothing, so the harness tiers changes by the live diff
-  (routine reversible kinds get one capped, expiring, scoped approval per wave; public or
-  irreversible ones keep per-change proof; checkboxes start unticked). `docs/operating.md`,
-  building with many agents, item 9: the owner's threat model goes in every reviewer prompt, and
-  review stops when only out-of-model findings remain. Each seen once, in the SEO harness (S46).
-  Tested in `tests/test_docs_build.py`.
+- `docs/rules.md`, human-in-the-loop rule 4: one chat yes is quoted for one code only, and a
+  wave that needs one yes gets one scoped approval (not yet proven: no harness refuses a reused
+  quote). New rule 12: a gate the human clicks through proves nothing, so the harness tiers changes
+  by the live diff (routine reversible kinds get one capped, expiring, scoped approval per wave;
+  public or irreversible ones keep per-change proof; the approve checkboxes start unticked).
+  Workflows rule R14 and `docs/operating.md` item 9: the owner's threat model (`config.threat`) is
+  in every reviewer, finder and skeptic prompt, and review stops when only out-of-model findings
+  remain; the build reviewer now also gets R11 (`config.known`). Seen once, in the SEO harness
+  (S46). Tested in `tests/test_docs_build.py` and `templates/workflows/tests/test_scripts.py`.
 - `docs/rules.md`, "Writing into someone else's system": six rules for a write door whose content
   is made after the approval (only approved work of one kind; the gate binds the file's sha256,
   or the live object as read just before a change of state; stage hidden, preview in place,

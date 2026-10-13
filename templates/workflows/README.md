@@ -42,6 +42,8 @@ Both scripts take `args: {config, items}` (the sweep takes `{config, dimensions}
 | `test` | The full suite; every file prints its `RESULT: N passed` line |
 | `golden` | The golden diff, `{base}` filled per item; `''` until the repo has one |
 | `in_flight` | Other branches and sessions, and the files they own |
+| `known` | Limits the owner accepted: reviewers and finders never report them (R11) |
+| `threat` | The owner's threat model: what the guard defends against and what is out of scope (R14) |
 | `schema_owner` | The one item that may bump a schema or data-format version in this run |
 | `risky` | The risky list: a diff that touches it waits for the owner's merge |
 | `port_base` | Each agent gets its own block of 10 ports from here |
@@ -77,7 +79,7 @@ Both scripts take `args: {config, items}` (the sweep takes `{config, dimensions}
 
 ## The rules pasted into prompts
 
-Each prompt carries only its role's rules, by id: the builder R1–R7 and R9, reviewers R1–R6 and R10, the fixer and the repair R1–R9, the verify gate R4–R6 and R10. The sweep's finders get R1, R4, R5, R10, R11 and R13, and its skeptics R1, R4, R5 and R10–R12. The ids are checked against this table by `test_scripts.py` in `workflows/tests/`.
+Each prompt carries only its role's rules, by id: the builder R1–R7 and R9, reviewers R1–R6, R10, R11 and R14, the fixer and the repair R1–R9, the verify gate R4–R6 and R10. The sweep's finders get R1, R4, R5, R10, R11, R13 and R14, and its skeptics R1, R4, R5, R10–R12 and R14. The ids are checked against this table by `test_scripts.py` in `workflows/tests/`.
 
 | Id | Rule | What it prevented |
 | --- | --- | --- |
@@ -94,6 +96,7 @@ Each prompt carries only its role's rules, by id: the builder R1–R7 and R9, re
 | R11 | **Known and accepted.** The brief lists the limits the owner accepted; they are not reported. | Accepted limits stopped coming back in every round. |
 | R12 | **The skeptic defaults to refuted** and lists `consumers_checked`: every module, page, adapter, doc and test it opened. | In one refactor sweep, the skeptics refuted several candidates before anyone built them; the survivors became a series of small, one-reason MRs. |
 | R13 | **Evidence and a proof method** per candidate; a change to the contract, a flag, a schema or the gate is out of scope for a clean-up. | A guard: each planned MR names the commands that prove it, and a refactor never carries a behaviour change. |
+| R14 | **Threat model up front.** The owner's threat model is in every reviewer prompt; out-of-model findings are listed as accepted limits, and review stops when only those remain. | In the SEO harness's approval-tier work, review rounds kept adding HMAC seals and locks against hand-forged files although its gate guards against accident, not forgery. |
 
 The gate itself: early scripts ended at the fix pass, so "green" was the fixer's word. The read-only gate re-runs the suite and the golden diff at the branch's real head. In later runs it passed every item without a repair round: cheap, and it turns a claim into a check another agent ran. Fixers applied most review findings and declined a real share of them, each with its evidence, which is why the fixer may decline.
 
