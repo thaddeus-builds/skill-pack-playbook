@@ -59,6 +59,18 @@ scaffold, console, docs, conformance.
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
 
+## [0.26.2] - 2026-10-13
+### Fixed
+- `tools/leak_guard.py` failed open when a `re:` term sat beside other terms: every term was
+  joined into one pattern and a line it missed was passed over. Joined, a later term's
+  backreference pointed at another term's group (`re:(a)\1` then `re:(b)\1`: an added `bb`
+  passed, though `re:(b)\1` alone refused it); and on Python 3.9 (macOS's `/usr/bin/python3`,
+  which a pre-push hook may run) an inline global flag not at the start, such as `(?a)`, only
+  warned and reached every term (`re:X\wY` beside `re:(?a)zzz`: an added `X示Y` passed under
+  3.9, refused under 3.12). Now only plain terms are joined for the quick pass; every `re:`
+  term is always searched on its own. Seen once, in the video-ads harness, whose own guard
+  fixed it first. (Carried from PR 83, written against 0.21.0.)
+
 ## [0.26.1] - 2026-10-13
 ### Fixed
 - `kit.guards.ssot.check_writes` missed writes 0.25.0 caught. 0.26.0's refinements are dropped where they cost a hit:
