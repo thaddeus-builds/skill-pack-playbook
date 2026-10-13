@@ -10,10 +10,11 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
-- `docs/lessons.md`, "A past winner that cannot be said is studied for its mechanism, never copied": a client's strongest past ad
-  that no row of the plan can say is not a template and not a move; the harness proposes the mechanism (who it reached,
-  how it opened, its pace, the worry it answered) for a person to confirm, citing the ad by id and numbers, never by its
-  words. Seen once, in the video-ads harness (owner decision 2026-10-13). Tested in `tests/test_docs_build.py`.
+- `docs/lessons.md`, "A past winner the harness cannot say is studied for its mechanism, never copied": a client's
+  strongest past ad that nothing in the plan can say is not a template and not a move; the harness proposes the
+  mechanism (who it reached, how it opened, its timing, why people converted) for a person to confirm. A reference the
+  client hands over to be copied is the other case. Seen once, in the video-ads harness (owner decision 2026-10-13).
+  A judgement, not code: `tests/test_docs_build.py` pins the lesson's wording and its link from `docs/path-weights.md`.
 - `docs/rules.md`, data layers: a page the harness delivers is drawn by the harness (code and test: `kit.guards.pages`,
   kit 0.29.0 below; tested in `tests/test_docs_build.py`).
 - `docs/rules.md`, human-in-the-loop rule 13: an open question never holds the plan (code and test: `kit.questions`,
@@ -88,8 +89,10 @@ scaffold, console, docs, conformance.
   `past_min_expected_conv` at that rate, and reads strong or weak at `promising_p` and `downweight_p`. `gaps` are strong
   groups with none of the plan's own units, `warnings` weak groups with `past_warn_units` or more. Nothing from it is an
   input of `posteriors()`, `judge()` or `pick()`: the test holds that their results do not change when the past is read
-  and that none of their sources names it, and it measures how often an equally good group reads strong or weak (about 1
-  in 6 and 1 in 5). Additive: `settings()` gains two keys, and nothing else changes. Seen once, in the video-ads harness
+  and that none of their sources names it (no module state is left behind), and it measures how often an equally good group
+  reads strong or weak (about 1 in 6 and 1 in 5 with Poisson noise only, a third and 2 in 5 with spread between units).
+  The pool includes the group, so a group that is most of it reads conservatively; `p_better` and `expected` are
+  rounded and the read is decided on the rounded numbers. Additive: `settings()` gains two keys, and nothing else changes. Seen once, in the video-ads harness
   (its ROADMAP D64), which keeps its own copy for now.
 
 ## [0.27.0] - 2026-10-13
@@ -106,6 +109,18 @@ scaffold, console, docs, conformance.
   version of the data prompts again; `ask_only` never does); `self_test()` plants each break and the words its problem
   must say. Pure, stdlib only, no message codes. Seen once, in the video-ads harness (its ROADMAP D65), which keeps
   its own copy for now.
+
+## [0.26.2] - 2026-10-13
+### Fixed
+- `tools/leak_guard.py` failed open when a `re:` term sat beside other terms: every term was
+  joined into one pattern and a line it missed was passed over. Joined, a later term's
+  backreference pointed at another term's group (`re:(a)\1` then `re:(b)\1`: an added `bb`
+  passed, though `re:(b)\1` alone refused it); and on Python 3.9 (macOS's `/usr/bin/python3`,
+  which a pre-push hook may run) an inline global flag not at the start, such as `(?a)`, only
+  warned and reached every term (`re:X\wY` beside `re:(?a)zzz`: an added `X示Y` passed under
+  3.9, refused under 3.12). Now only plain terms are joined for the quick pass; every `re:`
+  term is always searched on its own. Seen once, in the video-ads harness, whose own guard
+  fixed it first. (Carried from PR 83, written against 0.21.0.)
 
 ## [0.26.1] - 2026-10-13
 ### Fixed
