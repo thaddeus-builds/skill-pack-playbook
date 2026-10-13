@@ -21,6 +21,11 @@
       in any order or as a set, in two processes with different PYTHONHASHSEED; another number, another batch); warm
       decided by the settings in hand; bad moves refused
   [6] twins(): flagged only past every threshold, with the known differences; at most three, the largest gap first
+  [8] past_signal(): units the plan did not make (a client's past ads) as a gap signal, never a weight: the pool's own
+      rate, P(better) worked by hand (a closed form), strong and weak reads under each threshold, gaps (strong, none of
+      ours) and warnings (weak, enough of ours), a cold pool judges nothing, every bad input refused, the same result
+      in any order; the result is no input of posteriors(), judge() or pick() (their results and sources); with every
+      group equally good the share reading strong or weak is measured (a pointer, not a proof)
   [7] calibration by simulation: every leaf equally good, five rounds, spend pushed to early leaders, two units per made
       leaf: at most 5 in 100 made leaves are ever proposed for closing (the measured rates are printed)
 """
@@ -70,7 +75,7 @@ def test_settings() -> None:
         "prior_conv": 2.0, "account_min_conv": 10.0, "min_expected_conv": 3.0, "promising_p": 0.8, "downweight_p": 0.2,
         "close_min_expected_conv": 5.0, "close_min_units": 2, "close_ratio": 0.7, "close_p": 0.1, "batch_size": 5,
         "explore_share": 0.3, "twin_min_conv": 6.0, "twin_min_expected_conv": 2.0, "twin_ratio": 2.0, "twin_p": 0.9,
-        "prior_shift_max": 1.5}, W.DEFAULTS)
+        "prior_shift_max": 1.5, "past_min_expected_conv": 3.0, "past_warn_units": 3}, W.DEFAULTS)
     check("every setting says what it is", all(isinstance(t, str) and t for _, _, _, t in W.SETTINGS))
     got = W.settings({"batch_size": "4", "close_p": 0.25, "close_min_units": 3.0})
     check("a harness's own values are laid over the defaults, typed",
@@ -82,7 +87,8 @@ def test_settings() -> None:
            ("prior_conv", float("nan")), ("prior_conv", float("inf")), ("prior_conv", 0), ("prior_conv", -1),
            ("promising_p", 1.0), ("downweight_p", 0.0), ("close_p", 1.2), ("twin_p", -0.1), ("explore_share", 1),
            ("close_ratio", 0), ("close_ratio", 1.01), ("prior_shift_max", 0.99), ("twin_ratio", 0),
-           ("twin_ratio", 0.5), ("twin_ratio", 1), ("account_min_conv", None)]
+           ("twin_ratio", 0.5), ("twin_ratio", 1), ("account_min_conv", None), ("past_min_expected_conv", 0),
+           ("past_warn_units", 0), ("past_warn_units", 1.5)]
     check("every value that is not one is refused, the message naming the key",
           all(k in message(W.setting, k, v) for k, v in bad),
           [(k, v, message(W.setting, k, v)) for k, v in bad if k not in message(W.setting, k, v)])
@@ -695,6 +701,165 @@ def test_calibration() -> None:
               made >= 1000 and r <= 0.05, (got, made, r))
 
 
+# ---------------------------------------------------------------- [8] the past: a gap signal, never a weight
+
+def erlang_above(n: int, rate: float, r: float) -> float:
+    """P(lambda > r) for lambda ~ Gamma(n, rate), n whole: e^-x * sum_{k<n} x^k / k!, x = rate * r."""
+    x = rate * r
+    return math.exp(-x) * sum(x ** k / math.factorial(k) for k in range(n))
+
+
+PAST = [("DEMO-p1", 1000, 10), ("DEMO-p2", 1000, 12), ("DEMO-p3", 1000, 2), ("DEMO-p4", 1000, 3),
+        ("DEMO-p5", 1000, 5), ("DEMO-p6", 1000, 8), ("DEMO-p7", 0, 0)]
+PAST_GROUPS = {"DEMO-g1": {"units": ["DEMO-p1", "DEMO-p2"], "ours": 0}, "DEMO-g2": {"units": ["DEMO-p3", "DEMO-p4"], "ours": 3},
+               "DEMO-g3": {"units": ["DEMO-p5", "DEMO-p6", "DEMO-p7"]}}
+
+
+def past_units(rows=PAST) -> list[dict]:
+    return [{"id": i, "spend": sp, "conv": cv} for i, sp, cv in rows]
+
+
+def by_key(out: dict) -> dict:
+    return {g["key"]: g for g in out["groups"]}
+
+
+def test_past() -> None:
+    print("\n[8] past_signal(): a gap signal, never a weight")
+    out = W.past_signal(past_units(), PAST_GROUPS)
+    R = 40 / 6000
+    check("the pool: units with spend, their spend and conversions, their own rate",
+          out["pool"] == {"units": 6, "spend": 6000.0, "conv": 40.0, "rate": R}, out["pool"])
+    g = by_key(out)
+    check("the groups, the largest by conversions first (a unit with no spend counts nowhere)",
+          [x["key"] for x in out["groups"]] == ["DEMO-g1", "DEMO-g3", "DEMO-g2"] and g["DEMO-g3"]["units"] == 2
+          and g["DEMO-g1"]["conv"] == 22.0 and g["DEMO-g1"]["spend"] == 2000.0, out["groups"])
+    # prior_conv 2 at the pool's rate: Gamma(2 + y, 2 / R + s); whole shapes here, so the closed form
+    worked = {k: erlang_above(2 + int(g[k]["conv"]), 2 / R + g[k]["spend"], R) for k in g}
+    check("P(better than the pool) against the closed form (whole shapes)",
+          all(abs(g[k]["p_better"] - worked[k]) < 1e-4 for k in g), (worked, {k: g[k]["p_better"] for k in g}))
+    check("its rate over the pool's, what its spend buys at the pool's rate",
+          g["DEMO-g1"]["vs_pool"] == round(0.011 / R, 2) and g["DEMO-g1"]["expected"] == round(2000 * R, 2)
+          and g["DEMO-g1"]["rate"] == 0.011, g["DEMO-g1"])
+    check("strong, none, weak", (g["DEMO-g1"]["reads"], g["DEMO-g3"]["reads"], g["DEMO-g2"]["reads"]) == (
+        "strong", None, "weak"), {k: (g[k]["p_better"], g[k]["reads"]) for k in g})
+    check("top: up to three units by conversions", g["DEMO-g1"]["top"] == ["DEMO-p2", "DEMO-p1"], g["DEMO-g1"])
+    check("a gap is a strong group with none of ours; a warning a weak one with enough of ours",
+          out["gaps"] == ["DEMO-g1"] and out["warnings"] == ["DEMO-g2"], (out["gaps"], out["warnings"]))
+    check("ours defaults to 0", g["DEMO-g3"]["ours"] == 0)
+    check("a strong group the plan has a unit on is no gap", W.past_signal(past_units(), {
+        **PAST_GROUPS, "DEMO-g1": {"units": ["DEMO-p1", "DEMO-p2"], "ours": 1}})["gaps"] == [])
+    check("a weak group with fewer of ours than past_warn_units is no warning",
+          W.past_signal(past_units(), {**PAST_GROUPS, "DEMO-g2": {"units": ["DEMO-p3", "DEMO-p4"], "ours": 2}})[
+              "warnings"] == [] and W.past_signal(past_units(), PAST_GROUPS, {"past_warn_units": 2})["warnings"] == [
+              "DEMO-g2"])
+    # thresholds
+    check("a group speaks once its spend buys past_min_expected_conv at the pool's rate (13.33 here)",
+          not by_key(W.past_signal(past_units(), PAST_GROUPS, {"past_min_expected_conv": 14}))["DEMO-g1"]["speaks"]
+          and by_key(W.past_signal(past_units(), PAST_GROUPS, {"past_min_expected_conv": 13}))["DEMO-g1"]["speaks"])
+    quiet = W.past_signal(past_units(), PAST_GROUPS, {"past_min_expected_conv": 14})
+    check("a group that does not speak reads nothing: no gap, no warning",
+          all(x["reads"] is None for x in quiet["groups"]) and quiet["gaps"] == [] and quiet["warnings"] == [])
+    check("promising_p and downweight_p move the reads",
+          by_key(W.past_signal(past_units(), PAST_GROUPS, {"promising_p": 0.99, "downweight_p": 0.001}))["DEMO-g1"][
+              "reads"] is None
+          and by_key(W.past_signal(past_units(), PAST_GROUPS, {"promising_p": 0.99, "downweight_p": 0.001}))[
+              "DEMO-g2"]["reads"] is None)
+    check("prior_conv moves P(better): a heavier prior pulls a group toward the pool",
+          by_key(W.past_signal(past_units(), PAST_GROUPS, {"prior_conv": 50}))["DEMO-g1"]["p_better"]
+          < g["DEMO-g1"]["p_better"])
+    # a cold pool judges nothing
+    for what, rows in (("no conversion", [("DEMO-p1", 1000, 0), ("DEMO-p2", 1000, 0)]), ("no spend", [("DEMO-p1", 0, 0)]),
+                       ("no units", [])):
+        cold = W.past_signal(past_units(rows), {"DEMO-g1": {"units": [r[0] for r in rows]}} if rows else {})
+        check(f"{what}: no pool rate, nothing judged", cold["pool"]["rate"] is None and cold["groups"] == []
+              and cold["gaps"] == [] and cold["warnings"] == [], cold)
+    check("a group with no unit with spend is listed with no rate", by_key(W.past_signal(past_units(), {
+        "DEMO-g9": {"units": ["DEMO-p7"]}, "DEMO-g1": PAST_GROUPS["DEMO-g1"]}))["DEMO-g9"]["vs_pool"] is None)
+    check("a unit may sit in several groups", len(W.past_signal(past_units(), {
+        "DEMO-a": {"units": ["DEMO-p1"]}, "DEMO-b": {"units": ["DEMO-p1", "DEMO-p2"]}})["groups"]) == 2)
+    # bad input
+    bad_groups = [{"": {"units": ["DEMO-p1"]}}, {"DEMO-g": {"units": "DEMO-p1"}}, {"DEMO-g": {"units": ["DEMO-p1", "DEMO-p1"]}},
+                  {"DEMO-g": {"units": ["DEMO-nope"]}}, {"DEMO-g": {"units": [1]}}, {"DEMO-g": {"units": [["DEMO-p1"]]}},
+                  {"DEMO-g": {}}, {"DEMO-g": ["DEMO-p1"]}, {"DEMO-g": {"units": ["DEMO-p1"], "ours": -1}},
+                  {"DEMO-g": {"units": ["DEMO-p1"], "ours": True}}, {"DEMO-g": {"units": ["DEMO-p1"], "ours": 1.5}},
+                  ["DEMO-g"], None]
+    check("every bad group is refused", all(raises(W.past_signal, past_units(), x) for x in bad_groups),
+          [x for x in bad_groups if not raises(W.past_signal, past_units(), x)])
+    bad_units = [[{"id": "DEMO-p1", "spend": -1, "conv": 1}], [{"id": "DEMO-p1", "spend": 1, "conv": -1}],
+                 [{"id": "DEMO-p1", "spend": float("nan"), "conv": 1}], [{"id": "DEMO-p1", "spend": "1", "conv": 1}],
+                 [{"id": "DEMO-p1", "spend": True, "conv": 1}], [{"spend": 1, "conv": 1}],
+                 [{"id": "DEMO-p1", "spend": 1}], ["DEMO-p1"],
+                 [{"id": "DEMO-p1", "spend": 1, "conv": 1}, {"id": "DEMO-p1", "spend": 1, "conv": 1}]]
+    check("every bad unit is refused", all(raises(W.past_signal, x, {}) for x in bad_units),
+          [x for x in bad_units if not raises(W.past_signal, x, {})])
+    check("a bad setting is refused naming the key", "past_warn_units" in message(
+        W.past_signal, past_units(), PAST_GROUPS, {"past_warn_units": 0}))
+    check("fractional conversions are fine", W.past_signal(past_units([("DEMO-p1", 1000, 10.5), ("DEMO-p2", 1000, 3.25)]), {
+        "DEMO-g": {"units": ["DEMO-p1"]}})["pool"]["conv"] == 13.75)
+    # determinism and purity
+    before_u, before_g = copy.deepcopy(past_units()), copy.deepcopy(PAST_GROUPS)
+    rng = random.Random(5)
+    shuffled = past_units()
+    rng.shuffle(shuffled)
+    regroup = {k: {**v, "units": list(reversed(v["units"]))} for k, v in reversed(list(PAST_GROUPS.items()))}
+    check("the same result in any order of units, groups and a group's units", W.past_signal(shuffled, regroup) == out
+          and W.past_signal(past_units(), {k: {**v, "units": set(v["units"])} for k, v in PAST_GROUPS.items()}) == out)
+    check("nothing is mutated", past_units() == before_u and PAST_GROUPS == before_g)
+    # never a weight
+    leaves = [{"id": "DEMO-l1", "parents": ["DEMO-d1"], "conv": 6, "spend": 1000},
+              {"id": "DEMO-l2", "parents": ["DEMO-d1"], "conv": 4, "spend": 1000},
+              {"id": "DEMO-l3", "parents": ["DEMO-d2"], "conv": 1, "spend": 1000}]
+    acct = W.account(11, 3000)
+    moves = [{"id": "DEMO-m1", "group": "DEMO-d1", "n": 2, "kind": "unknown", "post": None},
+             {"id": "DEMO-m2", "group": "DEMO-d2", "n": 2, "kind": "known", "post": (4.0, 1000.0)},
+             {"id": "DEMO-m3", "group": "DEMO-d3", "n": 2, "kind": "unknown", "post": None}]
+
+    def plan_results() -> str:
+        pw = W.posteriors(leaves)
+        j = W.judge(pw["leaves"]["DEMO-l3"], pw["account"], made=2, spend=1000, settled=2)
+        return repr([pw, j, W.pick(moves, acct, seed=7), W.twins([], acct), acct])
+    base = plan_results()
+    W.past_signal(past_units(), PAST_GROUPS)
+    check("the plan's posteriors, judgements and next batch are the same before and after the past is read",
+          plan_results() == base)
+    check("its result carries nothing a leaf, a move or the account takes (no post, shift, state, parents, warm)",
+          not {"post", "shift", "state", "parents", "warm", "reason"} & {k for x in out["groups"] for k in x}
+          and not {"post", "shift", "state", "parents", "warm"} & set(out["pool"]) & set(out))
+    import inspect
+    reads = {fn: "past" in inspect.getsource(getattr(W, fn)).lower() for fn in
+             ("posteriors", "judge", "pick", "twins", "account", "_warm", "_move", "_without")}
+    check("no function that weighs, judges or picks reads the past (its source never names it)",
+          not any(reads.values()), [f for f, r in reads.items() if r])
+    import ast
+    called = {n.func.id if isinstance(n.func, ast.Name) else getattr(n.func, "attr", "") for n in ast.walk(
+        ast.parse(inspect.getsource(W.past_signal))) if isinstance(n, ast.Call)}
+    check("past_signal itself calls none of them", not called & {"posteriors", "judge", "pick", "twins", "account"}, called)
+
+
+def null_past(trials: int = 300, groups: int = 8, per: int = 5, rate: float = 0.01) -> tuple[int, int, int]:
+    """(strong, weak, groups judged) over seeded pools where every unit has the same true rate."""
+    strong = weak = n = 0
+    for t in range(trials):
+        rng = random.Random(7000 + t)
+        us = [{"id": f"DEMO-{i}", "spend": (sp := rng.choice([500, 1000, 2000, 4000])),
+               "conv": _poisson(rng, sp * rate)} for i in range(groups * per)]
+        gs = {f"DEMO-g{j}": {"units": [f"DEMO-{i}" for i in range(j * per, (j + 1) * per)]} for j in range(groups)}
+        for x in W.past_signal(us, gs)["groups"]:
+            n += 1
+            strong += x["reads"] == "strong"
+            weak += x["reads"] == "weak"
+    return strong, weak, n
+
+
+def test_past_calibration() -> None:
+    print("\n[8b] past_signal(): every group equally good")
+    strong, weak, n = null_past()
+    print(f"  {strong} of {n} groups read strong ({100 * strong / n:.1f}%), {weak} weak ({100 * weak / n:.1f}%)")
+    check("with every group equally good about 1 in 6 reads strong and 1 in 5 weak: a pointer, never a proof "
+          "(at most 25% each; the docs say so)", n >= 2000 and strong / n <= 0.25 and weak / n <= 0.25
+          and strong > 0 and weak > 0, (strong, weak, n))
+
+
 def main() -> int:
     test_settings()
     test_statistics()
@@ -703,6 +868,8 @@ def main() -> int:
     test_pick()
     test_twins()
     test_calibration()
+    test_past()
+    test_past_calibration()
     return finish()
 
 

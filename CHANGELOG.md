@@ -61,6 +61,19 @@ scaffold, console, docs, conformance.
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
 
+## [0.28.0] - 2026-10-13
+### Added
+- `kit.pathweights.past_signal(units, groups, cfg)` and two thresholds, `past_min_expected_conv` (3) and `past_warn_units`
+  (3): past results (a client's past ads, another period and another hand) as a gap signal, never a weight
+  (`docs/path-weights.md`, "Past results"). A group of past units is judged against the past pool's own rate, never the
+  account's (P(better) under Gamma-Poisson, the prior worth `prior_conv`), speaks once its spend buys
+  `past_min_expected_conv` at that rate, and reads strong or weak at `promising_p` and `downweight_p`. `gaps` are strong
+  groups with none of the plan's own units, `warnings` weak groups with `past_warn_units` or more. Nothing from it is an
+  input of `posteriors()`, `judge()` or `pick()`: the test holds that their results do not change when the past is read
+  and that none of their sources names it, and it measures how often an equally good group reads strong or weak (about 1
+  in 6 and 1 in 5). Additive: `settings()` gains two keys, and nothing else changes. Seen once, in the video-ads harness
+  (its ROADMAP D64), which keeps its own copy for now.
+
 ## [0.27.0] - 2026-10-13
 ### Added
 - `kit.questions` (pack `learning`; rule: `docs/rules.md`, human-in-the-loop rule 13): open questions that never hold the

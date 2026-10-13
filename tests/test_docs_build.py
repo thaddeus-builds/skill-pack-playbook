@@ -1072,6 +1072,37 @@ def test_the_open_question_rule_is_whole_and_checked():
     assert open_question_problems(rules, module, "") == ["the test"]
 
 
+PAST = "Past results: a gap signal, never a weight"
+
+
+def past_problems(doc_text: str, module: str, test: str) -> list[str]:
+    """What the past-results section of docs/path-weights.md fails to say or to check: the section exists; it says why
+    the past stays out of the weights, that a group is judged against the past pool's own rate (never the account's),
+    what gaps and warnings are, that a person confirms what follows, how far to trust it, and where it was seen; both
+    thresholds are in its table; the function exists, and its test holds that the plan's results do not change when the
+    past is read."""
+    body = section(doc_text, PAST) if f"## {PAST}" in doc_text else ""
+    out = [] if body else [PAST]
+    out += [w for w in ("Why they stay out of the weights", "never the account's rate", "`gaps`", "`warnings`",
+                        "confirmed by a person", "How much to trust it", "*Seen once:*", "`past_signal(") if body and w not in body]
+    out += [f"threshold {k}" for k in ("past_min_expected_conv", "past_warn_units") if f"| `{k}` |" not in doc_text]
+    if "def past_signal(" not in module:
+        out.append("the function")
+    if "are the same before and after the past is read" not in test:
+        out.append("the test")
+    return out
+
+
+def test_the_past_results_section_is_whole_and_checked():
+    text, module, test = doc("docs/path-weights.md"), doc("kit/pathweights.py"), doc("kit/tests/test_pathweights.py")
+    assert past_problems(text, module, test) == [], past_problems(text, module, test)
+    assert past_problems(text.replace(f"## {PAST}", "## x"), module, test) == [PAST]
+    assert past_problems(text.replace("never the account's rate", "x"), module, test) == ["never the account's rate"]
+    assert past_problems(text.replace("| `past_warn_units` |", "| x |"), module, test) == ["threshold past_warn_units"]
+    assert past_problems(text, module.replace("def past_signal(", "def other("), test) == ["the function"]
+    assert past_problems(text, module, "") == ["the test"]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
