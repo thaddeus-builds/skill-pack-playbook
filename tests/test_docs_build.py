@@ -877,12 +877,13 @@ SETTINGS = "`ssot/` is the builder's; what a client sets lives in that client's 
 
 def settings_problems(rules: str, guard: str, suites: str) -> list[str]:
     """What the client-settings rule fails to say or to check: a numbered bold item of the registries section that
-    names both ways a harness reads a client's value, the bounds on write and on read, its check and the allowlist,
+    names both ways a harness reads a client's value, that a client's vocabulary is its value too (ssot keeps the axes), the bounds on write and on read, its check and the allowlist,
     and where it was seen; the check exists in the ssot guard and the day-one ssot suite runs it."""
     body = section(rules, "Registries: one place per value")
     item = next((i for i in re.split(r"^\d+\. ", body, flags=re.M) if i.startswith(f"**{SETTINGS}**")), "")
     out = [] if item else [SETTINGS]
     out += [w for w in ("`threshold_<name>`", "append-only", "when it is written and again when it is read",
+                        "a client's vocabulary", "the axes and their code letters",
                         "`check_writes`", "`[guards.ssot].writers`", "*Seen once:*") if item and w not in item]
     if "def check_writes(" not in guard:
         out.append("the guard")
@@ -898,6 +899,7 @@ def test_the_client_settings_rule_is_whole_and_checked():
     assert settings_problems(rules.replace("`check_writes` in", "the check in"), guard, suites) == ["`check_writes`"]
     assert settings_problems(rules.replace("*Seen once:* a video-ads", "a video-ads"), guard, suites) == [
         "*Seen once:*"]
+    assert settings_problems(rules.replace("a client's vocabulary", "x"), guard, suites) == ["a client's vocabulary"]
     assert settings_problems(rules, "", "") == ["the guard", "the suite"]
 
 
