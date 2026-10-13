@@ -1,5 +1,5 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-12
+Updated: 2026-10-13
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: harnesses adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
 - [N1] 2026-10-12 fold the video-ads harness's lessons into the kit, one pull request per lesson (kit 0.14.0 and the branches beside it); the lead reviews, merges in order and re-vendors
@@ -16,6 +16,7 @@ Updated: 2026-10-12
 - [X6] 2026-10-05 quality evals in every harness; SEO and outreach adoption (#26)
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL harness's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
+- [X9] 2026-10-13 a first harness imports `kit.autonomy` (0.27.0): the SEO harness when it moves onto the kit (W2), or the Amazon Ads harness once its owner names which write kinds may rise above L1 (docs/autonomy.md, "Adopting it in another harness"); with no importer by 0.29.0 the module is deleted (kit/packs.tsv)
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)
