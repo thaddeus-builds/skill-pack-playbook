@@ -1039,6 +1039,39 @@ def test_the_rubber_stamp_lessons_are_whole():
     assert rubber_stamp_problems(rules, operating.replace("([R14]", "([R1]")) == ["R14"]
 
 
+OPEN_Q = "An open question never holds the plan."
+
+
+def open_question_problems(rules: str, module: str, test: str) -> list[str]:
+    """What the open-question rule fails to say or to check: a numbered bold item of the human-in-the-loop rules that
+    names both fields (`by_data`, `meanwhile`), that a wait is no `meanwhile`, the read-back, the owner asked only what
+    no data can answer, its check and where it was seen; the check exists in kit/questions.py with its self-test, and
+    its test runs that self-test."""
+    body = section(rules, "Human-in-the-loop rules")
+    item = next((i for i in re.split(r"^\d+\. ", body, flags=re.M) if i.startswith(f"**{OPEN_Q}**")), "")
+    out = [] if item else [OPEN_Q]
+    out += [w for w in ("`by_data`", "`meanwhile`", "never a wait", "read-back", "only what no data can answer",
+                        "`kit.questions`", "`problems()`", "`readback()`", "*Seen once:*") if item and w not in item]
+    out += [f"kit/questions.py: def {f}(" for f in ("problems", "readback", "groups", "self_test")
+            if f"def {f}(" not in module]
+    if "Q.self_test() == []" not in test:
+        out.append("the test")
+    return out
+
+
+def test_the_open_question_rule_is_whole_and_checked():
+    rules, module, test = doc("docs/rules.md"), doc("kit/questions.py"), doc("kit/tests/test_questions.py")
+    assert open_question_problems(rules, module, test) == [], open_question_problems(rules, module, test)
+    assert open_question_problems(rules.replace(f"**{OPEN_Q}**", "**x**"), module, test) == [OPEN_Q]
+    assert open_question_problems(rules.replace("never a wait", "fine"), module, test) == ["never a wait"]
+    assert open_question_problems(rules.replace("only what no data can answer", "x"), module, test) == [
+        "only what no data can answer"]
+    assert open_question_problems(rules.replace("`readback()`", "x"), module, test) == ["`readback()`"]
+    assert open_question_problems(rules, module.replace("def readback(", "def other("), test) == [
+        "kit/questions.py: def readback("]
+    assert open_question_problems(rules, module, "") == ["the test"]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
