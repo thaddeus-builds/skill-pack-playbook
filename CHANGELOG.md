@@ -10,6 +10,11 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/rules.md`, Registries item 9: a client's vocabulary is its value too. The options a harness mines or proposes for
+  one client (a creative dimension's values, words taken from its own or its competitors' ads) are rows in that client's
+  database, confirmed or retired by a person there; `ssot/` keeps the schema (the axes and their code letters) and the
+  generic seeds a builder writes for every client. Seen once, in the video-ads harness (owner decision 2026-10-13).
+  Tested in `tests/test_docs_build.py`.
 - `docs/rules.md`, human-in-the-loop rule 4: one chat yes is quoted for one code only, and a
   wave that needs one yes gets one scoped approval (not yet proven: no harness refuses a reused
   quote). New rule 12: a gate the human clicks through proves nothing, so the harness tiers changes
