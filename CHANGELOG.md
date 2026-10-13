@@ -82,6 +82,10 @@ scaffold, console, docs, conformance.
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
 
+## [0.30.1] - 2026-10-13
+### Fixed
+- `kit.guards.pages` read a vendored kit that sits at `kit/` (`scripts_dir = "."`): the skip path was `./kit`, which matched nothing, so the guard flagged its own host line. The path is normalised. Seen in the video-ads harness, which allowed the line meanwhile.
+
 ## [0.30.0] - 2026-10-13
 ### Added
 - `kit.guards.pages` (pack `testkit`) and `suites.page_links(root)`: a page the harness delivers is drawn by the harness

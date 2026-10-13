@@ -143,7 +143,7 @@ def files(root: Path, cfg) -> tuple[list[str], list[str]]:
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
             names += [str((Path(dirpath) / f).relative_to(root)) for f in sorted(filenames)]
-    skip = [d for d in (f"{cfg.scripts_dir}/kit", "console") if _vendored(root, d)]
+    skip = [d for d in (os.path.normpath(f"{cfg.scripts_dir}/kit"), "console") if _vendored(root, d)]
     return [f for f in names if not _release.under(f, skip)], problems
 
 
