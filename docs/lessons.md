@@ -124,3 +124,20 @@ The rules:
 
 *Seen once* (2026-10-13), in this playbook (PRs 88 and 89).
 
+## A past winner that cannot be said is studied for its mechanism, never copied (from the video-ads harness, 2026-10-13)
+
+When a harness reads a client's past results ([path-weights.md](path-weights.md#past-results-a-gap-signal-never-a-weight)), its strongest single ad may win on an angle the harness cannot say: the claim sits outside the facts approved for the product, or no row of the plan states it. The tempting move is to turn that ad into a template or a next move. The harness learns the mechanism instead and proposes that.
+
+The owner's words (2026-10-13): if we are to learn from it, learn the underlying logic, not this specific case.
+
+*Why:* the video-ads harness's first client had one past ad with a very large share of all past conversions, and its angle was one the plan's card could not say. Copying it risks a claim the product's approved facts do not support, and fits the plan to one draw: a single ad has a wide spread, and the past signal itself reads an equally good group as strong about 1 time in 6 ([path weights](path-weights.md)). So the unplaceable winner went to the agent as a question to answer with a mechanism, not as a step. Nothing was copied; the owner set the rule before any template was written.
+
+The rules:
+
+- A strong past ad that no row of the plan can say is not a template and not a move. It is a proposal for a person to confirm, and the proposal names a mechanism.
+- A mechanism is what can be separated from the claim: who the ad reached, how it opened, its pace and timing, which worry it answered, why people converted. Ask each question of the ad, then check what the harness can say about each answer.
+- Cite the ad by its id and its numbers, never by its words: nothing of the ad's script, offer or claim is quoted into a card, a template or a page.
+- A strong past ad the harness can say is the other case: its gap is a proposal for a template, and the mechanism is still what is studied.
+- A reference ad the client hands over to be copied is neither: it is a request, its risks stay warnings the owner can waive, and it is built faithfully. Past results are evidence about the design, not a script to repeat.
+
+*Seen once* (2026-10-13), in that harness (owner decision; its ROADMAP D64 holds the gap signal this feeds).
