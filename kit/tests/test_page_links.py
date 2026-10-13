@@ -205,6 +205,20 @@ def test_harness() -> None:
           and "[other]" in pages.PAGES_TABLE.sub("", t))
 
 
+def test_scripts_dir_dot() -> None:
+    print("\n[1b] a harness whose kit sits at kit/ (scripts_dir = \".\")")
+    r = build()
+    toml = (r / "harness.toml").read_text()
+    import re as _re
+    put(r, "harness.toml", _re.sub(r'scripts_dir = "[^"]*"', 'scripts_dir = "."', toml))
+    put(r, "kit/MANIFEST.sha256", "x\n")
+    put(r, "kit/guards/pages.py", f"HOSTS = ('{LINK}',)\n")
+    check("the vendored kit at kit/ is skipped when scripts_dir is \".\"", pages.check_links(r) == [], pages.check_links(r))
+    os.remove(r / "kit/MANIFEST.sha256")
+    commit(r)
+    check("…and read when it holds no MANIFEST.sha256", len(pages.check_links(r)) == 1, pages.check_links(r))
+
+
 def test_config() -> None:
     print("\n[2] [guards.pages]")
     ok = '[guards.pages.allow]\n"docs/rule.md" = "the page that names the rule"\n'
@@ -274,6 +288,7 @@ def test_suite() -> None:
 if __name__ == "__main__":
     test_rule()
     test_harness()
+    test_scripts_dir_dot()
     test_config()
     test_suite()
     raise SystemExit(finish())
