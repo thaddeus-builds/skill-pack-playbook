@@ -42,6 +42,7 @@ workbook_patch	workbook	cells set in a copy of the client's xlsx, everything els
 patternstore	learning	a per-client pattern store: closed rows, two-coder floor, shrunk rates
 pathweights	learning	path weights for variants: posteriors down a partition, states, the next batch, twins
 pagestyle	pages	one look for pages that guide making: states as colour, word and icon; one decision; the check
+autonomy	autonomy	the autonomy levels: the tier registry, the owner's switch, scoped approvals, caps from the archive, code-free undo, the digest
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	

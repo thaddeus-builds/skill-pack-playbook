@@ -1039,6 +1039,85 @@ def test_the_rubber_stamp_lessons_are_whole():
     assert rubber_stamp_problems(rules, operating.replace("([R14]", "([R1]")) == ["R14"]
 
 
+LEVEL_COLUMNS = ("Who decides each write", "Proof in the manifest", "What the harness checks", "What is revertible",
+                 "Default caps", "How it switches down", "Write kinds allowed")
+AUTONOMY_RULES = ("The harness classes each write, never the agent.",
+                  "A level is a ceiling per write kind, not a mode of the whole harness.",
+                  "Raising takes a person; lowering takes anyone.",
+                  "Every level above L1 expires and is capped, and the caps are counted from the archive.",
+                  "Above L1 only revertible kinds, and the undo of an L3 write needs no code.",
+                  "A stop issues no code.", "The person sees what ran.",
+                  "A person's approve of the work is still required through L3.")
+
+
+def autonomy_problems(text: str, rules: str) -> list[str]:
+    """What docs/autonomy.md fails to say, held to kit/autonomy.py: the levels table has every level of LEVELS in
+    order, each row whole under the seven columns, the levels not in BUILT marked "(not built)" and only those; the
+    proof table lists every PROOFS label at its level; each rule at every level is a numbered bold item; the judgement
+    on the owner's guess and the adoption note are there (naming amazon-ads); and docs/rules.md points at it from
+    rule 12, the channel rule (8) and the write door's preview rule (3)."""
+    sys.path.insert(0, REPO)
+    from kit import autonomy as A
+    out = []
+    table = [r for r in section(text, "The levels").splitlines() if r.startswith("| ")]
+    head = [c.strip() for c in table[0].strip("|").split("|")] if table else []
+    if head[1:] != list(LEVEL_COLUMNS):
+        out.append("level columns")
+    rows = [[c.strip() for c in r.strip("|").split("|")] for r in table[2:]]
+    if [r[0].split(" ")[0] for r in rows] != [lv for lv, _ in A.LEVELS]:
+        out.append("levels")
+    for (lv, name), r in zip(A.LEVELS, rows):
+        built = lv in A.BUILT
+        if not r[0].startswith(f"{lv} {name}") or ("(not built)" in r[0]) == built:
+            out.append(f"{lv} name")
+        if len(r) != len(LEVEL_COLUMNS) + 1 or not all(r):
+            out.append(f"{lv} cells")
+    proofs = {}
+    for r in section(text, "The shared mechanics").splitlines():
+        cells = [c.strip() for c in r.strip().strip("|").split("|")]
+        if r.strip().startswith("| `") and len(cells) > 1:
+            proofs[cells[0].strip("`")] = cells[1]
+    for proof, level in A.PROOFS.items():
+        if proof not in proofs or (level or "none") not in proofs[proof]:
+            out.append(f"proof {proof}")
+    items = re.split(r"^\d+\. ", section(text, "Rules at every level"), flags=re.M)[1:]
+    out += [t for t in AUTONOMY_RULES if not any(i.startswith(f"**{t}**") for i in items)]
+    judge = section(text, "Where this differs from the owner's first guess")
+    if not all(w in judge for w in ("L2", "L3", "L4", "channel")):
+        out.append("judgement")
+    if "amazon ads" not in section(text, "Adopting it in another harness").lower():
+        out.append("adoption")
+    human = section(rules, "Human-in-the-loop rules")
+    if "This rule is L2 of the [autonomy levels](autonomy.md)" not in human:
+        out.append("rule 12 pointer")
+    if "mode switch ([L3](autonomy.md#the-levels))" not in human:
+        out.append("rule 8 switch")
+    if "draft and publish in one step" not in section(rules, DOOR):
+        out.append("door preview")
+    return out
+
+
+def test_the_autonomy_levels_are_whole_and_match_the_kit():
+    text, rules = doc("docs/autonomy.md"), doc("docs/rules.md")
+    assert autonomy_problems(text, rules) == [], autonomy_problems(text, rules)
+    for title in AUTONOMY_RULES:                                                 # the check would notice each one gone
+        assert autonomy_problems(text.replace(f"**{title}**", "**x**"), rules) == [title], title
+    assert autonomy_problems(text.replace("| L4 rule-started work (not built) |", "| L4 rule-started work |"),
+                             rules) == ["L4 name"]
+    assert autonomy_problems(text.replace("| L3 owner-switched mode |", "| L3 owner-switched mode (not built) |"),
+                             rules) == ["L3 name"]
+    assert "L5 cells" in autonomy_problems(text.replace("| none by design, which is why no harness is here |", "| |"),
+                                           rules)
+    assert autonomy_problems(text.replace("| `undo` | none: it lowers exposure |", "| `undo` | L3 |"),
+                             rules) == ["proof undo"]
+    assert autonomy_problems(text.replace("| `approval` | L2 |", "| `approval` | L3 |"), rules) == ["proof approval"]
+    assert autonomy_problems(text.replace("Amazon Ads", "other"), rules) == ["adoption"]
+    assert autonomy_problems(text, rules.replace("This rule is L2", "This is L2")) == ["rule 12 pointer"]
+    assert autonomy_problems(text, rules.replace("mode switch ([L3]", "switch ([L3]")) == ["rule 8 switch"]
+    assert autonomy_problems(text, rules.replace("draft and publish in one step", "publish")) == ["door preview"]
+    assert autonomy_problems("# t\n", "# t\n")[:2] == ["level columns", "levels"]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
