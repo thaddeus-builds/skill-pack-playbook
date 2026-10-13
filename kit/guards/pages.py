@@ -129,7 +129,7 @@ def _vendored(root: Path, rel: str) -> bool:
 
 
 def files(root: Path, cfg) -> tuple[list[str], list[str]]:
-    """(the files to read, problems). Shipped files (the whole tree with no git, less dot-directories), less the
+    """(the files to read, problems). Shipped files (the whole tree with no git, less .git, virtualenvs and caches), less the
     vendored kit and console and the symlinks."""
     got = _release.shipped(root)
     problems: list[str] = []
