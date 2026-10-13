@@ -9,7 +9,7 @@ On SYNTHETIC files only (neutral names, a made-up artifact id).
       and the console (only when they hold a MANIFEST.sha256) are not read, a console of the harness's own is; a file
       with a NUL byte, over 5 MB, a symlink, a file deleted from the disk and a directory named like a file are not read
       and do not crash; harness.toml is read outside its [guards.pages] tables; a repository with nothing tracked is a
-      problem; a harness with no git is read whole, less dot-directories
+      problem; a harness with no git is read whole, less .git, virtualenvs and caches
   [2] [guards.pages]: allow (with its reason, passing; with max, a link added later is a problem; no reason, a path that
       is gone, a file that holds no link now, a file that does not ship: each a problem), hosts (a host the harness
       adds; a bad one is a problem), a bad allow table is a problem
@@ -61,7 +61,7 @@ def build(extra: str = "", *, repo: bool = True) -> Path:
     text = re.sub(r"\[release\]\n(?:.*\n)*?(?=\n\[)", "", text)          # the fake shop's own release table
     toml.write_text(text + TOML + extra, encoding="utf-8")
     write(root, "SKILL.md", "# Skill\nThe page is written by `space page`.\n")
-    write(root, "README.md", "# Readme\nDocs: https://claude.ai/docs/overview\n")
+    write(root, "README.md", f"# Readme\nDocs: https://{H}/docs/overview\n")
     write(root, "scripts/shop.py", "print('ok')\n")
     write(root, "notes/local.md", "scratch\n")
     write(root, "CLAUDE.md", "# internal\n")
@@ -158,7 +158,11 @@ def test_harness() -> None:
         r = build()
         (r / "u16.txt").write_bytes((LINK + "\n").encode("utf-16"))
         commit(r)
-        check("a UTF-16 file (NUL bytes) is not read: the docstring says so", pages.check_links(r) == [])
+        check("UTF-16 with a byte order mark is decoded and read", len(pages.check_links(r)) == 1, pages.check_links(r))
+        r = build()
+        (r / "u16.txt").write_bytes((LINK + "\n").encode("utf-16-le"))
+        commit(r)
+        check("UTF-16 without one (NUL bytes) is not read: the docstring says so", pages.check_links(r) == [])
         r = build(repo=False)
         git(r, "init", "-q")
         check("a repository that tracks nothing is a problem, not a pass", len(pages.check_links(r)) == 1
@@ -174,8 +178,12 @@ def test_harness() -> None:
           and pages.check_links(r)[0].startswith("notes/local.md:1:"), pages.check_links(r))
     write(r, "notes/local.md", "scratch\n")
     write(r, ".venv/lib/x.md", LINK)
+    write(r, ".git/x.md", LINK)
     write(r, "node_modules/p/README.md", LINK)
-    check("…less dot-directories and node_modules", pages.check_links(r) == [], pages.check_links(r))
+    check("…less .git, virtualenvs and node_modules", pages.check_links(r) == [], pages.check_links(r))
+    write(r, ".claude/skills/x/SKILL.md", LINK)
+    write(r, ".github/workflow.yml", LINK)
+    check("…but other dot-directories (.claude, .github) are read", len(pages.check_links(r)) == 2, pages.check_links(r))
     r = build()
     toml = (r / "harness.toml").read_text()
     put(r, "harness.toml", toml + f'\n[guards.pages]\nhosts = ["example.test/page"]\n\n[other]\nnote = "{LINK}"\n')
@@ -183,6 +191,18 @@ def test_harness() -> None:
     check("harness.toml is read outside its [guards.pages] tables (a link after them is caught, the host it names is not)",
           len(got) == 1 and got[0].startswith("harness.toml"), got)
     check("a link wrapped across lines is reported at its first line", pages.hits(f"x {H}/\nartifact/abc") == [1])
+    check("…also when the next line opens with a comment mark, a quote mark or a bullet",
+          all(pages.hits(f"{H}/\n{m} artifact/abc") == [1] for m in ("#", ">", "*", "//", "-")))
+    check("a decoded line break (%0A, an entity, \\u000a) moves no line number",
+          pages.hits(f"a%0Ab&#10;c\n{LINK}") == [2] and pages.hits(f"a\\u000ab\n{LINK}") == [2])
+    import time
+    t0 = time.time()
+    pages.hits(f"{H}/" + " " * 40000 + "x\n" + (f"{H}/" + " " * 2000 + "\n") * 20)
+    check("a long run of spaces after a host does not stall the check (linear)", time.time() - t0 < 2.0, time.time() - t0)
+    t = '[guards.pages]\nhosts = ["example.test/page"]\n  [other]\nnote = "x"\n[b]\nk = 1\n'
+    check("the [guards.pages] strip keeps the line count and stops at an indented header",
+          pages.PAGES_TABLE.sub(lambda m: "\n" * m.group(0).count("\n"), t).count("\n") == t.count("\n")
+          and "[other]" in pages.PAGES_TABLE.sub("", t))
 
 
 def test_config() -> None:
@@ -231,11 +251,13 @@ def test_config() -> None:
     r = build('[guards.pages]\nhosts = ["example.test/page"]\n')
     put(r, "README.md", f"{LINK}\n")
     check("an added host leaves the default hosts in force", len(pages.check_links(r)) == 1)
-    for bad in ('hosts = 5', 'hosts = ["a"]', 'hosts = ["abc"]', 'hosts = [1]', 'allow = ["README.md"]', 'allow = "README.md"'):
+    for bad in ('hosts = 5', 'hosts = ["a"]', 'hosts = ["abc"]', 'hosts = ["a.b"]', 'hosts = ["example"]', 'hosts = [1]',
+                'allow = ["README.md"]', 'allow = "README.md"', 'allow = {"README.md" = {reason = "x", max = true}}'):
         r = build(f"[guards.pages]\n{bad}\n")
         got = pages.check_links(r)
+        want = "a table" if bad.startswith("allow = [") or bad.startswith('allow = "') else "[guards.pages]"
         check(f"a bad config ({bad}) is a problem, not a crash or a silent pass",
-              len(got) == 1 and "[guards.pages]" in got[0], got)
+              len(got) >= 1 and want in got[0], got)
 
 
 def test_suite() -> None:

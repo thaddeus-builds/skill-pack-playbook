@@ -9,14 +9,14 @@ from what ships; that the page really comes from a verb is the harness's own tes
 
 `check_links(root)` reads the tracked files `git archive` would ship (kit.guards.release asks git: tracked, less the
 export-ignore ones; an untracked file is not read until `git add`, and a repository that tracks nothing is a problem;
-with no git or no repository the whole tree is read, less dot-directories, never a skip). Every file is read as text
-unless it holds a NUL byte (an image, UTF-16) or is over 5 MB, and a symlink is not followed. It returns a problem for
+with no git or no repository the whole tree is read, less .git, virtualenvs, caches and node_modules, never a skip). Every file is read as text
+unless it holds a NUL byte (an image; UTF-16 with a byte order mark is decoded) or is over 5 MB, and a symlink is not followed. It returns a problem for
 every hosted-artifact link: its path and line, never the link. A link in a file that does not ship (a planning file, a
 local note in `[release].internal`) is fine: it never reaches the installed harness.
 
 A line is read after `html.unescape`, `%`-decoding (twice), `\uXXXX` and backslash-slash decoding, so an entity-,
 percent-, JSON- or double-escaped slash is a slash; the host may carry a trailing dot or a port, and a link wrapped
-across a line break is read as one. What is not read: a link built from parts, and one in a file type that holds no
+across a line break (a comment or quote mark may open the next line) is read as one. What is not read: a link built from parts, and one in a file type that holds no
 text. Not read either: the vendored kit (`<scripts_dir>/kit/`) and console (`console/`) when they hold a
 MANIFEST.sha256 (the playbook's own bytes, held by the drift guard), and the `[guards.pages]` tables of harness.toml,
 which name the hosts it adds.
@@ -52,22 +52,27 @@ from kit.guards import release as _release
 
 HOSTS = ("claude.ai/artifact", "claude.ai/code/artifact", "claude.ai/public/artifacts")
 MAX_BYTES = 5_000_000
-SKIP_DIRS = ("node_modules", "__pycache__")
-PAGES_TABLE = re.compile(r"^\[guards\.pages[^\]\n]*\][^\n]*\n(?:(?!\[)[^\n]*\n?)*", re.M)
+SKIP_DIRS = (".git", ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache", "node_modules", "__pycache__")
+PAGES_TABLE = re.compile(r"^\[guards\.pages[^\]\n]*\][^\n]*\n(?:(?![ \t]*\[)[^\n]*\n?)*", re.M)
 
 
-def _normal(text: str) -> str:
-    """The text with its escapes undone and lowercased, line breaks kept, so a hit's line is the file's."""
+def _line(text: str) -> str:
+    """One line with its escapes undone and lowercased; a decoded line break becomes a space, so a hit's line is the
+    file's."""
     for _ in range(2):
         text = unquote(html.unescape(text))
     text = re.sub(r"\\u00([0-9a-f]{2})", lambda m: chr(int(m.group(1), 16)), text, flags=re.I)
-    return re.sub(r"\\+/", "/", text).lower()
+    return re.sub(r"[\r\n\v\f\x1c-\x1e\x85\u2028\u2029]", " ", re.sub(r"\\+/", "/", text).lower())
+
+
+def _normal(text: str) -> str:
+    return "\n".join(_line(x) for x in text.split("\n"))
 
 
 def _pattern(hosts) -> re.Pattern:
     def one(h: str) -> str:
         first, *rest = [p for p in h.strip().lower().split("/") if p]
-        return r"[ \t]*/+[ \t]*\n?[ \t]*".join([re.escape(first) + r"\.?(?::\d+)?", *map(re.escape, rest)])
+        return r"[ \t]*/+[ \t]*(?:\n[ \t#>*/-]*)?".join([re.escape(first) + r"\.?(?::\d+)?", *map(re.escape, rest)])
     parts = [one(h) for h in hosts if h.strip("/ ")]
     return re.compile("|".join(parts)) if parts else re.compile(r"(?!x)x")
 
@@ -114,6 +119,8 @@ def _readable(path: Path) -> str | None:
         raw = path.read_bytes()
     except OSError:
         return None
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):                      # UTF-16 with a byte order mark
+        return raw.decode("utf-16", errors="replace")
     return None if b"\0" in raw else raw.decode("utf-8", errors="replace")
 
 
@@ -134,7 +141,7 @@ def files(root: Path, cfg) -> tuple[list[str], list[str]]:
     else:
         names = []
         for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS)
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
             names += [str((Path(dirpath) / f).relative_to(root)) for f in sorted(filenames)]
     skip = [d for d in (f"{cfg.scripts_dir}/kit", "console") if _vendored(root, d)]
     return [f for f in names if not _release.under(f, skip)], problems
@@ -186,7 +193,7 @@ PLANTED = {
     "a code-session link": f"print('open https://{H}/code/artifact/0f1e2d3c-aaaa')\n",
     "a public share": f"url = 'https://{H}/public/artifacts/abc'\n",
     "capitals": f"HTTPS://{H.upper()}/ARTIFACT/ABC\n",
-    "www and http": f"http://www.{H}/artifact/abc\n",
+    "www and http": "http" + f"://www.{H}/artifact/abc\n",
     "a trailing dot": f"{H}./artifact/abc\n",
     "a port": f"{H}:443/artifact/abc\n",
     "json-escaped slashes": '{"link": "https:\\/\\/' + H + '\\/artifact\\/abc"}\n',
@@ -199,6 +206,8 @@ PLANTED = {
     "a named entity slash": H + "&sol;artifact&sol;abc\n",
     "a doubled slash": H + "//artifact/abc\n",
     "wrapped across a line": H + "/\nartifact/abc\n",
+    "wrapped behind a comment mark": H + "/\n# artifact/abc\n",
+    "after a decoded line break": "a%0Ab\n" + H + "/artifact/x\n",
     "on a later line": f"# a page\n\nsome words\nthe sample: {H}/artifact/abc\n",
 }
 SOUND = (f"The page is written by `site build` to the review folder.\n"
@@ -211,7 +220,8 @@ def self_test() -> list[str]:
     missed = [what for what, text in PLANTED.items() if not hits(text)]
     if hits(SOUND):
         missed.append("the sound text fails")
-    if hits(PLANTED["on a later line"]) != [4] or hits("a\r\nb\r\n" + H + "/artifact/x") != [3]:
+    if hits(PLANTED["on a later line"]) != [4] or hits("a\r\nb\r\n" + H + "/artifact/x") != [3] \
+            or hits(PLANTED["after a decoded line break"]) != [2] or hits("%0a%0a%0a\n" + H + "/artifact/x") != [2]:
         missed.append("the line of a hit")
     if hits("see example.test/page/abc", hosts=(*HOSTS, "example.test/page")) != [1]:
         missed.append("a host the harness adds")
