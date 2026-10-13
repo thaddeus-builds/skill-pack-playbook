@@ -1000,6 +1000,43 @@ def test_every_link_in_the_readme_and_docs_resolves():
     assert len(doc("README.md").split()) <= 2000, "the README is the overview; the detail goes in docs/"
 
 
+TIERS = "A gate the human clicks through proves nothing: tier changes by what the harness can see."
+ONE_YES = "One yes is quoted for one code only"
+THREAT = "Put the owner's threat model in every reviewer prompt, and stop when only out-of-model findings remain"
+
+
+def rubber_stamp_problems(rules: str, operating: str) -> list[str]:
+    """What the rubber-stamp lessons fail to say: each a numbered bold item where it belongs, saying where it was seen;
+    the tier rule names the live diff, the caps, the expiry and the unticked checkboxes; the one-gate rule (4) says a
+    yes is quoted for one code only, and that no harness refuses a reused quote yet; the threat model points at R14."""
+    out = []
+    human = section(rules, "Human-in-the-loop rules")
+    items = lambda body: re.split(r"^\d+\. ", body, flags=re.M)
+    for title, body in ((TIERS, human), (THREAT, section(operating, "Building with many agents"))):
+        item = next((i for i in items(body) if i.startswith(f"**{title}")), None)
+        if item is None or "*Seen once" not in item:
+            out.append(title)
+        elif title == TIERS:
+            out += [w for w in ("diff", "capped", "expires", "unticked") if w not in item]
+        elif "R14" not in item:
+            out.append("R14")
+    gate = next((i for i in items(human) if i.startswith("**One gate for every channel**")), "")
+    if ONE_YES not in gate or "*Not yet proven:*" not in gate.split(ONE_YES)[-1]:
+        out.append(ONE_YES)
+    return out
+
+
+def test_the_rubber_stamp_lessons_are_whole():
+    rules, operating = doc("docs/rules.md"), doc("docs/operating.md")
+    assert rubber_stamp_problems(rules, operating) == [], rubber_stamp_problems(rules, operating)
+    for title in (TIERS, THREAT):                                                # the check would notice each one gone
+        assert rubber_stamp_problems(rules.replace(f"**{title}", "**x"),
+                                     operating.replace(f"**{title}", "**x")) == [title], title
+    assert rubber_stamp_problems(rules.replace("start unticked", "start blank"), operating) == ["unticked"]
+    assert rubber_stamp_problems(rules.replace(ONE_YES, "A yes is kept"), operating) == [ONE_YES]
+    assert rubber_stamp_problems(rules, operating.replace("([R14]", "([R1]")) == ["R14"]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
