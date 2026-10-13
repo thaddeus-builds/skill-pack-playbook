@@ -16,9 +16,23 @@ scaffold, console, docs, conformance.
   client hands over to be copied is the other case. Seen once, in the video-ads harness (owner decision 2026-10-13).
   A judgement, not code: `tests/test_docs_build.py` pins the lesson's wording and its link from `docs/path-weights.md`.
 - `docs/rules.md`, data layers: a page the harness delivers is drawn by the harness (code and test: `kit.guards.pages`,
-  kit 0.29.0 below; tested in `tests/test_docs_build.py`).
+  kit 0.30.0 below; tested in `tests/test_docs_build.py`).
 - `docs/rules.md`, human-in-the-loop rule 13: an open question never holds the plan (code and test: `kit.questions`,
-  kit 0.27.0 below; tested in `tests/test_docs_build.py`).
+  kit 0.28.0 below; tested in `tests/test_docs_build.py`).
+- `docs/autonomy.md` (new): autonomy levels L0 to L5, like SAE's driving levels, by what proof a write into
+  someone else's system carries: L0 hand-carried, L1 per-change consent (`tty`, `relay`, or the approve of a known
+  payload), L2 scoped approval (rule 12), L3 an owner-switched mode over a closed registry of revertible kinds,
+  L4 rule-started work and L5 full autonomy (neither built; what L4 would need and why no harness is at L5). Per
+  level: who decides, the proof recorded, the checks, what is revertible, the default caps, how it switches down
+  and the write kinds allowed; eight rules at every level (the harness classes each write; a level is a ceiling
+  per kind; raising takes a person, lowering anyone; expiry and caps counted from the archive; only revertible
+  kinds above L1 and a code-free undo at L3; a stop issues no code; the digest; the approve still required through
+  L3); the judgement that a retype and a relayed code are one level and the item's approve is the destination,
+  so the owner's S46/S47 sit at L2/L3, not L3/L4; the SEO harness as the worked example; what the Amazon Ads
+  harness must add. `docs/rules.md`: rule 8 admits an owner's mode switch retyped on a page; rule 12 points at the
+  levels; the write door's rule 3 lets an L3 mode draft and publish in one step where nobody can preview in place.
+  Seen once, in the SEO harness (S46, S47; owner decisions 2026-10-13). Tested in `tests/test_docs_build.py`,
+  which holds the doc to `kit/autonomy.py`'s levels and proof labels.
 - `docs/rules.md`, Registries item 9: a client's vocabulary is its value too. The options a harness mines or proposes for
   one client (a creative dimension's values, words taken from its own or its competitors' ads) are rows in that client's
   database, confirmed or retired by a person there; `ssot/` keeps the schema (the axes and their code letters) and the
@@ -68,12 +82,13 @@ scaffold, console, docs, conformance.
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
 
-## [0.29.0] - 2026-10-13
+## [0.30.0] - 2026-10-13
 ### Added
 - `kit.guards.pages` (pack `testkit`) and `suites.page_links(root)`: a page the harness delivers is drawn by the harness
   (`docs/rules.md`, data layers), so no file the harness ships links to a hosted artifact. `check_links(root)` reads
   what `git archive` ships (untracked files are not read; nothing tracked is a problem; with no repository the whole
-  tree less dot-directories, never a skip) as text unless it holds a NUL byte or is over 5 MB, follows no symlink, and
+  tree less .git, virtualenvs, caches and node_modules, never a skip) as text unless it holds a NUL byte (UTF-16 with a
+  byte order mark is decoded) or is over 5 MB, follows no symlink, and
   names each file and line that holds a hosted-artifact link, never the link. A line is read after HTML-entity,
   percent (twice), `\uXXXX` and backslash decoding, with a trailing dot or a port on the host and a link wrapped across
   a line break; a link built from parts is not read. Not read: the vendored kit and console (when they hold a
@@ -84,7 +99,7 @@ scaffold, console, docs, conformance.
   answers. `self_test()` plants each form. Seen once, in the video-ads harness (owner decision 2026-10-13). A harness
   opts in with `run(suites.page_links(ROOT))` in a test; `templates/harness.toml` documents the table.
 
-## [0.28.0] - 2026-10-13
+## [0.29.0] - 2026-10-13
 ### Added
 - `kit.pathweights.past_signal(units, groups, cfg)` and two thresholds, `past_min_expected_conv` (3) and `past_warn_units`
   (3): past results (a client's past ads, another period and another hand) as a gap signal, never a weight
@@ -99,7 +114,7 @@ scaffold, console, docs, conformance.
   rounded and the read is decided on the rounded numbers. Additive: `settings()` gains two keys, and nothing else changes. Seen once, in the video-ads harness
   (its ROADMAP D64), which keeps its own copy for now.
 
-## [0.27.0] - 2026-10-13
+## [0.28.0] - 2026-10-13
 ### Added
 - `kit.questions` (pack `learning`; rule: `docs/rules.md`, human-in-the-loop rule 13): open questions that never hold the
   plan. A question names `by_data` (the data that can answer it, from the harness's closed list of kinds, or `ask_only`)
@@ -113,6 +128,20 @@ scaffold, console, docs, conformance.
   version of the data prompts again; `ask_only` never does); `self_test()` plants each break and the words its problem
   must say. Pure, stdlib only, no message codes. Seen once, in the video-ads harness (its ROADMAP D65), which keeps
   its own copy for now.
+
+## [0.27.0] - 2026-10-13
+### Added
+- `kit.autonomy` (new pack `autonomy`; imports nothing from the kit): the autonomy levels' shared mechanics, pure over
+  data the harness passes. The tier registry under the harness's own column names (`canon`) and its check
+  (`check_tiers`: a tier-B or auto row names its undo, an auto row's undo is a registered code-free undo, no orphan
+  undo row); `tier_of`, `eligible`, `ids_of`. The owner's switch, one fact `YYYY-MM-DD:ID,…` (`switch_value`,
+  `parse_switch`), on only while its latest history row is a person's confirm, clamped to `max_days`, its ids frozen
+  so a registry edit narrows and never widens (`mode`), an agent's write only ever off (`may_set`). The verdicts:
+  `approval_why` (L2, a fixed order) and `auto_verdict` (L3: a cap, an unverified last write or a mixed run is a
+  stop, no code issued). Caps from the archive (`used`, `tighten` only lowers, `lock`). The record (`gate`,
+  `suffix`, `proof_level`), code-free undo (`undo_free`, `undone_by`) and the digest. No harness imports it yet: the
+  SEO harness keeps its own copy (`scripts/apply_shopify.py`), so it is extra with no consumer (`kit-tiers.tsv`).
+  Test: `kit/tests/test_autonomy.py`.
 
 ## [0.26.2] - 2026-10-13
 ### Fixed

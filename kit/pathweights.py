@@ -614,10 +614,10 @@ def past_signal(units: Iterable[Mapping], groups: Mapping[str, Mapping], cfg: Ma
     reads conservatively (its vs_pool is understated). It speaks once its spend would buy past_min_expected_conv at R;
     it reads `strong` when it speaks and P(better) is at least promising_p, `weak` when it speaks and P is at most
     downweight_p, else None. Each group: {key, units, spend, conv, rate, vs_pool (its rate over R; None with no spend),
-    p_better, expected (spend x R), speaks, reads, ours, top (up to three unit ids by conversions)}, p_better and
-    expected rounded to 4 and 2 places and speaks and reads decided on the rounded numbers, so what is shown never
-    contradicts the read (as judge()); a unit with conversions and no spend counts nowhere; the largest by
-    conversions first. `gaps`: keys of strong groups with ours == 0, the surest first. `warnings`: keys of weak groups
+    p_better, expected (spend x R), speaks, reads, ours, top (up to three unit ids by conversions)}, the largest by
+    conversions first; p_better and expected are rounded to 4 and 2 places and speaks and reads are decided on the
+    rounded numbers, so what is shown never contradicts the read (as judge()). A unit with conversions and no spend
+    counts nowhere. `gaps`: keys of strong groups with ours == 0, the surest first. `warnings`: keys of weak groups
     with ours >= past_warn_units, the weakest first. With no pool rate (no conversion, or no spend) nothing is judged:
     groups, gaps and warnings are empty.
 
@@ -669,7 +669,10 @@ def past_signal(units: Iterable[Mapping], groups: Mapping[str, Mapping], cfg: Ma
     for key, (ids, ours) in parsed.items():
         members = [by_id[i] for i in ids]
         s, y = math.fsum(u["spend"] for u in members), math.fsum(u["conv"] for u in members)
-        p = round(p_above(a0 + y, a0 / R + s, R), 4)           # what is shown decides the read, as judge() does
+        try:
+            p = round(p_above(a0 + y, a0 / R + s, R), 4)       # what is shown decides the read, as judge() does
+        except (ArithmeticError, ValueError):
+            raise ValueError(f"group {key!r}: numbers too large to judge") from None
         expected = round(s * R, 2)
         speaks = expected >= need
         top = sorted((u for u in members if u["conv"] > 0), key=lambda u: (-u["conv"], -u["spend"], str(u["id"])))[:3]
