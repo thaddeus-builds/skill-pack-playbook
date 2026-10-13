@@ -96,3 +96,31 @@ The rules:
   never drifts from the code.
 
 *Seen once* (2026-10-12 and 13), in that harness's ROADMAP X45.
+
+## A guard's refinement never costs the recall it had (from the playbook's ssot write rule, kit 0.26.0, 2026-10-13)
+
+A guard that scans code for a forbidden act (here, a harness writing into `ssot/`) is reviewed for false hits and
+misses, and each false hit invites a refinement that makes it smarter. Each refinement is tried on the cases the last
+version caught, and dropped when it misses one: the guard prefers a false hit, which one allowlist row with its reason
+answers, to a miss, which nobody sees.
+
+*Paid for:* `kit.guards.ssot.check_writes` went through four review rounds in one day, and its 0.26.0 shipped with
+misses. Round one asked for a name to hold only its last binding and for `self.p` to be keyed by its class, to stop
+two false hits. Round two found that each one missed writes 0.25.0 caught (a path set in an if/else branch, an
+augmented assignment, a comprehension, a subclass writing what its base set); its fixes made the rules narrower still,
+and round three found more misses (a call wrapped over two lines, a helper that returns the ssot dir, a mixin). Both
+refinements were dropped, and round four, comparing every case with 0.25.0, found three smaller ones that had stayed
+(imports looked up per module, which lost star re-exports; a stored attribute named `name`; "named for reading" matched
+inside `ensure_ready`). 0.26.1 drops or narrows each; run case by case against 0.25.0, the only hits it no longer
+reports are the false hits it was meant to remove.
+
+The rules:
+
+- A refinement that removes false hits ships with the cases the old version caught as must-hit cases in the guard's
+  self-test (`_WRITE_CASES` in `kit/guards/ssot.py`, run by `writes_self_test()`); the review compares the two versions
+  on them, case by case.
+- When a refinement's second round of review finds new misses, drop it: put the allowlist row where the false hit was.
+- A guard says which way it errs, in its docstring and in the changelog line.
+
+*Seen once* (2026-10-13), in this playbook (PRs 88 and 89).
+
