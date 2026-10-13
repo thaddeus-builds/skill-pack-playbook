@@ -10,6 +10,8 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/rules.md`, human-in-the-loop rule 13: an open question never holds the plan (code and test: `kit.questions`,
+  kit 0.28.0 below; tested in `tests/test_docs_build.py`).
 - `docs/autonomy.md` (new): autonomy levels L0 to L5, like SAE's driving levels, by what proof a write into
   someone else's system carries: L0 hand-carried, L1 per-change consent (`tty`, `relay`, or the approve of a known
   payload), L2 scoped approval (rule 12), L3 an owner-switched mode over a closed registry of revertible kinds,
@@ -72,6 +74,36 @@ scaffold, console, docs, conformance.
   `kit.pagestyle` and tries each way a demo can break the rule (a term in the page data or split by
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
+
+## [0.29.0] - 2026-10-13
+### Added
+- `kit.pathweights.past_signal(units, groups, cfg)` and two thresholds, `past_min_expected_conv` (3) and `past_warn_units`
+  (3): past results (a client's past ads, another period and another hand) as a gap signal, never a weight
+  (`docs/path-weights.md`, "Past results"). A group of past units is judged against the past pool's own rate, never the
+  account's (P(better) under Gamma-Poisson, the prior worth `prior_conv`), speaks once its spend buys
+  `past_min_expected_conv` at that rate, and reads strong or weak at `promising_p` and `downweight_p`. `gaps` are strong
+  groups with none of the plan's own units, `warnings` weak groups with `past_warn_units` or more. Nothing from it is an
+  input of `posteriors()`, `judge()` or `pick()`: the test holds that their results do not change when the past is read
+  and that none of their sources names it (no module state is left behind), and it measures how often an equally good group
+  reads strong or weak (about 1 in 6 and 1 in 5 with Poisson noise only, a third and 2 in 5 with spread between units).
+  The pool includes the group, so a group that is most of it reads conservatively; `p_better` and `expected` are
+  rounded and the read is decided on the rounded numbers. Additive: `settings()` gains two keys, and nothing else changes. Seen once, in the video-ads harness
+  (its ROADMAP D64), which keeps its own copy for now.
+
+## [0.28.0] - 2026-10-13
+### Added
+- `kit.questions` (pack `learning`; rule: `docs/rules.md`, human-in-the-loop rule 13): open questions that never hold the
+  plan. A question names `by_data` (the data that can answer it, from the harness's closed list of kinds, or `ask_only`)
+  and `meanwhile` (what the plan does until then: an action, never a wait). `problems(questions, sources)` is the check a
+  harness's tests run (a missing or repeated id, a `by_data` outside the kinds, a blank, placeholder or waiting
+  `meanwhile`; an answered or dropped question needs neither). The wait test is a floor: it catches the obvious waits
+  (English, a few Chinese, `extra_waits` for a harness's own words); a word that also opens ordinary actions (hold,
+  pause, stop) counts only in a short text or with an "until" cue, and a short one may be a false hit, which a reworded
+  `meanwhile` answers. `groups()` sorts the questions for a page; `readback(questions, held)` lists the unanswered ones
+  whose data the harness now holds and has no read record for (the record is the fingerprint the agent read, so a new
+  version of the data prompts again; `ask_only` never does); `self_test()` plants each break and the words its problem
+  must say. Pure, stdlib only, no message codes. Seen once, in the video-ads harness (its ROADMAP D65), which keeps
+  its own copy for now.
 
 ## [0.27.0] - 2026-10-13
 ### Added
