@@ -10,6 +10,8 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/rules.md`, data layers: a page the harness delivers is drawn by the harness (code and test: `kit.guards.pages`,
+  kit 0.29.0 below; tested in `tests/test_docs_build.py`).
 - `docs/rules.md`, human-in-the-loop rule 13: an open question never holds the plan (code and test: `kit.questions`,
   kit 0.27.0 below; tested in `tests/test_docs_build.py`).
 - `docs/rules.md`, Registries item 9: a client's vocabulary is its value too. The options a harness mines or proposes for
@@ -60,6 +62,18 @@ scaffold, console, docs, conformance.
   `kit.pagestyle` and tries each way a demo can break the rule (a term in the page data or split by
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
+
+## [0.29.0] - 2026-10-13
+### Added
+- `kit.guards.pages` (pack `testkit`) and `suites.page_links(root)`: a page the harness delivers is drawn by the harness
+  (`docs/rules.md`, data layers), so no file the harness ships links to a hosted artifact. `check_links(root)` reads
+  what `git archive` ships (the whole tree when there is no repository, never a skip), less the vendored kit, the
+  console and `harness.toml`, and names each file and line that holds a hosted-artifact link, never the link. A link in
+  an export-ignore file is fine. `[guards.pages]` takes `hosts` (more hosts to treat so) and `allow` ({path: reason}; a
+  row with no reason, a gone path, or a file with no such link now is a problem). It errs toward a false hit (any text
+  that spells a host, prose included), which an `allow` row answers; a link built from parts is not read. `self_test()`
+  plants each form (markdown link, bare host, capitals, JSON-escaped and percent-encoded slashes). Seen once, in the
+  video-ads harness (owner decision 2026-10-13). A harness opts in with `run(suites.page_links(ROOT))` in a test.
 
 ## [0.28.0] - 2026-10-13
 ### Added
