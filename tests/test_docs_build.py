@@ -1084,7 +1084,7 @@ def past_problems(doc_text: str, module: str, test: str) -> list[str]:
     body = section(doc_text, PAST) if f"## {PAST}" in doc_text else ""
     out = [] if body else [PAST]
     out += [w for w in ("Why they stay out of the weights", "never the account's rate", "`gaps`", "`warnings`",
-                        "confirmed by a person", "How much to trust it", "*Seen once:*", "`past_signal(") if body and w not in body]
+                        "for a person to confirm", "How much to trust it", "*Seen once:*", "`past_signal(") if body and w not in body]
     out += [f"threshold {k}" for k in ("past_min_expected_conv", "past_warn_units") if f"| `{k}` |" not in doc_text]
     if "def past_signal(" not in module:
         out.append("the function")
@@ -1137,19 +1137,23 @@ def test_the_page_rule_is_whole_and_checked():
     assert page_rule_problems(rules, guard, suites, "") == ["the test"]
 
 
-MECHANISM = "A past winner that cannot be said is studied for its mechanism, never copied"
+MECHANISM = "A past winner the harness cannot say is studied for its mechanism, never copied"
+MECHANISM_WORDS = ("*Why:*", "not a template and not a move", "a proposal for a person to confirm", "the harness's own words",
+                   "who the ad reached", "how it opened", "its timing", "why people converted", "is the other case",
+                   "already runs on the platform", "never promotes a past ad to a template", "that a person can waive",
+                   "claim-scope.md#waivers", "No code enforces this", "*Seen once*")
 
 
 def mechanism_problems(lessons: str, weights: str) -> list[str]:
-    """What the mechanism lesson fails to say: a section of docs/lessons.md that says why, the rules (a
-    strong ad no row can say is no template and no move; a mechanism is what separates from the claim; cite by id and
-    numbers, never by words; the faithful-copy reference is the other case) and where it was seen; and the path-weights
-    section on the past links to it by its real anchor."""
+    """What the mechanism lesson fails to say: a section of docs/lessons.md with its why, the rules (no template and no
+    move; a proposal in the harness's own words naming who the ad reached, how it opened, its timing and why people
+    converted; the sayable winner as the other case; the client's reference, which already runs on the platform, as
+    neither, with the waiver link), the plain statement that no code enforces it, and where it was seen; and the
+    path-weights section on the past links to it by its real anchor."""
     heading = next((h for h in re.findall(r"^## (.+)$", lessons, re.M) if h.startswith(MECHANISM)), None)
     out = [] if heading else [MECHANISM]
     body = section(lessons, heading) if heading else ""
-    out += [w for w in ("*Why:*", "not a template and not a move", "what can be separated from the claim",
-                        "never by its words", "request", "*Seen once*") if heading and w not in body]
+    out += [w for w in MECHANISM_WORDS if heading and w not in body]
     if heading:
         slug = re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
         if f"(lessons.md#{slug})" not in weights:
@@ -1161,8 +1165,8 @@ def test_the_mechanism_lesson_is_whole_and_linked():
     lessons, weights = doc("docs/lessons.md"), doc("docs/path-weights.md")
     assert mechanism_problems(lessons, weights) == [], mechanism_problems(lessons, weights)
     assert mechanism_problems(lessons.replace(MECHANISM, "x"), weights) == [MECHANISM]
-    assert mechanism_problems(lessons.replace("never by its words", "x"), weights) == ["never by its words"]
-    assert mechanism_problems(lessons.replace("*Why:*", "x"), weights) == ["*Why:*"]
+    for word in MECHANISM_WORDS:                                                  # each phrase is checked on its own
+        assert mechanism_problems(lessons.replace(word, "x"), weights) == [word], word
     assert mechanism_problems(lessons, weights.replace("(lessons.md#", "(lessons.md?")) == ["the link from path-weights.md"]
 
 

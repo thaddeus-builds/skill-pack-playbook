@@ -124,20 +124,19 @@ The rules:
 
 *Seen once* (2026-10-13), in this playbook (PRs 88 and 89).
 
-## A past winner that cannot be said is studied for its mechanism, never copied (from the video-ads harness, 2026-10-13)
+## A past winner the harness cannot say is studied for its mechanism, never copied
 
-When a harness reads a client's past results ([path-weights.md](path-weights.md#past-results-a-gap-signal-never-a-weight)), its strongest single ad may win on an angle the harness cannot say: the claim sits outside the facts approved for the product, or no row of the plan states it. The tempting move is to turn that ad into a template or a next move. The harness learns the mechanism instead and proposes that.
+When a harness reads a client's past results ([path-weights.md](path-weights.md#past-results-a-gap-signal-never-a-weight)), the strongest single ad may win on an angle the harness cannot say: no template or direction of the plan states it. The tempting move is to make that ad a template or a next move. The harness learns the mechanism instead and proposes that.
 
-The owner's words (2026-10-13): if we are to learn from it, learn the underlying logic, not this specific case.
-
-*Why:* the video-ads harness's first client had one past ad with a very large share of all past conversions, and its angle was one the plan's card could not say. Copying it risks a claim the product's approved facts do not support, and fits the plan to one draw: a single ad has a wide spread, and the past signal itself reads an equally good group as strong about 1 time in 6 ([path weights](path-weights.md)). So the unplaceable winner went to the agent as a question to answer with a mechanism, not as a step. Nothing was copied; the owner set the rule before any template was written.
+*Why:* the owner of the video-ads harness (2026-10-13), on its first client's strongest past ad, which had about a third of all past conversions: if we are to learn from it, learn the underlying logic, not this specific case. Copying a winner the harness cannot say risks a compliance problem and overfits one ad.
 
 The rules:
 
-- A strong past ad that no row of the plan can say is not a template and not a move. It is a proposal for a person to confirm, and the proposal names a mechanism.
-- A mechanism is what can be separated from the claim: who the ad reached, how it opened, its pace and timing, which worry it answered, why people converted. Ask each question of the ad, then check what the harness can say about each answer.
-- Cite the ad by its id and its numbers, never by its words: nothing of the ad's script, offer or claim is quoted into a card, a template or a page.
+- A strong past ad that nothing in the plan can say is not a template and not a move. It is a proposal for a person to confirm.
+- The proposal states a mechanism in the harness's own words, not the ad's: what can be separated from the claim, which is who the ad reached, how it opened, its timing, and why people converted. The ad's id and numbers are its evidence.
 - A strong past ad the harness can say is the other case: its gap is a proposal for a template, and the mechanism is still what is studied.
-- A reference ad the client hands over to be copied is neither: it is a request, its risks stay warnings the owner can waive, and it is built faithfully. Past results are evidence about the design, not a script to repeat.
+- A reference ad the client hands over to be copied, one that already runs on the platform, is neither: it is the client's request, it is built faithfully, and its risks stay warnings that a person can waive ([claim-scope waivers](../templates/claim-scope.md#waivers)). The harness never promotes a past ad to a template by itself; a reference is the client's choice, not a result.
 
-*Seen once* (2026-10-13), in that harness (owner decision; its ROADMAP D64 holds the gap signal this feeds).
+No code enforces this: it is a judgement the agent makes and a person confirms, and `tests/test_docs_build.py` pins only the lesson's wording.
+
+*Seen once* (2026-10-13), in that harness; its ROADMAP D64 holds the gap signal this feeds.
