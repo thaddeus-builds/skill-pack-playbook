@@ -1,6 +1,6 @@
 # Restructuring plan: a smaller parent
 
-Status: **accepted 2026-10-05** (decisions 1 and 2: packs as drawn, phase 1 first). Phase 1 is in progress: step 4 and the comparison tool are done; steps 1 to 3 need the harness checkouts. Phase 2 steps 1 to 5 are done in kit 0.7.0 (packs, selective vendoring, `--packs`); step 6 needs the harness checkouts. Phases 4 and 5 are done. Phase 3 waits until the harnesses have moved. Each phase lists the decisions it needs from the owner. Related issues: #19, #20, #22, #24, #26.
+Status: **accepted 2026-10-05** (decisions 1 and 2: packs as drawn, phase 1 first). Phase 1 is in progress: step 4 and the comparison tool are done; steps 1 to 3 need the harness checkouts. Phase 2 steps 1 to 5 are done in kit 0.7.0 (packs, selective vendoring, `--packs`); step 6 needs the harness checkouts. Phases 4 and 5 are done. Phase 3 is done (2026-10-13). Each phase lists the decisions it needs from the owner. Related issues: #19, #20, #22, #24, #26.
 
 ## Why
 
@@ -120,6 +120,8 @@ Since the harnesses converge in phase 1, they can converge directly on 0.7.0 and
 4. Keep the kit rules: stdlib only, no domain words, the kit and console never import each other, every message coded.
 
 **Done when** no test reads a prose document for a required paragraph, except `test_docs_build.py`'s check that every path a doc names exists.
+
+**Done 2026-10-13.** `kit-tiers.tsv` and `kit/tests/test_tiers.py` are deleted; `docs/kit-and-tools.md` states the admission rule on packs alone. Two differences from the steps above: the consumer count is `tools/consumers.py`, not `kit/tools/consumers.py`, so it is not vendored and needs no kit version; and the core/stack layering inside `base` is dropped with the tiers, as step 4 allowed, because the pack rule (a pack imports only `base` and itself) is the one the vendor tool relies on.
 
 **Breaking?** No.
 

@@ -32,18 +32,19 @@ Updated: 2026-10-13
 - [D12] 2026-10-11 kit 0.12.0: one human gate per client file (PR #67)
 - [D13] 2026-10-12 kit 0.13.0: the `learning` pack, a per-client pattern store (PR #68)
 - [D14] 2026-10-12 kit 0.14.0: one roadmap format, `kit.guards.roadmap` and the twelfth generated test, from the video-ads harness; this file converted to it (branch kit-roadmap-guard)
+- [D15] 2026-10-13 RESTRUCTURE.md phase 3: `kit-tiers.tsv` and `kit/tests/test_tiers.py` retired, the consumer count is `tools/consumers.py` (branch claude/dazzling-shannon-xz4x07)
 ## Parked
 ## Decisions
 - [R1] 2026-10-05 which console copy stays (#24): "the playbook's" (as recorded in this roadmap's open decisions, 2026-10-05)
 - [R2] 2026-10-05 selective vendoring go-ahead and date (#19): "yes, after turn 2"; built in kit 0.7.0, RESTRUCTURE.md phase 2 (as recorded in this roadmap's open decisions, 2026-10-05)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
-- kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`; tiers in `kit-tiers.tsv` (5 core, 11 stack, 42 extra), enforced by `kit/tests/test_tiers.py`
+- kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`; who uses a module: `python3 tools/consumers.py <harness checkouts>`
 - Zylos adapter and console: `hosts/zylos/` (0.1.1) and `console/`; the host every harness is adapted to; always stays
 - harnesses that vendor the kit: the short-video ad harness (two worktrees of one repository), the KOL harness, the RedNote harness; on different kit versions
 - harnesses that do not: the SEO harness (forked its own gate), the outreach scraper, the ads harness the kit came from (#26)
 - restructure: RESTRUCTURE.md (accepted 2026-10-05); turns 2 to 4 follow it: one kit version first, then packs and selective vendoring, then docs
 - new machine: clone this repository; install Python 3.11 or newer and Node 22 or newer; `python3 run_all.py` must end `RESULT: N passed` (9 suites, about 2 minutes); clone each harness you will touch (the kit is copied into them, never imported from here); read the open issues, then Now and Next
-- session start: read this file and `kit-tiers.tsv`; fetch every remote (other sessions may have merged since this file was written); do the one turn Now names, anything else goes to an issue; before changing `kit/`, a changed byte the vendor tool copies needs a `VERSION` bump and a regenerated `MANIFEST.sha256` (kit/README.md, "Upgrades and drift"), and a move or rename breaks the harnesses that import it
+- session start: read this file and `kit/packs.tsv`; fetch every remote (other sessions may have merged since this file was written); do the one turn Now names, anything else goes to an issue; before changing `kit/`, a changed byte the vendor tool copies needs a `VERSION` bump and a regenerated `MANIFEST.sha256` (kit/README.md, "Upgrades and drift"), and a move or rename breaks the harnesses that import it
 - session end: tests green, push, pull requests opened; set Updated and move the rows above (Done with its reference, the next turn in Now, what it needs as a Waiting row); file an issue for every loose end, nothing lives only in a transcript; memory notes only for what the repository cannot hold; tell the owner in one screen what to look at, what you need, what the next session does
 - issues: the repository's issues; #19 to #27 hold the detail

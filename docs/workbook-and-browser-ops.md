@@ -9,7 +9,7 @@ Two things came up in one client at once, and each is the kind of thing the next
 1. **The client runs everything in a spreadsheet.** Emma's team manages every influencer project in one Excel workbook (12 sheets, a budget and target block, a roster per quarter, a group-buy ledger, a discount calendar). The harness must run beside it and put each new result back where the team already looks, for a smooth change-over (KOL harness R29, X39). Any harness that serves a team with a living workbook has the same need, and the video-ad harness's hand-off sheet is the same shape.
 2. **The platform has no API.** The client's ad tool (Smartly) can only be driven through a browser; opening an API to a customer takes months. Operating a platform through a browser has to follow the same ladder as an API: read first, then draft, then operate, each important step approved. The social-marketing harness already drives a real browser with Playwright and holds a one-entry writer allowlist; the video-ad harness reads a platform's review results in a person's browser.
 
-## Consumers (evidence for the tiers)
+## Consumers (the case for each module)
 
 | Module | Harness | Use | State |
 | --- | --- | --- | --- |
@@ -19,7 +19,7 @@ Two things came up in one client at once, and each is the kind of thing the next
 | browser-ops | social-marketing harness | its Playwright reader and one-entry writer allowlist | exists, its own copy |
 | browser-ops | video-ad harness | reading the platform's review results in a person's browser (its X17, X25) | exists, its own copy |
 
-Until two of these are merged against the module, both stay `extra`.
+Until two of these are merged against the module, it stays in its own pack, not `base` (`python3 tools/consumers.py` counts it).
 
 ## `workbook` (pack `workbook`, stdlib only)
 
