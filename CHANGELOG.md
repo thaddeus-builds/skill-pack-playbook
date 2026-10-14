@@ -10,6 +10,14 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/roadmap.md` (new): planning a harness that already runs. The vision cut into four to six pillars plus one for
+  operations; a read-only inventory per pillar (state, evidence, smallest task, size, a do-not-build-now list); the
+  roadmap kept in the story registry (an owner row with its milestone, an agent row with proof commands as DONE and
+  `owner pending: question? (recommended: answer)` notes), a generated view with `--check` and registry tests; three
+  open milestones plus later; one story per session on a cheaper model from a fixed builder prompt, merged by the
+  coordinator, released per milestone; issue templates for production testers; who works where, the directory layout
+  and the git rules. The SEO harness's roadmap of 2026-10-14 is the worked example. Seen once. Linked from the README;
+  `tests/test_docs_build.py` holds its sections, its method items and the builder prompt.
 - Lessons from the SEO harness, closing the loop on writes into someone else's system, each seen once there and
   tested in `tests/test_docs_build.py`. `docs/rules.md`, stories item 7: "done" for a written object is a fixed
   checklist recomputed from fresh data; a check older than the last write is `unknown`; a slow outside system gets a
