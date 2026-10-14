@@ -5,9 +5,11 @@ This repository is the **parent of every growth-marketing harness** (KOL, Amazon
 ## Keep it small
 
 - **Channel code stays in the harness.** A platform's API, fields and vocabulary do not enter `kit/`, `console/`, `build/` or `scaffold/`. If only one harness needs it, it lives there.
-- **A new kit module goes in the pack named for its concern, never in `base`.** It moves to `base` once two harnesses import it from code merged to their main branches. A module no harness imports is parked by a ROADMAP row with a `Delete on` day and deleted when the day comes; `tests/test_playbook_roadmap.py` fails after it, and `python3 tools/consumers.py` does the count ([kit/packs.tsv](kit/packs.tsv)).
+- **Extract, don't invent.** The parent holds what harnesses already run. A lesson seen in one harness arrives as a note in `docs/`, with where and when it was seen. It becomes kit code only when a harness imports the kit's version in production; a harness that keeps its own copy is not an importer.
+- **The guardrails are the parent; the features are the channel.** `base` is what makes a write safe and checkable (the gate, the human tables, the queue, dry-run, the write guard, the `--json` contract, coded messages), and its list is pinned in `tests/test_admission.py`. A new module goes in the pack named for its concern, never in `base`; it moves to `base` once two harnesses import it from code merged to their main branches.
+- **Every pack names its importer.** A pack in `kit/` has a ROADMAP Links line `pack <name>: <harness> imports ... in production`, or a Parked row that names it with a `Review on` day. Code nobody imports lives in `_parked/` (not vendored, not run by CI, imported by nothing) until a harness imports it. `python3 tools/consumers.py` does the count; `tests/test_admission.py` and `tests/test_playbook_roadmap.py` fail when this is broken ([the rule and why](docs/kit-and-tools.md#the-admission-rule)).
 - **Packs stay decoupled.** A pack imports only `base` and itself, and a test enforces it. The kit is stdlib only, and `from kit import X` paths do not move.
-- **A lesson arrives as a small change with a test,** from a harness that paid for it. Say where it was seen; if once, say once. No new rule without a check that fails when the rule is broken: a rule nothing enforces is deleted, not kept.
+- **A lesson arrives as a small change with a test,** from a harness that paid for it. Say where it was seen; if once, say once, and keep it a note in `docs/` (the first bullet). No new rule without a check that fails when the rule is broken: a rule nothing enforces is deleted, not kept.
 
 ## Keep each change focused
 
