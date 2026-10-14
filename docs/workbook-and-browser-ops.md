@@ -1,6 +1,6 @@
 # Two proposed kit modules: `workbook` and `browser-ops`
 
-Status: `workbook` slice 1 (read, the map, the store) is **kit 0.11.0**; the rest is design (proposed 2026-10-10 from the KOL harness's client Emma; the owner agreed to write it into the playbook). The modules are added as `extra` in their own packs and become more only when two independent harnesses use them in merged code ([the admission rule](kit-and-tools.md#the-admission-rule)).
+Status: **parked 2026-10-14**: the `workbook` code (kit 0.11.0 to 0.21.0) is in [`_parked/workbook/`](../_parked/README.md), not in `kit/`, until a harness imports it. `workbook` slice 1 (read, the map, the store) was **kit 0.11.0**; the rest is design (proposed 2026-10-10 from the KOL harness's client Emma; the owner agreed to write it into the playbook). The modules are added as `extra` in their own packs and become more only when two independent harnesses use them in merged code ([the admission rule](kit-and-tools.md#the-admission-rule)).
 
 ## Why now
 

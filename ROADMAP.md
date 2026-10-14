@@ -1,6 +1,6 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-13
-<!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: harnesses adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. A Parked row that says `Delete on YYYY-MM-DD` is a module nobody imports: tests/test_playbook_roadmap.py fails once that day has passed, and the way out is to delete the module or to move the day with the owner's words quoted in Decisions. -->
+Updated: 2026-10-14
+<!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: harnesses adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. A Parked row that says `Review on YYYY-MM-DD` is code nobody imports (in `_parked/`, or a pack kept for a reason the row gives): tests/test_playbook_roadmap.py fails once that day has passed, and the way out is to revive it, delete it, or move the day with the owner's words quoted in Decisions. -->
 ## Now
 - [N1] 2026-10-12 fold the video-ads harness's lessons into the kit, one pull request per lesson (kit 0.14.0 and the branches beside it); the lead reviews, merges in order and re-vendors
 ## Waiting on owner
@@ -12,7 +12,7 @@ Updated: 2026-10-13
 - [X2] 2026-10-05 turn 3 (#19): selective vendoring, a harness takes only the tiers it needs (breaking). Needs turn 2 done, the owner's go-ahead (R2) and a quiet week for the short-video harness. Packs and the vendor side are built (D3); what is left is moving each harness onto them
 - [X3] 2026-10-05 the scaffold sets up Zylos itself: vendors the adapter, writes the manifest, passes `node zylos/lib.js check` (#25)
 - [X4] 2026-10-05 restore the three Anthropic source links in the README once the leak scan allows them (#23, W1)
-- [X5] 2026-10-05 `copylint` and the other one-harness modules: recheck with `python3 tools/consumers.py <harness checkouts>` after the KOL harness merges (#22); the four packs with no importer are parked (P1 to P4)
+- [X5] 2026-10-05 `copylint` and the other one-harness modules: recheck with `python3 tools/consumers.py <harness checkouts>` after the KOL harness merges (#22); the packs with no importer are parked (P1 to P4)
 - [X6] 2026-10-05 quality evals in every harness; SEO and outreach adoption (#26)
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL harness's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
@@ -32,16 +32,20 @@ Updated: 2026-10-13
 - [D13] 2026-10-12 kit 0.13.0: the `learning` pack, a per-client pattern store (PR #68)
 - [D14] 2026-10-12 kit 0.14.0: one roadmap format, `kit.guards.roadmap` and the twelfth generated test, from the video-ads harness; this file converted to it (branch kit-roadmap-guard)
 - [D15] 2026-10-13 RESTRUCTURE.md phase 3: `kit-tiers.tsv` and `kit/tests/test_tiers.py` retired, the consumer count is `tools/consumers.py` (branch claude/dazzling-shannon-xz4x07)
+- [D16] 2026-10-14 the playbook's admission rule written down and checked (`tests/test_admission.py`); three packs with no importer set aside in `_parked/`, kit 0.31.0 (branch claude/dazzling-shannon-xz4x07)
 ## Parked
-- [P1] 2026-10-13 pack `autonomy` (`kit/autonomy.py`, 404 lines, kit 0.27.0): written from the SEO harness, which keeps its own gate until it moves onto the kit (W2); the rule X9 gave it ("deleted if no importer by 0.29.0") passed unmet at 0.30.1. Delete on 2026-11-13 unless a harness imports it
-- [P2] 2026-10-13 pack `workbook` (5 modules, 2,402 lines, kit 0.11.0 to 0.21.0): written for the KOL harness's client workbook, whose import is still planned; no harness imports it. Delete on 2026-11-13 unless a harness imports it
-- [P3] 2026-10-13 pack `learning` (`patternstore`, `pathweights`, `questions`, 1,584 lines, kit 0.13.0 to 0.28.0): generalised from the video-ads harness, which keeps its own copy; no harness imports it. Delete on 2026-11-13 unless a harness imports it
-- [P4] 2026-10-13 pack `pages` (`kit/pagestyle.py`, 999 lines, kit 0.24.0): from the video-ads harness's page style, which keeps its own copy; no harness imports it. Delete on 2026-11-13 unless a harness imports it
+- [P1] 2026-10-14 `_parked/autonomy/` (`autonomy.py`, 404 lines, was kit 0.27.0): written from the SEO harness, which keeps its own gate until it moves onto the kit (W2); no harness imports it. Review on 2027-01-13
+- [P2] 2026-10-14 `_parked/workbook/` (5 modules and the xlsx test writer, about 2,400 lines, was kit 0.11.0 to 0.21.0): written for the KOL harness's client workbook, whose import is still planned; no harness imports it. Review on 2027-01-13
+- [P3] 2026-10-14 `_parked/learning/` (`patternstore`, `pathweights`, `questions`, about 1,600 lines, was kit 0.13.0 to 0.28.0): generalised from the video-ads harness, which keeps its own copy; no harness imports it. Review on 2027-01-13
+- [P4] 2026-10-14 pack `pages` (`kit/pagestyle.py`, 999 lines, kit 0.24.0) stays in the kit for now: `templates/design-first.md` and `tests/test_design_first.py` use it, and no harness imports it. Parking it means giving that template a renderer of its own, which is a change of its own. Review on 2027-01-13
 ## Decisions
 - [R1] 2026-10-05 which console copy stays (#24): "the playbook's" (as recorded in this roadmap's open decisions, 2026-10-05)
 - [R2] 2026-10-05 selective vendoring go-ahead and date (#19): "yes, after turn 2"; built in kit 0.7.0, RESTRUCTURE.md phase 2 (as recorded in this roadmap's open decisions, 2026-10-05)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
+- pack compliance: the video-ads harness imports `copylint`, `claimscope` and `phrasebook` in production (merged to its main; the KOL harness keeps a fork of `copylint`)
+- pack generation: the video-ads harness imports `takes`, `prices`, `preflight` and `consent` in production
+- pack data: the KOL harness imports `retry` in production
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`; who uses a module: `python3 tools/consumers.py <harness checkouts>`
 - Zylos adapter and console: `hosts/zylos/` (0.1.1) and `console/`; the host every harness is adapted to; always stays
 - harnesses that vendor the kit: the short-video ad harness (two worktrees of one repository), the KOL harness, the RedNote harness; on different kit versions

@@ -1,6 +1,8 @@
 # Path weights: which variants beat the account, what to make next
 
-A harness that makes variants a client pays to run (ads, posts, emails) and gets back, per variant, its spend and its conversions can read from them which kinds of variant do better than the client's own account, which to make more of, which to make less of, and which a person may close. Module: [`kit/pathweights.py`](../kit/pathweights.py), pack `learning` (`[kit] packs = ["learning"]`). It reads numbers and proposes; it writes nothing, pays for nothing and closes nothing.
+> Status: parked 2026-10-14. The code (`pathweights.py`, `questions.py`) is in [`_parked/learning/`](../_parked/README.md), not in `kit/`: written from the video-ads harness, which keeps its own copy. The design below stays.
+
+A harness that makes variants a client pays to run (ads, posts, emails) and gets back, per variant, its spend and its conversions can read from them which kinds of variant do better than the client's own account, which to make more of, which to make less of, and which a person may close. Module: [`_parked/learning/pathweights.py`](../_parked/learning/pathweights.py), pack `learning` (`[kit] packs = ["learning"]`). It reads numbers and proposes; it writes nothing, pays for nothing and closes nothing.
 
 *Seen once:* the video-ads harness built it for its first client (2026-10-13) and is the worked example: its `pkg/spacemodel.py` (the statistics, pure), `pkg/space.py` (what it reads, its verbs, its tables, a person's close at the gate) and its `docs/space.md`. It keeps its own copy for now; this module is that copy with the channel taken out, and with fixes that copy takes when it adopts the module (warmth under the thresholds in hand, the explore share's fill within the batch first, a `twin_ratio` above 1, `downweight_p` below `promising_p`, sorted move keys, the Gamma series at large shapes).
 
@@ -63,7 +65,7 @@ A client who starts with a harness has usually run ads before. Those past units 
 
 **How much to trust it.** It is a pointer, not a finding. With every group equally good and only Poisson noise, groups of five units (spend 500 to 4000 each) read strong about 1 time in 6 and weak about 1 time in 5. Real ads differ by more than Poisson noise (the model has no spread between units), so expect more: with unit rates spread by half a log-unit, about a third read strong and 2 in 5 weak (the test prints both). Among many groups some will read strong by chance: look at the ones with a reason, and let the plan's own numbers decide.
 
-*Seen once:* the video-ads harness (its ROADMAP D64, owner decision 2026-10-13), on its first client's past ads: it flagged a direction the plan leaned on that the past read weak, and angles no template served, and kept the plan's weights and closes untouched. It keeps its own copy for now (it adds which rows can say an angle); this function is that part with the channel taken out. Test: [`kit/tests/test_pathweights.py`](../kit/tests/test_pathweights.py), section 8.
+*Seen once:* the video-ads harness (its ROADMAP D64, owner decision 2026-10-13), on its first client's past ads: it flagged a direction the plan leaned on that the past read weak, and angles no template served, and kept the plan's weights and closes untouched. It keeps its own copy for now (it adds which rows can say an angle); this function is that part with the channel taken out. Test: [`_parked/learning/tests/test_pathweights.py`](../_parked/learning/tests/test_pathweights.py), section 8.
 
 ## Thresholds
 
@@ -105,4 +107,4 @@ Every threshold is in `DEFAULTS`; `settings(over)` lays the harness's defaults o
 - At tens of variants and single-digit conversions only gaps of about 2x show; smaller ones stay invisible, and most leaves stay `testing` for weeks. Borrowing down the partition is what lets anything be said earlier.
 - Calibration, held by the test: with every leaf equally good, five rounds of numbers and spend pushed to early leaders, at most 5 in 100 made leaves are ever proposed for closing (the test prints the measured rates).
 
-Test: [`kit/tests/test_pathweights.py`](../kit/tests/test_pathweights.py).
+Test: [`_parked/learning/tests/test_pathweights.py`](../_parked/learning/tests/test_pathweights.py).

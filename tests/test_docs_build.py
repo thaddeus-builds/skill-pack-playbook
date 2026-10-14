@@ -42,6 +42,17 @@ GENERATED = {"test_ssot.py", "test_layering.py", "test_clock.py", "test_json_con
              "test_roadmap.py", "test_never_table.py"}
 
 
+def parked_module(name: str, rel: str):
+    """A module that sits in _parked/ (outside kit/), loaded from its file so a design doc is still held to the code it
+    describes while the code is parked."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, os.path.join(REPO, rel))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def doc(rel: str) -> str:
     with open(os.path.join(REPO, rel), encoding="utf-8") as f:
         return f.read()
@@ -1045,14 +1056,14 @@ OPEN_Q = "An open question never holds the plan."
 def open_question_problems(rules: str, module: str, test: str) -> list[str]:
     """What the open-question rule fails to say or to check: a numbered bold item of the human-in-the-loop rules that
     names both fields (`by_data`, `meanwhile`), that a wait is no `meanwhile`, the read-back, the owner asked only what
-    no data can answer, its check and where it was seen; the check exists in kit/questions.py with its self-test, and
+    no data can answer, its check and where it was seen; the check exists in _parked/learning/questions.py with its self-test, and
     its test runs that self-test."""
     body = section(rules, "Human-in-the-loop rules")
     item = next((i for i in re.split(r"^\d+\. ", body, flags=re.M) if i.startswith(f"**{OPEN_Q}**")), "")
     out = [] if item else [OPEN_Q]
     out += [w for w in ("`by_data`", "`meanwhile`", "never a wait", "read-back", "only what no data can answer",
                         "`kit.questions`", "`problems()`", "`readback()`", "*Seen once:*") if item and w not in item]
-    out += [f"kit/questions.py: def {f}(" for f in ("problems", "readback", "groups", "self_test")
+    out += [f"_parked/learning/questions.py: def {f}(" for f in ("problems", "readback", "groups", "self_test")
             if f"def {f}(" not in module]
     if "Q.self_test() == []" not in test:
         out.append("the test")
@@ -1060,7 +1071,7 @@ def open_question_problems(rules: str, module: str, test: str) -> list[str]:
 
 
 def test_the_open_question_rule_is_whole_and_checked():
-    rules, module, test = doc("docs/rules.md"), doc("kit/questions.py"), doc("kit/tests/test_questions.py")
+    rules, module, test = doc("docs/rules.md"), doc("_parked/learning/questions.py"), doc("_parked/learning/tests/test_questions.py")
     assert open_question_problems(rules, module, test) == [], open_question_problems(rules, module, test)
     assert open_question_problems(rules.replace(f"**{OPEN_Q}**", "**x**"), module, test) == [OPEN_Q]
     assert open_question_problems(rules.replace("never a wait", "fine"), module, test) == ["never a wait"]
@@ -1068,7 +1079,7 @@ def test_the_open_question_rule_is_whole_and_checked():
         "only what no data can answer"]
     assert open_question_problems(rules.replace("`readback()`", "x"), module, test) == ["`readback()`"]
     assert open_question_problems(rules, module.replace("def readback(", "def other("), test) == [
-        "kit/questions.py: def readback("]
+        "_parked/learning/questions.py: def readback("]
     assert open_question_problems(rules, module, "") == ["the test"]
 
 
@@ -1094,7 +1105,7 @@ def past_problems(doc_text: str, module: str, test: str) -> list[str]:
 
 
 def test_the_past_results_section_is_whole_and_checked():
-    text, module, test = doc("docs/path-weights.md"), doc("kit/pathweights.py"), doc("kit/tests/test_pathweights.py")
+    text, module, test = doc("docs/path-weights.md"), doc("_parked/learning/pathweights.py"), doc("_parked/learning/tests/test_pathweights.py")
     assert past_problems(text, module, test) == [], past_problems(text, module, test)
     assert past_problems(text.replace(f"## {PAST}", "## x"), module, test) == [PAST]
     assert past_problems(text.replace("never the account's rate", "x"), module, test) == ["never the account's rate"]
@@ -1224,13 +1235,12 @@ AUTONOMY_RULES = ("The harness classes each write, never the agent.",
 
 
 def autonomy_problems(text: str, rules: str) -> list[str]:
-    """What docs/autonomy.md fails to say, held to kit/autonomy.py: the levels table has every level of LEVELS in
+    """What docs/autonomy.md fails to say, held to _parked/autonomy/autonomy.py: the levels table has every level of LEVELS in
     order, each row whole under the seven columns, the levels not in BUILT marked "(not built)" and only those; the
     proof table lists every PROOFS label at its level; each rule at every level is a numbered bold item; the judgement
     on the owner's guess and the adoption note are there (naming amazon-ads); and docs/rules.md points at it from
     rule 12, the channel rule (8) and the write door's preview rule (3)."""
-    sys.path.insert(0, REPO)
-    from kit import autonomy as A
+    A = parked_module("autonomy", "_parked/autonomy/autonomy.py")
     out = []
     table = [r for r in section(text, "The levels").splitlines() if r.startswith("| ")]
     head = [c.strip() for c in table[0].strip("|").split("|")] if table else []

@@ -1,6 +1,8 @@
 # The pattern store: what a client's outputs taught, per client
 
-A harness that makes things a client pays to run (ads, posts, emails) should let what worked steer what it makes next. The pattern store keeps that as **abstract rows in the client's own database**, and reads them back as shrunk rates that always carry their counts. Module: [`kit/patternstore.py`](../kit/patternstore.py), pack `learning` (`[kit] packs = ["learning"]`). The process around it (a factor catalog, the owner's definition of a winner, rules pending until a variant confirms them): [templates/outcome-learning.md](../templates/outcome-learning.md).
+> Status: parked 2026-10-14. The code (`patternstore.py`) is in [`_parked/learning/`](../_parked/README.md), not in `kit/`: written from the video-ads harness, which keeps its own copy. The design below stays.
+
+A harness that makes things a client pays to run (ads, posts, emails) should let what worked steer what it makes next. The pattern store keeps that as **abstract rows in the client's own database**, and reads them back as shrunk rates that always carry their counts. Module: [`_parked/learning/patternstore.py`](../_parked/learning/patternstore.py), pack `learning` (`[kit] packs = ["learning"]`). The process around it (a factor catalog, the owner's definition of a winner, rules pending until a variant confirms them): [templates/outcome-learning.md](../templates/outcome-learning.md).
 
 *Seen once:* the video-ads harness built it for its first client (2026-10-12) and is the worked example: its `pkg/patterns.py` (the rows and the export), `pkg/patterns_query.py` (the query) and its `docs/patterns.md`. It keeps its own copy for now; this module is that copy with the channel taken out.
 

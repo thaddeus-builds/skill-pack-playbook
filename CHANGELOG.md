@@ -105,6 +105,11 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.31.0] - 2026-10-14
+
+### Removed
+- Three packs leave `kit/` for [`_parked/`](_parked/README.md), outside what `vendor.py` copies and what `kit/MANIFEST.sha256` covers. Each was written from one harness that keeps its own copy or has not moved onto the kit, and no harness imports it from the kit: `workbook` (`workbook`, `workbook_map`, `workbook_store`, `workbook_patch`, `file_gate`, and the test kit's `testing/xlsx.py` that only they used), `learning` (`patternstore`, `pathweights`, `questions`) and `autonomy`. Their tests and message-code fragments went with them; nothing else in the kit imported them. **A harness that does `from kit import workbook` (or the others) loses it on its next re-vendor**; `vendor.py` does not refuse this, because the module is gone from the kit and not dropped by a pack choice. Restore: `git mv` the files back from `_parked/<pack>/`, add their rows to `kit/packs.tsv`, bump `kit/VERSION` and regenerate the manifest. The code is also in this repository's history at 0.30.1. The designs stay in `docs/` (`autonomy.md`, `pattern-store.md`, `path-weights.md`, `workbook-and-browser-ops.md`, `rules.md` rule 13). `pages` stays: the playbook's own `templates/design-first.md` and its test use `kit.pagestyle`.
+
 ## [0.30.1] - 2026-10-13
 ### Fixed
 - `kit.guards.pages` read a vendored kit that sits at `kit/` (`scripts_dir = "."`): the skip path was `./kit`, which matched nothing, so the guard flagged its own host line. The path is normalised. Seen in the video-ads harness, which allowed the line meanwhile.

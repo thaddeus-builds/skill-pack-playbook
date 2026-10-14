@@ -2,7 +2,7 @@
 
 Two throwaway harnesses stand in for real ones. `human` is used in production
 by both (shared); `copylint` by one; `takes` only by a test (none, listed as
-test only); `workbook` by nobody. The vendored kit inside a harness is not
+test only); `claimscope` by nobody (`claimscope`). The vendored kit inside a harness is not
 read as use, a `scripts_dir = "."` harness keeps its kit at kit/, and a
 missing directory is refused.
 """
@@ -40,13 +40,13 @@ def setup(tmp: Path) -> tuple[Path, Path]:
         "harness.toml": '[harness]\nname = "acme"\nscripts_dir = "scripts"\n',
         "scripts/a.py": "from kit import human\n",
         "scripts/b.py": "def f():\n    from kit.copylint import lint\n",
-        "scripts/kit/workbook.py": "from kit import human\n",          # the vendored copy is not use
+        "scripts/kit/claimscope.py": "from kit import human\n",        # the vendored copy is not use
         "tests/test_t.py": "from kit import takes\n",
     })
     write(flat, {
         "harness.toml": '[harness]\nname = "flat"\nscripts_dir = "."\n',
         "run.py": "import kit.human\n",
-        "kit/workbook.py": "from kit import human\n",
+        "kit/claimscope.py": "from kit import human\n",
     })
     return acme, flat
 
@@ -64,7 +64,7 @@ def test_shared_one_none_and_test_only():
         assert (m["human"]["verdict"], m["human"]["prod"]) == ("shared", ["acme", "flat"]), m["human"]
         assert (m["copylint"]["verdict"], m["copylint"]["prod"]) == ("one", ["acme"]), m["copylint"]
         assert (m["takes"]["verdict"], m["takes"]["test_only"]) == ("none", ["acme"]), m["takes"]
-        assert m["workbook"]["verdict"] == "none" and m["workbook"]["prod"] == [], m["workbook"]
+        assert m["claimscope"]["verdict"] == "none" and m["claimscope"]["prod"] == [], m["claimscope"]
 
 
 def test_the_text_report_names_what_to_move_and_what_to_delete():
@@ -72,7 +72,7 @@ def test_the_text_report_names_what_to_move_and_what_to_delete():
         acme, flat = setup(Path(tmp))
         r = run(str(acme), str(flat))
         assert r.returncode == 0, r.stderr
-        assert "none (no production importer):" in r.stdout and "workbook" in r.stdout, r.stdout
+        assert "none (no production importer):" in r.stdout and "claimscope" in r.stdout, r.stdout
         assert "shared (belong in base): -" in r.stdout, r.stdout     # human is base already
 
 
