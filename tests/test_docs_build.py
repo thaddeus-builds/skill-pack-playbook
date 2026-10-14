@@ -1137,6 +1137,48 @@ def test_the_page_rule_is_whole_and_checked():
     assert page_rule_problems(rules, guard, suites, "") == ["the test"]
 
 
+DONE = "\"Done\" for an object written into someone else's system is a fixed checklist, recomputed from fresh data."
+DONE_WORDS = ("`unknown`, never the old `pass`", "never blocks", "due list", "closed from memory",
+              "`scripts/compute_published.py`", "*Seen once:*")
+OTHER_WAY = "The other way round holds too:"
+OTHER_WAY_WORDS = ("read-only verb", "keeps only the judgement", "`seo apply shopify check --file`", "*Seen once*")
+COPIES = "A copied template drifts from the release it came from."
+COPIES_WORDS = ("compares each copy", "`client_folder()`", "*Seen once:*", "*Not yet in the kit:*")
+
+
+def loop_problems(rules: str, operating: str, consoles: str) -> list[str]:
+    """What the lessons on closing the loop fail to say: "done" is a numbered bold item of the stories section (a
+    stale check is unknown, a convention never blocks, the due list, the item closed from memory, the SEO example);
+    "Code filters; the agent judges" goes the other way round too (a prompt's mechanical check is a read-only verb, the
+    prompt keeps the judgement); the client workspace warns that a copied template drifts and the doctor compares it.
+    Each says where it was seen."""
+    items = lambda body: re.split(r"^\d+\. ", body, flags=re.M)
+    out = []
+    done = next((i for i in items(section(rules, "Stories that prove themselves")) if i.startswith(f"**{DONE}**")), None)
+    out += [DONE] if done is None else [w for w in DONE_WORDS if w not in done]
+    judge = next((i for i in items(section(operating, SMALL)) if i.startswith("**Code filters; the agent judges.**")), "")
+    other = judge.partition(f"**{OTHER_WAY}**")[2]
+    out += [OTHER_WAY] if not other else [w for w in OTHER_WAY_WORDS if w not in other]
+    bullet = next((b for b in section(consoles, "One client, one workspace").split("\n- ")
+                   if b.startswith(f"**{COPIES}**")), None)
+    out += [COPIES] if bullet is None else [w for w in COPIES_WORDS if w not in bullet]
+    return out
+
+
+def test_the_lessons_on_closing_the_loop_are_whole():
+    rules, operating, consoles = doc("docs/rules.md"), doc("docs/operating.md"), doc("docs/consoles.md")
+    assert loop_problems(rules, operating, consoles) == [], loop_problems(rules, operating, consoles)
+    assert loop_problems(rules.replace(f"**{DONE}**", "**x**"), operating, consoles) == [DONE]
+    assert loop_problems(rules.replace("closed from memory", "x"), operating, consoles) == ["closed from memory"]
+    assert loop_problems(rules, operating.replace(f"**{OTHER_WAY}**", "x"), consoles) == [OTHER_WAY]
+    assert loop_problems(rules, operating.replace("keeps only the judgement", "x"), consoles) == [
+        "keeps only the judgement"]
+    assert loop_problems(rules, operating, consoles.replace(f"**{COPIES}**", "**x**")) == [COPIES]
+    assert loop_problems(rules, operating, consoles.replace("*Not yet in the kit:* `scaffold", "`scaffold")) == [
+        "*Not yet in the kit:*"]
+    assert loop_problems("# t\n", "# t\n", "# t\n") == [DONE, OTHER_WAY, COPIES]
+
+
 MECHANISM = "A past winner the harness cannot say is studied for its mechanism, never copied"
 MECHANISM_WORDS = ("*Why:*", "not a template and not a move", "a proposal for a person to confirm", "the harness's own words",
                    "who the ad reached", "how it opened", "its timing", "why people converted", "is the other case",
@@ -1291,6 +1333,54 @@ def test_the_roadmap_method_is_whole_and_linked():
     assert roadmap_problems(text.replace("**Only the coordinator allocates", "**Anyone allocates"), readme) == ["ids"]
     assert roadmap_problems(text, readme.replace("(docs/roadmap.md)", "(docs/x.md)")) == ["README link"]
     assert roadmap_problems(text + "\n" * 400, readme) == ["length"]
+
+ALL_RAW = "A datum a later decision needs is built from all of raw, never from the newest snapshot alone."
+ALL_RAW_WORDS = ("every raw file", "newest observation", "derived on each read", "names no platform",
+                 "`scripts/_lib/inventory.py`", "*Seen once:*")
+HOST = "The right to write binds to a host, never to a switch that travels with a copy."
+HOST_WORDS = ("a dry run and a read are never refused", "an agent may narrow it", "only the owner's confirm",
+              "`scripts/_lib/write_host.py`", "*Seen once*")
+ADAPTER = ("One gate for every platform, and an adapter per platform row; extract the gate when the second platform "
+           "arrives, not before.")
+ADAPTER_WORDS = ("registry row", "never a branch inside the gate", "byte for byte", "`scripts/_lib/apply_gate.py`",
+                 "*Seen once*")
+EXPORT = "An export branch never merges back"
+EXPORT_WORDS = ("*Paid for:*", "Main merges into it; it never merges into main.", "`git archive`",
+                "name what in the code, tests or docs reads it", "*Seen once*")
+
+
+def data_platform_problems(rules: str, lessons: str) -> list[str]:
+    """What the data and platform lessons fail to say: the data-layers paragraph (all of raw, the newest
+    observation, a derived lifecycle that names no platform); the write door's rules 7 and 8, numbered bold items (the
+    host binding that only the owner widens; one gate with an adapter per registry row, extracted at the second platform
+    with the first pinned); the export-branch section of docs/lessons.md. Each names the SEO example and says where it
+    was seen."""
+    out = []
+    para = next((p for p in section(rules, "Data layers and their guards").split("\n\n")
+                 if p.startswith(f"**{ALL_RAW}**")), None)
+    out += [ALL_RAW] if para is None else [w for w in ALL_RAW_WORDS if w not in para]
+    items = re.split(r"^\d+\. ", section(rules, DOOR), flags=re.M)
+    for title, words in ((HOST, HOST_WORDS), (ADAPTER, ADAPTER_WORDS)):
+        item = next((i for i in items if i.startswith(f"**{title}**")), None)
+        out += [title] if item is None else [w for w in words if w not in item]
+    heading = next((h for h in re.findall(r"^## (.+)$", lessons, re.M) if h.startswith(EXPORT)), None)
+    out += [EXPORT] if heading is None else [w for w in EXPORT_WORDS if w not in section(lessons, heading)]
+    return out
+
+
+def test_the_data_and_platform_lessons_are_whole():
+    rules, lessons = doc("docs/rules.md"), doc("docs/lessons.md")
+    assert data_platform_problems(rules, lessons) == [], data_platform_problems(rules, lessons)
+    for title in (ALL_RAW, HOST, ADAPTER):                                      # the check would notice each one gone
+        assert data_platform_problems(rules.replace(f"**{title}**", "**x**"), lessons) == [title], title
+    assert data_platform_problems(rules.replace("derived on each read", "x"), lessons) == ["derived on each read"]
+    assert data_platform_problems(rules.replace("an agent may narrow it", "x"), lessons) == ["an agent may narrow it"]
+    assert data_platform_problems(rules.replace("never a branch inside the gate", "x"), lessons) == [
+        "never a branch inside the gate"]
+    assert data_platform_problems(rules, lessons.replace(f"## {EXPORT}", "## x")) == [EXPORT]
+    assert data_platform_problems(rules, lessons.replace("it never merges into main.", "x")) == [
+        "Main merges into it; it never merges into main."]
+    assert data_platform_problems("# t\n", "# t\n") == [ALL_RAW, HOST, ADAPTER, EXPORT]
 
 
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification

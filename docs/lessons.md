@@ -140,3 +140,17 @@ The rules:
 No code enforces this: it is a judgement the agent makes and a person confirms, and `tests/test_docs_build.py` pins only the lesson's wording.
 
 *Seen once* (2026-10-13), in that harness; its ROADMAP D64 holds the gap signal this feeds.
+
+## An export branch never merges back (from the SEO harness, 2026-10-13)
+
+A harness packaged for someone else gets a branch of its own. Here it was a library of use cases that takes `git archive` of a branch and allows no real client name. That branch adds what only the package needs (an agent brief, a version, a changelog, examples, `export-ignore` lines) and replaces real names with placeholders. Main merges into it; it never merges into main.
+
+*Paid for:* the package's first branch was merged into main. Main then carried an agent brief, a version file, a changelog and placeholder folders that only the archive used; nothing in the code, tests or docs read them. They were removed the same day. The de-identification came after and stayed on the branch: merged back, it would have put placeholders where main's docs and examples name the real clients.
+
+The rules:
+
+- An export is a branch main merges into, never the other way. Its packaging and its de-identification live only there, and main's README says so.
+- The export's scan for real names runs on the export branch, over what `git archive` ships; the list of names does not ship. The kit's `kit/tools/leak_guard.py` is the same kind of scan for a push.
+- Before a packaging file lands on main, name what in the code, tests or docs reads it. A file nothing reads belongs on the export branch.
+
+*Seen once* (2026-10-13), in the SEO harness: its README, and the commits "remove the fde-usecase packaging from main" and "de-identify the fde-usecase export (export branch only)". No code there enforces the direction.
