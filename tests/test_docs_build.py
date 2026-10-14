@@ -1137,6 +1137,48 @@ def test_the_page_rule_is_whole_and_checked():
     assert page_rule_problems(rules, guard, suites, "") == ["the test"]
 
 
+DONE = "\"Done\" for an object written into someone else's system is a fixed checklist, recomputed from fresh data."
+DONE_WORDS = ("`unknown`, never the old `pass`", "never blocks", "due list", "closed from memory",
+              "`scripts/compute_published.py`", "*Seen once:*")
+OTHER_WAY = "The other way round holds too:"
+OTHER_WAY_WORDS = ("read-only verb", "keeps only the judgement", "`seo apply shopify check --file`", "*Seen once*")
+COPIES = "A copied template drifts from the release it came from."
+COPIES_WORDS = ("compares each copy", "`client_folder()`", "*Seen once:*", "*Not yet in the kit:*")
+
+
+def loop_problems(rules: str, operating: str, consoles: str) -> list[str]:
+    """What the lessons on closing the loop fail to say: "done" is a numbered bold item of the stories section (a
+    stale check is unknown, a convention never blocks, the due list, the item closed from memory, the SEO example);
+    "Code filters; the agent judges" goes the other way round too (a prompt's mechanical check is a read-only verb, the
+    prompt keeps the judgement); the client workspace warns that a copied template drifts and the doctor compares it.
+    Each says where it was seen."""
+    items = lambda body: re.split(r"^\d+\. ", body, flags=re.M)
+    out = []
+    done = next((i for i in items(section(rules, "Stories that prove themselves")) if i.startswith(f"**{DONE}**")), None)
+    out += [DONE] if done is None else [w for w in DONE_WORDS if w not in done]
+    judge = next((i for i in items(section(operating, SMALL)) if i.startswith("**Code filters; the agent judges.**")), "")
+    other = judge.partition(f"**{OTHER_WAY}**")[2]
+    out += [OTHER_WAY] if not other else [w for w in OTHER_WAY_WORDS if w not in other]
+    bullet = next((b for b in section(consoles, "One client, one workspace").split("\n- ")
+                   if b.startswith(f"**{COPIES}**")), None)
+    out += [COPIES] if bullet is None else [w for w in COPIES_WORDS if w not in bullet]
+    return out
+
+
+def test_the_lessons_on_closing_the_loop_are_whole():
+    rules, operating, consoles = doc("docs/rules.md"), doc("docs/operating.md"), doc("docs/consoles.md")
+    assert loop_problems(rules, operating, consoles) == [], loop_problems(rules, operating, consoles)
+    assert loop_problems(rules.replace(f"**{DONE}**", "**x**"), operating, consoles) == [DONE]
+    assert loop_problems(rules.replace("closed from memory", "x"), operating, consoles) == ["closed from memory"]
+    assert loop_problems(rules, operating.replace(f"**{OTHER_WAY}**", "x"), consoles) == [OTHER_WAY]
+    assert loop_problems(rules, operating.replace("keeps only the judgement", "x"), consoles) == [
+        "keeps only the judgement"]
+    assert loop_problems(rules, operating, consoles.replace(f"**{COPIES}**", "**x**")) == [COPIES]
+    assert loop_problems(rules, operating, consoles.replace("*Not yet in the kit:* `scaffold", "`scaffold")) == [
+        "*Not yet in the kit:*"]
+    assert loop_problems("# t\n", "# t\n", "# t\n") == [DONE, OTHER_WAY, COPIES]
+
+
 MECHANISM = "A past winner the harness cannot say is studied for its mechanism, never copied"
 MECHANISM_WORDS = ("*Why:*", "not a template and not a move", "a proposal for a person to confirm", "the harness's own words",
                    "who the ad reached", "how it opened", "its timing", "why people converted", "is the other case",

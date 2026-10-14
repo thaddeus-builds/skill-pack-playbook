@@ -10,6 +10,14 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- Lessons from the SEO harness, closing the loop on writes into someone else's system, each seen once there and
+  tested in `tests/test_docs_build.py`. `docs/rules.md`, stories item 7: "done" for a written object is a fixed
+  checklist recomputed from fresh data; a check older than the last write is `unknown`; a slow outside system gets a
+  due list after a set number of days, never an assumed delay; a work item closes with its object (S43, S48).
+  `docs/operating.md`, "Code filters; the agent judges": the other way round, a mechanical check that lives only in a
+  prompt belongs in a read-only verb, and the prompt keeps the judgement. `docs/consoles.md`, one client, one
+  workspace: a copied template drifts from its release, and the doctor compares each copy with the harness's template
+  (S45, S48; not yet in the kit).
 - `docs/lessons.md`, "A past winner the harness cannot say is studied for its mechanism, never copied": a client's
   strongest past ad that nothing in the plan can say is not a template and not a move; the harness proposes the
   mechanism (who it reached, how it opened, its timing, why people converted) for a person to confirm. A reference the
