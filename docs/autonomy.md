@@ -1,8 +1,10 @@
 # Autonomy levels
 
+> Status: parked 2026-10-14. The code (`autonomy.py`) is in [`_parked/autonomy/`](../_parked/README.md), not in `kit/`: written from the SEO harness, imported by no harness. The design below stays.
+
 A harness that writes into someone else's system runs each write at a level, the way a car runs at an SAE driving level. The level says what proof the write carries and who gave it. The work item a person approved is the destination; the writes that carry it out are the driving. Below L4 a person sets every destination; the levels differ in how much of the driving still needs a person.
 
-The shared mechanics are [`kit/autonomy.py`](../kit/autonomy.py) (the `autonomy` pack, since 0.27.0; pure over data the harness passes, so it fits any store). [Rule 12](rules.md#human-in-the-loop-rules) starts here. *Seen once:* the SEO harness, its S46 (L2) and S47 (L3), on the owner's decisions of 2026-10-13. *Paid for:* there one chat "1. 同意" was quoted for eleven store-write codes, and nobody saw the eleven diffs. Then the owner, who has no login to the store's admin, could not preview a single draft, so nothing shipped unless they typed at a terminal.
+The shared mechanics are [`_parked/autonomy/autonomy.py`](../_parked/autonomy/autonomy.py) (the `autonomy` pack, since 0.27.0; pure over data the harness passes, so it fits any store). [Rule 12](rules.md#human-in-the-loop-rules) starts here. *Seen once:* the SEO harness, its S46 (L2) and S47 (L3), on the owner's decisions of 2026-10-13. *Paid for:* there one chat "1. 同意" was quoted for eleven store-write codes, and nobody saw the eleven diffs. Then the owner, who has no login to the store's admin, could not preview a single draft, so nothing shipped unless they typed at a terminal.
 
 ## The levels
 
@@ -38,7 +40,7 @@ SAE's split between L3 and L4 turns on fallback: at L3 the human takes over when
 
 ## The shared mechanics
 
-`kit/autonomy.py` decides these from the harness's own data. Its codes are the SEO harness's message codes, and the harness words them.
+`_parked/autonomy/autonomy.py` decides these from the harness's own data. Its codes are the SEO harness's message codes, and the harness words them.
 
 1. **The tier registry** (`canon`, `check_tiers`, `tier_of`, `eligible`). One row per (verb, change): `id`, `verb`, `change`, `tier` (A or B), `undo` (the verb that reverts it; any text after the first word is a note), `auto` (`yes`, `undo` or `no`), plus the harness's own label and reason columns. A harness keeps its own column names and words, and `canon` maps them. The check requires the following. A tier-B row and a `yes` row name an undo. A `yes` row's undo is an `undo` row, so the undo is code-free. Every `undo` row is the undo of some `yes` row. An unknown pair is tier A.
 2. **The switch** (`switch_value`, `parse_switch`, `mode`, `may_set`). One fact, typed in the harness's fact registry, with the value `YYYY-MM-DD:ID,ID`. A person turns it on through the harness's confirm verb (a relayed code, or the terminal). On the console card, the person retypes the number of days, and that value is what the gate binds. An agent's `set` is refused unless its day is before today (off). The value freezes the ids the owner saw, so a registry edit can narrow a mode that is on but never widen it.

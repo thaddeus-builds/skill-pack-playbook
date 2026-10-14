@@ -6,9 +6,9 @@ labels, made-up ids).
       harness's words laid over EN; an unknown key, an empty word, a template without {n}, a more line that does not
       name the owner's fold, a bad lang refused, the message naming the key; the module's own parts are English; a
       Style carries every name the module exports, and docs/page-style.md's parts table names each with its signature
-  [2] the states: the five of kit.pathweights, each its own icon; every state renders colour, word and icon (chip,
+  [2] the states: the five, each its own icon; every state renders colour, word and icon (chip,
       vchip, legend, card, fold_row) in English, in Chinese and in a harness's own words; an unknown state refused;
-      tenths() reads as kit.pathweights.tenths()
+      tenths() rounds toward a half (pinned; the playbook's parked pathweights reads the same way)
   [3] the small parts: the status bar grows by the counts in ORDER, the legend line in the words' separator, ten dots,
       tiles, money in the harness's template, amounts, fitting; every text escaped, a count that is not a whole number
       refused
@@ -52,7 +52,6 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # ROOT
 
 from kit import pagestyle as ps  # noqa: E402
-from kit import pathweights as W  # noqa: E402
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 
 EVIL = '</script><b>x"&\'<'
@@ -157,7 +156,7 @@ def test_words() -> None:
 
 def test_states() -> None:
     print("\n[2] the states: colour, word and icon")
-    check("the five states of kit.pathweights", ps.STATES == W.STATES, (ps.STATES, W.STATES))
+    check("the five states", ps.STATES == ("untested", "testing", "promising", "down", "closed"), ps.STATES)
     check("each state its own icon", set(ps.ICON) == set(ps.STATES) and len(set(ps.ICON.values())) == 5)
     check("ORDER holds each state once", sorted(ps.ORDER) == sorted(ps.STATES) and len(ps.ORDER) == 5)
     for st, style in (("EN", ps.DEFAULT), ("ZH", ZHS), ("own", OWN)):
@@ -181,9 +180,9 @@ def test_states() -> None:
     for fn in (lambda: ps.chip("maybe"), lambda: ps.word("maybe"), lambda: ps.vchip("maybe", "x"),
                lambda: ps.card("maybe", anchor="a"), lambda: ps.fold_row("maybe", anchor="a", title="t")):
         check("an unknown state is refused, naming it", "maybe" in message(fn))
-    grid = [i / 1000 for i in range(1001)] + [0.79, 0.21, 0.3, 0.7, 0.8, 0.2]
-    check("tenths() reads as kit.pathweights.tenths()", all(ps.tenths(p) == W.tenths(p) for p in grid),
-          [p for p in grid if ps.tenths(p) != W.tenths(p)][:5])
+    pinned = {0: 0, 0.04: 1, 0.05: 1, 0.2: 2, 0.21: 3, 0.3: 3, 0.5: 5, 0.7: 7, 0.79: 7, 0.8: 8, 0.96: 9, 1: 10}
+    check("tenths() rounds toward a half, at the points the states are judged on",
+          all(ps.tenths(p) == n for p, n in pinned.items()), {p: ps.tenths(p) for p in pinned})
     check("tenths(): 0.79 reads 7 and 0.21 reads 3", (ps.tenths(0.79), ps.tenths(0.21), ps.tenths(0.8),
                                                        ps.tenths(0.2)) == (7, 3, 8, 2))
 

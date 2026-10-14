@@ -5,7 +5,7 @@ harness: docs/page-style.md.
 The rules the style carries, and the part that keeps each:
 
     a state is colour AND word AND icon     chip(state), vchip(state, label): five states (untested ○, testing ◐,
-                                            promising ▲, down ▼, closed ✕: the states of kit.pathweights), colour-blind
+                                            promising ▲, down ▼, closed ✕: the states of the parked pathweights), colour-blind
                                             safe (Okabe-Ito blue for better, orange for worse, grey for closed), never
                                             colour alone; each state's text reads on its fill at 4.5:1 or more in the
                                             light theme and both dark ones, and nothing dims it (no opacity; the map's
@@ -218,7 +218,7 @@ def amount(x) -> str:
 
 def tenths(p: float) -> int:
     """P as "about n times in 10", rounded toward a half, so 0.79 reads 7 (not 8, the promising line) and 0.21 reads 3
-    (not 2, the down line): a number shown never crosses the line its state was judged on (kit.pathweights.tenths)."""
+    (not 2, the down line): a number shown never crosses the line its state was judged on (the parked pathweights' tenths)."""
     return math.floor(10 * p + _SLACK) if p >= 0.5 else math.ceil(10 * p - _SLACK)
 
 
