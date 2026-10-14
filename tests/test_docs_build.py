@@ -1291,6 +1291,55 @@ def test_the_autonomy_levels_are_whole_and_match_the_kit():
     assert autonomy_problems("# t\n", "# t\n")[:2] == ["level columns", "levels"]
 
 
+ALL_RAW = "A datum a later decision needs is built from all of raw, never from the newest snapshot alone."
+ALL_RAW_WORDS = ("every raw file", "newest observation", "derived on each read", "names no platform",
+                 "`scripts/_lib/inventory.py`", "*Seen once:*")
+HOST = "The right to write binds to a host, never to a switch that travels with a copy."
+HOST_WORDS = ("a dry run and a read are never refused", "an agent may narrow it", "only the owner's confirm",
+              "`scripts/_lib/write_host.py`", "*Seen once*")
+ADAPTER = ("One gate for every platform, and an adapter per platform row; extract the gate when the second platform "
+           "arrives, not before.")
+ADAPTER_WORDS = ("registry row", "never a branch inside the gate", "byte for byte", "`scripts/_lib/apply_gate.py`",
+                 "*Seen once*")
+EXPORT = "An export branch never merges back"
+EXPORT_WORDS = ("*Paid for:*", "Main merges into it; it never merges into main.", "`git archive`",
+                "name what in the code, tests or docs reads it", "*Seen once*")
+
+
+def data_platform_problems(rules: str, lessons: str) -> list[str]:
+    """What the data and platform lessons fail to say: the data-layers paragraph (all of raw, the newest
+    observation, a derived lifecycle that names no platform); the write door's rules 7 and 8, numbered bold items (the
+    host binding that only the owner widens; one gate with an adapter per registry row, extracted at the second platform
+    with the first pinned); the export-branch section of docs/lessons.md. Each names the SEO example and says where it
+    was seen."""
+    out = []
+    para = next((p for p in section(rules, "Data layers and their guards").split("\n\n")
+                 if p.startswith(f"**{ALL_RAW}**")), None)
+    out += [ALL_RAW] if para is None else [w for w in ALL_RAW_WORDS if w not in para]
+    items = re.split(r"^\d+\. ", section(rules, DOOR), flags=re.M)
+    for title, words in ((HOST, HOST_WORDS), (ADAPTER, ADAPTER_WORDS)):
+        item = next((i for i in items if i.startswith(f"**{title}**")), None)
+        out += [title] if item is None else [w for w in words if w not in item]
+    heading = next((h for h in re.findall(r"^## (.+)$", lessons, re.M) if h.startswith(EXPORT)), None)
+    out += [EXPORT] if heading is None else [w for w in EXPORT_WORDS if w not in section(lessons, heading)]
+    return out
+
+
+def test_the_data_and_platform_lessons_are_whole():
+    rules, lessons = doc("docs/rules.md"), doc("docs/lessons.md")
+    assert data_platform_problems(rules, lessons) == [], data_platform_problems(rules, lessons)
+    for title in (ALL_RAW, HOST, ADAPTER):                                      # the check would notice each one gone
+        assert data_platform_problems(rules.replace(f"**{title}**", "**x**"), lessons) == [title], title
+    assert data_platform_problems(rules.replace("derived on each read", "x"), lessons) == ["derived on each read"]
+    assert data_platform_problems(rules.replace("an agent may narrow it", "x"), lessons) == ["an agent may narrow it"]
+    assert data_platform_problems(rules.replace("never a branch inside the gate", "x"), lessons) == [
+        "never a branch inside the gate"]
+    assert data_platform_problems(rules, lessons.replace(f"## {EXPORT}", "## x")) == [EXPORT]
+    assert data_platform_problems(rules, lessons.replace("it never merges into main.", "x")) == [
+        "Main merges into it; it never merges into main."]
+    assert data_platform_problems("# t\n", "# t\n") == [ALL_RAW, HOST, ADAPTER, EXPORT]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
