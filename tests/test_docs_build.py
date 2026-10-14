@@ -1249,6 +1249,50 @@ def test_the_autonomy_levels_are_whole_and_match_the_kit():
     assert autonomy_problems("# t\n", "# t\n")[:2] == ["level columns", "levels"]
 
 
+ROADMAP_SECTIONS = ("The method", "Executing it", "Feedback from production testers", "Who works where",
+                    "Worked example: the SEO harness", "Adopting it in another harness")
+ROADMAP_METHOD = ("Start from the owner's vision, cut into four to six pillars plus one for operations.",
+                  "Inventory each pillar in parallel with read-only agents.",
+                  "The roadmap lives in the story registry, not in a plan document.",
+                  "A generated view, never hand-edited.", "Tests hold the registry.",
+                  "Few milestones, ordered by what unblocks real use.",
+                  "Batch the owner's questions, each with a recommended default.", "Size each row for one session.")
+ROADMAP_PROMPT = ("BLOCKED", "recommended answer", "proof command", "Do not allocate a new story id", "Do not merge it.")
+
+
+def roadmap_problems(text: str, readme: str) -> list[str]:
+    """What docs/roadmap.md fails to say: its sections; each method step a numbered bold item; the builder prompt in a
+    text block with the BLOCKED stop, the recommended answer, the proof commands as DONE, no new story id and no
+    merge; only the coordinator allocates ids; the README links it; and it stays short (at most 400 lines)."""
+    heads = re.findall(r"^## (.+)$", text, re.M)
+    out = [h for h in ROADMAP_SECTIONS if h not in heads]
+    items = re.split(r"^\d+\. ", section(text, "The method"), flags=re.M)[1:]
+    out += [t for t in ROADMAP_METHOD if not any(i.startswith(f"**{t}**") for i in items)]
+    prompt = next(iter(re.findall(r"^```text\n(.*?)^```", section(text, "Executing it"), re.M | re.S)), "")
+    out += [w for w in ROADMAP_PROMPT if w not in prompt]
+    if "**Only the coordinator allocates story ids.**" not in section(text, "Who works where"):
+        out.append("ids")
+    if "(docs/roadmap.md)" not in readme:
+        out.append("README link")
+    if len(text.splitlines()) > 400:
+        out.append("length")
+    return out
+
+
+def test_the_roadmap_method_is_whole_and_linked():
+    text, readme = doc("docs/roadmap.md"), doc("README.md")
+    assert roadmap_problems(text, readme) == [], roadmap_problems(text, readme)
+    for h in ROADMAP_SECTIONS:                                                    # the check would notice each one gone
+        assert roadmap_problems(text.replace(f"## {h}\n", "## x\n"), readme)[:1] == [h], h
+    for t in ROADMAP_METHOD:
+        assert roadmap_problems(text.replace(f"**{t}**", "**x**"), readme) == [t], t
+    for w in ROADMAP_PROMPT:
+        assert roadmap_problems(text.replace(w, "x"), readme) == [w], w
+    assert roadmap_problems(text.replace("**Only the coordinator allocates", "**Anyone allocates"), readme) == ["ids"]
+    assert roadmap_problems(text, readme.replace("(docs/roadmap.md)", "(docs/x.md)")) == ["README link"]
+    assert roadmap_problems(text + "\n" * 400, readme) == ["length"]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
