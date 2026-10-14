@@ -81,6 +81,13 @@ scaffold, console, docs, conformance.
   `kit.pagestyle` and tries each way a demo can break the rule (a term in the page data or split by
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
+- Lessons from the SEO harness on data and platforms, each seen once there and tested in
+  `tests/test_docs_build.py`. `docs/rules.md`, data layers: a datum a later decision needs is built from all of raw,
+  never the newest snapshot alone, and an object's lifecycle (proposed, decided, written, verified or broken) is
+  derived and names no platform (S52). The write door, rule 7: the right to write binds to a host id, never to a
+  switch that travels with a copied database; an agent narrows it, only the owner moves it (`write_host`, S34, S47).
+  Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
+  arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
 ## [0.30.1] - 2026-10-13
 ### Fixed
