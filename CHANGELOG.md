@@ -10,6 +10,22 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/roadmap.md` (new): planning a harness that already runs. The vision cut into four to six pillars plus one for
+  operations; a read-only inventory per pillar (state, evidence, smallest task, size, a do-not-build-now list); the
+  roadmap kept in the story registry (an owner row with its milestone, an agent row with proof commands as DONE and
+  `owner pending: question? (recommended: answer)` notes), a generated view with `--check` and registry tests; three
+  open milestones plus later; one story per session on a cheaper model from a fixed builder prompt, merged by the
+  coordinator, released per milestone; issue templates for production testers; who works where, the directory layout
+  and the git rules. The SEO harness's roadmap of 2026-10-14 is the worked example. Seen once. Linked from the README;
+  `tests/test_docs_build.py` holds its sections, its method items and the builder prompt.
+- Lessons from the SEO harness, closing the loop on writes into someone else's system, each seen once there and
+  tested in `tests/test_docs_build.py`. `docs/rules.md`, stories item 7: "done" for a written object is a fixed
+  checklist recomputed from fresh data; a check older than the last write is `unknown`; a slow outside system gets a
+  due list after a set number of days, never an assumed delay; a work item closes with its object (S43, S48).
+  `docs/operating.md`, "Code filters; the agent judges": the other way round, a mechanical check that lives only in a
+  prompt belongs in a read-only verb, and the prompt keeps the judgement. `docs/consoles.md`, one client, one
+  workspace: a copied template drifts from its release, and the doctor compares each copy with the harness's template
+  (S45, S48; not yet in the kit).
 - `docs/lessons.md`, "A past winner the harness cannot say is studied for its mechanism, never copied": a client's
   strongest past ad that nothing in the plan can say is not a template and not a move; the harness proposes the
   mechanism (who it reached, how it opened, its timing, why people converted) for a person to confirm. A reference the
@@ -81,6 +97,13 @@ scaffold, console, docs, conformance.
   `kit.pagestyle` and tries each way a demo can break the rule (a term in the page data or split by
   a tag, a badge folded, hidden or commented out, a demo in a client's data folder outside its review
   folder among them).
+- Lessons from the SEO harness on data and platforms, each seen once there and tested in
+  `tests/test_docs_build.py`. `docs/rules.md`, data layers: a datum a later decision needs is built from all of raw,
+  never the newest snapshot alone, and an object's lifecycle (proposed, decided, written, verified or broken) is
+  derived and names no platform (S52). The write door, rule 7: the right to write binds to a host id, never to a
+  switch that travels with a copied database; an agent narrows it, only the owner moves it (`write_host`, S34, S47).
+  Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
+  arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
 ## [0.30.1] - 2026-10-13
 ### Fixed
