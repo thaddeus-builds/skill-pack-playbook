@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The harness itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the harness still runs anywhere.
 
-Version: `VERSION` (0.2.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.3.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a harness copies, and what it writes
 
@@ -206,7 +206,7 @@ Zylos treats a failing post-install or post-upgrade as a warning, so read the ou
   - Soft checks, which print a note and continue: each endpoint's reachability; `<cli> <doctor>` (summary line printed, full report in `logs/doctor-install.log`); the declared scope, with the exact `scope.declare` command when none is; the console entry present; the Caddy block and the public Host (below).
   - It prints the absolute CLI command, then reconciles the scheduled tasks.
 - **post-upgrade** is post-install in light mode: uv, Python, the CLI and the tasks; it skips the endpoint, doctor and scope checks and says so.
-- **pre-uninstall** stops the detached jobs still running (a job counts only if its pid *and* start time match), removes every task this adapter manages, and never touches the data dir. It exits 1 with the reason when a job or a task can't be stopped or removed.
+- **pre-uninstall** stops the detached jobs still running (a job counts only if its pid *and* start time match), removes every task this adapter manages, copies the console's Caddy block to `<data dir>/caddy-block.saved` (uninstall deletes it from the Caddyfile), and never touches the rest of the data dir. It exits 1 with the reason when a job or a task can't be stopped or removed.
 
 Each hook's runtime is capped at 9 minutes, under the agent's 10-minute command cap. A soft step the cap cuts is listed as skipped with the command that finishes it; a hard step the cap cuts fails with "rerun post-install". The hooks are idempotent, so a rerun picks up where it stopped.
 
@@ -307,7 +307,7 @@ For the example manifest it prints:
 
 Validate, then reload: `~/zylos/bin/caddy validate --config ~/zylos/http/Caddyfile --adapter caddyfile && pm2 reload caddy`.
 
-Core never rewrites the block on upgrade (no routes are declared). A reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it: paste it again. post-install and post-upgrade warn when `users_file` has logins but the Caddyfile has no BEGIN marker; they never edit the Caddyfile.
+Core never rewrites the block on upgrade (no routes are declared). A reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it: paste it again. post-install and post-upgrade warn when `users_file` has logins but the Caddyfile has no BEGIN marker, and name the copy pre-uninstall kept (`caddy-block.saved`, with the host's own edits); they never edit the Caddyfile.
 
 **Adding a person.** The logins are `<data dir>/<users_file>` (mode 0600), one `<username> <bcrypt hash>` per line, never in the repository. Caddy fails to start on a missing or empty list, so add the first person before pasting the block. Hash at a terminal so the password never goes through chat:
 

@@ -10,7 +10,7 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
-- `hosts/zylos` 0.2.1: the adapter's function `harnessEnv` is `cliEnv`, and what the hooks print to the owner no longer says "the harness" ("run it as:", "the CLI"): the adapter serves projects that do not call themselves a harness. No behaviour change; copy the folder again to take it (the SEO skill pack did, S172).
+- `hosts/zylos` 0.3.0: pre-uninstall keeps a copy of the console's Caddy block in `<data dir>/caddy-block.saved` and post-install names it when the block is missing (found in the SEO skill pack, which had changed its copy: it now comes from here); the adapter's function `harnessEnv` is `cliEnv`, and what the hooks print to the owner no longer says "the harness" ("run it as:", "the CLI"): the adapter serves projects that do not call themselves a harness. No behaviour change; copy the folder again to take it (the SEO skill pack did, S172).
 - `docs/rules.md`, registries items 10 and 11, from the SEO harness (each seen once): the owner's own files sit apart
   from the registries (`ssot/intent/`, both still TSV files in `ssot/`, so conformance I5 holds; the index says which
   edit changes behaviour); and a table many branches add to is append-only, a change being a new row of the same id
