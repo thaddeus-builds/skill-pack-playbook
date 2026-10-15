@@ -29,8 +29,10 @@ function consoleNotes() {
   const C = h.M.console;
   if (h.caddyBlockMissing()) {
     h.log(`WARNING: ${h.USERS_FILE} has logins but ${h.CADDYFILE} has no "${h.CADDY_MARKER}" block, `
-          + `so ${C.base_path} has no route (uninstall + add removes it). Print the block with `
-          + `node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} caddy, paste it (zylos/README.md "The Caddy block"), then: `
+          + `so ${C.base_path} has no route (uninstall + add removes it). `
+          + (fs.existsSync(h.CADDY_SAVED) ? `Paste the copy kept at ${h.CADDY_SAVED} (it has your edits), or print a fresh block with `
+                                          : 'Print the block with ')
+          + `node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} caddy and paste it (zylos/README.md "The Caddy block"), then: `
           + `${h.ZYLOS_DIR}/bin/caddy validate --config ${h.CADDYFILE} --adapter caddyfile && pm2 reload caddy`);
   }
   if (h.allowHostMissing()) {

@@ -258,6 +258,20 @@ def test_pre_uninstall_removes_every_managed_task_and_keeps_the_data():
         assert os.path.isfile(os.path.join(host.data, ".env")) and "data dir left as is" in r.stdout
 
 
+def test_pre_uninstall_keeps_a_copy_of_the_caddy_block():
+    with Host(link=True) as host:
+        installed(host)
+        caddyfile = os.path.join(host.zylos, "http", "Caddyfile")
+        block = "# BEGIN zylos-component:shop-harness\nexample.test {\n  header_up Host x\n}\n# END zylos-component:shop-harness"
+        host.write(caddyfile, "other.test {\n}\n" + block + "\n")
+        r = host.hook("pre-uninstall.js", ZYLOS_COMPONENT=host.name, ZYLOS_SKILL_DIR=host.skill,
+                      ZYLOS_DATA_DIR=host.data)
+        saved = os.path.join(host.data, "caddy-block.saved")
+        assert r.returncode == 0 and "kept a copy of the Caddy block" in r.stdout, r.stdout + r.stderr
+        assert open(saved).read() == block + "\n", "exactly the component's block, nothing of the host's other sites"
+        assert (os.stat(saved).st_mode & 0o777) == 0o600
+
+
 def test_every_placeholder_renders_shell_quoted():
     with Host(link=True) as host:            # the host's paths hold a space
         tpl = "{cli}|{node}|{detach}|{data_dir}|{skill_dir}|{logs}|{log:pull-a}|{exit}"
