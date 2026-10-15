@@ -55,7 +55,7 @@ flowchart TB
     end
     subgraph L3["AI alone"]
       direction LR
-      c1["issue filed<br/>by an agent"] --> c2["triage against<br/>house rules"] --> c3["fix + tests in<br/>its own worktree"] --> c4["CI green:<br/>auto-merge"]
+      c1["issue filed<br/>by an agent"] --> c2["triage against<br/>house rules"] --> c3["fix + tests in<br/>its own worktree"] --> c4["local suite green:<br/>merge"]
     end
     OM["Owner merges"]:::risky
     L3 -. "touches the risky list" .-> OM
