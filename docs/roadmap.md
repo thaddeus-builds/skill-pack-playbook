@@ -113,7 +113,7 @@ One layout on the owner's machine:
                                binaries in Git LFS, secrets ignored
 ```
 
-Git rules: merge requests only, into main; CI green before a merge; never squash; resolve conflicts by merging main in, never rebase or force-push. Tags are semantic versions, and the CLI's `--version` and the skill's version read the same number. Remove merged worktrees and branches every week: one session once left 108 worktrees ([operating](operating.md#when-agents-file-the-issues), rule 6).
+Git rules: merge requests only, into main; the local suite green before a merge and CI on main right after, the risky and environment-dependent changes waiting for the MR's own CI ([operating](operating.md#when-agents-file-the-issues), rule 4); never squash; resolve conflicts by merging main in, never rebase or force-push. Tags are semantic versions, and the CLI's `--version` and the skill's version read the same number. Remove merged worktrees and branches every week: one session once left 108 worktrees ([operating](operating.md#when-agents-file-the-issues), rule 6).
 
 ## Worked example: the SEO harness
 
