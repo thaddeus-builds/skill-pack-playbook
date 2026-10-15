@@ -154,3 +154,78 @@ The rules:
 - Before a packaging file lands on main, name what in the code, tests or docs reads it. A file nothing reads belongs on the export branch.
 
 *Seen once* (2026-10-13), in the SEO harness: its README, and the commits "remove the fde-usecase packaging from main" and "de-identify the fde-usecase export (export branch only)". No code there enforces the direction.
+
+## Ecommerce SEO Skill Pack, first non-manufacturer client (2026-10)
+
+The SEO harness (renamed "skill pack": the repository `ecommerce-seo-skill-pack`, on the owner's GitLab;
+ids below are its story ids, `S..`) was calibrated on B2B manufacturers. Its first software client closed a full loop
+in one day: a blog page written, checked, reviewed and sent as a merge request into the client's protected site
+repository. Nine lessons came out of it. Each was checked on 2026-10-15 against that repository, its client folder and its git history; where the code is not
+on its `main` yet, the entry says so. Some sharpen a rule above; the entry names the rule.
+
+1. **A check ships with a known-bad input it must refuse.** Sharpens [Building with many agents](operating.md#building-with-many-agents)
+   rule 2, from tests to the checks that gate a generated artifact. *Paid for:* the first merge request carried a leaked
+   template variable (`\g<1>`) in its table of contents, which also lost its list wrapper. Every check passed, because
+   none of them had ever been shown to fail on such a page. An independent review found it. Where: `markup_leaks` in `scripts/_lib/pagetext.py`, registry row `ph10` in `ssot/placeholder_patterns.tsv`,
+   the "generator leak" case in `tests/test_nextjs_static.py` (S163).
+2. **Judge a regression against the baseline, on the same copy.** Run each of the site's own checks on its clean `main`
+   and on `main` plus the change; only a check that passes on `main` and fails with the change counts. Anything red
+   on both is reported as `baseline`, not as the change's fault. *Paid for:* the site's own `test-china-legal-links.mjs`
+   is red on its clean `main` (2 of 5 tests); read as a verdict, it would blame every page for a failure no page
+   caused. Where: the client's pre-flight, `content/preflight/preflight.py` in the client folder (not in the skill pack
+   repository), and its description in `docs/nextjs-static-adapter.md` ("pre-flight"; S163, on branch
+   `claude/s163-preflight-lessons` when this was written).
+3. **A check reads the representation the consumer sees, not the one that is easiest to scan.** *Paid for:* the
+   placeholder scan read the page through `html_text`, which drops `<1>` as a tag; a browser shows `\g<1>` as visible
+   text. The leak was invisible to the scan, and the local preview was looked at on a narrow window, where that column
+   is hidden. Now the leak scan reads the markup with its tags kept, and the adapter note tells builders to preview at desktop width,
+   not only on a phone.
+   Where: `markup_leaks` and the `html_text` docstring in `scripts/_lib/pagetext.py` (S163).
+4. **A rule that depends on the client's kind is a column of a registry row read by one function, never a branch.**
+   Extends [Registries](rules.md#registries-one-place-per-value) rules 6 and 9: the row also says whom it applies to.
+   *Paid for:* the client was a software company, and its missing-materials list still asked for a catalogue, data
+   sheets, factory photos and SKU parameters, which it cannot supply. S172 added an applies-to column to the
+   prerequisites registry, written like the one the slot registry already had; the list for that client went from 7
+   items to 5 with no new branch on the business model in code. The same fault turned up in a second registry the same day
+   (S174, proposed): the page-type modules still require a spec table and factory media for every article.
+   Where: `ssot/intent/prerequisites.tsv` (the applies-to column), `applies` in `scripts/_lib/compute_common.py`, read by
+   `compute_status.py` and `compute_brief.py` (S172).
+5. **Every read verb that can return more than a few kilobytes has narrowing flags and a `--summary`; its default output
+   size is a quality measure.** Extends [Teach the agent from `--help`](rules.md#data-layers-and-their-guards).
+   *Paid for:* on the real client the gap report was 830 KB, opportunities 497 KB, inventory 439 KB, competitors 301 KB,
+   and the status report 61 KB just to learn the next command. One read cost the agent hundreds of thousands of tokens, so it
+   filtered each report with a throwaway script, outside the verbs. S179 added `--only`, `--limit`,
+   `--summary` and per-report filters. The default output stayed byte for byte the same, which the refactor diff
+   showed, and a narrowed run adds a `narrowed` key saying what it cut. Where: `narrow` in
+   `scripts/_lib/compute_common.py` (S179).
+6. **Writing into a repository whose main branch is protected is a work branch plus a merge request, never the base
+   branch, and a review cycle needs an amend path from the first slice.** Applies [Writing into someone else's
+   system](rules.md#writing-into-someone-elses-system) to a forge. *Paid for:* the adapter pushes only new branches
+   and never reuses a name, so when review sent the first merge request back with findings, the fix could only be a
+   new branch, a new request, and a person closing the old one. The note proposes adding a fast-forward commit to the
+   item's own open branch while its base is unchanged; that is still not built, and the amend must be a gated write
+   bound to the new bytes like any other. Where: `push_branch` in `scripts/_lib/nextjs_static.py`;
+   `docs/nextjs-static-adapter.md` ("What the review of the first merge request found") (S163).
+7. **Prove the door is open before asking the owner for a one-time code.** *Paid for:* of the 7 archived write runs of
+   that first day, 3 ended in a refused push (HTTP 403, then a token without the push permission). Each had cost the
+   owner a relayed code and a sentence of approval for a write that could not succeed. The read of the remote worked
+   all along, so the adapter's `ls-remote` checks proved nothing about the right to push. No access probe is built
+   yet. Sharpens [Human-in-the-loop](rules.md#human-in-the-loop-rules) rule 7 (budget the owner's attention). Where: the
+   refusal is `nextjs_push_rejected` in `push_branch` (`scripts/_lib/nextjs_static.py`); the runs are under
+   `raw/apply/nextjs-static/` in that client's workspace (S163).
+8. **Allocate a shared id where the writes meet, not where each session claims it.** Sharpens "Only the coordinator
+   allocates story ids" in [roadmap.md](roadmap.md#who-works-where) and [Registries](rules.md#registries-one-place-per-value)
+   rule 11. *Paid for:* with many sessions in parallel, picking "the next free id" on a branch raced even after the
+   picker learned to read every branch and merge request. In the two days to 2026-10-15 the skill pack's `main` took at
+   least 8 fix-up commits that renumbered a story ("S180: renumber from S179 (taken by !196 and !197)", "S172 was taken
+   twice"); `git log origin/main --since='2026-10-14' --oneline | grep -i -E 'renumber|was taken'` lists them. Where:
+   `tools/story_next.py` (its docstring admits two simultaneous runs can still collide) and the parallel-sessions
+   paragraph of the skill pack's `CLAUDE.md`. An allocation at merge is not built.
+9. **A copy of a shared file set carries a stamp naming its source, and the doctor treats a missing stamp as the
+   finding.** Extends the vendored-copy rule in the README ("What the kit guarantees") to client folders. *Paid for:*
+   the doctor checked a client folder against the template only when the folder held `client.env`. The client's
+   folder, made before the template existed, had none, so the doctor said ok while its launcher still read an
+   old variable and lacked the guard that blocks the four human-confirm commands (S180). The skill pack's own
+   main checkout showed the same class: found on a side branch with uncommitted work from 2026-10-08, more than 400 commits
+   behind `main`, until it was fast-forwarded on 2026-10-15. Where: `client_folder` and `doctor` in `scripts/seo.py`,
+   message code `client_folder_legacy`, `templates/client/` (S45, S180).

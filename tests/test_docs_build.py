@@ -1436,6 +1436,34 @@ def test_the_data_and_platform_lessons_are_whole():
     assert data_platform_problems("# t\n", "# t\n") == [ALL_RAW, HOST, ADAPTER, EXPORT]
 
 
+SEO_CLIENT = "Ecommerce SEO Skill Pack, first non-manufacturer client"
+
+
+def seo_client_problems(lessons: str) -> list[str]:
+    """What the SEO skill pack's lessons fail to say: a section of docs/lessons.md of at most 90 lines in plain English,
+    with nine numbered bold rules, each saying what it *Paid for:* and *Where:* the code lives."""
+    heading = next((h for h in re.findall(r"^## (.+)$", lessons, re.M) if h.startswith(SEO_CLIENT)), None)
+    if heading is None:
+        return [SEO_CLIENT]
+    body = section(lessons, heading)
+    items = re.split(r"^\d+\. ", body, flags=re.M)[1:]
+    out = [] if len(items) == 9 else [f"{len(items)} lessons, not 9"]
+    out += [f"lesson {n}: {w}" for n, i in enumerate(items, 1) for w in ("**", "*Paid for:*", "Where:") if w not in i]
+    out += ["over 90 lines"] if len(body.splitlines()) > 90 else []
+    out += ["not plain English"] if re.search("[\u4e00-\u9fff]", body) else []
+    return out
+
+
+def test_the_seo_client_lessons_are_whole():
+    lessons = doc("docs/lessons.md")
+    assert seo_client_problems(lessons) == [], seo_client_problems(lessons)
+    assert seo_client_problems(lessons.replace(f"## {SEO_CLIENT}", "## x")) == [SEO_CLIENT]
+    assert seo_client_problems(lessons.replace("*Paid for:* the first merge request", "x")) == ["lesson 1: *Paid for:*"]
+    assert seo_client_problems(lessons + "\n适用于\n") == ["not plain English"]
+    assert seo_client_problems(lessons + "\n" * 20) == ["over 90 lines"]
+    assert seo_client_problems("# t\n") == [SEO_CLIENT]
+
+
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification
 
 
