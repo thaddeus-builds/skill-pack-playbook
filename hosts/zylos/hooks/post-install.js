@@ -29,8 +29,10 @@ function consoleNotes() {
   const C = h.M.console;
   if (h.caddyBlockMissing()) {
     h.log(`WARNING: ${h.USERS_FILE} has logins but ${h.CADDYFILE} has no "${h.CADDY_MARKER}" block, `
-          + `so ${C.base_path} has no route (uninstall + add removes it). Print the block with `
-          + `node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} caddy, paste it (zylos/README.md "The Caddy block"), then: `
+          + `so ${C.base_path} has no route (uninstall + add removes it). `
+          + (fs.existsSync(h.CADDY_SAVED) ? `Paste the copy kept at ${h.CADDY_SAVED} (it has your edits), or print a fresh block with `
+                                          : 'Print the block with ')
+          + `node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} caddy and paste it (zylos/README.md "The Caddy block"), then: `
           + `${h.ZYLOS_DIR}/bin/caddy validate --config ${h.CADDYFILE} --adapter caddyfile && pm2 reload caddy`);
   }
   if (h.allowHostMissing()) {
@@ -60,8 +62,8 @@ async function main({ upgrade = false } = {}) {
     return;
   }
   if (!fs.existsSync(h.ENTRY)) {
-    h.fail(`the harness CLI ${h.ENTRY} (manifest cli.entry) is missing`,
-           'install a complete release of the harness (zylos/README.md "Install")');
+    h.fail(`the CLI ${h.ENTRY} (manifest cli.entry) is missing`,
+           'install a complete release (zylos/README.md "Install")');
   }
   const uv = await h.ensureUv();
   h.log(`uv: ${uv}`);
@@ -79,12 +81,12 @@ async function main({ upgrade = false } = {}) {
   // resolving it once proves Python + dependencies work.
   const entry = path.relative(h.SKILL_DIR, h.ENTRY);
   r = h.run(uv, h.cliArgs('--help'));
-  if (r.timedOut) budgetFail(`resolving the harness CLI (uv run ${entry} --help)`);
+  if (r.timedOut) budgetFail(`resolving the CLI (uv run ${entry} --help)`);
   if (r.status !== 0) {
     h.fail(`uv run ${entry} --help exited ${r.status ?? r.signal}: ${h.tail(r)}`, `${h.cliCommand()} --help`);
   }
   h.log(`python ${h.PYTHON_VERSION} + ${h.BIN_NAME} ready; data dir: ${h.DATA_DIR}`);
-  h.log(`run the harness as: ${h.cliCommand()} <verb> …`);
+  h.log(`run it as: ${h.cliCommand()} <verb> …`);
 
   // --- soft checks (install only: post-upgrade stays light) ----------------
   if (upgrade) skipped.push('endpoint, doctor and scope checks (post-upgrade stays light)');
