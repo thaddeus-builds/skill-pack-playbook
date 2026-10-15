@@ -73,7 +73,7 @@ A worktree is a peer of the checkout, never a child of it. One layout, the same 
 4. **Tell the tool.** Claude Code in the desktop app: Settings → Claude Code names where new session worktrees go (the default is inside the project); choose a folder outside it. Claude Code on the command line: a `WorktreeCreate` hook may place worktrees elsewhere (it replaces the default logic, so it must run `git worktree add` itself), or create the worktree with git as above and start `claude` inside it. Expect an approval prompt when a session enters a worktree outside `.claude/worktrees/`.
 5. **Check it.** `git worktree list` shows no path under the checkout; a worktree whose branch is merged is removed the same week ([rule 6](#when-agents-file-the-issues): one session once left 108).
 
-Sources: [git worktree](https://git-scm.com/docs/git-worktree), [Claude Code: worktrees](https://code.claude.com/docs/en/worktrees), [Claude Code feature request for a sibling default](https://claudeissues.com/issue/27282-feature-request-configurable-worktree-directory-location-with-sibling-directory), [report of nested worktrees confusing tools](https://claudeissues.com/issue/73791-dx-enterworktree-nests-worktrees-inside-the-repo-claude-worktrees-causing-editor).
+Sources (names, not links: the playbook links no outside site): the git manual, `git worktree`; Claude Code's documentation, "Run parallel sessions with worktrees"; two Claude Code issue reports, one asking for a sibling-folder default and one on nested worktrees confusing editors and build tools.
 
 ## Keeping a harness small as it grows
 
