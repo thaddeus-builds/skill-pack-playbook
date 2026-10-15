@@ -1364,6 +1364,29 @@ def test_worktrees_live_beside_the_checkout():
     assert worktree_problems(operating, roadmap.replace("<harness>_worktrees/<name>/", "<harness>/w/")) == ["roadmap layout"]
 
 
+REGISTRY_RULES = (("10.", "**The owner's own files sit apart from the registries, in `ssot/intent/`.**", ("conformance I5 holds", "*Paid for:*")),
+                  ("11.", "**A table many branches add to is append-only", ("the last row is in effect", "union", "`latest`", "*Paid for:*")))
+
+
+def registry_rule_problems(rules: str) -> list[str]:
+    body = section(rules, "Registries: one place per value")
+    out = []
+    for num, head, words in REGISTRY_RULES:
+        line = next((l for l in body.splitlines() if l.startswith(f"{num} {head}")), "")
+        if not line:
+            out.append(f"{num} missing")
+        out += [f"{num} {w}" for w in words if line and w not in line]
+    return out
+
+
+def test_the_owner_files_and_append_only_rules_are_whole():
+    rules = doc("docs/rules.md")
+    assert registry_rule_problems(rules) == [], registry_rule_problems(rules)
+    assert registry_rule_problems(rules.replace("conformance I5 holds", "x")) == ["10. conformance I5 holds"]
+    assert registry_rule_problems(rules.replace("the last row is in effect", "x")) == ["11. the last row is in effect"]
+    assert registry_rule_problems(rules.replace("**A table many branches add to is append-only", "**x")) == ["11. missing"]
+
+
 ALL_RAW = "A datum a later decision needs is built from all of raw, never from the newest snapshot alone."
 ALL_RAW_WORDS = ("every raw file", "newest observation", "derived on each read", "names no platform",
                  "`scripts/_lib/inventory.py`", "*Seen once:*")
