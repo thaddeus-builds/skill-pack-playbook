@@ -211,8 +211,7 @@ on its `main` yet, the entry says so. Some sharpen a rule above; the entry names
    on both is reported as `baseline`, not as the change's fault. *Paid for:* the site's own `test-china-legal-links.mjs`
    is red on its clean `main` (2 of 5 tests); read as a verdict, it would blame every page for a failure no page
    caused. Where: the client's pre-flight, `content/preflight/preflight.py` in the client folder (not in the skill pack
-   repository), and its description in `docs/nextjs-static-adapter.md` ("pre-flight"; S163, on branch
-   `claude/s163-preflight-lessons` when this was written).
+   repository), and its description in `docs/nextjs-static-adapter.md` ("pre-flight"; S163).
 3. **A check reads the representation the consumer sees, not the one that is easiest to scan.** *Paid for:* the
    placeholder scan read the page through `html_text`, which drops `<1>` as a tag; a browser shows `\g<1>` as visible
    text. The leak was invisible to the scan, and the local preview was looked at on a narrow window, where that column
@@ -224,8 +223,9 @@ on its `main` yet, the entry says so. Some sharpen a rule above; the entry names
    *Paid for:* the client was a software company, and its missing-materials list still asked for a catalogue, data
    sheets, factory photos and SKU parameters, which it cannot supply. S172 added an applies-to column to the
    prerequisites registry, written like the one the slot registry already had; the list for that client went from 7
-   items to 5 with no new branch on the business model in code. The same fault turned up in a second registry the same day
-   (S174, proposed): the page-type modules still require a spec table and factory media for every article.
+   items to 5 with no new branch on the business model in code. The same fault turned up in a second place the same day
+   (S174): an article still asked a software client for test results and factory media. It closed with three more
+   applies-to values on existing slot rows and no code.
    Where: `ssot/intent/prerequisites.tsv` (the applies-to column), `applies` in `scripts/_lib/compute_common.py`, read by
    `compute_status.py` and `compute_brief.py` (S172).
 5. **Every read verb that can return more than a few kilobytes has narrowing flags and a `--summary`; its default output
@@ -241,14 +241,14 @@ on its `main` yet, the entry says so. Some sharpen a rule above; the entry names
    system](rules.md#writing-into-someone-elses-system) to a forge. *Paid for:* the adapter pushes only new branches
    and never reuses a name, so when review sent the first merge request back with findings, the fix could only be a
    new branch, a new request, and a person closing the old one. The note proposes adding a fast-forward commit to the
-   item's own open branch while its base is unchanged; that is still not built, and the amend must be a gated write
-   bound to the new bytes like any other. Where: `push_branch` in `scripts/_lib/nextjs_static.py`;
+   item's own open branch while its base is unchanged; S184 (an open merge request when this was written)
+   builds it, and the amend must be a gated write bound to the new bytes like any other. Where: `push_branch` in `scripts/_lib/nextjs_static.py`;
    `docs/nextjs-static-adapter.md` ("What the review of the first merge request found") (S163).
 7. **Prove the door is open before asking the owner for a one-time code.** *Paid for:* of the 7 archived write runs of
    that first day, 3 ended in a refused push (HTTP 403, then a token without the push permission). Each had cost the
    owner a relayed code and a sentence of approval for a write that could not succeed. The read of the remote worked
-   all along, so the adapter's `ls-remote` checks proved nothing about the right to push. No access probe is built
-   yet. Sharpens [Human-in-the-loop](rules.md#human-in-the-loop-rules) rule 7 (budget the owner's attention). Where: the
+   all along, so the adapter's `ls-remote` checks proved nothing about the right to push. A push preflight is in S184 (open when this was written);
+   nothing on `main` tried the right to push before. Sharpens [Human-in-the-loop](rules.md#human-in-the-loop-rules) rule 7 (budget the owner's attention). Where: the
    refusal is `nextjs_push_rejected` in `push_branch` (`scripts/_lib/nextjs_static.py`); the runs are under
    `raw/apply/nextjs-static/` in that client's workspace (S163).
 8. **Allocate a shared id where the writes meet, not where each session claims it.** Sharpens "Only the coordinator
