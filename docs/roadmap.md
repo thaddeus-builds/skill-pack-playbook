@@ -105,8 +105,9 @@ Every template begins with what must never be pasted: secrets, codes, env files,
 One layout on the owner's machine:
 
 ```text
-<harness>/                     dev checkout on main; only pulls
-  .claude/worktrees/<name>/    one per dev session; removed once merged
+<harness>/                     dev checkout on main; only pulls, nobody works in it
+<harness>_worktrees/<name>/    one per dev session, a sibling folder; removed once merged
+                               ([operating](operating.md#where-worktrees-live))
 <harness>-release/             a clone pinned to the release tag; client sessions run it
 <workspaces>/                  a separate repository: one folder per client (its data root),
                                binaries in Git LFS, secrets ignored
