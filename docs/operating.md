@@ -58,6 +58,23 @@ flowchart LR
 
 The full rules table, with what each rule prevented, is in [`templates/workflows/README.md`](../templates/workflows/README.md#the-rules-pasted-into-prompts).
 
+## Where worktrees live
+
+A worktree is a peer of the checkout, never a child of it. One layout, the same name on every machine and in every harness:
+
+```text
+<parent>/<repo>/                   the checkout, kept on main: it pulls and reads, nobody works in it
+<parent>/<repo>_worktrees/<name>/  one worktree per session, a sibling folder; <name> is the branch with "/" as "-"
+```
+
+1. **Create and remove them with git, from the checkout.** `git worktree add ../<repo>_worktrees/<name> -b <branch> origin/main`; `git worktree list`; `git worktree remove ../<repo>_worktrees/<name>` once merged; `git worktree prune` for entries whose folder is gone. If a checkout or worktree folder is renamed or moved, `git worktree repair` (run in the main worktree, or in the moved one) reconnects it; `git worktree move` moves a linked one cleanly.
+2. **Nothing under the checkout.** No `.claude/worktrees/`, no `worktrees/` inside the repository. *Paid for:* a session started in `<repo>/.claude/worktrees/<name>` read the checkout's `CLAUDE.md` as well as its own (instruction files are read up the directory tree). The checkout sat on a stale branch, so the two copies, 12.6 KB and 8.3 KB, disagreed and cost 21 KB of context in every session. Editors, file watchers, test discovery and lockfile detection also walk into a nested worktree (reported against Claude Code's default), and the layout needs a `.gitignore` line to keep `git status` clean.
+3. **Why a sibling folder named `<repo>_worktrees`.** The git manual does not fix a location; its own examples are siblings (`../hotfix`, `../temp`). Claude Code's default is nested (`.claude/worktrees/<name>`, with a `.gitignore` tip), and users have asked for a sibling default. Tools and write-ups that group worktrees use one sibling folder per repository (`<repo>-worktrees/<branch>`, `<repo>.worktrees/`). We take the underscore: the folder sorts next to the repository, and it cannot be mistaken for a repository called `something-worktrees`. A name per branch (`<repo>-<branch>` as direct siblings) fills the parent folder with project-named folders once there are twenty sessions.
+4. **Tell the tool.** Claude Code in the desktop app: Settings → Claude Code names where new session worktrees go (the default is inside the project); choose a folder outside it. Claude Code on the command line: a `WorktreeCreate` hook may place worktrees elsewhere (it replaces the default logic, so it must run `git worktree add` itself), or create the worktree with git as above and start `claude` inside it. Expect an approval prompt when a session enters a worktree outside `.claude/worktrees/`.
+5. **Check it.** `git worktree list` shows no path under the checkout; a worktree whose branch is merged is removed the same week ([rule 6](#when-agents-file-the-issues): one session once left 108).
+
+Sources: [git worktree](https://git-scm.com/docs/git-worktree), [Claude Code: worktrees](https://code.claude.com/docs/en/worktrees), [Claude Code feature request for a sibling default](https://claudeissues.com/issue/27282-feature-request-configurable-worktree-directory-location-with-sibling-directory), [report of nested worktrees confusing tools](https://claudeissues.com/issue/73791-dx-enterworktree-nests-worktrees-inside-the-repo-claude-worktrees-causing-editor).
+
 ## Keeping a harness small as it grows
 
 *Seen once:* the video-ads harness reached about 40,000 lines and 42 verbs in its first weeks. No module was dead; the cost was repetition and drift. The step that closed its loop (results back to the insight they tested) had no home of its own, and a newcomer agent had to read the code to finish ordinary tasks. The owner chose to slim it before adding anything. Three methods came out of that, each seen once.
