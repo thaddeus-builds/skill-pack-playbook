@@ -10,6 +10,10 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/rules.md`, registries items 10 and 11, from the SEO harness (each seen once): the owner's own files sit apart
+  from the registries (`ssot/intent/`, both still TSV files in `ssot/`, so conformance I5 holds; the index says which
+  edit changes behaviour); and a table many branches add to is append-only, a change being a new row of the same id
+  with the last row in effect. `tests/test_docs_build.py` holds both.
 - Worktrees live beside the checkout, never inside it (`docs/operating.md`, "Where worktrees live"; the layout block
   of `docs/roadmap.md` follows): `<repo>/` stays on main and `<repo>_worktrees/<name>/` holds one worktree per session.
   Paid for once in the SEO harness: a session in `.claude/worktrees/` read the checkout's stale `CLAUDE.md` too, 21 KB
