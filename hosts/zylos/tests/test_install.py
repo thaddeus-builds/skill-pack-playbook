@@ -74,7 +74,7 @@ def test_post_install_prepares_the_runtime_and_prints_the_next_steps():
         assert "doctor-install.log" in out and os.path.isfile(os.path.join(host.logs, "doctor-install.log"))
         assert "UNREACHABLE" in out, "an unreachable endpoint is a soft note"
         assert f"no declared_markets declared yet. Next, with the owner: '{host.link}' facts init" in out, out
-        assert f"run the harness as: '{host.link}' <verb>" in out, out
+        assert f"run it as: '{host.link}' <verb>" in out, out
         assert "zylos-core 0.8.1 (minimum 0.7.1)" in out, out
         assert oct(os.stat(host.data).st_mode & 0o777) == "0o700"
         host.reset_uv_log()

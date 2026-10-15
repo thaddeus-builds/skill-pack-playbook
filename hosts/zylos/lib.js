@@ -69,7 +69,7 @@ const SECRET_KEY = /SECRET|TOKEN|PASSWORD|ACCESS_KEY|API_KEY|PRIVATE_KEY/;
 // it from an env file, so it is never a config key; console.js makes the
 // confirm-code secret itself.
 const isGateSecret = (k) => k === 'CONSOLE_SECRET' || k.endsWith('CONFIRM_CODE_SECRET');
-const GATE_SECRET_WHY = 'a gate secret: the harness never loads it from an env file '
+const GATE_SECRET_WHY = 'a gate secret: never loaded from an env file '
   + '(zylos/bin/console.js makes the confirm-code secret at each start)';
 
 function relPath(v) {
@@ -183,7 +183,7 @@ function validate(m) {
   shape(m.detach, 'detach', ['exit_marker', 'alias']);
   str(m.detach.exit_marker, 'detach.exit_marker', re(RE.marker), 'an upper-case marker such as ACME-EXIT');
   str(m.detach.alias, 'detach.alias', (s) => RE.name.test(s) && !NOT_ALIASES.includes(s),
-      'the word a detached command starts with to mean the harness CLI (not uv, node or sh)');
+      'the word a detached command starts with to mean the CLI (not uv, node or sh)');
 
   const seen = new Set();
   list(m.tasks, 'tasks', (t, key) => {
@@ -368,7 +368,7 @@ function envValue(key) {
 // and bytecode caches under it, so nothing is written into the skill dir
 // (which `zylos upgrade` backs up and merges). console.js adds the
 // confirm-code secret (CONFIRM_SECRET_VAR) for its relay's harness runs.
-function harnessEnv(base = process.env) {
+function cliEnv(base = process.env) {
   const dataDir = base[DATA_VAR] || DATA_DIR;
   return { ...base, [DATA_VAR]: dataDir,
            PYTHONPYCACHEPREFIX: base.PYTHONPYCACHEPREFIX || path.join(dataDir, '.pycache') };
@@ -460,7 +460,7 @@ function run(cmd, args, timeout = 600_000) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const r = spawnSync(cmd, args, {
     cwd: DATA_DIR, encoding: 'utf8', timeout: Math.min(timeout, left),
-    env: harnessEnv({ ...process.env, [DATA_VAR]: DATA_DIR }),
+    env: cliEnv({ ...process.env, [DATA_VAR]: DATA_DIR }),
   });
   return { ...r, timedOut: r.error?.code === 'ETIMEDOUT' && remaining() <= 0 };
 }
@@ -970,7 +970,7 @@ module.exports = {
   ADAPTER_DIR, SKILL_DIR, ZYLOS_DIR, DATA_DIR, LOGS_DIR, CONSOLE_DIR, ENTRY, CONSOLE_ENTRY, CLI_JS, DETACH_JS,
   CONSOLE_JS, POST_INSTALL, SCHEDULER_CLI, BIN_LINK, TASK_STATE, USERS_FILE, CADDYFILE, CADDY_MARKER,
   log, fail, q, tail, remaining, budgetMinutes,
-  readEnvFile, envFiles, envValue, harnessEnv,
+  readEnvFile, envFiles, envValue, cliEnv,
   findUv, ensureUv, checkZylosVersion, run, cliArgs, cliCommand, reachable,
   renderPrompt, unresolved, tasksNamed, addTask, updateTask, removeTask, readTaskState, requiredKeys,
   reconcileTask, reconcileAll, removeAllTasks,

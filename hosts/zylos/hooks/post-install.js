@@ -60,8 +60,8 @@ async function main({ upgrade = false } = {}) {
     return;
   }
   if (!fs.existsSync(h.ENTRY)) {
-    h.fail(`the harness CLI ${h.ENTRY} (manifest cli.entry) is missing`,
-           'install a complete release of the harness (zylos/README.md "Install")');
+    h.fail(`the CLI ${h.ENTRY} (manifest cli.entry) is missing`,
+           'install a complete release (zylos/README.md "Install")');
   }
   const uv = await h.ensureUv();
   h.log(`uv: ${uv}`);
@@ -79,12 +79,12 @@ async function main({ upgrade = false } = {}) {
   // resolving it once proves Python + dependencies work.
   const entry = path.relative(h.SKILL_DIR, h.ENTRY);
   r = h.run(uv, h.cliArgs('--help'));
-  if (r.timedOut) budgetFail(`resolving the harness CLI (uv run ${entry} --help)`);
+  if (r.timedOut) budgetFail(`resolving the CLI (uv run ${entry} --help)`);
   if (r.status !== 0) {
     h.fail(`uv run ${entry} --help exited ${r.status ?? r.signal}: ${h.tail(r)}`, `${h.cliCommand()} --help`);
   }
   h.log(`python ${h.PYTHON_VERSION} + ${h.BIN_NAME} ready; data dir: ${h.DATA_DIR}`);
-  h.log(`run the harness as: ${h.cliCommand()} <verb> …`);
+  h.log(`run it as: ${h.cliCommand()} <verb> …`);
 
   // --- soft checks (install only: post-upgrade stays light) ----------------
   if (upgrade) skipped.push('endpoint, doctor and scope checks (post-upgrade stays light)');
