@@ -1334,6 +1334,36 @@ def test_the_roadmap_method_is_whole_and_linked():
     assert roadmap_problems(text, readme.replace("(docs/roadmap.md)", "(docs/x.md)")) == ["README link"]
     assert roadmap_problems(text + "\n" * 400, readme) == ["length"]
 
+WORKTREE_WORDS = ("never a child of it", "<parent>/<repo>_worktrees/<name>/", "git worktree add ../<repo>_worktrees/",
+                   "git worktree repair", "Settings → Claude Code", "`WorktreeCreate` hook", "*Paid for:*")
+
+
+def worktree_problems(operating: str, roadmap: str) -> list[str]:
+    """What the worktree rule fails to say: its section in docs/operating.md names the peer rule, the sibling layout,
+    the git commands to create and repair, how to tell the desktop app and the CLI, and what it cost; and the
+    roadmap's machine layout no longer puts worktrees inside the harness checkout."""
+    body = section(operating, "Where worktrees live")
+    out = [w for w in WORKTREE_WORDS if w not in body]
+    if not body:
+        out.append("section")
+    if ".claude/worktrees/<name>/" in roadmap:
+        out.append("roadmap layout nests worktrees")
+    if "<harness>_worktrees/<name>/" not in roadmap:
+        out.append("roadmap layout")
+    return out
+
+
+def test_worktrees_live_beside_the_checkout():
+    operating, roadmap = doc("docs/operating.md"), doc("docs/roadmap.md")
+    assert worktree_problems(operating, roadmap) == [], worktree_problems(operating, roadmap)
+    for w in WORKTREE_WORDS:                                                      # the check would notice each one gone
+        assert worktree_problems(operating.replace(w, "x"), roadmap) == [w], w
+    assert worktree_problems(operating.replace("## Where worktrees live\n", "## x\n"), roadmap)[-1:] != [], "section"
+    assert worktree_problems(operating, roadmap + "\n  .claude/worktrees/<name>/ one per session") == [
+        "roadmap layout nests worktrees"]
+    assert worktree_problems(operating, roadmap.replace("<harness>_worktrees/<name>/", "<harness>/w/")) == ["roadmap layout"]
+
+
 ALL_RAW = "A datum a later decision needs is built from all of raw, never from the newest snapshot alone."
 ALL_RAW_WORDS = ("every raw file", "newest observation", "derived on each read", "names no platform",
                  "`scripts/_lib/inventory.py`", "*Seen once:*")

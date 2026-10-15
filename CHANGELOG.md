@@ -10,6 +10,11 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- Worktrees live beside the checkout, never inside it (`docs/operating.md`, "Where worktrees live"; the layout block
+  of `docs/roadmap.md` follows): `<repo>/` stays on main and `<repo>_worktrees/<name>/` holds one worktree per session.
+  Paid for once in the SEO harness: a session in `.claude/worktrees/` read the checkout's stale `CLAUDE.md` too, 21 KB
+  of context that disagreed with itself. Git commands to create, remove, move and repair; how to point the Claude Code
+  desktop app and CLI at it; the sources. `tests/test_docs_build.py` holds the section and the layout.
 - `docs/roadmap.md` (new): planning a harness that already runs. The vision cut into four to six pillars plus one for
   operations; a read-only inventory per pillar (state, evidence, smallest task, size, a do-not-build-now list); the
   roadmap kept in the story registry (an owner row with its milestone, an agent row with proof commands as DONE and
