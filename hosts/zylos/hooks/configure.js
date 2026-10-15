@@ -40,7 +40,7 @@ const bad = [];
 for (const [k, v] of Object.entries(values)) {
   if (v === null || v === undefined || v === '') continue;
   if (!KEY.test(k)) { bad.push(`${k} (not a KEY name)`); continue; }
-  if (h.isGateSecret(k)) { bad.push(`${k} (a gate secret: the harness never loads it from the .env)`); continue; }
+  if (h.isGateSecret(k)) { bad.push(`${k} (a gate secret: never loaded from the .env)`); continue; }
   if (typeof v === 'object') { bad.push(`${k} (an object or array, not a string)`); continue; }
   const s = String(v); // numbers/booleans: their JSON text
   if (/[\r\n\v\f\x1c-\x1e\x85\u2028\u2029]/.test(s)) { bad.push(`${k} (multi-line value)`); continue; }

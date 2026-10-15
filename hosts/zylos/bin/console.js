@@ -42,7 +42,7 @@ if (!uv) {
   process.exit(127);
 }
 fs.mkdirSync(h.CONSOLE_DIR, { recursive: true, mode: 0o700 });
-const env = h.harnessEnv();
+const env = h.cliEnv();
 env[h.CONFIRM_SECRET_VAR] = crypto.randomBytes(32).toString('hex');
 // the relay's harness runs find uv the same way
 env.PATH = [path.dirname(uv), env.PATH].filter(Boolean).join(path.delimiter);
