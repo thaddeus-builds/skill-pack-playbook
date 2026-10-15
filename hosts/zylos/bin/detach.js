@@ -66,7 +66,7 @@ const fd = fs.openSync(logFile, 'w', 0o600);
 // The marker is a validated plain token (lib.js), safe unquoted.
 const child = spawn('sh', ['-c', `"$@"; echo "${MARKER} $?"`, 'sh', ...cmd], {
   cwd: h.DATA_DIR,
-  env: h.harnessEnv(),
+  env: h.cliEnv(),
   detached: true,
   stdio: ['ignore', fd, fd],
 });
