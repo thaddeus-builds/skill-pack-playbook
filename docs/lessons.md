@@ -155,6 +155,44 @@ The rules:
 
 *Seen once* (2026-10-13), in the SEO harness: its README, and the commits "remove the fde-usecase packaging from main" and "de-identify the fde-usecase export (export branch only)". No code there enforces the direction.
 
+## Checking the specification and the tests (from the SEO skill pack, 2026-10-15)
+
+Two questions a harness owner asks and cannot answer by reading: "could another agent build this from what we wrote down?" and "do thousands of assertions guard anything?" Both can be measured in an hour or two, and the answers were not the ones the owner or the agent expected. Neither measurement belongs in CI; run them at a milestone and when the owner doubts.
+
+*Paid for:* a spec of 40 registries, 160 stories and policies that nobody could say was enough to rebuild from; and a suite whose headline count ("6500 assertions") was twice its real number of assertion sites (loops re-run one assertion per row) and was suspected, by the owner, of guarding nothing.
+
+### Rebuild trial: can a fresh agent rebuild a rule engine from the spec alone?
+
+1. Pick three to five small rule engines whose answer is a pure function of an input (a classifier, a relevance rule, a de-duplication, a scorer). Give each one a stdin-to-stdout JSON contract; the contract is yours, the rules must come from the spec.
+2. Make a sandbox that holds only the spec folder (the registries, the owner's intent files, the blueprint) and a small file of visible examples. No code, no tests, no git history. Say in the brief that reading anything outside the folder voids the trial, and ask the agent to say honestly whether it did.
+3. Generate the hidden cases by running the real implementation (50 to 100 per engine, edge cases included: plurals, other languages, empty input, ties, hyphens). The judge compares, per engine, the agent's answers with the real ones. Keep cases and judge outside the sandbox.
+4. Require a `GUESSES.md`: every place the spec was silent or ambiguous, what the agent guessed and how sure it was. This file, not the score, is the product: it is the list of what the spec lacks.
+5. Fix the spec where `GUESSES.md` says, then repeat with a new agent in a clean sandbox. Rounds with one agent teach it the answers.
+
+What it showed: a registry-driven engine (page-type rules held in one table) was rebuilt 83 of 83; a rule whose details live only in code (what "contains a term" means, which label wins when two apply, how near-duplicate keywords pool their volume) scored 40/47 and 10/16, and every miss was one of the agent's logged guesses. Write those details into the spec as rules (order of checks, boundary characters, how a tie breaks, which file a name refers to), not as examples. After the fix the second agent scored 106/106; that proves the written rules transfer, not that the spec is complete, because the author knew the answers. Completeness is shown by trying more engines.
+
+- A rule that exists only in code is a gap in the spec, and the registries do not close it: the table holds the values, the code holds the semantics.
+- Name the registry a sentence refers to ("the units column of the page-type table", not "the unit registry"): two tables held overlapping lists and the agent had to guess.
+- Do not describe a quantity that the output does not depend on; the agent spent guesses on it.
+- The trial costs one agent run per round and no repository change except the spec. Keep the trial's material out of the repository.
+
+### Mutation sample: do the tests notice a change in the logic?
+
+A mutant is a copy of the code with one small change (a comparison flipped, `and` turned into `or`, a number plus one). A test suite guards a line if some test fails on its mutant.
+
+1. Sample, do not sweep: 40 to 50 mutants drawn at random from the modules whose behaviour matters, at most three per module, from three kinds only (comparison operator, boolean operator, integer constant). Work in scratch copies of the repository, never the working tree; restore each file after its run.
+2. For each mutant run only the test files that mention the module, smallest first, and stop at the first failing file (a non-zero exit, a missing result line, zero passed, or a hang past the timeout all count as "caught").
+3. Report caught over sampled, per module, and name every survivor with its line. Read the survivors: some are equivalent mutants (the change cannot alter behaviour) and some are real, usually a boundary (`>=` against `>`) that no test sits on.
+4. A sample of 45 has a margin of about 12 points. Say so; do not report it as a coverage figure.
+
+What it showed: 36 of 45 mutants were caught (80%), including 8 of 8 in the human gate, the apply gate, the auto-confirm and the human tables, which is where the owner most needed it; the survivors were boundary conditions in a status report and in a peer-recognition rule, and each was a real untested behaviour, not junk. The same session found that the suite's headline count was inflated by loops, and the number the owner should read is the count of assertion sites (about half).
+
+- Report both numbers: assertion sites and assertion executions.
+- Judge a suite by what it catches in the code that must not break (the gate, the money, the data), not by its size. Registry-shape and documentation checks are cheap and have their own value; they are not behaviour tests, and the sample does not measure them.
+- A survivor is a test to write only if the behaviour is one the owner relies on; otherwise delete the doubt, not the code.
+
+*Seen once* (2026-10-15), in the SEO skill pack: the rebuild trial is in its blueprint (`ssot/intent/blueprint.md`, section 15) and story S173; the mutation sample was run from a scratch script that is not kept, because the method is five steps and the sample must be redrawn each time.
+
 ## Ecommerce SEO Skill Pack, first non-manufacturer client (2026-10)
 
 The SEO harness (renamed "skill pack": the repository `ecommerce-seo-skill-pack`, on the owner's GitLab;
