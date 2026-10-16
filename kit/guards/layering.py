@@ -1,12 +1,12 @@
-"""The layering a harness states in prose, pinned on its import graph.
+"""The layering a skill pack states in prose, pinned on its import graph.
 
-A stdlib AST scan of the harness's scripts: `<scripts_dir>/*.py` as
+A stdlib AST scan of the skill pack's scripts: `<scripts_dir>/*.py` as
 top-level modules (the scripts dir is on sys.path), every package under
 it (`_lib.x`, the vendored `kit.x`; the running kit when none is
-vendored) and `[layers].packages` (package dirs at the harness root).
+vendored) and `[layers].packages` (package dirs at the skill pack root).
 "Reaches" = imports directly (inside a function too), or loads at import
 time through any chain of top-level imports. `check_layers(root)` returns
-every problem of these rules, all named in harness.toml `[layers]`:
+every problem of these rules, all named in skill-pack.toml `[layers]`:
 
   a. only `writer_importers` import `writer`, the one module that calls
      the external write API;
@@ -22,19 +22,19 @@ every problem of these rules, all named in harness.toml `[layers]`:
   f. of the computes only `spawn_allowed` ones run another process (reach
      kit.runner / _lib.runner, or import subprocess themselves);
   g. a `write_verbs` module reaches no compute script;
-  h. a harness package module (_lib…) imports no top-level script, and
-     the kit imports nothing of the harness's;
-  i. harness code imports nothing dynamically (importlib.import_module,
+  h. a skill pack package module (_lib…) imports no top-level script, and
+     the kit imports nothing of the skill pack's;
+  i. skill pack code imports nothing dynamically (importlib.import_module,
      __import__, spec_from_file_location, runpy): the graph must see
      every edge.
 
 An import under `if TYPE_CHECKING:` is a type hint, not an edge.
 
 `[layers].exempt = ["m>t", …]` allows the one edge m -> t (a deliberate
-lazy import). A module harness.toml names that does not exist leaves its
+lazy import). A module skill-pack.toml names that does not exist leaves its
 rule empty rather than failing: `members(root)` shows what each layer
 holds, for a test's positive controls. `self_test()` plants one violation
-of each rule in a scratch harness and returns the ones the rules miss.
+of each rule in a scratch skill pack and returns the ones the rules miss.
 
 Test: kit/tests/test_guards.py.
 """
@@ -47,8 +47,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 import kit
-from kit.config import HarnessConfig
-from kit.guards import harness, module_name, report, strs
+from kit.config import SkillPackConfig
+from kit.guards import skill_pack, module_name, report, strs
 
 NETWORK = frozenset({"urllib.request", "http.client", "socket", "ssl",
                      "requests", "httpx", "aiohttp", "ftplib", "smtplib",
@@ -107,7 +107,7 @@ def _imports(tree: ast.AST, eager: bool = True):
 
 
 class ImportGraph:
-    """The import edges between a harness's own modules, plus each
+    """The import edges between a skill pack's own modules, plus each
     module's external (stdlib / third-party) imports."""
 
     def __init__(self, roots: dict[str, Path | str]):
@@ -204,7 +204,7 @@ def _dotted(base: str, alias: ast.alias | None) -> set[str]:
     return {".".join(parts[:i]) for i in range(1, len(parts) + 1)}
 
 
-def default_roots(cfg: HarnessConfig) -> dict[str, Path]:
+def default_roots(cfg: SkillPackConfig) -> dict[str, Path]:
     scripts = cfg.root / cfg.scripts_dir
     roots: dict[str, Path] = {"": scripts}
     if scripts.is_dir():
@@ -218,11 +218,11 @@ def default_roots(cfg: HarnessConfig) -> dict[str, Path]:
     return roots
 
 
-def members(root: Path | str | None = None, cfg: HarnessConfig | None = None,
+def members(root: Path | str | None = None, cfg: SkillPackConfig | None = None,
             graph: ImportGraph | None = None) -> dict[str, set[str]]:
     """What each layer holds: {pull, ingest, compute, writer, clients, db,
     write_verbs, scripts}."""
-    cfg = cfg or harness(root)
+    cfg = cfg or skill_pack(root)
     g = graph or ImportGraph(default_roots(cfg))
     scripts_dir = (cfg.root / cfg.scripts_dir).resolve()
     scripts = {m for m in g.modules if "." not in m
@@ -252,7 +252,7 @@ def members(root: Path | str | None = None, cfg: HarnessConfig | None = None,
 def check_layers(root: Path | str | None = None,
                  graph: ImportGraph | None = None) -> list[str]:
     """Every problem of the layering rules (module docstring)."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     g = graph or ImportGraph(default_roots(cfg))
     mem = members(cfg=cfg, graph=g)
     exempt = {tuple(x.split(">", 1)) for x in strs(cfg.layers.get("exempt"))}
@@ -297,18 +297,18 @@ def check_layers(root: Path | str | None = None,
     if spawns:
         out.append(f"f: computes that run another process: {spawns}; only "
                    f"{sorted(mem['spawn_allowed'])} may")
-    harness_mods = {m for m in g.modules if not m.startswith("kit.")
+    skill_pack_mods = {m for m in g.modules if not m.startswith("kit.")
                     and m != "kit"}
-    for m in sorted(harness_mods - mem["scripts"]):
+    for m in sorted(skill_pack_mods - mem["scripts"]):
         found = sorted(g.direct(m) & mem["scripts"])
         if found:
             out.append(f"h: {m} imports the script(s) {found} (a library "
                        f"imports no script)")
-    for m in sorted(g.modules - harness_mods):
-        found = sorted(g.direct(m) & harness_mods)
+    for m in sorted(g.modules - skill_pack_mods):
+        found = sorted(g.direct(m) & skill_pack_mods)
         if found:
-            out.append(f"h: {m} (the kit) imports the harness's {found}")
-    for m in sorted(harness_mods):
+            out.append(f"h: {m} (the kit) imports the skill pack's {found}")
+    for m in sorted(skill_pack_mods):
         if g.dynamic.get(m):
             out.append(f"i: {m} imports dynamically at line(s) "
                        f"{g.dynamic[m]}: the graph cannot see that edge")
@@ -316,7 +316,7 @@ def check_layers(root: Path | str | None = None,
 
 
 _PLANTED = {
-    "harness.toml": '[harness]\nname = "planted"\ncli = "planted"\n'
+    "skill-pack.toml": '[skill_pack]\nname = "planted"\ncli = "planted"\n'
                     'env_prefix = "PLANTED"\n\n[layers]\n'
                     'writer = "_lib/writer"\n'
                     'writer_importers = ["execute_actions"]\n'
@@ -368,7 +368,7 @@ _EXPECTED = (
 
 
 def self_test() -> list[str]:
-    """The rules tried on a scratch harness that breaks each one: [] when
+    """The rules tried on a scratch skill pack that breaks each one: [] when
     every planted violation is caught and the clean modules pass."""
     with tempfile.TemporaryDirectory(prefix="layering-") as d:
         root = Path(d)

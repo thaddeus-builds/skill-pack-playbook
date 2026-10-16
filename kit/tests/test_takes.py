@@ -39,7 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import human, messages, takes  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 CFG = _shop.use()
@@ -63,7 +63,7 @@ def store() -> takes.TakeStore:
 
 
 def code_of(fn) -> str | None:
-    e = raises(fn, HarnessError)
+    e = raises(fn, SkillPackError)
     return getattr(getattr(e, "message", None), "code", None)
 
 

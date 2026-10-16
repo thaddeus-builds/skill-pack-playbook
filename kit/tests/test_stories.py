@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""kit.stories: the story-check engine, on the fake "shop" harness.
+"""kit.stories: the story-check engine, on the fake "shop" skill pack.
 
   [1] the expect grammar: path, path>0, path=V, !term, `[]`, `*`
   [2] the registry: only read verbs (write, gated, external, unknown,
@@ -15,7 +15,7 @@
       output
   [5] the default has_rows: the market's rows, any row without a market
       column, a view, no table
-  [6] through the harness CLI (run_via_cli): `--` then --json, --market
+  [6] through the skill pack CLI (run_via_cli): `--` then --json, --market
       where the verb takes one, --assume on a compute only, {market} as
       an SQL literal, a failure document, a finding exit; main() end to end
   [7] check_registry(): the registry's own rules
@@ -368,7 +368,7 @@ FINDING = ('import json, sys\nprint(json.dumps({"rows": [], "finding": '
 
 
 def test_cli(data: Path) -> None:
-    print("\n[6] through the harness CLI")
+    print("\n[6] through the skill pack CLI")
     root = Path(tmp_dir("stories-")) / "shop"
     shutil.copytree(_shop.SHOP, root, ignore=shutil.ignore_patterns(
         "__pycache__", "*.pyc"))

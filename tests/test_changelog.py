@@ -1,6 +1,6 @@
 """CHANGELOG.md names every kit version and stays in order.
 
-A harness re-vendors the kit and reads this file to learn what changed, so a
+A skill pack re-vendors the kit and reads this file to learn what changed, so a
 `kit/VERSION` bump without an entry is a defect. Checked: `## [Unreleased]` first,
 then one `## [X.Y.Z] - DATE` per release, versions strictly descending, dates never
 increasing, the newest heading equal to `kit/VERSION`, and the Zylos host version

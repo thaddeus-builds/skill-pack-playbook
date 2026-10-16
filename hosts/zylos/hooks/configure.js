@@ -1,7 +1,7 @@
 'use strict';
 // Zylos configure hook: the collected config arrives as one JSON object on
 // stdin ({"KEY": "value", …}). It goes to the component's own
-// <data dir>/.env (mode 0600, data dir 0700), which the harness's env chain
+// <data dir>/.env (mode 0600, data dir 0700), which the skill pack's env chain
 // reads as $<PREFIX>_DATA_DIR/.env; never to the Zylos root .env.
 //
 // Merge-only, so it can be re-run any time (zylos-core has no reconfigure
@@ -15,7 +15,7 @@
 // written when a key of its group is in use and it is absent (zylos-core never
 // applies a declared default). No network, no uv: Zylos kills it after 30 s.
 // A gate secret (*CONFIRM_CODE_SECRET, CONSOLE_SECRET) refuses the whole input:
-// the harness never loads it from the .env. Only key names are printed.
+// the skill pack never loads it from the .env. Only key names are printed.
 
 const fs = require('node:fs');
 const path = require('node:path');

@@ -1,12 +1,12 @@
 """The approval queue: nothing is written to an external system unapproved.
 
-Ported from the reference harness's `queue_actions.py` + `_lib/approvals.py`
+Ported from the reference skill pack's `queue_actions.py` + `_lib/approvals.py`
 (the generic core; the domain's flatten/refusal/slot rules become the
-harness's compute and its `validate` hook). The queue reads a proposal
+skill pack's compute and its `validate` hook). The queue reads a proposal
 document and writes only `action_queue`; it never calls an external API
 (kit.execute does, after a human approved). What it guards:
 
-  * `add [--market M] [--from FILE]`: the snapshot is the harness's own
+  * `add [--market M] [--from FILE]`: the snapshot is the skill pack's own
     compute (the `snapshot` hook) or a saved copy of it, never recomputed
     here. A snapshot run with `--assume` (non-empty
     meta.assumed_thresholds) is a what-if and is refused whole: only
@@ -16,7 +16,7 @@ document and writes only `action_queue`; it never calls an external API
     to what a proposal rests on (its basis: the rows its rule read plus
     the ingest version) is a different action, and the same action twice
     is one row (UNIQUE in the file). Each new proposal passes the
-    harness's `validate(con, proposal)` or is recorded as `rejected` with
+    skill pack's `validate(con, proposal)` or is recorded as `rejected` with
     the refusal's code in `reason_code` (decided_by `validate`), so a
     later run can read why (`rejected()`). A rejected proposal is never
     proposed again unchanged: the same action_id stays one rejected row.
@@ -86,7 +86,7 @@ from typing import Any, Callable, Iterable
 from kit import contract, dates, db, human
 from kit import market as markets
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, code, coded, msg
 
 TABLE = "action_queue"
@@ -181,12 +181,12 @@ def expired(row: dict, ttl_hours: float, at: datetime | None = None) -> bool:
 
 
 def no_snapshot(market: str | None) -> dict:
-    """The `snapshot` hook of a harness with no proposing report yet (a new
-    harness, B1): every `queue add` without --from is refused, coded, and
+    """The `snapshot` hook of a skill pack with no proposing report yet (a new
+    skill pack, B1): every `queue add` without --from is refused, coded, and
     names the way that works."""
     cli = config().cli
-    raise HarnessError(msg(
-        "queue_no_snapshot", "no report of this harness proposes anything "
+    raise SkillPackError(msg(
+        "queue_no_snapshot", "no report of this skill pack proposes anything "
         "yet: queue a saved proposal document with --from FILE", cli=cli),
         [f"{cli} queue add --from <proposals.json>"])
 
@@ -196,7 +196,7 @@ def rejected(con: sqlite3.Connection, market: str, target_ref: str,
     """The "no"s a proposal run reads before proposing again: every
     rejected row for this market and target (and kind), newest first,
     with its reason and reason_code (decided_by `validate` = the
-    harness's own check; anything else = a person or an agent)."""
+    skill pack's own check; anything else = a person or an agent)."""
     sql = (f"SELECT id, action_id, kind, target_ref, payload, basis, reason, "
            f"reason_code, decided_by, decided_at FROM {TABLE} WHERE "
            f"status='rejected' AND market=? AND target_ref=?")
@@ -213,12 +213,12 @@ def rejected(con: sqlite3.Connection, market: str, target_ref: str,
 def load_snapshot(explicit: str | None, src: str | None,
                   snapshot: Snapshot) -> dict:
     """`--from FILE` (a saved proposal document) or a fresh run of the
-    harness's compute (the `snapshot` hook), checked for its shape."""
+    skill pack's compute (the `snapshot` hook), checked for its shape."""
     if src:
         try:
             doc = json.loads(Path(src).read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "queue_snapshot_unreadable",
                 f"cannot read the snapshot {src}: {e}. Nothing was written",
                 path=str(src), detail=str(e))) from None
@@ -232,7 +232,7 @@ def load_snapshot(explicit: str | None, src: str | None,
     elif not isinstance(doc.get("proposals"), list):
         problem = "no proposals list"
     if problem:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "queue_snapshot_invalid",
             f"not a proposal document ({problem}): expected {{meta, "
             f"proposals: [...]}}. Nothing was written", problem=problem))
@@ -240,8 +240,8 @@ def load_snapshot(explicit: str | None, src: str | None,
 
 
 def _proposal(i: int, p: Any, explicit: str | None) -> dict:
-    def bad(problem: str) -> HarnessError:
-        return HarnessError(msg(
+    def bad(problem: str) -> SkillPackError:
+        return SkillPackError(msg(
             "queue_proposal_invalid",
             f"proposal {i}: {problem}. Nothing was written",
             index=i, problem=problem))
@@ -257,7 +257,7 @@ def _proposal(i: int, p: Any, explicit: str | None) -> dict:
             raise bad(f"{k} must be an object")
     m = markets.validate(p.get("market"))
     if explicit and m != explicit:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "queue_snapshot_market",
             f"proposal {i} is for market {m}, not {explicit}. Nothing was "
             f"written", market=explicit, found=m))
@@ -282,7 +282,7 @@ def add(spec: db.SchemaSpec, con: sqlite3.Connection, doc: dict,
     meta = doc["meta"]
     if meta.get("assumed_thresholds"):
         names = sorted(meta["assumed_thresholds"])
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "queue_snapshot_assumed",
             f"the snapshot ran with --assume ({', '.join(names)}): a "
             f"what-if, not the live state. Confirm the threshold or rerun "
@@ -392,25 +392,25 @@ def _rows(con: sqlite3.Connection, ids: list[int], allowed: tuple[str, ...],
     for i in sorted(set(ids)):
         r = fetch(con, i)
         if r is None:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "queue_item_not_found",
                 f"no queue item #{i}. Nothing was written", id=i))
         if r["status"] == "superseded" and "superseded" not in allowed:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "queue_item_superseded",
                 f"#{i} was superseded ({r['reason']}); approve the newer "
                 f"proposal instead. Nothing was written", id=i))
         if ttl_hours is not None:
             ttl = ttl_hours(con, r["market"])
             if expired(r, ttl):
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "queue_item_expired",
                     f"#{i}: its approval of {r['decided_at']} is older than "
                     f"{ttl:g}h; a fresh `queue add` proposes it again. "
                     f"Nothing was written", id=i,
                     decided_at=r["decided_at"], ttl_hours=ttl))
         if r["status"] not in allowed:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "queue_item_wrong_status",
                 f"#{i} is {r['status']}, not {' or '.join(allowed)}. "
                 f"Nothing was written", id=i, status=r["status"],
@@ -425,7 +425,7 @@ def _unchanged(con: sqlite3.Connection, rows: list[dict]) -> None:
         now = fetch(con, r["id"])
         if (now["status"], now["decided_at"]) != (r["status"],
                                                   r["decided_at"]):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "queue_item_changed",
                 f"#{r['id']} changed while it was being decided; list it "
                 f"again. Nothing was written", id=r["id"]))
@@ -475,14 +475,14 @@ def reject(spec: db.SchemaSpec, con: sqlite3.Connection, ids: list[int], *,
     why = human.why(reason)
     rc = (reason_code or "").strip()
     if not REASON_CODE_RE.match(rc):
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "queue_reason_code_invalid",
             f"--reason-code {reason_code!r}: one snake_case word (a-z, 0-9, "
             f"_), at most 64 characters. Nothing was written",
             reason_code=reason_code or ""))
     allowed = sorted(reason_codes) if reason_codes is not None else None
     if allowed is not None and rc not in allowed:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "queue_reason_code_unknown",
             f"--reason-code {rc}: not one of {', '.join(allowed)}. Nothing "
             f"was written", reason_code=rc, allowed=allowed))
@@ -545,7 +545,7 @@ def _parser(prog: str) -> argparse.ArgumentParser:
     p = contract.Parser(prog=prog, description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="verb", required=True)
     sp = sub.add_parser("add", help="queue a proposal snapshot (the "
-                                    "harness's compute, or --from FILE)")
+                                    "skill pack's compute, or --from FILE)")
     sp.add_argument("--market")
     sp.add_argument("--from", dest="src", metavar="FILE",
                     help="a saved proposal document instead of a fresh run")

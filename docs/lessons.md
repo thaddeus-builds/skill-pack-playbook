@@ -1,10 +1,10 @@
 # Lessons
 
-What the source project and the harnesses after it paid for, kept here when the code that carried a lesson is gone or not yet written.
+What the source project and the skill packs after it paid for, kept here when the code that carried a lesson is gone or not yet written.
 
 ## Pulling into raw (from `kit/pull.py`, removed in kit 0.7.0)
 
-`kit/pull.py` merged each pull into raw, planned long pulls in chunks and kept a ledger of gaps. No harness imported it, so it was removed (RESTRUCTURE.md, phase 5). The last version is at commit `8e13e16` (`git show 8e13e16:kit/pull.py`), with its test in `kit/tests/test_pull.py`. Before writing a pull layer again, compare dlt (incremental cursors and state) and Airbyte's Amazon Ads source, which re-pulls a lookback window (3 days by default) for numbers the platform restates.
+`kit/pull.py` merged each pull into raw, planned long pulls in chunks and kept a ledger of gaps. No skill pack imported it, so it was removed (RESTRUCTURE.md, phase 5). The last version is at commit `8e13e16` (`git show 8e13e16:kit/pull.py`), with its test in `kit/tests/test_pull.py`. Before writing a pull layer again, compare dlt (incremental cursors and state) and Airbyte's Amazon Ads source, which re-pulls a lookback window (3 days by default) for numbers the platform restates.
 
 *Paid for:* each pull replaced raw and the platform keeps only a few months; a late resumed report put older numbers back; an unreadable raw file was overwritten by one pull's rows; a long pull killed halfway started over and the quota ran out again; a run that cleared the last run's gaps lost the list a gaps-only pull needed.
 
@@ -37,7 +37,7 @@ Its neighbours stay in the kit: `kit/raw.py` (write-once raw files), `kit/atomic
 
 A background job generates paid takes (a video model behind a hosted workflow), renders, checks and exports each file under
 a code. The first real batch ran three times before one pair of files was usable. The fixes are in adcut-harness
-(merge requests 9 and 10 and the lessons commit after them); the rules carry to any harness that pays per generated asset.
+(merge requests 9 and 10 and the lessons commit after them); the rules carry to any skill pack that pays per generated asset.
 
 *Paid for:* the plan priced a re-run that the job then skipped (the codes were exported, and a code names one file); a
 provider task finished and was paid, its download failed, and the resumed job refused the take as already paid, so the only
@@ -64,14 +64,14 @@ The rules:
 - A detached job that vanished without its end is still told. A job writes an exit marker and a notice when it ends; one
   killed from outside writes neither. So the next listing of jobs checks each job with no marker: when its pid is gone,
   or belongs to another process now (its start time differs from the one recorded), it writes one notice once,
-  "stopped without an end", with no exit code. *Seen once (2026-10-11):* the harness, its data and its virtualenv sat
+  "stopped without an end", with no exit code. *Seen once (2026-10-11):* the skill pack, its data and its virtualenv sat
   on an external disk that the OS unmounted at screen lock; a queued paid job died two minutes after it started and
   nobody was told. Keep all three on the internal disk ([install checklist](../templates/install-checklist.md#scheduled-tasks-and-long-jobs)).
 
 ## Design and a synthetic demo before code (from adcut-harness X45, 2026-10-13)
 
 Before it built a map of its creative plan, with a weight on each path and a close only a person confirms, the
-video-ads harness wrote one design page and a clickable demo of the real page, and wrote the code only after the owner
+video-ads skill pack wrote one design page and a clickable demo of the real page, and wrote the code only after the owner
 said yes. The steps, what the design page holds, the demo's guards and a checklist:
 [templates/design-first.md](../templates/design-first.md).
 
@@ -87,19 +87,19 @@ The rules:
   code. Every ask on the page carries a recommended answer, so one reply can agree to all of them.
 - An append-only table's columns are proven on a scratch copy of real data before the page fixes them: once it holds
   rows they cannot change.
-- The demo is the real page, drawn by the harness's own renderer from a synthetic world. A hand-made mock-up shows a
+- The demo is the real page, drawn by the skill pack's own renderer from a synthetic world. A hand-made mock-up shows a
   page the code will not write.
 - A demo is shared only when it is synthetic (marked, `DEMO` ids) and a scan for client terms that fails closed found
   nothing in any form the page reaches a reader, its page data too; it is never written into a client's data, and a
   client's real page is never shared.
-- Once the code exists, the harness draws the demo itself, from a synthetic fixture to the same link, so the picture
+- Once the code exists, the skill pack draws the demo itself, from a synthetic fixture to the same link, so the picture
   never drifts from the code.
 
-*Seen once* (2026-10-12 and 13), in that harness's ROADMAP X45.
+*Seen once* (2026-10-12 and 13), in that skill pack's ROADMAP X45.
 
 ## A guard's refinement never costs the recall it had (from the playbook's ssot write rule, kit 0.26.0, 2026-10-13)
 
-A guard that scans code for a forbidden act (here, a harness writing into `ssot/`) is reviewed for false hits and
+A guard that scans code for a forbidden act (here, a skill pack writing into `ssot/`) is reviewed for false hits and
 misses, and each false hit invites a refinement that makes it smarter. Each refinement is tried on the cases the last
 version caught, and dropped when it misses one: the guard prefers a false hit, which one allowlist row with its reason
 answers, to a miss, which nobody sees.
@@ -124,26 +124,26 @@ The rules:
 
 *Seen once* (2026-10-13), in this playbook (PRs 88 and 89).
 
-## A past winner the harness cannot say is studied for its mechanism, never copied
+## A past winner the skill pack cannot say is studied for its mechanism, never copied
 
-When a harness reads a client's past results ([path-weights.md](path-weights.md#past-results-a-gap-signal-never-a-weight)), the strongest single ad may win on an angle the harness cannot say: no template or direction of the plan states it. The tempting move is to make that ad a template or a next move. The harness learns the mechanism instead and proposes that.
+When a skill pack reads a client's past results ([path-weights.md](path-weights.md#past-results-a-gap-signal-never-a-weight)), the strongest single ad may win on an angle the skill pack cannot say: no template or direction of the plan states it. The tempting move is to make that ad a template or a next move. The skill pack learns the mechanism instead and proposes that.
 
-*Why:* the owner of the video-ads harness (2026-10-13), on its first client's strongest past ad, which had a large share of all past conversions: if we are to learn from it, learn the underlying logic, not this specific case. Copying a winner the harness cannot say risks a compliance problem and overfits one ad.
+*Why:* the owner of the video-ads skill pack (2026-10-13), on its first client's strongest past ad, which had a large share of all past conversions: if we are to learn from it, learn the underlying logic, not this specific case. Copying a winner the skill pack cannot say risks a compliance problem and overfits one ad.
 
 The rules:
 
 - A strong past ad that nothing in the plan can say is not a template and not a move. It is a proposal for a person to confirm.
-- The proposal states a mechanism in the harness's own words, not the ad's: what can be separated from the claim, which is who the ad reached, how it opened, its timing, and why people converted. The ad's id and numbers are its evidence.
-- A strong past ad the harness can say is the other case: its gap is a proposal for a template, and the mechanism is still what is studied.
-- A reference ad the client hands over to be copied, one that already runs on the platform, is neither: it is the client's request, it is built faithfully (even if it is also the strongest past ad), and its risks stay warnings that a person can waive ([claim-scope waivers](../templates/claim-scope.md#waivers)). The harness never promotes a past ad to a template by itself; a reference is the client's choice, not a result.
+- The proposal states a mechanism in the skill pack's own words, not the ad's: what can be separated from the claim, which is who the ad reached, how it opened, its timing, and why people converted. The ad's id and numbers are its evidence.
+- A strong past ad the skill pack can say is the other case: its gap is a proposal for a template, and the mechanism is still what is studied.
+- A reference ad the client hands over to be copied, one that already runs on the platform, is neither: it is the client's request, it is built faithfully (even if it is also the strongest past ad), and its risks stay warnings that a person can waive ([claim-scope waivers](../templates/claim-scope.md#waivers)). The skill pack never promotes a past ad to a template by itself; a reference is the client's choice, not a result.
 
 No code enforces this: it is a judgement the agent makes and a person confirms, and `tests/test_docs_build.py` pins only the lesson's wording.
 
-*Seen once* (2026-10-13), in that harness; its ROADMAP D64 holds the gap signal this feeds.
+*Seen once* (2026-10-13), in that skill pack; its ROADMAP D64 holds the gap signal this feeds.
 
-## An export branch never merges back (from the SEO harness, 2026-10-13)
+## An export branch never merges back (from the SEO skill pack, 2026-10-13)
 
-A harness packaged for someone else gets a branch of its own. Here it was a library of use cases that takes `git archive` of a branch and allows no real client name. That branch adds what only the package needs (an agent brief, a version, a changelog, examples, `export-ignore` lines) and replaces real names with placeholders. Main merges into it; it never merges into main.
+A skill pack packaged for someone else gets a branch of its own. Here it was a library of use cases that takes `git archive` of a branch and allows no real client name. That branch adds what only the package needs (an agent brief, a version, a changelog, examples, `export-ignore` lines) and replaces real names with placeholders. Main merges into it; it never merges into main.
 
 *Paid for:* the package's first branch was merged into main. Main then carried an agent brief, a version file, a changelog and placeholder folders that only the archive used; nothing in the code, tests or docs read them. They were removed the same day. The de-identification came after and stayed on the branch: merged back, it would have put placeholders where main's docs and examples name the real clients.
 
@@ -153,11 +153,11 @@ The rules:
 - The export's scan for real names runs on the export branch, over what `git archive` ships; the list of names does not ship. The kit's `kit/tools/leak_guard.py` is the same kind of scan for a push.
 - Before a packaging file lands on main, name what in the code, tests or docs reads it. A file nothing reads belongs on the export branch.
 
-*Seen once* (2026-10-13), in the SEO harness: its README, and the commits "remove the fde-usecase packaging from main" and "de-identify the fde-usecase export (export branch only)". No code there enforces the direction.
+*Seen once* (2026-10-13), in the SEO skill pack: its README, and the commits "remove the fde-usecase packaging from main" and "de-identify the fde-usecase export (export branch only)". No code there enforces the direction.
 
 ## Checking the specification and the tests (from the SEO skill pack, 2026-10-15)
 
-Two questions a harness owner asks and cannot answer by reading: "could another agent build this from what we wrote down?" and "do thousands of assertions guard anything?" Both can be measured in an hour or two, and the answers were not the ones the owner or the agent expected. Neither measurement belongs in CI; run them at a milestone and when the owner doubts.
+Two questions a skill pack owner asks and cannot answer by reading: "could another agent build this from what we wrote down?" and "do thousands of assertions guard anything?" Both can be measured in an hour or two, and the answers were not the ones the owner or the agent expected. Neither measurement belongs in CI; run them at a milestone and when the owner doubts.
 
 *Paid for:* a spec of 40 registries, 160 stories and policies that nobody could say was enough to rebuild from; and a suite whose headline count ("6500 assertions") was twice its real number of assertion sites (loops re-run one assertion per row) and was suspected, by the owner, of guarding nothing.
 

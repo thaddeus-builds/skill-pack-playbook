@@ -2,7 +2,7 @@
 
 Regulated products carry an approved document that fixes what may be claimed: a drug's indication on its package insert, a health food's approved function on its registration, a cosmetic's efficacy class, a fund's prospectus. An ad that names anything outside it is refused by the platform's review, however ordinary the words. A banned-word list can't catch this, because the words are not bad in themselves. What makes them wrong is the product. So the check runs the other way round: every claim the copy makes must be one the approved document names.
 
-*Seen once:* a short-video ad harness made creatives for an OTC throat product whose indication reads, in full, "dry throat and sore throat caused by acute and chronic pharyngitis". In one afternoon the platform refused 20 of its creatives, all for the same reason: they named an itchy throat, phlegm, a foreign-body feeling, hoarseness, a cough. None of those words was on any banned list. The harness then held every line to the indication. Of the 10 phrases the reviewer had quoted, it caught all 10, and the approved wording passed. A second batch of 26 rejected creatives turned out to be 5 scripts rearranged, so one bad sentence was refused again and again. That is why the harness also keeps a phrase library. Code: [`kit/claimscope.py`](../kit/claimscope.py), [`kit/phrasebook.py`](../kit/phrasebook.py).
+*Seen once:* a short-video ad skill pack made creatives for an OTC throat product whose indication reads, in full, "dry throat and sore throat caused by acute and chronic pharyngitis". In one afternoon the platform refused 20 of its creatives, all for the same reason: they named an itchy throat, phlegm, a foreign-body feeling, hoarseness, a cough. None of those words was on any banned list. The skill pack then held every line to the indication. Of the 10 phrases the reviewer had quoted, it caught all 10, and the approved wording passed. A second batch of 26 rejected creatives turned out to be 5 scripts rearranged, so one bad sentence was refused again and again. That is why the skill pack also keeps a phrase library. Code: [`kit/claimscope.py`](../kit/claimscope.py), [`kit/phrasebook.py`](../kit/phrasebook.py).
 
 ## The claims record, from the approved document
 
@@ -11,7 +11,7 @@ One JSON file per product (for example `products/<id>/claims.json`). The agent f
 | Field | What it holds |
 | --- | --- |
 | `subject` | The product, as the person retypes it at the gate |
-| `category` | The harness's category word (the harness decides which categories need a record) |
+| `category` | The skill pack's category word (the skill pack decides which categories need a record) |
 | `scope_text` | The approved document's wording, verbatim, in its own language. Never a summary |
 | `allowed` | The claims that wording allows, as the lexicon's canonical names |
 | `source` | Where the wording was read: the insert photo, the registration page, the filing |
@@ -23,7 +23,7 @@ A category that needs a record and has none is itself an error (`claimscope.requ
 
 ## The lexicon: what copy can claim
 
-A harness TSV (for example `ssot/claim_terms.tsv`), an owner file with a pending-until-confirmed status per row:
+A skill pack TSV (for example `ssot/claim_terms.tsv`), an owner file with a pending-until-confirmed status per row:
 
 | Column | What it holds |
 | --- | --- |
@@ -33,21 +33,21 @@ A harness TSV (for example `ssot/claim_terms.tsv`), an owner file with a pending
 | `pattern` | A regex covering how people actually say it, including the spoken forms |
 | `severity`, `note`, `law_ref`, `status` | `error` or `warn`; why; the clause it rests on; `pending`, `confirmed` or `retired` |
 
-A harness that already has its own kind words (symptom, condition, widener, scene) maps them once: `kinds={"symptom": "claim", "condition": "claim", "widener": "always", "scene": "always"}`. The longest match wins, so "dry and itchy throat" names both dry (allowed) and itchy (not), and is not read as just "dry". Two hits of one row side by side are one finding. A broken row (bad regex, unknown kind) is refused, never skipped. A finding from a row or record nobody has confirmed says "draft, not advice".
+A skill pack that already has its own kind words (symptom, condition, widener, scene) maps them once: `kinds={"symptom": "claim", "condition": "claim", "widener": "always", "scene": "always"}`. The longest match wins, so "dry and itchy throat" names both dry (allowed) and itchy (not), and is not read as just "dry". Two hits of one row side by side are one finding. A broken row (bad regex, unknown kind) is refused, never skipped. A finding from a row or record nobody has confirmed says "draft, not advice".
 
 ## The gates: script, asset, render
 
 Run the same check wherever words enter the ad:
 
-1. **Script**, before any paid generation: every spoken line, subtitle, callout, card and call to action. What an open error then does is the harness's stop mode (below).
+1. **Script**, before any paid generation: every spoken line, subtitle, callout, card and call to action. What an open error then does is the skill pack's stop mode (below).
 2. **Assets**, before they are placed: text on packaging shots, stock clips and the client's own footage. A pack front can carry a claim the ad must not repeat.
-3. **Render**, before anything leaves: read the finished video the way the reviewer does, speech by recognition and screen text by OCR, and check that. Recognition makes homophone errors, so the harness keeps a small fix table and applies it before checking and storing.
+3. **Render**, before anything leaves: read the finished video the way the reviewer does, speech by recognition and screen text by OCR, and check that. Recognition makes homophone errors, so the skill pack keeps a small fix table and applies it before checking and storing.
 
 A finding with its time (`(where, text, t)`) lets a person jump to the frame.
 
 ## What stops, what warns
 
-A harness picks what an open finding does, per channel, with one switch: for example `compliance_stop` in `ssot/constants.tsv`, `warn` or `block`, read in one place, any other value refused.
+A skill pack picks what an open finding does, per channel, with one switch: for example `compliance_stop` in `ssot/constants.tsv`, `warn` or `block`, read in one place, any other value refused.
 
 - **`warn`, where the platform's own review stops a non-compliant ad at no cost to the ad.** The step runs; the finding is shown and recorded with the step's result, and a person decides before anything is uploaded. A late rejection then costs only the generation, which is cheap next to good ads held back by a false alarm. This is the default for such a channel.
 - **`block`, where it does not:** a channel with no review of its own, a rejection that costs money or standing (an account penalised for refusals, or for probing the reviewers), or copy that must be held by law before it is published. An open error refuses the spend, fails QC and refuses export.
@@ -60,7 +60,7 @@ A harness picks what an open finding does, per channel, with one switch: for exa
 - **Preflight:** a paid request the vendor's own schema rules out (`kit/preflight.py`) is refused before it is sent.
 - **Technical QC:** duration, canvas, audio, and each element the category's rules require on screen (an AI label, a legal bar) present. What a required element *says*, while unconfirmed, is a finding and follows the switch.
 
-*Seen once, an owner decision in the video-ads harness:* it first stopped on every finding. The owner changed that: the platform's second review stops a bad ad by itself, so a late rejection costs the ad nothing and loses only the cheap generation. Claim-scope, asset and unconfirmed-legal findings became warnings a person decides on; the switch keeps the old stops. The same owner later narrowed it at upload: a file the platform would refuse is not sent unchanged, because probing the reviewers is penalised.
+*Seen once, an owner decision in the video-ads skill pack:* it first stopped on every finding. The owner changed that: the platform's second review stops a bad ad by itself, so a late rejection costs the ad nothing and loses only the cheap generation. Claim-scope, asset and unconfirmed-legal findings became warnings a person decides on; the switch keeps the old stops. The same owner later narrowed it at upload: a file the platform would refuse is not sent unchanged, because probing the reviewers is penalised.
 
 ## Waivers
 
@@ -83,7 +83,7 @@ One TSV per product (`phrases.tsv`): every phrase its copy has said or may say, 
 4. `false_alarms(approved_lines, check)` must be empty: run the same check over creatives the platform approved. An alarm is a row that is too wide. Narrow it rather than waive it.
 5. A reason that quotes nothing tells you to audit that video (speech and screen text) to find what was said.
 
-Both numbers go in the harness's report. Recall without the false-alarm side just teaches the lexicon to refuse everything.
+Both numbers go in the skill pack's report. Recall without the false-alarm side just teaches the lexicon to refuse everything.
 
 ## Checks
 

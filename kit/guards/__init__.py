@@ -1,7 +1,7 @@
-"""Guards: the structural rules a harness's own tests hold it to.
+"""Guards: the structural rules a skill pack's own tests hold it to.
 
-Each guard is a library call a harness test makes. It reads its parameters
-from the harness's harness.toml (kit.config: the bound harness, or the one
+Each guard is a library call a skill pack test makes. It reads its parameters
+from the skill pack's skill-pack.toml (kit.config: the bound skill pack, or the one
 at `root` when a root is passed) and returns a list of problems: plain
 strings, empty when the rule holds. A guard runs in a test, never under a
 verb, so its findings are for the developer and are not coded messages.
@@ -9,7 +9,7 @@ Each module also has a `check_*()` convenience that reports through
 kit.testing.check.
 
   ssot.py           the ssot index, the owner-file lint, ids kept not deleted;
-                    no harness code writes under ssot/ (it is the builder's)
+                    no skill pack code writes under ssot/ (it is the builder's)
   release.py        what `git archive` ships, and .gitattributes from config
   layering.py       the import graph: pull / ingest / compute / one writer
   clock.py          one clock: no calendar read but kit.dates.now(), by AST
@@ -17,7 +17,7 @@ kit.testing.check.
   boundary.py       the core never names an adapter; a consumer only reads
   drift.py          a vendored kit/ or console/ matches its MANIFEST.sha256
   roadmap.py        the one ROADMAP.md format: seven sections, dated rows with ids, what each wait unblocks
-  pages.py          no shipped file links to a hosted artifact: a page the harness delivers is drawn by one of its verbs
+  pages.py          no shipped file links to a hosted artifact: a page the skill pack delivers is drawn by one of its verbs
   evals.py          agent evals, the offline half: sound cases, and the forbidden-command pattern generated from the verb table;
                     SKILL.md's Never table names exactly the verbs only a person runs
 
@@ -41,14 +41,14 @@ TEXT_EXT = (".py", ".tsv", ".md", ".json", ".js", ".mjs", ".cjs", ".ts",
 SKIP_DIRS = ("node_modules", ".git", "__pycache__")
 
 
-def harness(root: Path | str | None = None) -> _config.HarnessConfig:
-    """The harness a guard checks: the one at `root` (read, not bound), else
+def skill_pack(root: Path | str | None = None) -> _config.SkillPackConfig:
+    """The skill pack a guard checks: the one at `root` (read, not bound), else
     the bound one."""
     return _config.load(root) if root is not None else _config.config()
 
 
-def section(cfg: _config.HarnessConfig, *keys: str) -> dict:
-    """A nested table of harness.toml, {} when absent:
+def section(cfg: _config.SkillPackConfig, *keys: str) -> dict:
+    """A nested table of skill-pack.toml, {} when absent:
     section(cfg, "guards", "ssot") = [guards.ssot]."""
     node: Any = cfg.raw
     for k in keys:
@@ -66,7 +66,7 @@ def strs(value: Any, default: Iterable[str] = ()) -> tuple[str, ...]:
 
 
 def module_name(spec: str) -> str:
-    """A module as harness.toml names it ("_lib/writer", "_lib.writer",
+    """A module as skill-pack.toml names it ("_lib/writer", "_lib.writer",
     "_lib/writer.py") -> its import name ("_lib.writer")."""
     s = spec.strip().removesuffix(".py").strip("/")
     return s.replace("/", ".")
@@ -100,8 +100,8 @@ def read(path: Path | str) -> str:
     return Path(path).read_text(encoding="utf-8", errors="replace")
 
 
-def verb_table(cfg: _config.HarnessConfig, verbs: Any = None) -> list:
-    """The harness's verb table as a list of verbs (objects with `words`,
+def verb_table(cfg: _config.SkillPackConfig, verbs: Any = None) -> list:
+    """The skill pack's verb table as a list of verbs (objects with `words`,
     `script`, `kind`, `takes_market`): `verbs` as given (a list or a
     {words: verb} mapping), else kit.verbs.load(<scripts_dir>/verbs.py)."""
     if verbs is None:

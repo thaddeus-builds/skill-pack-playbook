@@ -1,8 +1,8 @@
 # Third-party consent: a real person in a marketing output
 
-Marketing harnesses use real people: an AI twin of a founder or staff member, a cloned voice, a customer testimonial, a creator's clip reused as an ad, a quoted review. Each needs that person's permission for exactly this use. That permission is data the harness checks before it spends or publishes. It is not something the agent remembers from chat.
+Marketing skill packs use real people: an AI twin of a founder or staff member, a cloned voice, a customer testimonial, a creator's clip reused as an ad, a quoted review. Each needs that person's permission for exactly this use. That permission is data the skill pack checks before it spends or publishes. It is not something the agent remembers from chat.
 
-*Seen once:* a video-ad harness added an "authorised real presenter" (the person's footage became the still, their speech became a cloned voice). The first version let a JSON field say `status: confirmed`. On the owner's word in chat, the agent set that field itself, and the harness accepted it. Consent now counts only as a row the human gate wrote, bound to the record's content. Code: [`kit/consent.py`](../kit/consent.py).
+*Seen once:* a video-ad skill pack added an "authorised real presenter" (the person's footage became the still, their speech became a cloned voice). The first version let a JSON field say `status: confirmed`. On the owner's word in chat, the agent set that field itself, and the skill pack accepted it. Consent now counts only as a row the human gate wrote, bound to the record's content. Code: [`kit/consent.py`](../kit/consent.py).
 
 ## The record
 
@@ -10,7 +10,7 @@ One file per person per purpose (for example `cast/<id>/consent.json`):
 
 | Field | What it holds |
 | --- | --- |
-| `person`, `relation` | Who, and what they are to the advertiser (a closed set the harness declares: staff, owner, creator, customer, external) |
+| `person`, `relation` | Who, and what they are to the advertiser (a closed set the skill pack declares: staff, owner, creator, customer, external) |
 | `uses` | What of them may be used (a closed set: face, voice, name, words, footage) |
 | `scope` | Lists per key, for example brands, channels, purposes; `*` means any |
 | `valid_from`, `valid_until` | ISO dates; outside them nothing is made |
@@ -26,7 +26,7 @@ One file per person per purpose (for example `cast/<id>/consent.json`):
 4. **Check at the money path and at the build.** A paid call that uses the person (their face, their voice) is refused without valid consent; a build that includes an already-made take is refused too, so a revocation also stops re-use. Free previews that don't use the person (a placeholder, a stock voice) need none.
 5. **The agent drafts, the person signs, a person confirms.** The agent may fill the record from the signed letter. It never confirms, and a runtime that refuses to upload someone's biometrics is not to be worked around (see [vendor-api-discovery.md](vendor-api-discovery.md)).
 6. **AI content stays labelled.** Consent to a likeness is not consent to hide that it is synthetic. The AI label stays on every frame where the platform or law asks for one.
-7. **Category rules still apply.** Some categories forbid endorsers or testimonials outright (drug ads in several jurisdictions). A consented person is then limited to what the category allows: for example, staff speak as the manufacturer, never as a patient or doctor. Put this in the harness's category rules with a lint test.
+7. **Category rules still apply.** Some categories forbid endorsers or testimonials outright (drug ads in several jurisdictions). A consented person is then limited to what the category allows: for example, staff speak as the manufacturer, never as a patient or doctor. Put this in the skill pack's category rules with a lint test.
 
 ## The letter (skeleton; the client's lawyer adapts it)
 

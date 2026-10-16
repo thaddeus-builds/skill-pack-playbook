@@ -7,7 +7,7 @@
 `Host` lays out a temp HOME whose path has a space, the way Zylos does:
 
   $HOME/zylos                               ZYLOS_DIR (exported)
-  $HOME/zylos/.claude/skills/<name>         the skill dir: a harness with this
+  $HOME/zylos/.claude/skills/<name>         the skill dir: a skill pack with this
                                             adapter vendored as zylos/, its
                                             manifest.json, a SKILL.md whose
                                             frontmatter matches it, the root
@@ -44,7 +44,7 @@ ADAPTER = os.path.dirname(HERE)                        # hosts/zylos
 PLAYBOOK = os.path.dirname(os.path.dirname(ADAPTER))
 EXAMPLE = os.path.join(ADAPTER, "manifest.example.json")
 TEMPLATE = os.path.join(ADAPTER, "ecosystem.config.cjs.template")
-# What a harness copies into <harness>/zylos/ (everything but tests/, the
+# What a skill pack copies into <skill-pack>/zylos/ (everything but tests/, the
 # example and the root-file template).
 VENDORED = ["lib.js", "hooks", "bin", "Caddyfile.snippet", "VERSION", "README.md"]
 NODE = shutil.which("node")
@@ -160,7 +160,7 @@ def skill_md(m: dict) -> str:
     lines = [
         "---",
         f"name: {m['name']}",
-        "description: A fictional harness for the adapter's tests. Use whenever testing. Do NOT use otherwise.",
+        "description: A fictional skill pack for the adapter's tests. Use whenever testing. Do NOT use otherwise.",
         "version: 0.1.0",
         "type: capability",
         "",
@@ -218,7 +218,7 @@ class Host:
         shutil.copy2(TEMPLATE, os.path.join(self.skill, "ecosystem.config.cjs"))
         self.write_manifest(self.m)
         self.write(os.path.join(self.skill, "SKILL.md"), skill_md(self.m))
-        self.write(os.path.join(self.skill, self.m["cli"]["entry"]), "# the harness CLI (a stub)\n")
+        self.write(os.path.join(self.skill, self.m["cli"]["entry"]), "# the skill pack CLI (a stub)\n")
         if console == "playbook":        # the real playbook console, vendored
             shutil.copytree(os.path.join(PLAYBOOK, "console"), os.path.join(self.skill, "console"),
                             ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc"))

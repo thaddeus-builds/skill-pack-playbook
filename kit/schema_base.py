@@ -1,8 +1,8 @@
 """The kit's human tables, as data: what a human (or the gate) decided,
 which no pull can ever rebuild.
 
-`HUMAN` holds the six tables every harness gets (kit.db.with_human merges
-them with the harness's own cache tables):
+`HUMAN` holds the six tables every skill pack gets (kit.db.with_human merges
+them with the skill pack's own cache tables):
 
   * client_facts / client_facts_history   facts about the client, per market
   * decisions / decisions_history         decisions about one entity
@@ -10,11 +10,11 @@ them with the harness's own cache tables):
                                           the human's yes/no on each
   * action_effects                        what each executed write did
 
-Every table has a `market` column (a harness without markets writes the
+Every table has a `market` column (a skill pack without markets writes the
 pseudo-market "_"); every history table has `action`. Column order is the
 physical order: kit.db's drift guard compares it, so a change here is a
 schema change (kit/tests/test_db.py pins schema_hash of these tables:
-changing them means every harness bumps its schema version).
+changing them means every skill pack bumps its schema version).
 
 `APPEND_ONLY` and `FROZEN_COLUMNS` become triggers in the file itself
 (kit.db): history is never rewritten or deleted, a fact or a decision is

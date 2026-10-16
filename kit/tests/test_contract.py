@@ -3,11 +3,11 @@
 
   * emit() prints one JSON line (non-ASCII kept, key order kept);
   * fail() under --json prints exactly {error, next, code, params} on
-    stdout and nothing on stderr; exit 2 for a HarnessError, 1 otherwise;
+    stdout and nothing on stderr; exit 2 for a SkillPackError, 1 otherwise;
     text mode prints error:/next: on stderr only; a gate challenge adds
     `subject` and the rerun command with --code/--relay-user/--relay-at;
     a broken registry still yields a coded document;
-  * missing_db_error(): None with a DB; no_db with the harness's next
+  * missing_db_error(): None with a DB; no_db with the skill pack's next
     (hook, or the default) without one; never creates the file;
   * meta(): every required key always present, malformed parts refused;
   * stale_warning()/coverage_warning(): coded Msgs, None when all is well;
@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import config, contract  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.messages import code, msg  # noqa: E402
 from kit.testing.check import (capture, check, finish, one_doc, raises,  # noqa: E402
                                tmp_dir)
@@ -33,7 +33,7 @@ from kit.testing.check import (capture, check, finish, one_doc, raises,  # noqa:
 FAILURE_KEYS = {"error", "next", "code", "params"}
 
 
-class Challenge(HarnessError):
+class Challenge(SkillPackError):
     """Shaped like kit.human.CodeRequired (confirm_code + subject)."""
 
     def __init__(self, message, *, confirm_code, subject):
@@ -59,9 +59,9 @@ def main() -> int:
           and err == "", out)
 
     print("\n[2] fail(): the one failure output")
-    e = HarnessError(msg("no_db", "No database at /d", path="/d"),
+    e = SkillPackError(msg("no_db", "No database at /d", path="/d"),
                      ["shop facts init"])
-    check("HarnessError keeps message and next",
+    check("SkillPackError keeps message and next",
           e.message == "No database at /d" and e.next == ["shop facts init"]
           and str(e) == "No database at /d")
     rc, out, err = run_fail(e, True)
@@ -93,8 +93,8 @@ def main() -> int:
                               "--relay-at <iso_time>"]
           and set(doc) == FAILURE_KEYS | {"subject"}, doc)
     bad = Path(tmp_dir("broken-"))
-    (bad / "harness.toml").write_text(
-        '[harness]\nname = "x"\ncli = "x"\nenv_prefix = "X"\n'
+    (bad / "skill-pack.toml").write_text(
+        '[skill_pack]\nname = "x"\ncli = "x"\nenv_prefix = "X"\n'
         '[ssot]\nmessage_codes = "missing.tsv"\n')
     config.use(bad)
     rc, out, err = run_fail(RuntimeError("boom"), True)
@@ -108,8 +108,8 @@ def main() -> int:
 
     print("\n[3] missing_db_error(): a read never creates the DB")
     e = contract.missing_db_error()
-    check("no DB: no_db, path, the harness's no_db_next hook",
-          isinstance(e, HarnessError) and code(e.message) == {
+    check("no DB: no_db, path, the skill pack's no_db_next hook",
+          isinstance(e, SkillPackError) and code(e.message) == {
               "code": "no_db", "params": {"path": str(data / "shop.db")}}
           and e.next == ["shop facts init"], e and e.next)
     check("… and nothing was created", not (data / "shop.db").exists())
@@ -121,17 +121,17 @@ def main() -> int:
           == str(data / "other.db"))
     del os.environ["SHOP_DB"]
     plain = Path(tmp_dir("plain-"))
-    (plain / "harness.toml").write_text(
-        '[harness]\nname = "p"\ncli = "pl"\nenv_prefix = "SHOP"\n'
+    (plain / "skill-pack.toml").write_text(
+        '[skill_pack]\nname = "p"\ncli = "pl"\nenv_prefix = "SHOP"\n'
         'version = "1.2.3"\n')
     config.use(plain)
     check("no hook: next = <cli> doctor, <cli> facts init",
           contract.missing_db_error().next == ["pl doctor", "pl facts init"])
-    check("harness version from [harness].version",
-          contract.harness_version() == "1.2.3")
+    check("skill pack version from [skill_pack].version",
+          contract.skill_pack_version() == "1.2.3")
     _shop.use()
     saved = os.environ.pop("SHOP_DATA_DIR")
-    e = raises(contract.missing_db_error, HarnessError)
+    e = raises(contract.missing_db_error, SkillPackError)
     check("no data dir: data_dir_unset, not a cwd default",
           e is not None and e.message.code == "data_dir_unset", e)
     os.environ["SHOP_DATA_DIR"] = saved
@@ -152,10 +152,10 @@ def main() -> int:
           and m["sources"] == [] and m["stale"] == [] and m["coverage"] is None
           and m["thresholds_overridden"] == {} and m["assumed_thresholds"] == {}
           and m["evidence_level"] is None, m)
-    check("harness block: name, version, kit_version",
-          m["harness"] == {"name": "shop-harness", "version": None,
+    check("skill pack block: name, version, kit_version",
+          m["skill_pack"] == {"name": "shop-harness", "version": None,
                            "kit_version": Path(contract.__file__).with_name("VERSION")
-                           .read_text().strip()}, m["harness"])
+                           .read_text().strip()}, m["skill_pack"])
     full = contract.meta(
         window=w, sources=[{"table": "orders", "pulled_on": None}],
         stale=[{"table": "orders", "last_date": "2026-09-05", "lag_days": 5,
@@ -225,7 +225,7 @@ def main() -> int:
     check("None = 0, nothing printed", rc == 0 and out == "")
 
     def refuse(argv):
-        raise HarnessError(msg("no_db", "No database at q", path="q"), ["n"])
+        raise SkillPackError(msg("no_db", "No database at q", path="q"), ["n"])
     rc, out, err = capture(lambda a: contract.run_main(refuse, a, cmd=cmd),
                            ["--json"])
     check("an exception under --json -> the failure doc, exit 2",

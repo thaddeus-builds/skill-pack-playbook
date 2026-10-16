@@ -1,12 +1,12 @@
-"""The output contract every harness verb keeps.
+"""The output contract every skill pack verb keeps.
 
-  * One error base, `HarnessError(message, next)`: `message` is a coded
+  * One error base, `SkillPackError(message, next)`: `message` is a coded
     Msg, `next` the command(s) that fix it.
   * One stdout document under `--json`, a failure included: `fail()`
     prints exactly {"error", "next", "code", "params"[, "subject"]} on
     stdout and nothing on stderr; without --json it prints `error:` /
-    `next:` lines on stderr. Never a traceback. Exit 2 for a HarnessError
-    (a refusal the harness names; the gate's Refused is one), 1 for
+    `next:` lines on stderr. Never a traceback. Exit 2 for a SkillPackError
+    (a refusal the skill pack names; the gate's Refused is one), 1 for
     anything else.
   * A challenge from the human gate (an exception carrying `confirm_code`
     and `subject`, kit.human.CodeRequired) is rendered here too, byte for
@@ -20,7 +20,7 @@
     required keys are always present (None / [] / {} when n/a), so an
     orchestrator never guesses a shape.
 
-Note: the reference harness exited 1 on every failure; the kit follows
+Note: the reference skill pack exited 1 on every failure; the kit follows
 the spec (2 = a named refusal, 1 = anything else). Both are non-zero,
 which is all console/relay.py and runner.run_json look at.
 
@@ -42,8 +42,8 @@ from kit.config import config
 from kit.messages import Msg, failure, joined, msg
 
 
-class HarnessError(Exception):
-    """A failure the harness names: a (coded) message + the command(s) that
+class SkillPackError(Exception):
+    """A failure the skill pack names: a (coded) message + the command(s) that
     fix it."""
 
     def __init__(self, message: Msg | str, next: Iterable[str] = ()):
@@ -64,7 +64,7 @@ def emit(doc: Any) -> None:
 
 def _failure(e: BaseException) -> dict:
     """failure(e), even when the registry itself cannot load (a broken
-    harness.toml is reported through fail() too)."""
+    skill-pack.toml is reported through fail() too)."""
     try:
         return failure(e)
     except Exception:
@@ -95,13 +95,13 @@ def fail(e: BaseException, *, cmd: list[str], as_json: bool) -> int:
         print(f"error: {doc['error']}", file=sys.stderr)
         for c in doc["next"]:
             print(f"next: {c}", file=sys.stderr)
-    return 2 if isinstance(e, HarnessError) else 1
+    return 2 if isinstance(e, SkillPackError) else 1
 
 
-def missing_db_error() -> HarnessError | None:
+def missing_db_error() -> SkillPackError | None:
     """The refusal of a read verb when there is no DB file; None when there
     is one. A read creates nothing: only a write verb makes the DB. `next`
-    = `[contract].no_db_next` of harness.toml (commands after the CLI
+    = `[contract].no_db_next` of skill-pack.toml (commands after the CLI
     word), else `<cli> doctor` + `<cli> facts init`."""
     from kit import paths
     path = paths.db_path()
@@ -113,7 +113,7 @@ def missing_db_error() -> HarnessError | None:
         else ["doctor", "facts init"]
     nxt = [s if s.startswith(f"{cfg.cli} ") else f"{cfg.cli} {s}"
            for s in steps]
-    return HarnessError(msg("no_db", f"No database at {path}",
+    return SkillPackError(msg("no_db", f"No database at {path}",
                             path=str(path)), nxt)
 
 
@@ -124,7 +124,7 @@ SOURCE_KEYS = ("table", "pulled_on")
 STALE_KEYS = ("table", "last_date", "lag_days", "max_lag_days")
 REQUIRED_KEYS = ("window", "sources", "stale", "coverage",
                  "thresholds_overridden", "assumed_thresholds",
-                 "evidence_level", "harness")
+                 "evidence_level", "skill_pack")
 
 
 def _iso(d: date | str) -> str:
@@ -155,10 +155,10 @@ def missing_days(start: date | str, end: date | str,
     return [d for d in span(start, end) if d not in present]
 
 
-def harness_version() -> str | None:
-    """[harness].version of harness.toml, else <root>/VERSION, else None."""
+def skill_pack_version() -> str | None:
+    """[skill_pack].version of skill-pack.toml, else <root>/VERSION, else None."""
     cfg = config()
-    v = cfg.raw.get("harness", {}).get("version")
+    v = cfg.raw.get("skill_pack", {}).get("version")
     if v:
         return str(v)
     f = cfg.root / "VERSION"
@@ -186,8 +186,8 @@ def meta(*, window: dict | None, sources: list[dict], stale: list[dict],
     max_lag_days}], coverage {missing_days, next, …} | None,
     thresholds_overridden {name: …} ({} when none), assumed_thresholds
     ({} when none: anything else means the run is a what-if),
-    evidence_level | None, harness {name, version, kit_version}.
-    `extra` adds keys (a harness's own, e.g. `settled`); it may not
+    evidence_level | None, skill pack {name, version, kit_version}.
+    `extra` adds keys (a skill pack's own, e.g. `settled`); it may not
     replace a required one. A malformed part is a ValueError: a bug in
     the compute, not a runtime condition."""
     if window is not None and not (isinstance(window, dict)
@@ -208,7 +208,7 @@ def meta(*, window: dict | None, sources: list[dict], stale: list[dict],
         "thresholds_overridden": dict(thresholds_overridden or {}),
         "assumed_thresholds": dict(assumed_thresholds or {}),
         "evidence_level": evidence_level,
-        "harness": {"name": cfg.name, "version": harness_version(),
+        "skill_pack": {"name": cfg.name, "version": skill_pack_version(),
                     "kit_version": kit.__version__},
     }
     clash = set(extra or {}) & set(doc)
@@ -292,7 +292,7 @@ class Parser(argparse.ArgumentParser):
     parent's class). --help still prints help and exits 0."""
 
     def error(self, message: str):
-        raise HarnessError(msg("usage", f"{self.prog}: {message}",
+        raise SkillPackError(msg("usage", f"{self.prog}: {message}",
                                prog=self.prog, detail=message),
                            [f"{self.prog} --help"])
 

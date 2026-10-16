@@ -1,16 +1,16 @@
-"""Where a harness's data lands: the one resolver for the data dir and DB.
+"""Where a skill pack's data lands: the one resolver for the data dir and DB.
 
 Every verb, ingest, `kit.db.connect()` and `doctor` read their locations
 from here, so what doctor reports is what the scripts use.
 
   * `<P>_DATA_DIR` is required and never defaults to the cwd: agent shells
     reset it, and a wrong one lands credentials and client data in the
-    wrong place. Unset -> HarnessError(data_dir_unset), whose `next` names
+    wrong place. Unset -> SkillPackError(data_dir_unset), whose `next` names
     the variable. A relative value is cwd-relative too, so it is refused
     the same way (data_dir_not_absolute). `~` is expanded.
   * `<P>_DB` overrides the DB file; a relative one sits under the data
     dir. Default: `<DATA_DIR>/<db_file>`.
-  * `inside_repo(p)`: doctor warns when client data lives in the harness
+  * `inside_repo(p)`: doctor warns when client data lives in the skill pack
     checkout (it would ship in a release or leak into a commit).
 
 Process env only, read at call time (the CLI loads the env chain into
@@ -25,17 +25,17 @@ import os
 from pathlib import Path
 
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 
 
 def data_dir() -> Path:
-    """The client's data directory (absolute), or HarnessError."""
+    """The client's data directory (absolute), or SkillPackError."""
     cfg = config()
     var = cfg.env("DATA_DIR")
     value = os.environ.get(var, "").strip()
     if not value:
-        raise HarnessError(
+        raise SkillPackError(
             msg("data_dir_unset",
                 f"{var} is not set — set it to the directory that holds this "
                 f"client's .env and database. The current directory is never "
@@ -45,7 +45,7 @@ def data_dir() -> Path:
              f"{cfg.cli} doctor"])
     p = Path(value).expanduser()
     if not p.is_absolute():
-        raise HarnessError(
+        raise SkillPackError(
             msg("data_dir_not_absolute",
                 f"{var}={value} is a relative path — set it to an absolute "
                 f"path; the current directory is never used",
@@ -72,13 +72,13 @@ def resolve() -> dict[str, str | None]:
                     (cfg.env("DB"), db_path)):
         try:
             out[var] = str(fn())
-        except HarnessError:
+        except SkillPackError:
             out[var] = None
     return out
 
 
 def inside_repo(p: Path | str) -> bool:
-    """True when `p` is the harness checkout or anything inside it."""
+    """True when `p` is the skill pack checkout or anything inside it."""
     root = config().root.resolve()
     q = Path(p).expanduser().resolve()
     return q == root or root in q.parents

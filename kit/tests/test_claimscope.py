@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claim scope (kit/claimscope.py) holds each of its guards, in two
 domains: an OTC throat product whose approved indication reads
-用嗓过度引起的咽干、咽痛 (a harness with its own kind words, mapped), and
+用嗓过度引起的咽干、咽痛 (a skill pack with its own kind words, mapped), and
 an investment fund whose prospectus allows capital growth and
 diversification (the default kinds).
 
@@ -44,14 +44,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import claimscope, human, messages  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, clean_env, finish, raises, tmp_dir  # noqa: E402
 
 CFG = _shop.use()
 os.environ.pop("KIT_TTY", None)
 SECRET = CFG.env("CONFIRM_CODE_SECRET")
 
-# ---- domain 1: an OTC throat product (the harness's own kind words) --------
+# ---- domain 1: an OTC throat product (the skill pack's own kind words) --------
 THROAT_KINDS = {"symptom": "claim", "condition": "claim",
                 "widener": "always", "scene": "always"}
 THROAT_ROWS = [
@@ -218,7 +218,7 @@ def test_lexicon() -> None:
     rs = throat()
     c1 = next(r for r in rs if r["id"] == "C001")
     a3 = next(r for r in rs if r["id"] == "A003")
-    check("the harness's kind words map to claim / always, the word kept",
+    check("the skill pack's kind words map to claim / always, the word kept",
           c1["kind"] == "claim" and c1["label"] == "symptom"
           and a3["kind"] == "always" and a3["label"] == "scene"
           and c1["names"] == ["咽干", "咽痒"], (c1, a3))
@@ -226,7 +226,7 @@ def test_lexicon() -> None:
           {r["kind"] for r in fund()} == {"claim", "always"})
     bad_regex = rows_of(THROAT_ROWS, drop=())
     e = raises(lambda: claimscope.lexicon(bad_regex, kinds=THROAT_KINDS),
-               HarnessError)
+               SkillPackError)
     check("a bad regex is refused, never skipped (claimscope_row_invalid)",
           code(e) == "claimscope_row_invalid"
           and e.message.params["rule"] == "A099", repr(e))
@@ -245,10 +245,10 @@ def test_lexicon() -> None:
              "blank canonical": {"canonical": " + "}}
     for label, over in cases.items():
         e = raises(lambda: claimscope.lexicon([{**base, **over}]),
-                   HarnessError)
+                   SkillPackError)
         check(f"{label}: refused claimscope_row_invalid",
               code(e) == "claimscope_row_invalid", repr(e))
-    e = raises(lambda: claimscope.lexicon([base, base]), HarnessError)
+    e = raises(lambda: claimscope.lexicon([base, base]), SkillPackError)
     check("an id listed twice is refused", code(e) == "claimscope_row_invalid")
     check("a blank status reads as pending",
           claimscope.lexicon([base])[0]["status"] == "pending")
@@ -433,7 +433,7 @@ def test_record_through_the_gate() -> None:
           and claimscope.load(missing) is None)
     for body in ("{torn", "[1]", '{"allowed": "咽干"}'):
         missing.write_text(body, encoding="utf-8")
-        e = raises(lambda: claimscope.load(missing), HarnessError)
+        e = raises(lambda: claimscope.load(missing), SkillPackError)
         check(f"{body!r}: claimscope_record_invalid",
               code(e) == "claimscope_record_invalid", repr(e))
 
@@ -526,7 +526,7 @@ def test_waivers() -> None:
           and list(exc.subject["items"].values())
           == [[f0["rule"], f0["where"], f0["term"]]], repr(exc))
     w.write_text("{torn", encoding="utf-8")
-    e = raises(lambda: claimscope.open_errors(found, w), HarnessError)
+    e = raises(lambda: claimscope.open_errors(found, w), SkillPackError)
     check("an unreadable waivers file is refused",
           code(e) == "claimscope_waivers_unreadable", repr(e))
     check("waive() without the finding's words is a ValueError",

@@ -13,7 +13,7 @@ backup.
 `ROLES` is that split, and the `append` that `Store._txn` hands out refuses an
 event type outside the caller's role, so the agent has no code path that writes an answer. A human
 event is signed (HMAC-SHA256 over the event, `sig`) with the console's
-secret; whoever holds the secret can `verify()` it. Like the harness's own
+secret; whoever holds the secret can `verify()` it. Like the skill pack's own
 human gate this guards against an agent answering by accident (editing the
 file, running the wrong verb), not against a determined one: keep the secret
 out of the agent's reach (env `CONSOLE_SECRET`) if you want the second.
@@ -76,15 +76,15 @@ CODES = {
     "bad_value": "That answer is not valid for this ask.",
     "forbidden_event": "This side may not write that kind of event.",
     "corrupt_log": "events.jsonl has a line that is not valid; nothing was written.",
-    "gate_unavailable": "This answer needs the harness's gate, which the console was not started with.",
-    "gate_refused": "The harness refused the answer.",
-    "gate_changed": "The harness would write something other than what was shown; nothing was written.",
+    "gate_unavailable": "This answer needs the skill pack's gate, which the console was not started with.",
+    "gate_refused": "The skill pack refused the answer.",
+    "gate_changed": "The skill pack would write something other than what was shown; nothing was written.",
     "bad_signature": "Some human events are not signed by this console's secret.",
     "no_secret": "There is no secret to verify with: set CONSOLE_SECRET or point at the folder the console wrote.",
-    "gate_unsure": "The harness gave no clear answer; it may or may not have been written. Ask the agent to check.",
+    "gate_unsure": "The skill pack gave no clear answer; it may or may not have been written. Ask the agent to check.",
     "server_error": "Something went wrong on our side; nothing was saved.",
-    "not_recorded": "The harness was written, but the console could not record the answer; ask the agent to check.",
-    "gate_timeout": "The harness did not answer in time; ask the agent to check whether it was saved.",
+    "not_recorded": "The skill pack was written, but the console could not record the answer; ask the agent to check.",
+    "gate_timeout": "The skill pack did not answer in time; ask the agent to check whether it was saved.",
     "bad_request": "The request is not one this console understands.",
     "forbidden": "Not allowed (no valid page token, host or user).",
     "too_large": "The request is too large.",
@@ -323,7 +323,7 @@ def _gate(errors, g, step):
     if not (isinstance(expect, dict) and expect and _walk_ok(expect) and not _has_empty(expect)
             and len(canon(expect)) <= LIMITS["expect"]):
         errors.append({"field": "gate.expect", "code": "required",
-                       "message": "expect: the non-empty payload the harness must bind the code to "
+                       "message": "expect: the non-empty payload the skill pack must bind the code to "
                                   "(what the human is told will be written); use \"$value\" for the answer"})
         ok = False
     va = g.get("value_arg", False)
@@ -345,7 +345,7 @@ def _gate(errors, g, step):
     if mk is not None and not (isinstance(mk, str) and TOKEN_RE.match(mk)):
         errors.append({"field": "gate.market", "code": "bad_value",
                        "message": "market: one plain word (letters, digits, _ . : @ / -), "
-                                  "the harness's --market for this call"})
+                                  "the skill pack's --market for this call"})
         ok = False
     if not ok:
         return None
@@ -559,14 +559,14 @@ def check_value(ask: dict, value) -> tuple[str | None, dict | None]:
 
 
 def gate_runs(ask: dict, value: str) -> bool:
-    """Does this answer have to pass the harness's gate? A "no" never does:
+    """Does this answer have to pass the skill pack's gate? A "no" never does:
     nothing is confirmed by refusing."""
     return bool(ask.get("gate")) and not (
         ask["step"] in ("confirm", "approve") and value == "no")
 
 
 def expect_for(ask: dict, value: str) -> dict:
-    """The payload the harness must bind its code to: `expect` with the
+    """The payload the skill pack must bind its code to: `expect` with the
     answer put where it says "$value"."""
     def sub(x):
         if x == "$value":
@@ -580,7 +580,7 @@ def expect_for(ask: dict, value: str) -> dict:
 
 
 def matches(want, got, _top: bool = True) -> bool:
-    """`want` is what the human was shown, `got` what a harness would write.
+    """`want` is what the human was shown, `got` what a skill pack would write.
     At the top level `got` may say more (its envelope: verb, market, version);
     everything `want` names must match exactly: a nested object key for key, so
     an extra item in `got` is refused. Scalars are equal, numbers by value
@@ -985,7 +985,7 @@ class Store:
                gate: dict | None = None) -> dict:
         """Record one answer. `shown` is the hash of the ask as the page
         showed it. `gate` (the relay's result, already run and ok) means the
-        harness was written, so the answer is recorded even if the ask was
+        skill pack was written, so the answer is recorded even if the ask was
         revised meanwhile, and says so."""
         by = self._by("human", user)
         comment = self._say(comment, "comment", "comment", required=False)
@@ -1057,5 +1057,5 @@ class Store:
 
 def check_comment(text) -> str:
     """The comment as it will be stored (cleaned, within its limit), or
-    Refused: a server checks it before it runs a harness, never after."""
+    Refused: a server checks it before it runs a skill pack, never after."""
     return Store._say(text, "comment", "comment", required=False)

@@ -1,20 +1,20 @@
 """Agent evals, the offline half: cases that cannot rot, and a forbidden-command
 pattern that cannot drift from the verb table.
 
-An eval runs a live agent against a harness and grades what it did. The live
+An eval runs a live agent against a skill pack and grades what it did. The live
 run costs money and varies, so it runs by hand before a release. Everything
 that can be checked without a model is checked here, from a test of the
-harness's own (templates/evals/README.md shows the twelve lines):
+skill pack's own (templates/evals/README.md shows the twelve lines):
 
   1. Every case (a folder under the evals dir with a `prompt.md`) has a
      `case.yaml` that names a `scaffold_script` and the rule it tests
-     (`rule:` a quotation of the harness's SKILL.md, found there word for
+     (`rule:` a quotation of the skill pack's SKILL.md, found there word for
      word, in exactly one rule), a prompt with a description, and at least
      one grader; a grader has a `type:`, and a regular expression in it
      compiles.
   2. Every case carries the forbidden-verbs grader, and its pattern is the
      one generated from the verb table (`<scripts_dir>/verbs.py`): every
-     verb of kind gated or external, plus the harness's declared extras and
+     verb of kind gated or external, plus the skill pack's declared extras and
      whole families, plus `--apply` anywhere, spelled as the agent may type
      it (`<cli> <verb>`, or the verb's script called directly, after `;`,
      `&&`, `|`, a newline, a tab, a subshell, a path, or inside `bash -c '...'`
@@ -41,7 +41,7 @@ One more rule holds SKILL.md itself, with or without cases (the generated
   6. SKILL.md's first `##` section is `## Never`, and its table (a `Verb`
      column, and a column that says why only a person runs it) names exactly
      the person-only verbs of the table: every verb of kind gated, and every
-     verb `[guards.evals].extra` names (a verb of another kind the harness
+     verb `[guards.evals].extra` names (a verb of another kind the skill pack
      declares an agent must never run, `facts init` style). A verb is named in
      code font, with or without the cli word (`<cli> facts confirm`); a cell
      may name several. A gated verb added to the table with no row fails, and
@@ -52,7 +52,7 @@ One more rule holds SKILL.md itself, with or without cases (the generated
      external is not person-only by itself: an external read (a pull) is the
      agent's own (the template SKILL.md's Read scope; an eval forbids it only
      because an eval run is offline), and an external write (`execute apply`)
-     is a person's once the harness names it in `extra`.
+     is a person's once the skill pack names it in `extra`.
 
 What the pattern cannot see (and the template README says): a verb whose name
 is only inside a quoted or echoed string is blocked when it follows a space
@@ -64,8 +64,8 @@ Paid for: an agent-behaviour suite kept its forbidden-command pattern by hand,
 a long regular expression that began to miss a verb the moment one was added;
 and 4 of its 9 first cases passed with their rule cut out of the skill: the
 model already behaved that way, so they measured nothing. The Never table:
-a newcomer agent found the video-ads harness's person-only rules scattered over
-five places of its docs (seen once); that harness then gathered them in one
+a newcomer agent found the video-ads skill pack's person-only rules scattered over
+five places of its docs (seen once); that skill pack then gathered them in one
 table at the top of its SKILL.md.
 
 The grader files are the eval runner's own format (templates/evals/README.md
@@ -78,13 +78,13 @@ command, or with `trace=True` over a trace record `{"command": "..."}` as the
 runner serialises a tool call. The runner applies it as a JavaScript regular
 expression: no inline flags, no Python-only syntax.
 
-harness.toml `[guards.evals]`, all optional:
+skill-pack.toml `[guards.evals]`, all optional:
 
   dir          the evals folder (default `evals`)
   skill        the skill file (default `SKILL.md`)
   rules        heading of the rule list in it (default `Rules`)
   never        heading of the person-only verbs' table in it (default `Never`)
-  entries      names an agent may type for the harness (default: the cli and
+  entries      names an agent may type for the skill pack (default: the cli and
                `<cli>.py`)
   kinds        verb kinds an eval agent must never run (default gated, external)
   extra        more forbidden verbs of the table, "facts init" style
@@ -109,8 +109,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from kit import verbs as kverbs
-from kit.config import HarnessConfig
-from kit.guards import harness, report, section, strs
+from kit.config import SkillPackConfig
+from kit.guards import skill_pack, report, section, strs
 
 DEFAULT_KINDS = ("gated", "external")
 HELP_FLAGS = ("--help", "-h")
@@ -124,7 +124,7 @@ ANY = "any"                          # `any --code` in the Never table: a flag o
 
 # ---- the forbidden-command pattern ----------------------------------------
 
-def settings(cfg: HarnessConfig) -> dict[str, Any]:
+def settings(cfg: SkillPackConfig) -> dict[str, Any]:
     g = section(cfg, "guards", "evals")
     entries = strs(g.get("entries"), [cfg.cli, f"{cfg.cli}.py"])
     return {
@@ -409,7 +409,7 @@ def case_problems(name: str, files: dict[str, str], rules: list[str],
         p.append(f"{at}: no case.yaml")
     elif not re.search(r"scaffold_script:\s*\S", files["case.yaml"]):
         p.append(f"{at}/case.yaml: no context.scaffold_script: the agent would get no workspace, and every forbidden-verb "
-                 f"check would pass for lack of a harness to run")
+                 f"check would pass for lack of a skill pack to run")
     if not prompt.get("description"):
         p.append(f"{at}/prompt.md: the front matter has no description")
     for stray in ("rule", "guard"):
@@ -484,7 +484,7 @@ def coverage_problems(rules: list[str], quotes: dict[str, str], uncovered: Itera
 
 
 def check_cases(root: Path | str | None = None) -> list[str]:
-    cfg = harness(root)
+    cfg = skill_pack(root)
     base = Path(root) if root is not None else cfg.root
     s = settings(cfg)
     table = kverbs.load(base / cfg.scripts_dir / "verbs.py")
@@ -528,9 +528,9 @@ def check_cases(root: Path | str | None = None) -> list[str]:
 
 def regenerate(root: Path | str | None = None) -> list[str]:
     """Write the generated forbidden-verbs grader into every case. Returns the
-    paths written (relative to the harness). Run it after a verb changes. A
+    paths written (relative to the skill pack). Run it after a verb changes. A
     `[guards.evals]` that does not match the verb table is refused."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     base = Path(root) if root is not None else cfg.root
     s = settings(cfg)
     table = kverbs.load(base / cfg.scripts_dir / "verbs.py")
@@ -665,9 +665,9 @@ def never_problems(skill: str, verbs: Iterable[Any], entries: Iterable[str],
 
 
 def check_never_table(root: Path | str | None = None) -> list[str]:
-    """never_problems() for the harness at `root` (else the bound one), after
+    """never_problems() for the skill pack at `root` (else the bound one), after
     its `[guards.evals]` values are checked against the verb table."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     base = Path(root) if root is not None else cfg.root
     s = settings(cfg)
     table = kverbs.load(base / cfg.scripts_dir / "verbs.py")
@@ -800,7 +800,7 @@ def never_self_test() -> list[str]:
     if never_problems(_NEVER.replace("| `facts init` |", "| `./shop facts init US`, `shop.py facts confirm` |"), _TABLE, **kw):
         out.append("a cell that names two verbs, by path and with arguments, is refused")
     if never_problems("# Shop\n\n## Rules\n\n- x\n", [v for v in _TABLE if v.kind == "read"], ["shop"]):
-        out.append("a harness with no person-only verb is asked for a Never table")
+        out.append("a skill pack with no person-only verb is asked for a Never table")
     plants = {
         "a gated verb with no row": (_NEVER.replace("| `shop queue approve` | sends money out |\n", ""), kw, "does not name `shop queue approve`"),
         "an extra verb with no row": (_NEVER.replace("| `facts init` | declares the scope |\n", ""), kw, "does not name `shop facts init`"),

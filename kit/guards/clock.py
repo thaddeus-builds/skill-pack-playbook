@@ -1,10 +1,10 @@
-"""One clock: kit/dates.py's now() is the only calendar read in a harness.
+"""One clock: kit/dates.py's now() is the only calendar read in a skill pack.
 
 Every other module reads the time as `dates.now()`, `dates.today()`,
 `dates.host_today()` or `dates.market_day()`, so one patch of
 `kit.dates.now` (a test's, or a golden diff's one instant) reaches every
 read. `check_reads(root)` returns every problem of these rules, by AST, on
-every .py under the harness's code folders except the vendored kit:
+every .py under the skill pack's code folders except the vendored kit:
 
   1. no `.now`, `.today` or `.utcnow` of the stdlib `datetime.datetime` or
      `datetime.date`, however they were imported (`import datetime as dt`,
@@ -21,15 +21,15 @@ The clock itself (`<scripts_dir>/kit/dates.py`) must read the stdlib clock
 once, in `now()`; the vendored kit around it is held byte for byte by the
 drift guard and, in the playbook, by kit/tests/test_clock.py.
 
-harness.toml `[guards.clock]`, all optional:
+skill-pack.toml `[guards.clock]`, all optional:
 
   code     folders of code to lint (default: the scripts dir)
   skip     folders left out (default: the vendored kit)
   clock    the one module that reads the calendar
-  allowed  reads not yet moved, "path::function" = count, for a harness
+  allowed  reads not yet moved, "path::function" = count, for a skill pack
            that adopts the kit late. It must match exactly: a read that
            moved fails here until its row goes too, so the list only
-           shrinks. A new harness starts with none.
+           shrinks. A new skill pack starts with none.
 
 `self_test()` scans a planted file with every forbidden form, so the rule
 cannot pass by looking at nothing.
@@ -42,8 +42,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from kit.config import HarnessConfig
-from kit.guards import harness, report, section, strs
+from kit.config import SkillPackConfig
+from kit.guards import skill_pack, report, section, strs
 
 CLASSES = {"datetime.datetime", "datetime.date"}
 READS = {"now", "today", "utcnow"}
@@ -123,7 +123,7 @@ def scan(source: str) -> list[Hit]:
     return Scan().run(ast.parse(source))
 
 
-def settings(cfg: HarnessConfig) -> tuple[tuple[str, ...], tuple[str, ...],
+def settings(cfg: SkillPackConfig) -> tuple[tuple[str, ...], tuple[str, ...],
                                           str, dict[str, int]]:
     """(code folders, skipped folders, the clock module, allowed reads)."""
     g = section(cfg, "guards", "clock")
@@ -138,7 +138,7 @@ def settings(cfg: HarnessConfig) -> tuple[tuple[str, ...], tuple[str, ...],
 
 def modules(root: Path, code: tuple[str, ...], skip: tuple[str, ...]
             ) -> list[str]:
-    """The .py files under `code` (harness-relative, sorted), `skip`
+    """The .py files under `code` (skill-pack-relative, sorted), `skip`
     folders left out."""
     out = []
     for d in code:
@@ -153,7 +153,7 @@ def modules(root: Path, code: tuple[str, ...], skip: tuple[str, ...]
 
 
 def check_reads(root: Path | str | None = None) -> list[str]:
-    cfg = harness(root)
+    cfg = skill_pack(root)
     base = Path(root) if root is not None else cfg.root
     code, skip, clock, allowed = settings(cfg)
     files = modules(base, code, skip)

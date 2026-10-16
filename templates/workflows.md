@@ -29,7 +29,7 @@ Tell the human: each step's own window and freshness, the entity and rows behind
 
 When: after a meeting with the client, once its transcript is in the client's data folder (`${{env_prefix}}_DATA_DIR/meetings/<date>/`, recorded with consent), never in the checkout.
 
-1. Read the whole transcript. List, each with its quote and timestamp: goals, the client's own words for things, what they want the harness to do, every number they stated, open questions.
+1. Read the whole transcript. List, each with its quote and timestamp: goals, the client's own words for things, what they want the skill pack to do, every number they stated, open questions.
 2. A number with no quote is not written. A range stays a range: ask which end to use.
 3. A number that matches a key in `ssot/fact_keys.tsv` with no value yet: `{{cli}} facts set <key> <value> --source client_meeting_<date> --reason "<hh:mm:ss> <quote>"`. It stays pending.
 4. A number that differs from a confirmed fact: do not set it. Show the human the old value and the new quote; they change it.

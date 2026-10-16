@@ -110,7 +110,7 @@ def problem_log():
     return L
 
 
-RES_TITLE, RES_VALUE, RES_MESSAGE, ERR_DETAIL = "Ask title here", "Given value here", "Harness message here", "Technical detail here"
+RES_TITLE, RES_VALUE, RES_MESSAGE, ERR_DETAIL = "Ask title here", "Given value here", "Skill pack message here", "Technical detail here"
 
 
 def every_page(lang):
@@ -935,7 +935,7 @@ function page(opts = {}) {
 """
 
 
-def test_u11_an_answer_that_writes_to_a_harness_shows_what_before_and_what_after():
+def test_u11_an_answer_that_writes_to_a_skill_pack_shows_what_before_and_what_after():
     for lang in LANGS:
         d = Doc(pages.render_inbox(full_log().state(), ctx(lang)))
         ask = [a for a in d.find_all("details", "ask") if "Title of p1" in a.text()][0]
