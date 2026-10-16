@@ -3,14 +3,14 @@
 labels, made-up ids).
 
   [1] the words: EN and ZH both complete (every key of WORDS, no other, each a word, every template with its {n}); a
-      harness's words laid over EN; an unknown key, an empty word, a template without {n}, a more line that does not
+      skill pack's words laid over EN; an unknown key, an empty word, a template without {n}, a more line that does not
       name the owner's fold, a bad lang refused, the message naming the key; the module's own parts are English; a
       Style carries every name the module exports, and docs/page-style.md's parts table names each with its signature
   [2] the states: the five of kit.pathweights, each its own icon; every state renders colour, word and icon (chip,
-      vchip, legend, card, fold_row) in English, in Chinese and in a harness's own words; an unknown state refused;
+      vchip, legend, card, fold_row) in English, in Chinese and in a skill pack's own words; an unknown state refused;
       tenths() reads as kit.pathweights.tenths()
   [3] the small parts: the status bar grows by the counts in ORDER, the legend line in the words' separator, ten dots,
-      tiles, money in the harness's template, amounts, fitting; every text escaped, a count that is not a whole number
+      tiles, money in the skill pack's template, amounts, fitting; every text escaped, a count that is not a whole number
       refused
   [4] one decision with one copy button (its words, its label too, in its own attributes) and its hint (a command
       without one refused), none without a command; the copy button's script, run under node against a stub page,
@@ -102,8 +102,8 @@ def test_words() -> None:
           and ps.ZH["owner"].startswith("给负责人看"))
     check("EN's more line names the owner's fold too", "For the owner" in ps.EN["more"]
           and ps.EN["owner"].startswith("For the owner"))
-    check("neither set names a currency: money is the harness's", ps.EN["money"] == ps.ZH["money"] == "{n}")
-    check("a harness's words are laid over EN", OWN.words["state_down"] == "weaker" and OWN.words["copy"] == "Copy"
+    check("neither set names a currency: money is the skill pack's", ps.EN["money"] == ps.ZH["money"] == "{n}")
+    check("a skill pack's words are laid over EN", OWN.words["state_down"] == "weaker" and OWN.words["copy"] == "Copy"
           and OWN.lang == "en-GB")
     check("the default style is English, lang en", ps.DEFAULT.words == ps.EN and ps.DEFAULT.lang == "en"
           and ps.Style().words == ps.EN)
@@ -176,7 +176,7 @@ def test_states() -> None:
         lg = style.legend({"down": 2})
         check(f"{st} legend: every state's chip, 0 too", all(style.chip(s) in lg for s in ps.STATES)
               and lg.count("<small>0</small>") == 4 and "<small>2</small>" in lg)
-    check("the chip of a state a harness renamed says its word", "weaker" in OWN.chip("down")
+    check("the chip of a state a skill pack renamed says its word", "weaker" in OWN.chip("down")
           and "down" not in OWN.chip("down").split("</b>")[1])
     for fn in (lambda: ps.chip("maybe"), lambda: ps.word("maybe"), lambda: ps.vchip("maybe", "x"),
                lambda: ps.card("maybe", anchor="a"), lambda: ps.fold_row("maybe", anchor="a", title="t")):
@@ -223,7 +223,7 @@ def test_small_parts() -> None:
           and t.count("&lt;/script&gt;") == 3, t)
     check("money: whole, separated, — for none", (ps.money(None), ps.money(16800), ps.money(922.6), ps.money(0))
           == ("—", "16,800", "923", "0"))
-    check("money in the harness's template", (ZHS.money(16800), OWN.money(16800), ps.money(1234.5, "{n} €"),
+    check("money in the skill pack's template", (ZHS.money(16800), OWN.money(16800), ps.money(1234.5, "{n} €"),
                                                ps.Style({"money": "¥{n}"}).money(5))
           == ("16,800", "$16,800", "1,234 €", "¥5"))
     check("money: a minus before the currency, none for an amount that rounds to 0",
@@ -383,7 +383,7 @@ def test_warnings() -> None:
           and "<b>x" not in own, own)
     for bad in (4, 0, -1, True, 2.0, "3"):
         check(f"a limit of {bad!r} is refused", "limit" in message(ps.warnings, ["a"], limit=bad))
-    check("the box's title is the harness's", "<h2>Look out</h2>" in OWN.warnings(["a"]))
+    check("the box's title is the skill pack's", "<h2>Look out</h2>" in OWN.warnings(["a"]))
 
 
 # ---- [6] story, card, row, folds -------------------------------------------------------------
@@ -618,7 +618,7 @@ def test_skeleton() -> None:
 
 def demo_page(style: ps.Style, *, command: str = "demo close --path 0a1b2c3d4e --shown 3f9a2c1b", warns: int = 2,
               body_extra: str = "", data=None) -> str:
-    """A whole page as a harness writes one: tiles, the bar, the decision, warnings, the map, rows with cards, the
+    """A whole page as a skill pack writes one: tiles, the bar, the decision, warnings, the map, rows with cards, the
     owner's fold last; ids and the command only in the decision and the folds. `body_extra` goes before the fold."""
     counts = {"untested": 3, "testing": 2, "promising": 1, "down": 1, "closed": 1}
     cells = [{"state": s, "href": f"#p-{s}", "title": f"{style.word(s)}: Value {i}"}
@@ -651,7 +651,7 @@ SEEN: list[str] = []                            # each line a broken page below 
 
 def test_problems() -> None:
     print("\n[9] problems(): every rule, each tried on a broken page")
-    for name, style in (("English", ps.DEFAULT), ("Chinese", ZHS), ("a harness's own words", OWN)):
+    for name, style in (("English", ps.DEFAULT), ("Chinese", ZHS), ("a skill pack's own words", OWN)):
         for warns in (2, 6):
             page = demo_page(style, warns=warns)
             got = style.problems(page, commands=[r"\bdemo\b"])
@@ -706,11 +706,11 @@ def test_problems() -> None:
     for what, css in (("an opacity", ".chip{opacity:.7}"), ("an opacity in %", ".vchip small{opacity:60%}"),
                       ("a filter", ".card{filter:grayscale(1)}"), ("a state's fill", ":root{--p-f:#99CCFF}"),
                       ("the ink", ":root{--ink:#777777}")):
-        broken(f"the harness's CSS dims or recolours a state's text: {what}", good.replace("\n</style>", css + "\n</style>"),
+        broken(f"the skill pack's CSS dims or recolours a state's text: {what}", good.replace("\n</style>", css + "\n</style>"),
                "dims or recolours")
     broken("a style attribute that dims", demo_page(ps.DEFAULT, body_extra='<p style="opacity:.5">x</p>'),
            "dims or recolours")
-    fine("the harness's own CSS that dims nothing", good.replace("\n</style>", ":root{--f-body:serif}"
+    fine("the skill pack's own CSS that dims nothing", good.replace("\n</style>", ":root{--f-body:serif}"
                                                                 ".x{opacity:1;filter:none}\n</style>"))
     broken("the style's script changed", good.replace("beforeprint", "afterprint", 1), "script is not on the page")
     broken("a third script", good.replace("</body>", "<script>1</script></body>"), "3 scripts")
@@ -758,7 +758,7 @@ def test_problems() -> None:
     broken("a hash in upper case", demo_page(ps.DEFAULT, body_extra="<p>id 3F9A2C1B77</p>"), "a hash")
     broken("a hash straight after Chinese text", demo_page(ZHS, body_extra="<p>编号0A1B2C3D4E</p>"), "a hash")
     broken("a code in the rest", demo_page(ps.DEFAULT, body_extra="<p>because not_made</p>"), "a code")
-    broken("the harness's command in the rest", demo_page(ps.DEFAULT, body_extra="<p>demo close it</p>"),
+    broken("the skill pack's command in the rest", demo_page(ps.DEFAULT, body_extra="<p>demo close it</p>"),
            "a command", commands=[r"\bdemo\b"])
     fine("a word with digits, a date and a number are not a hash, nor is a dash in Chinese text", demo_page(
         ps.DEFAULT, body_extra="<p>2026-10-13, 16,800 and 12345678 and Value 3a, B2B, 第二批——按顺序</p>"))
@@ -810,7 +810,7 @@ def test_problems() -> None:
            "something after the owner's fold")
     broken("the owner's fold first", ps.page("t", ps.owner("<p>x</p>") + ps.tiles([("1", "a", "b")])
                                              + ps.decision("d", "")), "something after the owner's fold")
-    check("problems() names nothing on a page that keeps the rules, given the harness's command",
+    check("problems() names nothing on a page that keeps the rules, given the skill pack's command",
           ps.problems(good, commands=[re.compile(r"\bdemo\b")]) == [])
     rules = re.findall(r"^(\d)\. \*\*", DOC.split("## The rules", 1)[1].split("\n## ", 1)[0], re.M)
     table = DOC.split("## Checking a page", 1)[1].split("\n## ", 1)[0]

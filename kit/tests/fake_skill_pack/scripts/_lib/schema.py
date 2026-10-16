@@ -1,4 +1,4 @@
-"""The shop harness's schema: one cache table beside the kit's human
+"""The shop skill pack's schema: one cache table beside the kit's human
 tables (kit.db.with_human)."""
 
 from kit import db

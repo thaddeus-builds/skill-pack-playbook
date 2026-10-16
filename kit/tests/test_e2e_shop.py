@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The gate protocol end to end: the fake "shop" harness, driven through
-its own CLI (kit/tests/fake_harness/scripts/shop.py), and the playbook's
+"""The gate protocol end to end: the fake "shop" skill pack, driven through
+its own CLI (kit/tests/fake_skill_pack/scripts/shop.py), and the playbook's
 real console (console/ask.py + console/serve.py) relaying a person's
 clicks. Nothing is imported from console/: both halves meet only in
-their JSON and in the harness command, as in production.
+their JSON and in the skill pack command, as in production.
 
   [1] onboarding: `shop facts init` (piped) leaves the market declaration
       and the answer pending; a write before the declaration is confirmed
@@ -14,7 +14,7 @@ their JSON and in the harness command, as in production.
   [3] serve.py runs with --relay-cmd = the shop CLI and --relay-verbs
       "facts confirm,queue approve" on a free loopback port; the person
       answers the declaration by posting the form the page renders: the
-      console relays the one-time code, the harness writes it confirmed
+      console relays the one-time code, the skill pack writes it confirmed
       (changed_by @relay, the relay audit in its history)
   [4] the fact: its gate appears once the market is confirmed; the
       person types the value; confirmed through the relayed code. The
@@ -27,7 +27,7 @@ their JSON and in the harness command, as in production.
   [5b] every read verb of the table keeps the --json contract on the data
       this run left (history rows, a queue item)
   [6] the console's own record: every answer signed, each with the
-      harness's word
+      skill pack's word
 """
 
 import json
@@ -246,7 +246,7 @@ def test_pending(srv: Console) -> tuple[dict, dict]:
     doc = pending()
     decl = ask_for(doc, "client_facts", key="market_declared")
     cost = ask_for(doc, "client_facts", key="unit_cost")
-    check("the declaration's ask carries the gate the harness binds",
+    check("the declaration's ask carries the gate the skill pack binds",
           decl["step"] == "confirm" and decl["gate"] == {
               "verb": ["facts", "confirm", "market_declared"],
               "value_arg": False,
@@ -270,10 +270,10 @@ def test_pending(srv: Console) -> tuple[dict, dict]:
 def test_declaration(srv: Console, decl: dict) -> None:
     print("\n[3] the person confirms the market in the console")
     status, page = srv.answer(decl["id"], "yes", "we sell in the US")
-    check("the answer is saved with the harness's word",
+    check("the answer is saved with the skill pack's word",
           status == 200 and "res ok" in page, flat(page)[:400])
     row = fact("market_declared")
-    check("the harness wrote the declaration confirmed, through the relay",
+    check("the skill pack wrote the declaration confirmed, through the relay",
           row[:2] == ("US", 0) and row[2].endswith("@relay"), row)
     last = history("market_declared")[-1]
     check("its history: a confirm with the person's reason and the relay "
@@ -405,7 +405,7 @@ def test_record() -> None:
     print("\n[6] the console's record")
     got = ask_py("answers", "--all")
     answers = got.get("answers", [])
-    check("three answers, each verified, each with the harness's word",
+    check("three answers, each verified, each with the skill pack's word",
           len(answers) == 3 and all(a.get("verified") for a in answers)
           and all(isinstance(a.get("gate"), dict) and a["gate"]["ok"]
                   for a in answers), got)

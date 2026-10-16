@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Generate one client's workspace for an existing harness.
+"""Generate one client's workspace for an existing skill pack.
 
-    python3 scaffold/new_client.py --harness ../acme-harness \\
+    python3 scaffold/new_client.py --skill-pack ../acme-skill-pack \\
         --clients ../acme-clients --client northwind --title "Northwind Tea" \\
         [--port 8771] [--lang en|zh] [--language "Traditional Chinese"] \\
         [--relay-verbs "facts confirm,decisions confirm"] [--dry-run]
 
-A harness serves many clients; each client is one folder in a clients
-repository (the SEO harness's seo-researches, the KOL harness's
-kol-clients), never inside the harness checkout. What it writes, under
+A skill pack serves many clients; each client is one folder in a clients
+repository (the SEO skill pack's seo-researches, the KOL skill pack's
+kol-clients), never inside the skill pack checkout. What it writes, under
 <clients>/<client>/:
 
-  * bin/<cli>: the harness pinned to this client, <PREFIX>_DATA_DIR =
-    ./workspace; <PREFIX>_HARNESS (env) points at another checkout;
+  * bin/<cli>: the skill pack pinned to this client, <PREFIX>_DATA_DIR =
+    ./workspace; <PREFIX>_SKILL_PACK (env) points at another checkout;
     <PREFIX>_PYTHON (env, default python3) names the interpreter, and every
     wrapper refuses, in one line naming that variable, one older than
     Python 3.11 (the kit needs tomllib; macOS's own python3 is 3.9);
-  * bin/console: this client's owner console (the harness's vendored
+  * bin/console: this client's owner console (the skill pack's vendored
     console/serve.py), log in workspace/console; each start exports a fresh
     random <PREFIX>_CONFIRM_CODE_SECRET into the console's own process env
     (never written to a file, never printed) so a click can run a gate verb
@@ -27,17 +27,17 @@ kol-clients), never inside the harness checkout. What it writes, under
     `<<fill: …>>` left for who the client is);
   * .claude/settings.json: permissions.deny for every gate verb through
     the wrapper, and for hand edits under workspace/ (deny rules hold in
-    every permission mode; the wrapper is not a second gate, the harness
+    every permission mode; the wrapper is not a second gate, the skill pack
     is: this only stops an agent asking for what it may not do);
   * .claude/launch.json: the console as a preview;
   * .gitignore (workspace/ is data and secrets), reports/, and
     workspace/intake/ (0700, the drop folder), none of it committed.
 
-The gate verbs come from the harness itself (`<cli> verbs --json`, kind
+The gate verbs come from the skill pack itself (`<cli> verbs --json`, kind
 `gated`); the console relays those ending in confirm, approve or answer
 unless --relay-verbs says otherwise. It refuses a client folder that
-exists and is not empty, a clients folder inside the harness, and a
-harness with no harness.toml; `--dry-run` prints the files and writes
+exists and is not empty, a clients folder inside the skill pack, and a
+skill pack with no skill-pack.toml; `--dry-run` prints the files and writes
 nothing. It leaves no `{{` behind. A clients/README.md index is written
 only when there is none; otherwise the row to add is printed.
 
@@ -66,21 +66,21 @@ class Refused(Exception):
     pass
 
 
-def harness_names(harness: Path) -> dict:
-    toml = harness / "harness.toml"
+def skill_pack_names(skill_pack: Path) -> dict:
+    toml = skill_pack / "skill-pack.toml"
     if not toml.is_file():
-        raise Refused(f"{harness} has no harness.toml: not a harness")
-    h = tomllib.loads(toml.read_text(encoding="utf-8")).get("harness", {})
+        raise Refused(f"{skill_pack} has no skill-pack.toml: not a skill pack")
+    h = tomllib.loads(toml.read_text(encoding="utf-8")).get("skill_pack", {})
     for k in ("name", "cli", "env_prefix"):
         if not h.get(k):
-            raise Refused(f"{toml}: [harness].{k} is missing")
+            raise Refused(f"{toml}: [skill_pack].{k} is missing")
     return {"name": h["name"], "cli": h["cli"], "prefix": h["env_prefix"],
             "scripts": h.get("scripts_dir", "scripts")}
 
 
-def gate_verbs(harness: Path, n: dict) -> list[str]:
-    """The words of every `gated` verb, from the harness's own table."""
-    entry = harness / n["scripts"] / f"{n['cli']}.py"
+def gate_verbs(skill_pack: Path, n: dict) -> list[str]:
+    """The words of every `gated` verb, from the skill pack's own table."""
+    entry = skill_pack / n["scripts"] / f"{n['cli']}.py"
     r = subprocess.run([sys.executable, str(entry), "verbs", "--json"],
                        capture_output=True, text=True, timeout=120,
                        env={k: v for k, v in os.environ.items()
@@ -121,10 +121,10 @@ def python_check(p: str, name: str) -> str:
 def files(a, n: dict, gates: list[str], relay: list[str]) -> dict[str, tuple[str, int]]:
     """{relative path: (content, mode)} of the client folder."""
     cli, p = n["cli"], n["prefix"]
-    home = f'"${{{p}_HARNESS:-{a.harness}}}"'
+    home = f'"${{{p}_SKILL_PACK:-{a.skill_pack}}}"'
     wrapper = f"""#!/bin/sh
 # {a.title}: {cli} pinned to this client's workspace ({p}_DATA_DIR = ./workspace).
-# {p}_HARNESS points at another harness checkout; {p}_PYTHON names the interpreter.
+# {p}_SKILL_PACK points at another skill pack checkout; {p}_PYTHON names the interpreter.
 {python_check(p, "bin/" + cli)}export {p}_DATA_DIR="$(cd "$(dirname "$0")/../workspace" && pwd)"
 exec "$py" {home}/{n['scripts']}/{cli}.py "$@"
 """
@@ -133,7 +133,7 @@ exec "$py" {home}/{n['scripts']}/{cli}.py "$@"
 # browser. A click on a gated ask runs the gate through ./bin/{cli} with a
 # relayed one-time code, signed with a random {p}_CONFIRM_CODE_SECRET made
 # fresh at each start and kept only in this process's env: never in a file
-# (the harness never loads it from one), never printed.
+# (the skill pack never loads it from one), never printed.
 set -e
 {python_check(p, "bin/console")}root="$(cd "$(dirname "$0")/.." && pwd)"
 {p}_CONFIRM_CODE_SECRET="$(openssl rand -hex 32)"
@@ -161,8 +161,8 @@ exec "$py" {home}/console/ask.py "$@"
         "runtimeArgs": [str(folder / "bin" / "console")],
         "port": a.port}]}, indent=2) + "\n"
     brief = render(TEMPLATE.read_text(encoding="utf-8"), {
-        "harness_name": n["name"], "title": a.title, "client": a.client,
-        "harness_dir": str(a.harness), "cli": cli, "env_prefix": p,
+        "skill_pack_name": n["name"], "title": a.title, "client": a.client,
+        "skill_pack_dir": str(a.skill_pack), "cli": cli, "env_prefix": p,
         "port": str(a.port), "language": a.language,
         "gate_verbs": ", ".join(f"`{g}`" for g in gates) or "none"})
     return {"bin/" + cli: (wrapper, 0o755), "bin/console": (console, 0o755),
@@ -179,7 +179,7 @@ exec "$py" {home}/console/ask.py "$@"
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--harness", required=True, type=Path)
+    ap.add_argument("--skill-pack", required=True, type=Path)
     ap.add_argument("--clients", required=True, type=Path)
     ap.add_argument("--client", required=True)
     ap.add_argument("--title", required=True)
@@ -195,19 +195,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     try:
-        a.harness = a.harness.expanduser().resolve()
+        a.skill_pack = a.skill_pack.expanduser().resolve()
         if not CLIENT_RE.fullmatch(a.client):
             raise Refused(f"--client {a.client!r}: lower-case letters, "
                           f"digits, '.', '_' and '-' only")
         clients = a.clients.expanduser().resolve()
-        if clients == a.harness or a.harness in clients.parents:
-            raise Refused(f"{clients} is inside the harness: client data "
-                          f"never lives in the harness checkout")
+        if clients == a.skill_pack or a.skill_pack in clients.parents:
+            raise Refused(f"{clients} is inside the skill pack: client data "
+                          f"never lives in the skill pack checkout")
         folder = clients / a.client
         if folder.exists() and any(folder.iterdir()):
             raise Refused(f"{folder} exists and is not empty")
-        n = harness_names(a.harness)
-        gates = gate_verbs(a.harness, n)
+        n = skill_pack_names(a.skill_pack)
+        gates = gate_verbs(a.skill_pack, n)
         relay = ([v.strip() for v in a.relay_verbs.split(",") if v.strip()]
                  if a.relay_verbs else
                  [g for g in gates if g.split()[-1] in RELAYED])
@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     if not index.exists():
         index.write_text(
             f"# {n['name']} clients\n\nOne folder per client, each a "
-            f"workspace for {n['name']}: `bin/{n['cli']}` runs the harness "
+            f"workspace for {n['name']}: `bin/{n['cli']}` runs the skill pack "
             f"against that client's `workspace/` (never committed), "
             f"`bin/console` is the client's owner console, `CLAUDE.md` the "
             f"agent's brief, `reports/` is for people.\n\n"

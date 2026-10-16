@@ -2,21 +2,21 @@
 """kit.messages: a closed registry, both ways, and one placement rule.
 
   * the registry = kit base (message_codes.tsv + message_codes.d/*.tsv,
-    sorted) + the harness's; a code defined twice, a missing meaning, a
+    sorted) + the skill pack's; a code defined twice, a missing meaning, a
     malformed row = error at load;
   * lint_registry() refuses a param named after msg()'s own arguments
     (MSG_ARGS, read from its signature: code, text), planted in a row and in
-    a harness's registry; the kit's own registry passes;
+    a skill pack's registry; the kit's own registry passes;
   * a Msg is its text, with a registered code and exactly its params;
   * coded() / failure() / relayed() / joined() place codes one way;
-  * a harness's fragments (<ssot dir>/message_codes.d/*.tsv, sorted) load
+  * a skill pack's fragments (<ssot dir>/message_codes.d/*.tsv, sorted) load
     beside [ssot].message_codes, same rules: a code defined twice anywhere
     (two fragments, a fragment and the registry, a fragment and the kit) is
     an error naming both files; the ssot index row of the registry covers
     them;
   * check_registry_closed() finds a non-literal code, an unknown code, a
-    params mismatch, `**params`, and a harness code nobody emits (planted
-    bad calls), and passes the shop harness and the kit's foundation.
+    params mismatch, `**params`, and a skill pack code nobody emits (planted
+    bad calls), and passes the shop skill pack and the kit's foundation.
 """
 
 import copy
@@ -44,29 +44,29 @@ FOUNDATION = ["__init__.py", "config.py", "messages.py", "contract.py",
               "raw.py", "paths.py", "env.py", "testing/*.py", "tools/*.py"]
 
 
-def harness(toml_extra: str, codes: str) -> Path:
+def skill_pack(toml_extra: str, codes: str) -> Path:
     d = Path(tmp_dir("h-"))
-    (d / "harness.toml").write_text(
-        '[harness]\nname = "t"\ncli = "t"\nenv_prefix = "T"\n' + toml_extra
+    (d / "skill-pack.toml").write_text(
+        '[skill_pack]\nname = "t"\ncli = "t"\nenv_prefix = "T"\n' + toml_extra
         + '\n[ssot]\nmessage_codes = "codes.tsv"\n', encoding="utf-8")
     (d / "codes.tsv").write_text(codes, encoding="utf-8")
     return d
 
 
 def load_error(toml_extra: str, codes: str) -> Exception | None:
-    config.use(harness(toml_extra, codes))
+    config.use(skill_pack(toml_extra, codes))
     try:
         return raises(messages.registry, messages.RegistryError)
     finally:
         _shop.use()
 
 
-def fragment_harness(frags: dict[str, str], codes: str = HEAD,
+def fragment_skill_pack(frags: dict[str, str], codes: str = HEAD,
                      declared: bool = True) -> Path:
     d = Path(tmp_dir("hf-")).resolve()
     (d / "ssot" / "message_codes.d").mkdir(parents=True)
-    (d / "harness.toml").write_text(
-        '[harness]\nname = "t"\ncli = "t"\nenv_prefix = "T"\n[ssot]\n'
+    (d / "skill-pack.toml").write_text(
+        '[skill_pack]\nname = "t"\ncli = "t"\nenv_prefix = "T"\n[ssot]\n'
         'dir = "ssot"\n' + ('message_codes = "ssot/message_codes.tsv"\n'
                             if declared else ""), encoding="utf-8")
     (d / "ssot" / "message_codes.tsv").write_text(codes, encoding="utf-8")
@@ -80,14 +80,14 @@ def frag_load(d: Path):
     config.use(d)
     try:
         return raises(messages.registry, messages.RegistryError), \
-            (messages.harness_files(), dict(messages.registry())
+            (messages.skill_pack_files(), dict(messages.registry())
              if raises(messages.registry) is None else {})
     finally:
         _shop.use()
 
 
-def test_harness_fragments() -> None:
-    d = fragment_harness({"steer.tsv": HEAD + "steer_low\tsku\tLow {sku}\t低 {sku}\n",
+def test_skill_pack_fragments() -> None:
+    d = fragment_skill_pack({"steer.tsv": HEAD + "steer_low\tsku\tLow {sku}\t低 {sku}\n",
                           "alerts.tsv": HEAD + "alerts_spike\t\tSpike\t激增\n",
                           "notes.txt": "not a registry\n"},
                          HEAD + "t_main\t\tMain\t主\n")
@@ -96,11 +96,11 @@ def test_harness_fragments() -> None:
           err is None and [f.relative_to(d).as_posix() for f in files]
           == ["ssot/message_codes.tsv", "ssot/message_codes.d/alerts.tsv",
               "ssot/message_codes.d/steer.tsv"], (err, files))
-    check("their codes are harness codes, with their own file",
-          reg["steer_low"]["origin"] == "harness"
+    check("their codes are skill pack codes, with their own file",
+          reg["steer_low"]["origin"] == "skill_pack"
           and reg["steer_low"]["params"] == ("sku",)
           and reg["steer_low"]["file"].endswith("message_codes.d/steer.tsv")
-          and reg["t_main"]["origin"] == "harness"
+          and reg["t_main"]["origin"] == "skill_pack"
           and reg["no_db"]["origin"] == "kit")
     for label, frags, codes, needles in (
             ("two fragments", {"a.tsv": HEAD + "dup_x\t\ta\tb\n",
@@ -112,13 +112,13 @@ def test_harness_fragments() -> None:
                                           "a.tsv")),
             ("a fragment and the kit", {"a.tsv": HEAD + "no_db\tpath\ta\tb\n"},
              HEAD, ("no_db", "a.tsv"))):
-        err, _ = frag_load(fragment_harness(frags, codes))
+        err, _ = frag_load(fragment_skill_pack(frags, codes))
         check(f"a code defined twice ({label}) is an error naming both",
               err is not None and all(n in str(err) for n in needles), err)
-    err, _ = frag_load(fragment_harness({"a.tsv": HEAD + "t_y\t\tonly en\t\n"}))
+    err, _ = frag_load(fragment_skill_pack({"a.tsv": HEAD + "t_y\t\tonly en\t\n"}))
     check("a fragment row without a declared language's meaning is an error",
           err is not None and "meaning_zh" in str(err), err)
-    err, (files, reg) = frag_load(fragment_harness(
+    err, (files, reg) = frag_load(fragment_skill_pack(
         {"a.tsv": HEAD + "t_y\t\ty\t乙\n"}, declared=False))
     check("fragments load even when [ssot].message_codes is not declared",
           err is None and "t_y" in reg and len(files) == 1, (err, files))
@@ -127,7 +127,7 @@ def test_harness_fragments() -> None:
            "ssot/index.tsv\tregistry\t—\ttests/t.py\tfile\tthe index\n"
            "ssot/message_codes.tsv\tregistry\tkit/messages.py\ttests/t.py\t"
            "code\tmessage codes\n")
-    d = fragment_harness({"steer.tsv": HEAD + "steer_low\t\tLow\t低\n"})
+    d = fragment_skill_pack({"steer.tsv": HEAD + "steer_low\t\tLow\t低\n"})
     (d / "ssot" / "index.tsv").write_text(idx, encoding="utf-8")
     (d / "tests").mkdir()
     (d / "tests" / "t.py").write_text("", encoding="utf-8")
@@ -147,11 +147,11 @@ def main() -> int:
     _shop.use()
     reg = messages.registry()
 
-    print("[1] registry = kit base ∪ harness")
+    print("[1] registry = kit base ∪ skill pack")
     check("kit base codes are there, origin kit",
           reg["no_db"]["origin"] == "kit" and reg["no_db"]["params"] == ("path",))
-    check("harness codes are there, origin harness",
-          reg["shop_stock_low"]["origin"] == "harness"
+    check("skill pack codes are there, origin skill_pack",
+          reg["shop_stock_low"]["origin"] == "skill_pack"
           and reg["shop_stock_low"]["params"] == ("sku", "units"))
     check("the shared codes are in kit/message_codes.tsv",
           all(reg[c]["file"] == str(messages.BASE_TSV) for c in SHARED))
@@ -174,18 +174,18 @@ def main() -> int:
               "code": "c", "path": "p"}), TypeError) is not None)
     for name in sorted(messages.MSG_ARGS):
         row = {"t_shadow": {"file": "f.tsv", "params": ("sku", name),
-                            "meaning_en": "{sku}", "origin": "harness"}}
+                            "meaning_en": "{sku}", "origin": "skill_pack"}}
         got = messages.lint_registry(row)
         check(f"lint: a param named {name!r} is refused, naming the code",
               len(got) == 1 and "t_shadow" in got[0] and repr(name) in got[0]
               and "msg()'s own arguments" in got[0], got)
-    planted = harness("", HEAD + "t_x\tcode\tx {code}\tx\n")
+    planted = skill_pack("", HEAD + "t_x\tcode\tx {code}\tx\n")
     config.use(planted)
     try:
         got = messages.check_registry_closed(planted, ["*.py"])
     finally:
         _shop.use()
-    check("a harness registry row with a param named code: the row loads, "
+    check("a skill pack registry row with a param named code: the row loads, "
           "and check_registry_closed() reports it",
           any("codes.tsv: t_x: params ['code']" in g for g in got), got)
     check("lint: a param named params is fine (it lands in **params)",
@@ -197,7 +197,7 @@ def main() -> int:
 
     print("\n[2] load errors")
     e = load_error("", HEAD + "no_db\tpath\tagain\t又\n")
-    check("a code in kit base and harness = error naming both files",
+    check("a code in kit base and skill pack = error naming both files",
           e is not None and "no_db" in str(e) and "message_codes.tsv" in str(e)
           and "codes.tsv" in str(e), e)
     e = load_error("", HEAD + "t_x\t\tSomething\t\n")
@@ -213,10 +213,10 @@ def main() -> int:
     check("a code twice in one file = error", e is not None, e)
     e = load_error('languages = ["en", "ja"]',
                    "code\tparams\tmeaning_en\tmeaning_ja\nt_x\t\ta\tb\n")
-    check("a harness language beyond en/zh: harness rows carry it, the kit "
+    check("a skill pack language beyond en/zh: skill pack rows carry it, the kit "
           "base still loads (deviation, see module docstring)", e is None, e)
     e = load_error('languages = ["en", "ja"]', HEAD + "t_x\t\ta\tb\n")
-    check("… and a harness row without it = error",
+    check("… and a skill pack row without it = error",
           e is not None and "meaning_ja" in str(e), e)
 
     frag = Path(tmp_dir("frag-"))
@@ -299,11 +299,11 @@ def main() -> int:
         check(f"relayed: {label} -> unclassified_error",
               r.code == "unclassified_error" and r.params == {"detail": "t"})
 
-    print("\n[5b] a harness's message-code fragments")
-    test_harness_fragments()
+    print("\n[5b] a skill pack's message-code fragments")
+    test_skill_pack_fragments()
 
     print("\n[6] check_registry_closed: planted bad calls")
-    check("the shop harness is closed (kit codes exempt, both shop codes "
+    check("the shop skill pack is closed (kit codes exempt, both shop codes "
           "emitted)", messages.check_registry_closed(
               _shop.SHOP, ["scripts/**/*.py"]) == [],
           messages.check_registry_closed(_shop.SHOP, ["scripts/**/*.py"]))
@@ -330,7 +330,7 @@ def main() -> int:
           "['file']" in text, text)
     check("**params is found", "scripts/bad.py:7: shop_price_missing: params "
           "passed as **mapping" in text, text)
-    check("a harness code nobody emits is found",
+    check("a skill pack code nobody emits is found",
           "code 'shop_stock_low' is registered but no msg() call emits it"
           in text, text)
     check("kit codes are exempt unless strict_kit",

@@ -47,13 +47,13 @@ stderr and exits 2.
 A click writes one way. /answer checks, in this order and each before the next,
 that the ask is open, is still the one the page showed (`changed`), that the value
 is valid, that the comment is (core.check_comment), and only then, if the ask has a
-gate, sends it through the operator's harness (relay.py) and records the
-harness's word with the answer: nothing a harness must not see reaches it, and a
-failure to record it after the harness ran (a refusal, or the disk) is reported as
+gate, sends it through the operator's skill pack (relay.py) and records the
+skill pack's word with the answer: nothing a skill pack must not see reaches it, and a
+failure to record it after the skill pack ran (a refusal, or the disk) is reported as
 "check before you go on", never as "nothing was saved". A refused answer gives the
 typed comment back. One click per ask at a time (`Console.claim`), so a second click
-never runs the harness twice; the lock is held only for the write, never while the
-harness runs. A saved note or reopen answers 303 to the waiting page, which says so
+never runs the skill pack twice; the lock is held only for the write, never while the
+skill pack runs. A saved note or reopen answers 303 to the waiting page, which says so
 (`?done=`: only the known words are shown, nothing else), so a reload cannot
 write twice; the answer and answer-all results are pages of their own. console.js sends
 the forms itself and shows those same lines over the page it is on, so the person never
@@ -98,7 +98,7 @@ LANG_COOKIE = "console_lang"                               # + "_<port>": cookie
 TOKEN_KEY = b"console-page-token"
 HOST_RE = re.compile(r"(\[[0-9a-f:.]+\]|[a-z0-9._-]+)(?::([0-9]{1,5}))?")
 MAX_BODY, DRAIN = 64 * 1024, 1 << 20     # a bigger body is refused; up to DRAIN of it is read so the refusal reaches the client
-RELAY_TIMEOUT = 60.0                     # per call of the harness (relay makes two)
+RELAY_TIMEOUT = 60.0                     # per call of the skill pack (relay makes two)
 FORM = "application/x-www-form-urlencoded"
 SECURITY = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; "
@@ -204,7 +204,7 @@ class Console:
 
     @contextmanager
     def claim(self, id: str):
-        """One click per ask at a time: a second, while the first waits on the harness, finds it taken."""
+        """One click per ask at a time: a second, while the first waits on the skill pack, finds it taken."""
         with self.lock:
             if id in self.busy:
                 raise core.Refused("not_open", id=id, status="answering")
@@ -238,7 +238,7 @@ def _code(e) -> str:
 
 
 def _line(lang: str, cur=None, value=None, refused=None, message: str = "", comment: str = "") -> dict:
-    """One row of a result page. Only a harness's own words travel as `message`; the
+    """One row of a result page. Only a skill pack's own words travel as `message`; the
     comment a person typed comes back with a refusal, so nothing typed is lost."""
     ask = cur["ask"] if cur else None
     line = {"ok": refused is None, "id": cur["id"] if cur else None, "title": ask["title"] if ask else None,
@@ -263,7 +263,7 @@ def _through_gate(c: Console, user: str, ask: dict, value: str, comment: str) ->
 
 def _answer(c: Console, user: str, lang: str, id: str, shown: str, value, comment: str) -> dict:
     """One ask answered. `value` None means its suggestion. Everything that needs
-    no harness is checked first, so a stale page or a bad value never reaches one."""
+    no skill pack is checked first, so a stale page or a bad value never reaches one."""
     gate, typed = None, comment
     try:
         with c.claim(id):
@@ -276,7 +276,7 @@ def _answer(c: Console, user: str, lang: str, id: str, shown: str, value, commen
             value, err = core.check_value(ask, (ask.get("recommend") or {}).get("value") if value is None else value)
             if err:
                 raise core.Refused("bad_value", err["message"], reason=err["reason"])
-            comment = core.check_comment(comment)          # before the harness, not after; it gets the cleaned one
+            comment = core.check_comment(comment)          # before the skill pack, not after; it gets the cleaned one
             if core.gate_runs(ask, value):
                 gate = _through_gate(c, user, ask, value, comment)
             with c.lock:
@@ -284,11 +284,11 @@ def _answer(c: Console, user: str, lang: str, id: str, shown: str, value, commen
     except (core.Refused, OSError) as e:
         cause = getattr(e, "code", type(e).__name__)
         if gate:
-            log.warning("the harness was written for ask %s but the console could not record it (%s)", id, cause)
+            log.warning("the skill pack was written for ask %s but the console could not record it (%s)", id, cause)
             e = core.Refused("not_recorded", id=id, cause=cause)
         elif not isinstance(e, core.Refused):
             log.warning("the answer to ask %s could not be written (%s)", id, cause)
-        return _line(lang, _ask_of(c, id), refused=e, message=str(e) if _code(e) in pages.HARNESS_SAYS else "",
+        return _line(lang, _ask_of(c, id), refused=e, message=str(e) if _code(e) in pages.SKILL_PACK_SAYS else "",
                      comment=typed)
     return _line(lang, _ask_of(c, id), value, message=gate["message"] if gate else "")
 
@@ -545,7 +545,7 @@ def _parser() -> argparse.ArgumentParser:
     add("--allow-host", action="append", default=[], metavar="HOST[:PORT]", help="another Host to answer to")
     add("--title", default="Console")
     add("--lang", choices=i18n.LANGS, default="en")
-    add("--relay-cmd", help="the harness command that answers a gate")
+    add("--relay-cmd", help="the skill pack command that answers a gate")
     add("--relay-verbs", help="comma-separated verb prefixes it may be asked to run, e.g. 'facts confirm,queue approve'")
     add("--default-reason", default="console", help="the reason given to a gate when the person wrote no comment")
     add("--log-level", choices=("debug", "info", "warning"), default="info")

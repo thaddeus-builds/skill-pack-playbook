@@ -7,7 +7,7 @@ The story-check registry (`[ssot].story_checks`, a TSV with columns
 market as an SQL string literal, so an SQL check counts that market's
 rows only); `expect`, what that command's --json must hold; `needs`, the
 tables (`;`-separated) it needs rows in for the market. Each distinct verb
-runs once, through the harness CLI (kit.runner.run_json), with `--json`,
+runs once, through the skill pack CLI (kit.runner.run_json), with `--json`,
 `--market` where the verb takes one, and this run's `--assume` on a
 compute.
 
@@ -40,7 +40,7 @@ reason_code}], summary: {pass, fail, skip}}; exit 0 whatever the stories'
 status: a failed story is a finding, not an error.
 
 Deviations (SPEC §stories / the reference): a verb runs through the
-harness CLI (`<cli>.py <words> -- <rest> --json …`, the dispatcher
+skill pack CLI (`<cli>.py <words> -- <rest> --json …`, the dispatcher
 strips the first `--`), not by importing the verb table's script; a
 verb whose script is in `[layers].spawn_allowed` is refused (the
 reference hard-coded "every compute but this one"); `--assume` goes to
@@ -50,7 +50,7 @@ a `market` column: the reference's 30-day window over its own tables is
 domain, so both are hooks; a refused run exits 2 (kit.contract.fail);
 story_check_registry_missing / _bad are new codes.
 
-A harness runs it as its `compute stories` verb:
+A skill pack runs it as its `compute stories` verb:
 `raise SystemExit(kit.stories.main(sys.argv[1:]))`; every step is a hook
 (verbs, has_rows, resolve_market, run_verb, meta) it may replace.
 
@@ -70,7 +70,7 @@ from typing import Any, Callable, Mapping, NamedTuple
 
 from kit import contract, runner
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, coded, msg, relayed
 
 NONE = "—"
@@ -129,10 +129,10 @@ def rows(path: Path) -> list[dict[str, str]]:
     """The registry's rows (strict TSV: a cell is everything between two
     tabs), refused as a whole when the file or a column is missing."""
     if not path.is_file():
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "story_check_registry_missing",
             f"No story-check registry at {path}: declare [ssot].story_checks "
-            f"in harness.toml and create the file", path=str(path)), [])
+            f"in skill-pack.toml and create the file", path=str(path)), [])
     lines = [line.rstrip("\r").split("\t")
              for line in path.read_text(encoding="utf-8").split("\n")]
     lines = [r for r in lines if any(c.strip() for c in r)]
@@ -140,7 +140,7 @@ def rows(path: Path) -> list[dict[str, str]]:
     missing = [c for c in COLUMNS if c not in head]
     if missing:
         detail = f"the header lacks {', '.join(missing)}"
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "story_check_registry_bad",
             f"{path} is not a valid story-check registry: {detail}",
             path=str(path), detail=detail), [])
@@ -148,7 +148,7 @@ def rows(path: Path) -> list[dict[str, str]]:
     for n, r in enumerate(lines[1:], start=2):
         if len(r) != len(head):
             detail = f"line {n} has {len(r)} cells, the header {len(head)}"
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "story_check_registry_bad",
                 f"{path} is not a valid story-check registry: {detail}",
                 path=str(path), detail=detail), [])
@@ -159,13 +159,13 @@ def rows(path: Path) -> list[dict[str, str]]:
 def load(path: Path | str | None = None, *, verbs: Any = None
          ) -> list[Check]:
     """The registry's checks; a verb that is not a read verb, or a
-    malformed `expect` term, refuses them all (HarnessError)."""
+    malformed `expect` term, refuses them all (SkillPackError)."""
     cfg = config()
     path = Path(path) if path else cfg.ssot_path("story_checks")
     if path is None:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "story_check_registry_missing",
-            "No story-check registry: harness.toml declares no "
+            "No story-check registry: skill-pack.toml declares no "
             "[ssot].story_checks", path=""), [])
     table = verb_table(verbs)
     spawners = _spawners()
@@ -180,7 +180,7 @@ def load(path: Path | str | None = None, *, verbs: Any = None
                 words = []
             v = match(words, table) if words else None
             if v is None or v.kind != "read" or _stem(v.script) in spawners:
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "story_check_verb_refused",
                     f"{path.name} {story}: `{verb}` is not a read verb a "
                     f"story check may run; nothing was run",
@@ -188,7 +188,7 @@ def load(path: Path | str | None = None, *, verbs: Any = None
         expect = () if _none(r["expect"]) else tuple(r["expect"].split())
         for t in expect:
             if not TERM.fullmatch(t):
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "story_check_bad_term",
                     f"{path.name} {story}: `{t}` is not an expect term "
                     f"(path, path>0, path=V, !term); nothing was run",
@@ -280,7 +280,7 @@ def _is_compute(v: Any) -> bool:
 def run_via_cli(verb: str, market: str, assume: list[str], table: list
                 ) -> Any:
     """The verb's --json document, else the runner.ChildFailed its run
-    raised. Run as typed through `<scripts_dir>/<cli>.py`, as the harness
+    raised. Run as typed through `<scripts_dir>/<cli>.py`, as the skill pack
     CLI forwards it; a document without `error` is the verb's output
     whatever its exit (run_json's any_exit: an exit code that flags a
     finding the document carries)."""
@@ -319,7 +319,7 @@ def judge(c: Check, *, market: str, has_rows: Callable[[str], bool],
     cli = config().cli
     if not c.verb:
         return "skip", msg("story_check_ci_only", f"{c.story}: proved by the "
-                           f"harness's tests in CI; no check on the client's "
+                           f"skill pack's tests in CI; no check on the client's "
                            f"data", story=c.story)
     for t in c.needs:
         if not has_rows(t):
@@ -394,7 +394,7 @@ def main(argv: list[str] | None = None, *, verbs: Any = None,
     Hooks: `verbs` (the verb table), `registry` (the TSV path),
     `has_rows(con, table, market)`, `resolve_market(con, explicit, cmd)`
     (default kit.market.resolve), `run_verb(verb, market, assume)`
-    (default: through the harness CLI), `meta(con, market)` (default: an
+    (default: through the skill pack CLI), `meta(con, market)` (default: an
     empty kit.contract.meta)."""
     cfg = config()
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -408,7 +408,7 @@ def main(argv: list[str] | None = None, *, verbs: Any = None,
     cmd = [cfg.cli, "compute", "stories"]
     try:
         args = p.parse_args(argv)
-    except contract.HarnessError as e:
+    except contract.SkillPackError as e:
         head = argv[:argv.index("--")] if "--" in argv else argv
         return contract.fail(e, cmd=cmd, as_json="--json" in head)
     assume = [x for a in args.assume for x in ("--assume", a)]
@@ -450,14 +450,14 @@ def check_registry(path: Path | str | None = None, *, verbs: Any = None,
                    known_tables: set[str] | None = None,
                    required: tuple[str, ...] = (),
                    note_column: str = "note") -> list[str]:
-    """Problems of the registry itself (for the harness's ssot test): it
+    """Problems of the registry itself (for the skill pack's ssot test): it
     loads (read verbs only, well-formed terms); one row per story; a row
     without a verb has no expect and no needs, one with a verb at least
     one expect term; every `needs` is a known table (when given); every
     `required` story has a row; the note column, when present, is set."""
     try:
         checks = load(path, verbs=verbs)
-    except HarnessError as e:
+    except SkillPackError as e:
         return [str(e)]
     cfg = config()
     raw = rows(Path(path) if path else cfg.ssot_path("story_checks"))

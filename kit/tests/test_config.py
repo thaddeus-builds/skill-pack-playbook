@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""kit.config: harness.toml is the one binding, and switching it clears
+"""kit.config: skill-pack.toml is the one binding, and switching it clears
 every kit cache that depends on it.
 
-  * the fake "shop" harness loads with every field typed as the SPEC says;
+  * the fake "shop" skill pack loads with every field typed as the SPEC says;
   * env names are <env_prefix>_<NAME>; ssot_path is root-relative or None;
-  * defaults for the optional keys; a malformed harness.toml fails at load
+  * defaults for the optional keys; a malformed skill-pack.toml fails at load
     naming the key;
   * use() re-binds, clears registered caches (messages.registry among
-    them) and exports KIT_HARNESS_ROOT; config() honours it and otherwise
+    them) and exports KIT_SKILL_PACK_ROOT; config() honours it and otherwise
     walks up from the kit, never from the cwd;
   * importing kit, kit.dates, kit.atomic, kit.single_instance binds no
-    harness (pullers import them).
+    skill pack (pullers import them).
 """
 
 import os
@@ -28,27 +28,27 @@ from kit import config, messages  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 
-def harness(body: str, codes: str | None = None) -> Path:
-    d = Path(tmp_dir("harness-"))
-    (d / "harness.toml").write_text(body, encoding="utf-8")
+def skill_pack(body: str, codes: str | None = None) -> Path:
+    d = Path(tmp_dir("skill-pack-"))
+    (d / "skill-pack.toml").write_text(body, encoding="utf-8")
     if codes is not None:
         (d / "ssot").mkdir()
         (d / "ssot" / "message_codes.tsv").write_text(codes, encoding="utf-8")
     return d
 
 
-MINIMAL = '[harness]\nname = "b"\ncli = "bee"\nenv_prefix = "BEE"\n'
+MINIMAL = '[skill_pack]\nname = "b"\ncli = "bee"\nenv_prefix = "BEE"\n'
 
 
 def main() -> int:
-    print("[1] the shop harness loads, typed")
+    print("[1] the shop skill pack loads, typed")
     cfg = _shop.use()
     check("name / cli / env_prefix / db_file / scripts_dir",
           (cfg.name, cfg.cli, cfg.env_prefix, cfg.db_file, cfg.scripts_dir)
           == ("shop-harness", "shop", "SHOP", "shop.db", "scripts"), cfg)
     check("languages and markets are tuples, in declared order",
           cfg.languages == ("en", "zh") and cfg.markets == ("US", "CA"))
-    check("root is the resolved harness dir", cfg.root == _shop.SHOP.resolve())
+    check("root is the resolved skill pack dir", cfg.root == _shop.SHOP.resolve())
     check("home_env_file '' = no HOME file", cfg.home_env_file == "")
     check("ssot / release / layers / raw kept",
           cfg.ssot["message_codes"] == "ssot/message_codes.tsv"
@@ -72,7 +72,7 @@ def main() -> int:
           and bool(re.fullmatch(r"\d+\.\d+\.\d+", kit.__version__)))
 
     print("\n[2] defaults of the optional keys")
-    b = config.load(harness(MINIMAL))
+    b = config.load(skill_pack(MINIMAL))
     check("db_file defaults to <cli>.db, scripts_dir to scripts",
           b.db_file == "bee.db" and b.scripts_dir == "scripts")
     check("languages default en, zh; markets default () (no partition)",
@@ -81,32 +81,32 @@ def main() -> int:
           b.ssot == {"dir": "ssot"} and b.ssot_path("message_codes") is None)
     check("release / layers default to {}", b.release == {} and b.layers == {})
 
-    print("\n[3] a malformed harness.toml fails at load, naming the key")
+    print("\n[3] a malformed skill-pack.toml fails at load, naming the key")
     bad = {
         "no file": None,
-        "no [harness]": '[ssot]\ndir = "ssot"\n',
-        "[harness].cli": '[harness]\nname = "b"\nenv_prefix = "BEE"\n',
-        "[harness].env_prefix = 'bee'": MINIMAL.replace('"BEE"', '"bee"'),
-        "[harness].env_prefix = 'BEE_'": MINIMAL.replace('"BEE"', '"BEE_"'),
-        "[harness].markets twice": MINIMAL + 'markets = ["US", "US"]\n',
-        "[harness].languages not a list": MINIMAL + 'languages = "en"\n',
-        "[harness].languages empty": MINIMAL + "languages = []\n",
-        "[harness].db_file with a slash": MINIMAL + 'db_file = "a/b.db"\n',
-        "[harness].name not a string": MINIMAL.replace('"b"', "3"),
+        "no [skill_pack]": '[ssot]\ndir = "ssot"\n',
+        "[skill_pack].cli": '[skill_pack]\nname = "b"\nenv_prefix = "BEE"\n',
+        "[skill_pack].env_prefix = 'bee'": MINIMAL.replace('"BEE"', '"bee"'),
+        "[skill_pack].env_prefix = 'BEE_'": MINIMAL.replace('"BEE"', '"BEE_"'),
+        "[skill_pack].markets twice": MINIMAL + 'markets = ["US", "US"]\n',
+        "[skill_pack].languages not a list": MINIMAL + 'languages = "en"\n',
+        "[skill_pack].languages empty": MINIMAL + "languages = []\n",
+        "[skill_pack].db_file with a slash": MINIMAL + 'db_file = "a/b.db"\n',
+        "[skill_pack].name not a string": MINIMAL.replace('"b"', "3"),
         "TOML syntax": MINIMAL + "markets = [\n",
     }
     for label, body in bad.items():
-        d = Path(tmp_dir("bad-")) if body is None else harness(body)
+        d = Path(tmp_dir("bad-")) if body is None else skill_pack(body)
         e = raises(lambda: config.load(d), config.ConfigError)
         key = label.split(" ")[0].split("=")[0].strip()
         check(f"refused: {label}", e is not None
               and (key in str(e) or label in ("no file", "TOML syntax",
-                                               "no [harness]")), e)
+                                               "no [skill_pack]")), e)
 
     print("\n[4] use() re-binds and clears every registered kit cache")
     calls = []
     config.on_reset(lambda: calls.append(1))
-    other = harness(MINIMAL + '\n[ssot]\nmessage_codes = "ssot/message_codes.tsv"\n',
+    other = skill_pack(MINIMAL + '\n[ssot]\nmessage_codes = "ssot/message_codes.tsv"\n',
                     "code\tparams\tmeaning_en\tmeaning_zh\n"
                     "bee_only\t\tOnly in bee\t只在 bee\n")
     check("shop registry holds shop codes", "shop_stock_low" in messages.registry())
@@ -115,37 +115,37 @@ def main() -> int:
     check("messages.registry was cleared: bee codes, no shop codes",
           "bee_only" in messages.registry()
           and "shop_stock_low" not in messages.registry())
-    check("use() exports KIT_HARNESS_ROOT",
+    check("use() exports KIT_SKILL_PACK_ROOT",
           os.environ[config.ROOT_ENV] == str(other.resolve()))
     _shop.use()
     check("back to shop: shop codes again, bee gone",
           "shop_stock_low" in messages.registry()
           and "bee_only" not in messages.registry() and len(calls) == 2)
 
-    print("\n[5] config(): KIT_HARNESS_ROOT, else walk up from the kit")
+    print("\n[5] config(): KIT_SKILL_PACK_ROOT, else walk up from the kit")
     config.reset()
     os.environ[config.ROOT_ENV] = str(other)
-    check("KIT_HARNESS_ROOT decides", config.config().cli == "bee")
+    check("KIT_SKILL_PACK_ROOT decides", config.config().cli == "bee")
     tree = Path(tmp_dir("tree-"))
     (tree / "h" / "scripts" / "kit").mkdir(parents=True)
-    (tree / "h" / "harness.toml").write_text(MINIMAL)
-    check("find_root walks up from a vendored kit dir to the harness",
+    (tree / "h" / "skill-pack.toml").write_text(MINIMAL)
+    check("find_root walks up from a vendored kit dir to the skill pack",
           config.find_root(tree / "h" / "scripts" / "kit") == (tree / "h").resolve())
-    check("find_root: None with no harness.toml above",
+    check("find_root: None with no skill-pack.toml above",
           config.find_root(tree) is None
           or config.find_root(tree) != (tree / "h").resolve())
     config.reset()
     del os.environ[config.ROOT_ENV]
     cwd = os.getcwd()
-    os.chdir(tree / "h")          # a harness.toml in the cwd must not bind
+    os.chdir(tree / "h")          # a skill-pack.toml in the cwd must not bind
     try:
         if config.find_root(_shop.KIT) is None:
             e = raises(config.config, config.ConfigError)
-            check("unbound kit, harness.toml in the cwd: ConfigError, the "
-                  "cwd is never used", e is not None and "KIT_HARNESS_ROOT"
+            check("unbound kit, skill-pack.toml in the cwd: ConfigError, the "
+                  "cwd is never used", e is not None and "KIT_SKILL_PACK_ROOT"
                   in str(e), e)
         else:
-            check("the kit binds the harness above it, not the cwd's",
+            check("the kit binds the skill pack above it, not the cwd's",
                   config.config().root != (tree / "h").resolve())
     finally:
         os.chdir(cwd)

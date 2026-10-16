@@ -6,6 +6,6 @@ __pycache__/
 events.jsonl
 secret
 
-# scaffold/new_harness.py may preview a harness here (the one folder inside
+# scaffold/new_skill_pack.py may preview a skill pack here (the one folder inside
 # the playbook it writes to); never committed
 scaffold/out/

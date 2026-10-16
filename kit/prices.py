@@ -1,7 +1,7 @@
 """Prices: the registry of what each paid vendor call costs, an owner file
 whose rows are pending until a person confirms them through the gate.
 
-The file is a TSV the harness names (e.g. ssot/provider_prices.tsv), one
+The file is a TSV the skill pack names (e.g. ssot/provider_prices.tsv), one
 row per (provider, kind, model):
 
     provider, kind, model   the key (what is called, by whom)
@@ -61,7 +61,7 @@ estimate(), proposals(), propose(), confirm(), lower(), log_path().
 
 Paid for: a price read off a vendor's page was its member price (0.45)
 while the list price was 0.50, and about 30 rows proposed from the vendor's
-catalog waited on the owner, while the harness read every row as a price
+catalog waited on the owner, while the skill pack read every row as a price
 and approved spend against prices nobody had confirmed: its reader ignored
 the status column.
 
@@ -80,7 +80,7 @@ from pathlib import Path
 
 from kit import dates, human
 from kit.atomic import open_atomic
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, msg
 
 KEY_COLS = ("provider", "kind", "model")
@@ -188,14 +188,14 @@ def log_path(path: Path | str) -> Path:
     return p.with_name(p.stem + LOG_SUFFIX)
 
 
-def _invalid(path: Path, detail: str) -> HarnessError:
-    return HarnessError(msg("prices_file_invalid",
+def _invalid(path: Path, detail: str) -> SkillPackError:
+    return SkillPackError(msg("prices_file_invalid",
                             f"{path} is not a price file: {detail}. Nothing "
                             f"was read.", path=str(path), detail=detail))
 
 
-def _bad_row(path: Path, line: int, detail: str) -> HarnessError:
-    return HarnessError(msg("prices_row_invalid",
+def _bad_row(path: Path, line: int, detail: str) -> SkillPackError:
+    return SkillPackError(msg("prices_row_invalid",
                             f"{path} line {line}: {detail}. Nothing was "
                             f"read.", path=str(path), line=line,
                             detail=detail))
@@ -235,7 +235,7 @@ def load(path: Path | str, *, column: str | None = None) -> Registry:
     try:
         raw = path.read_bytes()
     except FileNotFoundError:
-        raise HarnessError(msg("prices_file_missing",
+        raise SkillPackError(msg("prices_file_missing",
                                f"no price file at {path}", path=str(path))
                            ) from None
     except OSError as e:
@@ -278,7 +278,7 @@ def load(path: Path | str, *, column: str | None = None) -> Registry:
             raise _bad_row(path, n, f"status {written!r} is not one of "
                                     f"{', '.join(STATUSES)}")
         if key in rows:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "prices_row_duplicate",
                 f"{path} line {n}: {key_text(key)} is already on line "
                 f"{rows[key].line}. Nothing was read.", path=str(path),
@@ -315,7 +315,7 @@ def estimate(registry: Registry, key: Key, quantity: float, *,
                         msg("prices_missing", f"{name} has no price row",
                             key=name))
     if unit is not None and unit != row.unit:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "prices_unit_mismatch",
             f"{name} is priced {row.unit}, the quantity is {unit}. Nothing "
             f"was estimated.", key=name, unit=unit, expected=row.unit))
@@ -334,8 +334,8 @@ def estimate(registry: Registry, key: Key, quantity: float, *,
 
 def _observed(i: int, o: object, source: str | None,
               read_on: str | None) -> dict:
-    def bad(detail: str) -> HarnessError:
-        return HarnessError(msg("prices_observed_invalid",
+    def bad(detail: str) -> SkillPackError:
+        return SkillPackError(msg("prices_observed_invalid",
                                 f"observed row {i}: {detail}. Nothing was "
                                 f"proposed.", index=i, detail=detail))
     if not isinstance(o, dict):
@@ -414,7 +414,7 @@ def _index(reg: Registry, key: Key) -> int:
     for i, c in enumerate(reg.cells):
         if tuple(c[k] for k in KEY_COLS) == tuple(key):
             return i
-    raise HarnessError(msg("prices_not_found",
+    raise SkillPackError(msg("prices_not_found",
                            f"{key_text(key)} has no row in {reg.path}",
                            key=key_text(key), path=str(reg.path)))
 
@@ -474,7 +474,7 @@ def confirm(path: Path | str, key: Key, *, reason: str | None,
     """A person confirms the price of `key`: they see provider, kind,
     model, value, unit, source and date, and retype the value at the
     terminal, or relay back a code bound to exactly that and the file's
-    content sha. Raises HarnessError (prices_not_found, prices_value_blank,
+    content sha. Raises SkillPackError (prices_not_found, prices_value_blank,
     prices_changed_meanwhile) or kit.human.Refused / CodeRequired."""
     key = tuple(key)
     name = key_text(key)
@@ -482,7 +482,7 @@ def confirm(path: Path | str, key: Key, *, reason: str | None,
     i = _index(reg, key)
     row = reg.row(key)
     if row.value is None:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "prices_value_blank",
             f"{name}: the price is blank; fill it from its source before a "
             f"person confirms it. Nothing was written.", key=name))
@@ -502,7 +502,7 @@ def confirm(path: Path | str, key: Key, *, reason: str | None,
     why += human.relay_audit(channel, relay_user, relay_at)
     now = load(path, column=column)
     if now.sha != reg.sha:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "prices_changed_meanwhile",
             f"{reg.path} changed while the person was being asked, so the "
             f"confirmation of {name} no longer matches it. Nothing was "
@@ -530,7 +530,7 @@ def lower(path: Path | str, key: Key, *, status: str, reason: str | None,
     key = tuple(key)
     name = key_text(key)
     if status not in LOWER:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "prices_status_invalid",
             f"status {status!r} is not one trust can be lowered to "
             f"({', '.join(LOWER)}); raising it is confirm(), through the "

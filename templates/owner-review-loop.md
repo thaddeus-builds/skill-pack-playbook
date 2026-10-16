@@ -1,14 +1,14 @@
 # The owner review loop: one page the owner decides on, read back by the next session
 
-A harness that makes things (a video, a report, a campaign) needs a place where the owner sees the plan before money is spent, and says yes or no per item. Chat scrolls away and a file on disk is invisible to them. A published page with a small store is the place.
+A skill pack that makes things (a video, a report, a campaign) needs a place where the owner sees the plan before money is spent, and says yes or no per item. Chat scrolls away and a file on disk is invisible to them. A published page with a small store is the place.
 
-*Seen once:* a Douyin ad harness. The owner said the first mock preview "sucks" and asked to see the script, the elements and the prompts first. The review page turned that into nine decisions in one sitting: cast, voices, mode, script policy, and a request for a sample. The next session read them back and applied them in minutes.
+*Seen once:* a Douyin ad skill pack. The owner said the first mock preview "sucks" and asked to see the script, the elements and the prompts first. The review page turned that into nine decisions in one sitting: cast, voices, mode, script policy, and a request for a sample. The next session read them back and applied them in minutes.
 
 ## Shape
 
 ```mermaid
 flowchart LR
-    V["plan vN<br/>(storyboard, report, batch)"] --> P["review page<br/>built by a harness verb"]
+    V["plan vN<br/>(storyboard, report, batch)"] --> P["review page<br/>built by a skill pack verb"]
     P --> O{"owner decides<br/>per item: approve / change + note<br/>per question: pick an option"}
     O --> S["page store<br/>collection feedback"]
     S --> N["next session reads it<br/>saves feedback/&lt;date&gt;.json"]
@@ -19,7 +19,7 @@ flowchart LR
 
 ## Rules
 
-1. **The page is a harness output, not hand-made.** A verb (e.g. `review --site DIR`) turns the plan into `index.html` + `media/`. Every revision regenerates it, so the page never drifts from the plan.
+1. **The page is a skill pack output, not hand-made.** A verb (e.g. `review --site DIR`) turns the plan into `index.html` + `media/`. Every revision regenerates it, so the page never drifts from the plan.
 2. **Republish to the same URL,** so the owner keeps one bookmark. Decisions keyed by item id survive republishes.
 3. **One store document per decision**, keyed by what it decides: `feedback/<item id>`, `feedback/q_<question>`. Each body is `{kind, target, decision | value, note, updated, plan_version}`. The plan version tells the next session which revision the owner was looking at.
 4. **Show real material, not placeholders.** Mocks read as the product and get rejected. Show real stills, real voices and real client footage; where something is a stand-in, label it so.

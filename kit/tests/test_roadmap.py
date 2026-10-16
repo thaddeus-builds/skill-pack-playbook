@@ -4,8 +4,8 @@
   [0] self_test: a sound roadmap passes and every planted break is caught;
       each break is also planted here, one by one, on the sound text
   [1] the shipped template, its placeholders filled as the scaffolder fills
-      them, passes, so a harness that starts from it starts green
-  [2] a harness's file: docs/ROADMAP.md or ROADMAP.md is found, two of them
+      them, passes, so a skill pack that starts from it starts green
+  [2] a skill pack's file: docs/ROADMAP.md or ROADMAP.md is found, two of them
       or none is a problem, [guards.roadmap] file is honoured, a broken file
       is reported with its name
   [3] edge cases: CRLF, a byte order mark, blank sections, a comment under
@@ -29,7 +29,7 @@ TEMPLATE = _shop.PLAYBOOK / "templates" / "ROADMAP.md"
 
 def filled() -> str:
     text = TEMPLATE.read_text(encoding="utf-8")
-    return text.replace("{{name}}", "acme-harness").replace("{{today}}", "2026-10-01")
+    return text.replace("{{name}}", "acme-skill-pack").replace("{{today}}", "2026-10-01")
 
 
 def test_rules() -> None:
@@ -56,15 +56,15 @@ def test_template() -> None:
           roadmap.sections(filled()))
 
 
-def harness_at(root: Path) -> Path:
+def skill_pack_at(root: Path) -> Path:
     root.mkdir(parents=True)
-    shutil.copy(_shop.SHOP / "harness.toml", root / "harness.toml")
+    shutil.copy(_shop.SHOP / "skill-pack.toml", root / "skill-pack.toml")
     return root
 
 
-def test_harness_file() -> None:
-    print("\n[2] a harness's file")
-    root = harness_at(Path(tmp_dir()) / "h")
+def test_skill_pack_file() -> None:
+    print("\n[2] a skill pack's file")
+    root = skill_pack_at(Path(tmp_dir()) / "h")
     got = roadmap.check_roadmap(root)
     check("no roadmap is reported, by its default home",
           len(got) == 1 and got[0].startswith("docs/ROADMAP.md does not exist"), got)
@@ -80,7 +80,7 @@ def test_harness_file() -> None:
     got = roadmap.check_roadmap(root)
     check("a broken file is reported with its name",
           len(got) == 1 and got[0].startswith("ROADMAP.md: the sections"), got)
-    with open(root / "harness.toml", "a", encoding="utf-8") as f:
+    with open(root / "skill-pack.toml", "a", encoding="utf-8") as f:
         f.write('\n[guards.roadmap]\nfile = "plan/ROADMAP.md"\n')
     (root / "plan").mkdir()
     (root / "plan" / "ROADMAP.md").write_text(filled(), encoding="utf-8")
@@ -108,7 +108,7 @@ def test_edges() -> None:
 def main() -> None:
     test_rules()
     test_template()
-    test_harness_file()
+    test_skill_pack_file()
     test_edges()
 
 

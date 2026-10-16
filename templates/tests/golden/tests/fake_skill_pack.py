@@ -1,7 +1,7 @@
-"""The smallest harness the example cases.py fits, as a git repository.
+"""The smallest skill pack the example cases.py fits, as a git repository.
 
 build(root) writes it and commits it once, with this module's engine.py and
-cases.py copied to tests/golden/ as a harness adopts them. It has a verb
+cases.py copied to tests/golden/ as a skill pack adopts them. It has a verb
 table, a clock seam, a runner seam, a registry default, fixtures, a report
 with a variant and a failure document, a verb whose child verb must be pinned
 too, a dry run, and a console of two pages in two languages. Test-only
@@ -237,7 +237,7 @@ if __name__ == "__main__":
         store.save("APPLIED", plan)
     print(json.dumps({"meta": store.meta(), "dry_run": "--apply" not in sys.argv,
                       "key_loaded": bool(os.environ.get("FAKE_API_KEY")) or os.path.exists(
-                          os.path.join(os.path.expanduser("~"), ".fake-harness", "credentials")),
+                          os.path.join(os.path.expanduser("~"), ".fake-skill-pack", "credentials")),
                       "would_write": plan, "child_today": doc["meta"]["today"]}))
 ''',
     "console.py": '''\
@@ -297,7 +297,7 @@ def git(repo: Path, *args: str) -> str:
 
 
 def build(root: Path) -> Path:
-    """The fake harness at root/repo, one commit on main; returns the repo."""
+    """The fake skill pack at root/repo, one commit on main; returns the repo."""
     repo = root / "repo"
     for rel, text in FILES.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -307,7 +307,7 @@ def build(root: Path) -> Path:
         shutil.copy(MODULE / name, repo / "tests" / "golden" / name)
     git(repo, "init", "-q", "-b", "main")
     git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "fake harness")
+    git(repo, "commit", "-q", "-m", "fake skill pack")
     return repo
 
 

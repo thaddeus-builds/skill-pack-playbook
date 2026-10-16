@@ -1,17 +1,17 @@
-"""The adapter's boundary: generic code, harness words only in the manifest.
+"""The adapter's boundary: generic code, skill pack words only in the manifest.
 
   * lib.js, the hooks, bin, the root-file template and the Caddy snippet name
-    no harness (amazon, ppc, spapi, kol, …) and hold none of the example
-    manifest's own values: everything harness-specific is read from
+    no skill pack (amazon, ppc, spapi, kol, …) and hold none of the example
+    manifest's own values: everything skill-pack-specific is read from
     zylos/manifest.json;
   * Node stdlib only (Zylos runs hooks with no npm install); the hooks and
-    bin are thin wrappers that load ../lib.js and nothing else of the harness;
+    bin are thin wrappers that load ../lib.js and nothing else of the skill pack;
   * the bin files are executable node scripts (core links them);
   * the root ecosystem file is the 3-line template; VERSION is semver;
   * the Caddy snippet strips the prefix (handle_path), keeps the public Host,
     strips then sets the user header, and redirects to the trailing slash;
   * README.md documents every manifest key, every placeholder, what a
-    harness writes, and the known limits.
+    skill pack writes, and the known limits.
 
 Run: python3 hosts/zylos/tests/test_boundary.py
 """
@@ -30,9 +30,9 @@ from _host import ADAPTER, Host, example  # noqa: E402
 CODE = ["lib.js", *(f"hooks/{h}.js" for h in ("configure", "post-install", "post-upgrade", "pre-uninstall")),
         *(f"bin/{b}.js" for b in ("cli", "detach", "console"))]
 GENERIC = CODE + ["ecosystem.config.cjs.template", "Caddyfile.snippet"]
-# Real harnesses the adapter was distilled from or is for; nowhere in this folder.
-HARNESS_WORDS = ["amazon", "ppc", "spapi", "sp-api", "kol", "sellersprite", "sqs", "webconsole"]
-# The example harness's words: only the example and the docs may use them
+# Real skill packs the adapter was distilled from or is for; nowhere in this folder.
+SKILL_PACK_WORDS = ["amazon", "ppc", "spapi", "sp-api", "kol", "sellersprite", "sqs", "webconsole"]
+# The example skill pack's words: only the example and the docs may use them
 # (generic hints in lib.js say "acme").
 EXAMPLE_WORDS = ["shop", "northwind"]
 
@@ -50,10 +50,10 @@ def test_the_adapter_files_are_all_there():
     assert want == have, (sorted(want - have), sorted(have - want))
 
 
-def test_no_harness_names_in_the_generic_files():
+def test_no_skill_pack_names_in_the_generic_files():
     for rel in GENERIC + ["README.md", "manifest.example.json"]:
         low = read(rel).lower()
-        words = HARNESS_WORDS + (EXAMPLE_WORDS if rel in GENERIC else [])
+        words = SKILL_PACK_WORDS + (EXAMPLE_WORDS if rel in GENERIC else [])
         hits = [w for w in words if w in low]
         assert not hits, (rel, hits)
     assert "ppc" in "run PPC_DATA_DIR".lower(), "the rule bites (case-insensitive)"

@@ -3,7 +3,7 @@
 
   * every kit module has exactly one row and every row names a module;
   * base and testkit exist; a module imports only base and its own pack
-    (lazy imports included), so a harness that takes base alone can import
+    (lazy imports included), so a skill pack that takes base alone can import
     all of it;
   * the import reader tells a module from a name, and a package's names
     from its submodules;
@@ -62,13 +62,13 @@ def main() -> int:
     print("\n[4] [kit] packs")
     h = Path(tmp_dir("packs-"))
     names = set(table.values())
-    (h / "harness.toml").write_text('[harness]\nname = "p"\n')
+    (h / "skill-pack.toml").write_text('[skill_pack]\nname = "p"\n')
     check("absent: every pack", packs.chosen(h, KIT) == names)
-    (h / "harness.toml").write_text('[harness]\nname = "p"\n[kit]\npacks = []\n')
+    (h / "skill-pack.toml").write_text('[skill_pack]\nname = "p"\n[kit]\npacks = []\n')
     check("empty: base and testkit", packs.chosen(h, KIT) == set(packs.ALWAYS))
     for body, words in (('packs = ["video"]', "unknown pack: video"),
                         ('packs = "data"', "must be a list")):
-        (h / "harness.toml").write_text(f'[harness]\nname = "p"\n[kit]\n{body}\n')
+        (h / "skill-pack.toml").write_text(f'[skill_pack]\nname = "p"\n[kit]\n{body}\n')
         try:
             packs.chosen(h, KIT)
             err = ""

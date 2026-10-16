@@ -1,5 +1,5 @@
 """Set cells in a copy of a client's .xlsx workbook, with the standard
-library only, so the client opens their own file with the harness's
+library only, so the client opens their own file with the skill pack's
 numbers in it. The original is never written; the copy is new bytes.
 
     p = plan(wb, sets, ours)           # what will be set, and what not
@@ -17,7 +17,7 @@ What it guards:
     the calculation chain and every other part are not touched: a text is
     written inline (`t="inlineStr"`), a set cell keeps its style.
   * The client's own cells win. A cell holding a formula is never set
-    (workbook_patch_formula); a cell holding a value the harness did not
+    (workbook_patch_formula); a cell holding a value the skill pack did not
     write there last time (`ours`, the values its previous copy set) is
     never set (workbook_patch_client_value); a cell a merge covers, other
     than the merge's anchor, is never set (workbook_patch_merged); a
@@ -31,7 +31,7 @@ What it guards:
     whose cells sit under a namespace prefix (`<x:row>`) is refused,
     coded (workbook_patch_unsupported), never guessed.
 
-Placing a harness's results comes from the client's map
+Placing a skill pack's results comes from the client's map
 (kit.workbook_map), never from a cell address in code:
 
   * table_sets(wb, map, table_id, rows, owner): one row per key of the
@@ -90,7 +90,7 @@ class Plan:
     kept: list[dict] = field(default_factory=list)   # {sheet, ref, field, why}
 
     def written(self) -> list[dict]:
-        """What the copy holds from the harness (the next plan's `ours`)."""
+        """What the copy holds from the skill pack (the next plan's `ours`)."""
         return [{"sheet": s.sheet, "ref": s.ref, "value": s.value}
                 for s in self.apply + self.same]
 
@@ -200,8 +200,8 @@ def _cell_xml(ref_: str, v: object, style: str | None) -> str:
 
 
 def _unsupported(part: str, why: str) -> Exception:
-    from kit.contract import HarnessError
-    return HarnessError(msg("workbook_patch_unsupported",
+    from kit.contract import SkillPackError
+    return SkillPackError(msg("workbook_patch_unsupported",
                             f"{part}: {why}; the copy is not written",
                             part=part, reason=why))
 
@@ -338,7 +338,7 @@ def apply(src: bytes, p: Plan) -> bytes:
     return out.getvalue()
 
 
-# ---- placing a harness's results by the map --------------------------------
+# ---- placing a skill pack's results by the map --------------------------------
 
 def table_sets(wb: Workbook, m: wm.Map, table_id: str,
                rows: dict[str, dict], owner: str
@@ -403,7 +403,7 @@ def table_sets(wb: Workbook, m: wm.Map, table_id: str,
     gone = [k for k in rows if k not in seen]
     if gone:
         out.append(msg("workbook_patch_keys_missing",
-                       f"{table_id}: {len(gone)} key(s) the harness has "
+                       f"{table_id}: {len(gone)} key(s) the skill pack has "
                        f"are not rows of the sheet; not added",
                        table_id=table_id, count=len(gone)))
     return sets, out

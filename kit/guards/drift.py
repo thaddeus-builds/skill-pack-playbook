@@ -1,14 +1,14 @@
 """A vendored kit or console is a plain copy nobody edits in place.
 
-kit/tools/vendor.py copies the playbook's kit/ to <harness>/<scripts_dir>/
-kit/ and console/ to <harness>/console/, and writes a MANIFEST.sha256 in
+kit/tools/vendor.py copies the playbook's kit/ to <skill-pack>/<scripts_dir>/
+kit/ and console/ to <skill-pack>/console/, and writes a MANIFEST.sha256 in
 each (kit/tools/manifest.py). A fix goes upstream first and is then
 re-vendored, so:
 
   * `check_vendored(dir)`: every file under `dir` matches its
     MANIFEST.sha256 (a changed, added or removed file is named), and its
     VERSION is present, non-empty and covered by the manifest;
-  * `check_harness(root)`: the harness has a vendored kit, both copies
+  * `check_skill_pack(root)`: the skill pack has a vendored kit, both copies
     (the console when present) pass check_vendored, and the console's
     VERSION equals the kit's: they are vendored together.
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kit.guards import harness, report
+from kit.guards import skill_pack, report
 from kit.tools import manifest
 
 
@@ -38,15 +38,15 @@ def check_vendored(dir: Path | str) -> list[str]:
     return out
 
 
-def check_harness(root: Path | str | None = None) -> list[str]:
-    """The harness's vendored kit (and console, when present) match their
+def check_skill_pack(root: Path | str | None = None) -> list[str]:
+    """The skill pack's vendored kit (and console, when present) match their
     manifests and carry the same VERSION."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     kit_dir = cfg.root / cfg.scripts_dir / "kit"
     console = cfg.root / "console"
     if not kit_dir.is_dir():
         return [f"no vendored kit at {cfg.scripts_dir}/kit/ (run "
-                f"kit/tools/vendor.py --harness {cfg.root})"]
+                f"kit/tools/vendor.py --skill-pack {cfg.root})"]
     out = check_vendored(kit_dir)
     if console.is_dir():
         out += check_vendored(console)
@@ -61,6 +61,6 @@ def check_harness(root: Path | str | None = None) -> list[str]:
 
 
 def check_drift(root: Path | str | None = None) -> bool:
-    """check_harness() as one kit.testing.check line."""
+    """check_skill_pack() as one kit.testing.check line."""
     return report("drift: the vendored kit and console match their "
-                  "manifests", check_harness(root))
+                  "manifests", check_skill_pack(root))

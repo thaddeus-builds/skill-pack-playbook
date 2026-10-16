@@ -47,8 +47,8 @@ import serve  # noqa: E402
 CONSOLE, AGENT, TOP = "console/README.md", "console/AGENT.md", "docs/consoles.md"
 QUEUE, INSTR = "templates/owner-queue-item.md", "templates/AGENT_INSTRUCTIONS.md"
 DOCS = (CONSOLE, AGENT, TOP, QUEUE, INSTR)
-HARNESS_FLAGS = {"--value", "--market", "--reason", "--json", "--code", "--relay-user",
-                 "--relay-at"}                                    # a harness's, not ours
+SKILL_PACK_FLAGS = {"--value", "--market", "--reason", "--json", "--code", "--relay-user",
+                 "--relay-at"}                                    # a skill pack's, not ours
 SCHEMATIC = {"--name"}                                                                       # `--name=value`, the shape
 LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
 PATH = re.compile(r"(?<![\w/.-])((?:console|templates)/[A-Za-z0-9_./-]*[A-Za-z0-9_/])")
@@ -173,7 +173,7 @@ def test_every_flag_the_docs_show_is_real_and_the_ones_that_matter_are_shown():
     for rel in (CONSOLE, AGENT, QUEUE):
         shown = set(FLAG.findall(doc(rel)))
         assert shown, rel
-        assert not shown - real - HARNESS_FLAGS - SCHEMATIC, (rel, sorted(shown - real - HARNESS_FLAGS - SCHEMATIC))
+        assert not shown - real - SKILL_PACK_FLAGS - SCHEMATIC, (rel, sorted(shown - real - SKILL_PACK_FLAGS - SCHEMATIC))
     assert "--gone" in set(FLAG.findall("`--gone`")) - real                # the check would notice
     said = "".join(doc(r) for r in (CONSOLE, AGENT))
     for flag in ("--user", "--user-header", "--allow-host", "--host", "--port", "--relay-cmd", "--relay-verbs",
@@ -489,7 +489,7 @@ def test_an_answer_the_gate_wrote_cannot_be_reopened_as_the_docs_say():
         with _t.assert_raises("already_applied"):
             store.reopen("alice", gated["id"], seq(gated["id"]))
         store.reopen("alice", plain["id"], seq(plain["id"]))                 # an answer nothing was written for can be taken back
-    assert "not once a harness's gate has written the answer (`already_applied`" in doc(CONSOLE)
+    assert "not once a skill pack's gate has written the answer (`already_applied`" in doc(CONSOLE)
     assert "the owner cannot reopen it" in doc(AGENT)
 
 
@@ -511,7 +511,7 @@ def test_the_top_readme_does_not_promise_what_the_console_does_not_do():
     assert core.validate_ask(typed)[1] == []                                 # a typed value may go without a recommendation
     choose = {k: v for k, v in example("choose-priority.json").items() if k != "recommend"}
     assert [e["field"] for e in core.validate_ask(choose)[1]] == ["recommend"]   # every other step may not
-    assert "never typed" not in top and "the one thing typed is a value the harness validates" in top
+    assert "never typed" not in top and "the one thing typed is a value the skill pack validates" in top
     assert "(a typed value may go without one)" in top
     assert "Widening what may be written counts only when typed in chat, not clicked on a page." in top
     assert "answered in chat (rule 8), not clicked" in top
@@ -603,11 +603,11 @@ def test_a_proxy_must_pass_the_host_through_as_the_docs_say():
     assert "so it stays under the prefix" in text and "`Path`" in text
 
 
-def test_a_harness_that_stalls_may_have_written_and_the_docs_and_words_say_so():
+def test_a_skill_pack_that_stalls_may_have_written_and_the_docs_and_words_say_so():
     assert "may have written" in relay.LATE and "ask the agent" in core.CODES["gate_timeout"]
     assert "may or may not have been saved" in i18n.t("err.gate_timeout", "en")
     assert "may or may not have been saved" in doc(AGENT)
-    assert "**the harness may have written**" in doc(CONSOLE) and "the ask stays open" in doc(CONSOLE)
+    assert "**the skill pack may have written**" in doc(CONSOLE) and "the ask stays open" in doc(CONSOLE)
     assert int(serve.RELAY_TIMEOUT) == 60 and "Each call gets 60 seconds" in doc(CONSOLE)
 
 
@@ -615,11 +615,11 @@ def test_the_relay_protocol_in_the_readme_is_the_one_relay_speaks():
     readme = doc(CONSOLE)
     assert relay.CHALLENGE in readme and f"{relay.MAX_MESSAGE} characters" in readme
     gated_ask, _ = core.validate_ask(example("provide-number.json"))
-    with _t.tmpdir() as d:                                                  # one real exchange, as the harness sees it
+    with _t.tmpdir() as d:                                                  # one real exchange, as the skill pack sees it
         log = os.path.join(d, "calls")
-        env = {**os.environ, "FAKE_HARNESS_LOG": log, "FAKE_HARNESS_STATE": os.path.join(d, "state")}
+        env = {**os.environ, "FAKE_SKILL_PACK_LOG": log, "FAKE_SKILL_PACK_STATE": os.path.join(d, "state")}
         with stdin_is_a_pipe():
-            got = relay.run(gated_ask, "4.20", cmd=[sys.executable, os.path.join(HERE, "fake_harness.py")],
+            got = relay.run(gated_ask, "4.20", cmd=[sys.executable, os.path.join(HERE, "fake_skill_pack.py")],
                             verbs=[["facts", "confirm"]], user="alice", reason="why", timeout=20, env=env)
         assert got["ok"], got
         with open(log, encoding="utf-8") as f:
@@ -638,7 +638,7 @@ def test_the_relay_protocol_in_the_readme_is_the_one_relay_speaks():
     assert "is one `--name=value` argument" in readme
 
 
-HARNESS = """import json, os, sys
+SKILL_PACK = """import json, os, sys
 if not any(a.startswith("--code=") for a in sys.argv):
     print(json.dumps({"code": "confirm_code_required", "params": {"confirm_code": "c-1"},
                       "subject": {"items": {"unit_cost": 4.2}}}))
@@ -652,9 +652,9 @@ sys.exit(1)
 def test_a_second_call_that_ends_without_words_is_unsure_and_one_with_words_is_a_refusal():
     gated, _ = core.validate_ask(example("provide-number.json"))
     with _t.tmpdir() as d:
-        script = os.path.join(d, "harness.py")
+        script = os.path.join(d, "skill_pack.py")
         with open(script, "w", encoding="utf-8") as f:
-            f.write(HARNESS)
+            f.write(SKILL_PACK)
         got = {}
         for ends in ("crash", "says"):
             got[ends] = relay.run(gated, "4.20", cmd=[sys.executable, script], verbs=[["facts", "confirm"]], user="alice",
@@ -673,8 +673,8 @@ def test_the_code_is_sent_only_for_a_subject_that_matches_what_expect_names_exac
     with _t.tmpdir() as d:
         for mode, ok, code, calls in (("ok", True, None, 2), ("extra", False, "gate_changed", 1)):
             log = os.path.join(d, mode)
-            env = child_env({"FAKE_HARNESS_MODE": mode, "FAKE_HARNESS_LOG": log, "FAKE_HARNESS_STATE": log + "-state"})
-            got = relay.run(gated, "4.20", cmd=[sys.executable, os.path.join(HERE, "fake_harness.py")],
+            env = child_env({"FAKE_SKILL_PACK_MODE": mode, "FAKE_SKILL_PACK_LOG": log, "FAKE_SKILL_PACK_STATE": log + "-state"})
+            got = relay.run(gated, "4.20", cmd=[sys.executable, os.path.join(HERE, "fake_skill_pack.py")],
                             verbs=[["facts", "confirm"]], user="alice", reason="why", timeout=20, env=env)
             assert (got["ok"], got["code"]) == (ok, code), (mode, got)
             with open(log, encoding="utf-8") as f:

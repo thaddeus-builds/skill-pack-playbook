@@ -15,14 +15,14 @@ format characters (a full-width or zero-width spelling is the same term).
 
 The term lists are client data, so they live OUTSIDE the repository
 (one term per line, `#` starts a comment, `re:` starts a regular
-expression). Where they are, in harness.toml at the repository's top
+expression). Where they are, in skill-pack.toml at the repository's top
 level (a path or glob each; `~` expands; a relative one is from the top
 level, which differs in a worktree, so prefer `~/` or an absolute path):
 
     [guards.leak]
-    terms = ["~/work/workspaces/acme-harness/*/data/client_terms.txt"]
+    terms = ["~/work/workspaces/acme-skill-pack/*/data/client_terms.txt"]
 
-and `<PREFIX>_CLIENT_TERMS` (`[harness].env_prefix`), more paths or globs
+and `<PREFIX>_CLIENT_TERMS` (`[skill_pack].env_prefix`), more paths or globs
 separated by `:`. Both are read; `--terms` replaces them. Fail closed:
 no list configured, a named list missing (even beside one that exists),
 a list that cannot be read, holds no term, or a pattern that is bad or
@@ -38,10 +38,10 @@ file names it the same way.
 Exit 0: no hit; 1: a hit; 2: refused for want of a usable list or git.
 
 Install, once per clone: kit/tools/pre-push.sample (its header says how).
-Seen in the video-ads harness, whose own guard this generalises (one list
-per client workspace, several clients beside one harness).
+Seen in the video-ads skill pack, whose own guard this generalises (one list
+per client workspace, several clients beside one skill pack).
 
-Stdlib only; runs without a bound harness.
+Stdlib only; runs without a bound skill pack.
 
 Test: kit/tests/test_leak_guard.py.
 """
@@ -78,7 +78,7 @@ class Terms(list):
     search. A `re:` term is always searched on its own: joined, its
     backreferences would point at another term's group, and on Python 3.9
     an inline global flag such as `(?a)` would reach every other term
-    (both fail open; seen in the video-ads harness)."""
+    (both fail open; seen in the video-ads skill pack)."""
     any: re.Pattern | None = None
 
 
@@ -99,18 +99,18 @@ def norm(text: str) -> str:
                    if unicodedata.category(c) != "Cf")
 
 
-def _harness_toml(root: Path) -> dict:
-    path = root / "harness.toml"
+def _skill_pack_toml(root: Path) -> dict:
+    path = root / "skill-pack.toml"
     if not path.is_file():
         return {}
     try:
         import tomllib
         return tomllib.loads(path.read_text(encoding="utf-8"))
     except ImportError:
-        raise Refusal("harness.toml needs Python 3.11 or newer to read"
+        raise Refusal("skill-pack.toml needs Python 3.11 or newer to read"
                       ) from None
     except (OSError, UnicodeDecodeError, ValueError) as e:
-        raise Refusal(f"harness.toml cannot be read "
+        raise Refusal(f"skill-pack.toml cannot be read "
                       f"({type(e).__name__})") from None
 
 
@@ -118,7 +118,7 @@ def configured(root: Path, environ: dict[str, str]
                ) -> list[tuple[str, str]]:
     """(source, path or glob) of every configured list, in order:
     `[guards.leak] terms`, then `<PREFIX>_CLIENT_TERMS`."""
-    raw = _harness_toml(root)
+    raw = _skill_pack_toml(root)
     specs = []
     terms = raw.get("guards", {}).get("leak", {}).get("terms", [])
     if not (isinstance(terms, list)
@@ -126,7 +126,7 @@ def configured(root: Path, environ: dict[str, str]
         raise Refusal("[guards.leak] terms must be a list of paths")
     specs += [(f"[guards.leak] terms #{i}", t)
               for i, t in enumerate(terms, 1)]
-    prefix = raw.get("harness", {}).get("env_prefix")
+    prefix = raw.get("skill_pack", {}).get("env_prefix")
     if isinstance(prefix, str) and prefix:
         var = f"{prefix}_{ENV_NAME}"
         parts = [p for p in environ.get(var, "").split(os.pathsep)
@@ -365,7 +365,7 @@ def main(argv: list[str] | None = None, *, stdin: str | None = None,
             specs, base = configured(top, environ), top
         if not specs:
             raise Refusal("no term list configured: set [guards.leak] terms "
-                          "in harness.toml or <PREFIX>_CLIENT_TERMS, or pass "
+                          "in skill-pack.toml or <PREFIX>_CLIENT_TERMS, or pass "
                           "--terms")
         paths = resolve(specs, base)
         if not paths:

@@ -13,7 +13,7 @@ kit/**/*.py except kit/dates.py and kit/tests/:
   3. no `from kit.dates import now | today | host_today | market_day`:
      a name bound at import keeps the function a patch no longer reaches.
 
-The rule is kit.guards.clock, the one a generated harness's
+The rule is kit.guards.clock, the one a generated skill pack's
 tests/test_clock.py runs on its own code.
 
 `time.time()` / `time.monotonic()` measure durations and code lifetimes
@@ -41,7 +41,7 @@ def main() -> int:
     problems = clock.self_test()
     check("the scan finds every planted form (and not time.time)",
           not problems, problems)
-    check("the guard is the same rule a generated harness runs "
+    check("the guard is the same rule a generated skill pack runs "
           "(kit.guards.clock: datetime, time.strftime/localtime, bound names)",
           len(clock.scan("from kit.dates import now\n")) == 1
           and len(clock.scan("import time\ntime.localtime()\n")) == 1)

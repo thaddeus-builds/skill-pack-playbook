@@ -58,7 +58,7 @@ def ask(step="confirm", **over):
 
 
 def gated(**over):
-    """A provide ask whose answer goes through a harness gate."""
+    """A provide ask whose answer goes through a skill pack gate."""
     return ask("provide", id="unit-cost",
                gate={"verb": ["facts", "confirm", "unit_cost"], "value_arg": True,
                      "expect": {"items": {"unit_cost": "$value"}}}, **over)
@@ -440,7 +440,7 @@ def test_gate_shape():
 
 
 def test_a_gate_on_choose_and_provide_must_carry_the_answer():
-    """The answer has to reach the harness AND be bound to what was shown:
+    """The answer has to reach the skill pack AND be bound to what was shown:
     value_arg true and "$value" as a whole value in expect. Each missing piece
     is refused; a yes/no gate needs neither."""
     give = {"verb": ["x"], "expect": {"n": "$value"}, "value_arg": True}
@@ -1375,7 +1375,7 @@ def test_gate_ran_answer_is_recorded_even_if_the_ask_was_revised():
         assert ev["gate"] == gate and "revised" not in ev
 
 
-def test_a_stale_page_answers_only_what_the_harness_really_wrote():
+def test_a_stale_page_answers_only_what_the_skill_pack_really_wrote():
     G = {"ok": True, "verb": ["x"], "message": "m"}
     with tmpstore() as s:                                        # gated, updated twice while the page shows the first
         s.post("bot", [gated()])
@@ -1399,13 +1399,13 @@ def test_a_stale_page_answers_only_what_the_harness_really_wrote():
         s.post("bot", [ask("provide", id="unit-cost")])
         u1 = shown(s, "unit-cost")
         s.post("bot", [gated()])
-        with assert_raises() as r:                               # not through the stale page without the harness…
+        with assert_raises() as r:                               # not through the stale page without the skill pack…
             s.answer("bob", "unit-cost", "5", shown=u1)
         assert r.err.code in ("gate_unavailable", "changed")
         with assert_raises("changed"):                           # …and no claim of a gate the page never showed
             s.answer("bob", "unit-cost", "5", shown=u1, gate=G)
         assert s.state()["asks"]["unit-cost"]["status"] == "open"
-    with tmpstore() as s:                                        # a gate that went away: the harness was written
+    with tmpstore() as s:                                        # a gate that went away: the skill pack was written
         s.post("bot", [gated()])                                  # for what the owner was shown
         g1 = shown(s, "unit-cost")
         s.post("bot", [ask("provide", id="unit-cost")])
@@ -1460,8 +1460,8 @@ def test_reopen_and_applied_rules():
         assert s.applied("bot", ["c"], "w" * core.LIMITS["where"])["applied"] == ["c"]
 
 
-def test_reopen_is_refused_once_the_harness_wrote():
-    """An answer that passed the harness's gate is already written there: putting
+def test_reopen_is_refused_once_the_skill_pack_wrote():
+    """An answer that passed the skill pack's gate is already written there: putting
     the ask back in Waiting would tell the owner it is undone. It is refused with
     its own words; a refusal, or an answer that wrote nothing, can still be reopened."""
     G = {"ok": True, "verb": ["facts", "confirm", "unit_cost"], "message": "confirmed"}
@@ -1494,10 +1494,10 @@ def test_reopen_is_refused_once_the_harness_wrote():
         with assert_raises("already_applied") as r:
             s.reopen("bob", "plain", again["seq"])
         assert str(r.err) == core.CODES["already_applied"]
-        # the agent can still apply what the harness wrote
-        assert s.applied("bot", ["unit-cost"], "the harness")["applied"] == ["unit-cost"]
+        # the agent can still apply what the skill pack wrote
+        assert s.applied("bot", ["unit-cost"], "the skill pack")["applied"] == ["unit-cost"]
         assert s.state()["problems"] == []
-    with tmpstore() as s:                                            # a revised ask changes nothing: the harness was written
+    with tmpstore() as s:                                            # a revised ask changes nothing: the skill pack was written
         s.post("bot", [gated()])
         h1 = shown(s, "unit-cost")
         s.post("bot", [gated(why="A newer fact.")])
@@ -1642,7 +1642,7 @@ def test_every_refusal_code_is_registered():
 
 
 def test_gate_refusal_messages_do_not_claim_nothing_was_written():
-    """After the second harness call something may have been written, so the
+    """After the second skill pack call something may have been written, so the
     words for a refusal, a timeout or an unclear answer there must not say it
     was not; an unclear one says it may or may not have been, and to check."""
     for code in ("gate_refused", "gate_timeout", "gate_unsure"):
@@ -1655,7 +1655,7 @@ def test_gate_refusal_messages_do_not_claim_nothing_was_written():
     assert "was written" not in core.CODES["gate_unsure"]           # it does not claim either
 
 
-def test_the_codes_for_an_unclear_harness_and_a_missing_secret():
+def test_the_codes_for_an_unclear_skill_pack_and_a_missing_secret():
     for code in ("gate_unsure", "no_secret"):
         assert code in core.CODES
         r = core.Refused(code, id="x")
@@ -2173,7 +2173,7 @@ def test_adv_names_with_a_trailing_newline_are_not_tokens():
 def test_adv_a_number_answer_is_plain_ascii_decimal():
     """A typed number is a plain ASCII decimal: '1_000', Arabic-Indic digits, '1 2',
     '+-1', '0x10', '1e' and '.e1' are refused as `number`. float() alone would take
-    some of them, and JavaScript, spreadsheets and most harnesses cannot read them."""
+    some of them, and JavaScript, spreadsheets and most skill packs cannot read them."""
     a = ok(ask("provide", input={"type": "number"}))
     for bad in ("1_000", "1_0", "\u0661\u0662", "1 2", "+-1", "0x10", "1e", ".e1"):
         v, e = core.check_value(a, bad)
@@ -2195,7 +2195,7 @@ def test_adv_a_date_answer_is_iso_and_zero_padded():
 
 def test_adv_a_typed_answer_has_no_control_characters():
     """A typed answer holds no control character ('a\\x00b', BEL, ESC, DEL), for text
-    and url alike: a NUL would reach the harness as --value=a\\x00b, where the
+    and url alike: a NUL would reach the skill pack as --value=a\\x00b, where the
     subprocess call raises, and the others would land in the log and on the page."""
     for step_input in ({"type": "text"}, {"type": "url"}):
         a = ok(ask("provide", input=step_input))
@@ -2367,7 +2367,7 @@ def test_adv_gate_bypass_needs_a_revision_the_owner_could_have_seen():
 
 def test_adv_gate_bypass_only_for_a_gated_ask():
     """A stale page answering an ask WITHOUT a gate is `changed` even when given
-    gate={'ok': True}: the proof stands in for 'the harness was really written',
+    gate={'ok': True}: the proof stands in for 'the skill pack was really written',
     which only a gated ask can mean."""
     with tmpstore() as s:
         s.post("bot", [ask()])
@@ -2378,7 +2378,7 @@ def test_adv_gate_bypass_only_for_a_gated_ask():
 
 
 def test_adv_gate_bypass_needs_an_ok_gate():
-    """Only gate={'ok': True} stands in for a written harness: a stale answer with
+    """Only gate={'ok': True} stands in for a written skill pack: a stale answer with
     gate={'ok': False, …} is refused (`changed` or a gate_ code), never recorded
     and stamped revised."""
     with tmpstore() as s:
@@ -2394,7 +2394,7 @@ def test_adv_gate_bypass_needs_an_ok_gate():
 def test_adv_a_gated_answer_needs_the_gate_proof():
     """A gated answer is never recorded without the gate's proof: Store.answer with no
     gate, for an ask whose gate runs, is refused with a gate_ code, so a caller's
-    bug cannot record a confirmed answer that no harness saw."""
+    bug cannot record a confirmed answer that no skill pack saw."""
     with tmpstore() as s:
         s.post("bot", [gated()])
         with assert_raises() as r:

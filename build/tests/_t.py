@@ -155,7 +155,7 @@ TRAIL_FILES = ("glossary.tsv", "glossary.agent.tsv", "user-stories.tsv", "user-s
 @contextmanager
 def workspace():
     """{root, repo, ssot, data, con}: a repository holding ssot/ copied from
-    templates/ssot/ as a new harness starts it (the owner and agent files keep
+    templates/ssot/ as a new skill pack starts it (the owner and agent files keep
     their header rows only: templates/ssot/README.md), the client's data
     folder beside it and a console folder."""
     with tmpdir() as d:

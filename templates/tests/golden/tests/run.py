@@ -10,7 +10,7 @@ also fails a file that leaves anything in its private TMPDIR. Exit 0 only when a
 least one file ran and every file passed.
 
 This runner works inside the playbook: it imports the playbook's `kit/` from the
-root of the checkout, four folders up. A harness copies `engine.py` and `cases.py`
+root of the checkout, four folders up. A skill pack copies `engine.py` and `cases.py`
 (see ../README.md), not these tests.
 """
 

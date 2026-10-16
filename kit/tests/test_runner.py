@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import contract, runner  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.messages import failure  # noqa: E402
 from kit.testing.check import (capture, check, finish, one_doc, raises,  # noqa: E402
                                tmp_dir)
@@ -74,8 +74,8 @@ def main() -> int:
           e is not None and str(e) == "No price on file for A"
           and e.next == ["shop prices set A"]
           and e.code == {"code": "shop_price_missing", "params": {"sku": "A"}})
-    check("ChildFailed is a HarnessError carrying the child's code",
-          isinstance(e, HarnessError) and failure(e) == e.code)
+    check("ChildFailed is a SkillPackError carrying the child's code",
+          isinstance(e, SkillPackError) and failure(e) == e.code)
     rc, out, _ = capture(lambda a: contract.fail(e, cmd=["shop", "q"],
                                                  as_json=True), [])
     check("fail() relays the child's error, next and code",

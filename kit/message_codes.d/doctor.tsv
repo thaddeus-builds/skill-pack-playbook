@@ -1,28 +1,28 @@
 code	params	meaning_en	meaning_zh
-doctor_harness	name,version,kit_version,root	{name} {version} (kit {kit_version}) at {root}	{name} {version}（kit {kit_version}），位置 {root}
+doctor_skill_pack	name,version,kit_version,root	{name} {version} (kit {kit_version}) at {root}	{name} {version}（kit {kit_version}），位置 {root}
 doctor_env_chain	files	env chain (later wins, the process env before all): {files}	环境变量查找链（后面的覆盖前面的，进程环境变量优先）：{files}
 doctor_env_process_only	var	env chain: none — process env only ({var}=none or empty: the cloud / multi-client setting)	没有环境变量文件：只用进程环境变量（{var}=none 或为空：云端或多客户的设置）
 doctor_env_var	name,value,source	{name} = {value} [{source}]	{name} = {value}（来源：{source}）
 doctor_token_source	mode	token source (every API): {mode}	令牌来源（所有接口）：{mode}
 doctor_home_secrets	names,file,var	{names} came from {file} (HOME-level: shared by every client of this user) — export them in the process env instead and set {var}=none	{names} 来自 {file}（用户主目录级文件：这个用户的所有客户共用）——请改为在进程环境变量里设置，并设 {var}=none
 doctor_env_file_loose	path	{path} is readable by other users	{path} 其他用户也能读取
-doctor_env_gate_secret_in_file	file,name	{name} is written in {file}: the harness never loads a gate secret from a file (an agent that can read or write the file could make its own approval codes). Remove the line; set it only in the process env of what runs the gate	{file} 里写了 {name}：工具从不从文件读取确认用的密钥（能读写这个文件的助手就能自己生成批准码）。请删掉这一行，只在运行确认流程的进程环境变量里设置它
-doctor_env_file_unsafe_name	file,name	{name} is written in {file}: the harness never loads it from a file (it would change who the gate thinks is at the terminal, which harness is bound, or the code that runs). Remove the line	{file} 里写了 {name}：工具从不从文件读取它（它会改变确认流程认为谁在终端前、绑定哪个工具，或运行哪段代码）。请删掉这一行
-doctor_console_secret_in_env	var	{var} is set in the environment this harness runs in: it is the owner console's own secret, which the console withholds from every harness call; an agent here could sign the console's answers. Unset it; it belongs only to the console process	运行这个工具的环境里设置了 {var}：这是负责人控制台自己的密钥，控制台调用工具时从不传给它；这里的助手可以冒签控制台的回答。请取消设置，它只属于控制台进程
+doctor_env_gate_secret_in_file	file,name	{name} is written in {file}: the skill pack never loads a gate secret from a file (an agent that can read or write the file could make its own approval codes). Remove the line; set it only in the process env of what runs the gate	{file} 里写了 {name}：工具从不从文件读取确认用的密钥（能读写这个文件的助手就能自己生成批准码）。请删掉这一行，只在运行确认流程的进程环境变量里设置它
+doctor_env_file_unsafe_name	file,name	{name} is written in {file}: the skill pack never loads it from a file (it would change who the gate thinks is at the terminal, which skill pack is bound, or the code that runs). Remove the line	{file} 里写了 {name}：工具从不从文件读取它（它会改变确认流程认为谁在终端前、绑定哪个工具，或运行哪段代码）。请删掉这一行
+doctor_console_secret_in_env	var	{var} is set in the environment this skill pack runs in: it is the owner console's own secret, which the console withholds from every skill pack call; an agent here could sign the console's answers. Unset it; it belongs only to the console process	运行这个工具的环境里设置了 {var}：这是负责人控制台自己的密钥，控制台调用工具时从不传给它；这里的助手可以冒签控制台的回答。请取消设置，它只属于控制台进程
 doctor_path	var,path	{var} -> {path}	{var} -> {path}
 doctor_data_dir_from_home	var,file	{var} came from {file} (HOME-level: any client that leaves it unset lands in this data dir)	{var} 来自 {file}（用户主目录级文件：任何没设置它的客户都会落到这个数据目录）
-doctor_inside_repo	var,path	{var} -> {path} is inside the harness checkout: client data would ship in a release or leak into a commit	{var} -> {path} 在工具的代码目录里：客户数据可能随发布版本发出，或被提交进仓库
+doctor_inside_repo	var,path	{var} -> {path} is inside the skill pack checkout: client data would ship in a release or leak into a commit	{var} -> {path} 在工具的代码目录里：客户数据可能随发布版本发出，或被提交进仓库
 doctor_no_db	path	no database yet at {path} (a write verb creates it)	{path} 还没有数据库（写入类命令会创建它）
 doctor_db_present	path	database at {path} (no schema given to doctor: its shape is not checked)	数据库在 {path}（没有提供表结构，未检查结构）
 doctor_db_unreadable	path,detail	the database at {path} cannot be read: {detail}	无法读取 {path} 的数据库：{detail}
 doctor_db_stale	tables	cache table(s) in an older shape: {tables} — the next ingest rebuilds them	缓存表结构过旧：{tables}——下次导入会重建
-doctor_db_unknown	tables	table(s) no longer in the schema (left by an older harness; do not read them): {tables}	表结构里已没有的表（旧版本留下的，不要读取）：{tables}
+doctor_db_unknown	tables	table(s) no longer in the schema (left by an older skill pack; do not read them): {tables}	表结构里已没有的表（旧版本留下的，不要读取）：{tables}
 doctor_db_ok	path,version	database at {path}: schema v{version}, current	数据库 {path}：表结构 v{version}，是最新的
 doctor_no_partition		no market partition (markets = []): nothing to declare	没有市场分区（markets = []）：无需声明
 doctor_markets_declared	markets	declared market(s): {markets}	已声明的市场：{markets}
 doctor_markets_pending	markets	market(s) {markets} declared but not confirmed: a person confirms the declaration	市场 {markets} 已声明但未确认：需要由人确认
-doctor_not_onboarded		no market declared — this harness is not onboarded yet	还没有声明任何市场——这个工具还没完成初始设置
-doctor_writes_on	var	writes: ON ({var}=1) — only the calls on the harness's allowlist can go out	写入：已开启（{var}=1）——只有白名单里的调用能发出
+doctor_not_onboarded		no market declared — this skill pack is not onboarded yet	还没有声明任何市场——这个工具还没完成初始设置
+doctor_writes_on	var	writes: ON ({var}=1) — only the calls on the skill pack's allowlist can go out	写入：已开启（{var}=1）——只有白名单里的调用能发出
 doctor_writes_bad_value	var,value	{var}={value} does not turn writes on (only 1 does): writes are off	{var}={value} 不会开启写入（只有 1 会）：写入是关闭的
 doctor_writes_off	reason	writes: off ({reason}) — the healthy default	写入：关闭（{reason}）——这是正常的默认状态
 doctor_platform_lock_set	detail	platform rule: set {detail}	平台规则：已设置 {detail}

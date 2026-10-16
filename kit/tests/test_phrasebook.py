@@ -4,7 +4,7 @@ domains: an OTC throat product's Chinese script lines (checked by
 kit.claimscope against 用嗓过度引起的咽干、咽痛, with a speech-recognition
 homophone fix) and an investment fund's English lines.
 
-  1. norm(): spaces and punctuation gone, NFKC, case folded, the harness's
+  1. norm(): spaces and punctuation gone, NFKC, case folded, the skill pack's
      `fix` applied first; clauses() splits on ，,。！？；!?; and line
      breaks, dropping short ones.
   2. add(): checked on the way in (an error = rejected, else pending),
@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import claimscope, human, messages, phrasebook  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, clean_env, finish, raises, tmp_dir  # noqa: E402
 
 CFG = _shop.use()
@@ -134,7 +134,7 @@ def test_norm_and_clauses() -> None:
     check("NFKC and case folded: Ｇｕａｒａｎｔｅｅｄ 8%! == guaranteed 8",
           phrasebook.norm("Ｇｕａｒａｎｔｅｅｄ 8%!") == phrasebook.norm(
               "guaranteed 8") == "guaranteed8")
-    check("the harness's fix runs first",
+    check("the skill pack's fix runs first",
           phrasebook.norm("咽喉咽", fix) == "咽喉炎"
           and phrasebook.norm("咽喉咽") == "咽喉咽")
     check("text_sha is of the norm: punctuation does not move it",
@@ -144,7 +144,7 @@ def test_norm_and_clauses() -> None:
     check("clauses split on ，,。！？；!?; and line breaks, short ones dropped",
           got == ["早起嗓子干", "用了三天", "Diversified",
                   "long-term growth"], got)
-    check("min_len is the harness's",
+    check("min_len is the skill pack's",
           phrasebook.clauses("好。可以。", min_len=2) == ["可以"]
           and phrasebook.clauses("好。可以。", min_len=1) == ["好", "可以"])
 
@@ -169,7 +169,7 @@ def test_add_and_harvest() -> None:
     check("punctuation does not make it new", r["new"] is False
           and r["id"] == "P0002", r)
     e = raises(lambda: phrasebook.add(p, " ，。", check_fn=check_fn),
-               HarnessError)
+               SkillPackError)
     check("a blank phrase is refused (phrasebook_text_blank)",
           code(e) == "phrasebook_text_blank", repr(e))
     rows = phrasebook.load(p)
@@ -327,12 +327,12 @@ def test_relay_meanwhile_and_refusals() -> None:
           code(exc) == "phrasebook_changed_meanwhile"
           and phrasebook.load(q)[0]["status"] == "pending", repr(exc))
     e = raises(lambda: phrasebook.reject(q, "P0099", reason="x"),
-               HarnessError)
+               SkillPackError)
     check("an unknown id: phrasebook_unknown", code(e) == "phrasebook_unknown")
     q.write_text(q.read_text(encoding="utf-8").replace("\tpending\t",
                                                        "\tmaybe\t", 1),
                  encoding="utf-8")
-    e = raises(lambda: phrasebook.load(q), HarnessError)
+    e = raises(lambda: phrasebook.load(q), SkillPackError)
     check("a status outside the set: phrasebook_row_invalid",
           code(e) == "phrasebook_row_invalid", repr(e))
 

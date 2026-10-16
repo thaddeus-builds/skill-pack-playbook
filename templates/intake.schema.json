@@ -40,7 +40,7 @@
       "type": "string", "pattern": "^[gwsnq][1-9][0-9]{0,4}$", "x-code": "bad_iid"
     },
     "audience": {
-      "description": "Who signs it: client (meaning, stories, numbers) or builder (the harness's shape). Each has a console of their own.",
+      "description": "Who signs it: client (meaning, stories, numbers) or builder (the skill pack's shape). Each has a console of their own.",
       "enum": ["client", "builder"]
     },
     "source": {

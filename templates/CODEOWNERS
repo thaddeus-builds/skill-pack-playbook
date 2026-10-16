@@ -7,7 +7,7 @@
 # matching MR for the owner to merge.
 # A refactor that moves code out of a path below adds its new file here in
 # the same MR; otherwise the moved code quietly starts auto-merging.
-# Every path below exists in a freshly scaffolded harness; scaffold/new_harness.py
+# Every path below exists in a freshly scaffolded skill pack; scaffold/new_skill_pack.py
 # leaves out the client console's line until that console exists.
 
 # the shared kit: the human gate, the write guard, human tables (vendored, never
@@ -38,7 +38,7 @@
 /ssot/decision_keys.tsv           {{owner}}
 
 # the layers (which module is the writer, who may import it) and what a release ships
-/harness.toml                     {{owner}}
+/skill-pack.toml                     {{owner}}
 
 # the agent instructions themselves
 /CLAUDE.md                        {{owner}}

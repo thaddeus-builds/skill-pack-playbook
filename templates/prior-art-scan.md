@@ -22,12 +22,12 @@ Split the scan into lenses and give each one to its own agent, so no lens is sta
 2. **The platform's own features and API**: what it already automates, what the API can read and write, rate limits, permissions.
 3. **Method**: how practitioners measure success and set thresholds (minimum data before a call, leading signals).
 4. **Agent patterns**: open-source tools and servers doing the same job for agents, their write actions and guardrails.
-5. **The law, per jurisdiction** (whenever the harness checks or produces copy people will see): the statutes and the regulators' own guidance on disclosure (paid relationships), claims the product may not make (medical, financial, environmental), price and scarcity claims, trial and return wording, origin, and personal data in the exports the harness keeps. Official sources only: the statute database, the regulator's guidelines and published decisions. Its output is a registry of **draft rules**, not prose: one row per rule with its jurisdiction, a pattern, `law_ref`, an official `source` URL and `status: pending` ([`kit/copylint.py`](../kit/copylint.py) runs the `banned` rows; a disclosure is a `required` row; what only a person can judge is a `human` row). A draft rule gives "a person reads this line", never a verdict; the client's counsel confirms rules one by one. Also list which of the client's own brief rules the law puts at risk: the brief can ask creators for exactly the wording the law forbids.
+5. **The law, per jurisdiction** (whenever the skill pack checks or produces copy people will see): the statutes and the regulators' own guidance on disclosure (paid relationships), claims the product may not make (medical, financial, environmental), price and scarcity claims, trial and return wording, origin, and personal data in the exports the skill pack keeps. Official sources only: the statute database, the regulator's guidelines and published decisions. Its output is a registry of **draft rules**, not prose: one row per rule with its jurisdiction, a pattern, `law_ref`, an official `source` URL and `status: pending` ([`kit/copylint.py`](../kit/copylint.py) runs the `banned` rows; a disclosure is a `required` row; what only a person can judge is a `human` row). A draft rule gives "a person reads this line", never a verdict; the client's counsel confirms rules one by one. Also list which of the client's own brief rules the law puts at risk: the brief can ask creators for exactly the wording the law forbids.
 
 Rules:
 
 - Every claim carries its URL and the date it was read. A claim whose page could not be opened is dropped, not guessed.
-- Never copy code or text from a source into the harness; write down the idea and where it came from.
+- Never copy code or text from a source into the skill pack; write down the idea and where it came from.
 - Record what to **avoid** as carefully as what to borrow.
 - A borrowed idea names the module it changes (a report, a rule, the gate, a registry). An idea with no module is a note, not a change.
 - **Verify mechanically before trusting a README.** `gh api repos/O/R --jq '[.full_name,.stargazers_count,.pushed_at,.license.spdx_id,.archived]'` catches renames and archives. Then read LICENSE itself: custom terms hide there ("non-commercial", "company licence above 3 staff"). Mark anything not confirmed UNVERIFIED; never fill a gap from memory.
@@ -35,15 +35,15 @@ Rules:
 - **Stop a lens** when two new searches in a row surface nothing better than its top three, or at about 20–30 tool calls.
 - **Prices and limits enter as pending facts** with their source and date; code never hard-codes a number read on a web page. A decision names what would change it ("if the gateway accepts `data:` URIs, drop the hosting layer").
 
-*Seen once, in a KOL harness:* the first scan left the law out; the second found that the client's creator brief made disease names required keywords (sleep apnoea, insomnia, a herniated disc) and had no sponsorship disclosure, where both markets fine a medical-efficacy claim for a non-medical product per case and hold the creator liable too. The brand's own sample scripts passed the brief check with nothing flagged until the law was a registry.
+*Seen once, in a KOL skill pack:* the first scan left the law out; the second found that the client's creator brief made disease names required keywords (sleep apnoea, insomnia, a herniated disc) and had no sponsorship disclosure, where both markets fine a medical-efficacy claim for a non-medical product per case and hold the creator liable too. The brand's own sample scripts passed the brief check with nothing flagged until the law was a registry.
 
-*Seen once, in a video-ad harness:* the scan replaced a planned renderer whose licence needed a company licence, found that the target editor's drafts are encrypted on read, and found that the client's "model API" key belonged to a gateway serving the model's open weights as ComfyUI workflows, with a lip-sync workflow the vendor's own API lacked. None of this was in the brief.
+*Seen once, in a video-ad skill pack:* the scan replaced a planned renderer whose licence needed a company licence, found that the target editor's drafts are encrypted on read, and found that the client's "model API" key belonged to a gateway serving the model's open weights as ComfyUI workflows, with a lip-sync workflow the vendor's own API lacked. None of this was in the brief.
 
 ## Output
 
-A folder in the harness repository, `docs/prior-art/`:
+A folder in the skill pack repository, `docs/prior-art/`:
 
-- `README.md`: the dated front page. A one-paragraph verdict (where the harness sits and why), **Borrow** (at most 12 ideas, each with its module and source), **Avoid**, open questions for the owner (at most 5) and the next re-scan date.
+- `README.md`: the dated front page. A one-paragraph verdict (where the skill pack sits and why), **Borrow** (at most 12 ideas, each with its module and source), **Avoid**, open questions for the owner (at most 5) and the next re-scan date.
 - One file per lens, `<date>-<lens>.md`: a table of name, what it does, what to borrow, what to avoid, source.
 
 ## After the scan

@@ -1,6 +1,6 @@
 """Read a client's .xlsx workbook as it is, with the standard library only
 (`zipfile` and `xml.etree`): every sheet's cells with their coordinates,
-nothing recalculated, nothing lost that a harness may need to read or to
+nothing recalculated, nothing lost that a skill pack may need to read or to
 write back.
 
 What it guards:
@@ -29,7 +29,7 @@ What it guards:
     external entity, and a DOCTYPE never reaches it.
   * A file that is not an xlsx (not a zip, no workbook part, broken XML)
     is refused, coded (workbook_unreadable). `.xls` (the binary format)
-    is out; a CSV goes through a harness's own import.
+    is out; a CSV goes through a skill pack's own import.
 
 Namespaces are matched by local name, so a workbook saved as Strict Open
 XML reads the same.
@@ -50,14 +50,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 
 MAX_PART = 64 * 1024 * 1024
 MAX_TOTAL = 512 * 1024 * 1024
 MAX_PARTS = 10_000
 
-# built-in number formats (ECMA-376 18.8.30) a harness is likely to meet;
+# built-in number formats (ECMA-376 18.8.30) a skill pack is likely to meet;
 # the date ones are every id the standard and the CJK locales reserve
 BUILTIN = {0: "General", 1: "0", 2: "0.00", 3: "#,##0", 4: "#,##0.00",
            9: "0%", 10: "0.00%", 11: "0.00E+00", 12: "# ?/?", 13: "# ??/??",
@@ -321,8 +321,8 @@ class _Zip:
         return out
 
 
-def _unreadable(label: str, reason: str) -> HarnessError:
-    return HarnessError(msg(
+def _unreadable(label: str, reason: str) -> SkillPackError:
+    return SkillPackError(msg(
         "workbook_unreadable",
         f"{label} cannot be read as an xlsx workbook: {reason}",
         path=label, reason=reason),
@@ -330,8 +330,8 @@ def _unreadable(label: str, reason: str) -> HarnessError:
          "again"])
 
 
-def _unsafe(label: str, part: str, reason: str) -> HarnessError:
-    return HarnessError(msg(
+def _unsafe(label: str, part: str, reason: str) -> SkillPackError:
+    return SkillPackError(msg(
         "workbook_unsafe",
         f"{label}: part {part} is refused before it is read: {reason}",
         path=label, part=part, reason=reason),

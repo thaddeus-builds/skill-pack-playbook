@@ -509,12 +509,12 @@ def test_every_answer_row_carries_apply_ready_for_the_applied_verb():
 def test_answers_carry_the_title_that_was_shown_and_say_when_the_ask_moved_on():
     with _t.tmpdir() as d:
         s = core.Store(d)
-        harness = {"verb": ["facts", "confirm", "x"], "expect": {"items": {"x": "yes"}}}
-        s.post("agent", [mk_ask("x", title="Old title?", gate=harness)])
+        skill_pack = {"verb": ["facts", "confirm", "x"], "expect": {"items": {"x": "yes"}}}
+        s.post("agent", [mk_ask("x", title="Old title?", gate=skill_pack)])
         shown = s.state()["asks"]["x"]["hash"]
-        s.post("agent", [mk_ask("x", title="New title?", gate=harness)])
+        s.post("agent", [mk_ask("x", title="New title?", gate=skill_pack)])
         gate = {"ok": True, "verb": ["facts", "confirm", "x"], "message": "written"}
-        s.answer("tester", "x", "yes", shown=shown, gate=gate)     # the harness was written: recorded
+        s.answer("tester", "x", "yes", shown=shown, gate=gate)     # the skill pack was written: recorded
         row = ok("answers", d=d)["answers"][0]
         assert row["title"] == "Old title?" and row["revised"] is True and row["gate"] == gate, row
         assert ok("list", "--status", "answered", d=d)["asks"][0]["title"] == "New title?"

@@ -1,4 +1,4 @@
-"""A sample harness with the test kit installed the way templates/tests/README.md
+"""A sample skill pack with the test kit installed the way templates/tests/README.md
 says: the kit's tests/*.py in tests/, the small common/ package (selftest/sample/) at the root,
 templates/gitattributes as .gitattributes, templates/ssot/ as ssot/, plus a
 few lines of code in the example layout. `build()` writes it, applies the
@@ -17,13 +17,13 @@ TEMPLATES = os.path.dirname(KIT)
 SAMPLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sample")
 
 CODE = {
-    "README.md": "# Sample harness\n",
+    "README.md": "# Sample skill pack\n",
     "CLAUDE.md": "# Agent instructions\n",
     ".claude/settings.json": "{}\n",
     ".github/workflows/test.yml": "on: push\n",
     ".gitlab-ci.yml": "test:\n  script: python3 tests/run.py\n",
     "evals/README.md": "# Agent-behaviour evals, run by hand\n",
-    "src/harness.py": '"""The CLI: one verb per script."""\n\n\ndef main(verb):\n    return verb\n',
+    "src/skill_pack.py": '"""The CLI: one verb per script."""\n\n\ndef main(verb):\n    return verb\n',
     "common/__init__.py": "",
     "src/lib/__init__.py": "",
     "src/lib/db.py": "import sqlite3\n\n\ndef connect(path):\n    return sqlite3.connect(path)\n",
@@ -41,12 +41,12 @@ CODE = {
     "src/compute_kpi.py": ("from common import dates\nfrom lib import db, rules\n\n\ndef main(path):\n"
                            "    return db.connect(path), dates.today(), rules.over_cap(1, 2)\n"),
     "src/compute_stories.py": ("import subprocess\nimport sys\n\n\ndef run(verb):\n"
-                               "    return subprocess.run([sys.executable, 'src/harness.py', *verb])\n"),
+                               "    return subprocess.run([sys.executable, 'src/skill_pack.py', *verb])\n"),
     "src/facts.py": ("from common import dates\nfrom lib import db\n\n\ndef set_pending(path, key, value):\n"
                      "    return db.connect(path), key, value, dates.now()\n"),
     "src/execute.py": ("from api import writer\nfrom lib import db, rules\n\n\ndef main(path, apply=False):\n"
                        "    return writer.write('x') if apply and rules.over_cap(2, 1) else db.connect(path)\n"),
-    "webconsole/serve.py": ('import subprocess\n\nTOOL = "harness"\n\n\ndef facts():\n'
+    "webconsole/serve.py": ('import subprocess\n\nTOOL = "skill_pack"\n\n\ndef facts():\n'
                             '    return subprocess.run([TOOL, "facts", "list", "--json"], capture_output=True)\n'),
 }
 

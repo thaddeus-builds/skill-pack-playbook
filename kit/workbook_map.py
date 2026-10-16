@@ -1,11 +1,11 @@
 """The map of a client's workbook: where each table is and what each
-column means to the harnesses that read or write it. The map is the only
+column means to the skill packs that read or write it. The map is the only
 place that knows the client's sheet and header names; the reader
 (kit.workbook) and the store (kit.workbook_store) know none.
 
-Two TSV files, kept with the client's data (not in a harness's
+Two TSV files, kept with the client's data (not in a skill pack's
 repository), because the sheet names are the client's words and one
-workbook may be written by more than one harness:
+workbook may be written by more than one skill pack:
 
   tables.tsv   table_id, workbook, sheet, anchor, search, stop, key,
                market, target, status, note
@@ -18,22 +18,22 @@ optionally `cols A-T`; default rows 1-50); `stop` where the data ends: a
 text a cell of the block starts with (`QUICK SUMMARY`), `blank:N` (N blank
 rows in a row) or empty (the sheet's last row); `key` the headers that
 identify a row, joined with ` + ` (empty: the row's content fingerprint);
-`market` a constant, `@Header`, or empty; `target` the harness table it
+`market` a constant, `@Header`, or empty; `target` the skill pack table it
 projects into, or `-`.
 
 columns.tsv: `header` as written (`Group > Header` when the same header
-shows twice in one block); `field` a field id of the harness's own
+shows twice in one block); `field` a field id of the skill pack's own
 vocabulary, or `-` (kept in the store, projected nowhere); `direction`
-in, out or both; `owner` the harness that writes the column (required
+in, out or both; `owner` the skill pack that writes the column (required
 for out and both); `type` one of TYPES. A row with table_id `-` and
-header `-` names a harness field that has no place in this workbook, and
+header `-` names a skill pack field that has no place in this workbook, and
 its note says why.
 
 values.tsv (optional): the numbers and words the agent read from the
 workbook that are not rows of a table (a rate in one cell, a target across
-a row), each with where it was read: key (a fact key of the harness),
+a row), each with where it was read: key (a fact key of the skill pack),
 market, value, sheet, cell (`F14`, or a range `F32:Q32`), status, note. A
-harness writes a confirmed value as a confirmed fact (kit.facts.plan_file /
+skill pack writes a confirmed value as a confirmed fact (kit.facts.plan_file /
 apply_file), so the map and the values the file states pass ONE human gate
 together, once per version of the bundle.
 
@@ -44,11 +44,11 @@ texts_confirmed() is a staged bundle with every row confirmed (what the
 owner's one yes turns it into), gate_rows() what a bundle confirms that
 the one before it did not: exactly what that gate must show and bind.
 
-cells.tsv (optional): where a harness writes into the workbook outside a
+cells.tsv (optional): where a skill pack writes into the workbook outside a
 table's rows (a month's actual spending across a row, a total in one
-cell): field (a field id of the harness's vocabulary), sheet, cell (one
+cell): field (a field id of the skill pack's vocabulary), sheet, cell (one
 cell, or a range along one row or one column, filled in order), owner
-(the harness that writes it), status, note. kit.workbook_patch sets these
+(the skill pack that writes it), status, note. kit.workbook_patch sets these
 cells in a copy of the client's file; nothing is read from them.
 
 The version is the hash of the files' texts; a map without values.tsv or
@@ -58,21 +58,21 @@ What it guards (problems() -> [Msg], check() raises them as one):
 
   * one owner per outgoing column: a column (workbook, sheet, anchor,
     header) with direction out or both has exactly one row, so two
-    harnesses never write the same cells;
-  * every field id is one of the harness's vocabulary (when it gives one);
+    skill packs never write the same cells;
+  * every field id is one of the skill pack's vocabulary (when it gives one);
   * the shape: the columns of both files, closed values (direction,
     status, type), unique table ids, every column row naming a declared
     table, an owner for every out or both row, a reason for every
     no-place row, the key headers and an `@Header` market among the
     table's column rows;
-  * values: a key (one of the harness's fact keys, when it gives them),
+  * values: a key (one of the skill pack's fact keys, when it gives them),
     a market, a value, a sheet and a cell or range for every row, one row
     per key and market;
   * cells: a field of the vocabulary, a sheet, a cell or a range along one
     row or column, and an owner for every row; no cell written by two
     rows.
 
-PERSONAL types (email, person, url) mark columns whose values a harness
+PERSONAL types (email, person, url) mark columns whose values a skill pack
 never prints (kit.workbook_store masks them).
 
 Test: kit/tests/test_workbook_map.py.
@@ -85,7 +85,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, joined, msg
 from kit.workbook import col_number, norm
 
@@ -102,9 +102,9 @@ _MONEY = re.compile(r"^money:[A-Z]{3}$")
 _SEARCH = re.compile(r"^rows\s+(\d+)\s*-\s*(\d+)(?:\s+cols\s+([A-Z]{1,3})\s*-"
                      r"\s*([A-Z]{1,3}))?$")
 NO_PLACE = "-"
-# the two file names, built so that no literal names a file of the harness
+# the two file names, built so that no literal names a file of the skill pack
 # (kit.guards.release takes a string literal that is only a file name ending
-# in .tsv for a registry the harness must ship;
+# in .tsv for a registry the skill pack must ship;
 # these are the client's, in its data folder)
 TABLES_FILE, COLUMNS_FILE, VALUES_FILE, CELLS_FILE = (
     f"{n}.tsv" for n in ("tables", "columns", "values", "cells"))
@@ -221,7 +221,7 @@ def texts(folder: Path | str) -> dict[str, str]:
         if not p.is_file():
             if name in OPTIONAL:
                 continue
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "workbook_map_missing",
                 f"{p} is not a file; a workbook map is tables.tsv and "
                 f"columns.tsv in one folder", path=str(p)),
@@ -256,7 +256,7 @@ def _bad(file: str, line: int, column: str, value: str,
 def problems(m: Map, fields: set[str] | None = None,
              keys: set[str] | None = None) -> list[Msg]:
     """Everything wrong with the map; empty when it holds. `fields` is the
-    harness's field vocabulary, `keys` its fact keys (values.tsv)."""
+    skill pack's field vocabulary, `keys` its fact keys (values.tsv)."""
     out: list[Msg] = _value_problems(m, keys) + _cell_problems(m, fields)
     seen: dict[str, dict] = {}
     for t in m.tables:
@@ -302,7 +302,7 @@ def problems(m: Map, fields: set[str] | None = None,
         if fields is not None and f and f != NO_PLACE and f not in fields:
             out.append(msg("workbook_map_field_unknown",
                            f"columns.tsv line {n}: field {f} is not in the "
-                           f"harness's field vocabulary", line=n, field=f))
+                           f"skill pack's field vocabulary", line=n, field=f))
         if tid == NO_PLACE:
             if c["header"] != NO_PLACE or not c["note"]:
                 out.append(msg("workbook_map_no_place_reason",
@@ -323,7 +323,7 @@ def problems(m: Map, fields: set[str] | None = None,
             if not c["owner"]:
                 out.append(msg("workbook_map_owner_missing",
                                f"columns.tsv line {n}: {c['header']} goes "
-                               f"out, so it needs its owning harness", line=n,
+                               f"out, so it needs its owning skill pack", line=n,
                                header=c["header"]))
             t = seen[tid]
             place = (t["workbook"], t["sheet"], norm(t["anchor"]),
@@ -369,7 +369,7 @@ def _value_problems(m: Map, keys: set[str] | None) -> list[Msg]:
         if keys is not None and v["key"] and v["key"] not in keys:
             out.append(msg("workbook_map_value_key_unknown",
                            f"values.tsv line {n}: {v['key']} is not one of "
-                           f"the harness's fact keys", line=n, key=v["key"]))
+                           f"the skill pack's fact keys", line=n, key=v["key"]))
         if (v["key"], v["market"]) in seen:
             out.append(msg("workbook_map_value_duplicate",
                            f"values.tsv: {v['key']} [{v['market']}] is "
@@ -410,7 +410,7 @@ def _cell_problems(m: Map, fields: set[str] | None) -> list[Msg]:
         if fields is not None and c["field"] and c["field"] not in fields:
             out.append(msg("workbook_map_field_unknown",
                            f"cells.tsv line {n}: field {c['field']} is not "
-                           f"in the harness's field vocabulary", line=n,
+                           f"in the skill pack's field vocabulary", line=n,
                            field=c["field"]))
         try:
             spots = cells_of(c["cell"])
@@ -435,7 +435,7 @@ def check(m: Map, fields: set[str] | None = None, *,
           extra: list[Msg] | None = None) -> None:
     probs = list(extra or []) or problems(m, fields, keys)  # a broken file first
     if probs:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "workbook_map_refused",
             f"the workbook map has {len(probs)} problem(s); nothing was "
             f"read through it: " + "; ".join(probs),
