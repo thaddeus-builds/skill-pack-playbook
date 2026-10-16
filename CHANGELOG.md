@@ -1,9 +1,9 @@
 # Changelog
 
-What a harness gets when it re-vendors the kit, and what else changed in the
+What a skill pack gets when it re-vendors the kit, and what else changed in the
 playbook, newest first. Format: Keep a Changelog.
 A release is a `kit/VERSION` (a patch for a fix, a minor for a new module or hook,
-a major when a harness must change). `hosts/zylos` has its own `VERSION`, noted
+a major when a skill pack must change). `hosts/zylos` has its own `VERSION`, noted
 where it moved. The short hash on a version line is the commit that set it; dates
 are the merge day. Everything under *Other* is outside the kit: templates, build,
 scaffold, console, docs, conformance.
@@ -116,6 +116,54 @@ scaffold, console, docs, conformance.
   switch that travels with a copied database; an agent narrows it, only the owner moves it (`write_host`, S34, S47).
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
+
+## [0.31.0] - 2026-10-16
+### Changed (breaking: a project must follow the table below when it re-vendors)
+The noun "harness" is "skill pack" everywhere in the playbook: the kit, the console, the scaffolder, the build and
+conformance tools, the templates, the Zylos adapter and the docs. Nothing else changed: no behaviour, no new check.
+A project pinned at 0.30.x keeps working as it is until it re-vendors, because a vendored copy brings its own kit; the
+rename is felt only when `kit/` is copied again (`kit/tools/vendor.py --skill-pack PATH`, or `scaffold/new_skill_pack.py
+--update-kit`). Then follow the table, search the project for `harness` and run its suite.
+
+| Old name | New name | Where |
+| --- | --- | --- |
+| `harness.toml` | `skill-pack.toml` | the project's one declaration; `kit.config.FILE`; renamed in the project root |
+| `[harness]` (table in the TOML) | `[skill_pack]` | the keys under it keep their names (`name`, `cli`, `env_prefix`, `db_file`, ...) |
+| `[harness].version` | `[skill_pack].version` | read by `kit.contract` |
+| `HarnessError` | `SkillPackError` | `kit.contract` (and the raise/except sites of the project) |
+| `HarnessConfig` | `SkillPackConfig` | `kit.config` |
+| `KIT_HARNESS_ROOT` | `KIT_SKILL_PACK_ROOT` | the env var that binds a project root for tests and child processes |
+| `<PREFIX>_HARNESS` | `<PREFIX>_SKILL_PACK` | the checkout path in a client's wrapper (`scaffold/new_client.py`) |
+| `--harness` | `--skill-pack` | `kit/tools/vendor.py`, `scaffold/new_client.py`; `tools/fleet.py` names its arguments `SKILL_PACK...` |
+| `scaffold/new_harness.py` | `scaffold/new_skill_pack.py` | the project generator; its tests `scaffold/tests/test_new_skill_pack.py` |
+| `skills/build-harness/` | `skills/build-skill-pack/` | the build skill |
+| `templates/harness.toml` | `templates/skill-pack.toml` | the template for `skill-pack.toml` |
+| `kit.messages.harness_files` | `kit.messages.skill_pack_files` | the project's message-code files |
+| `kit.guards.drift.check_harness` | `kit.guards.drift.check_skill_pack` | the drift check of a vendored copy |
+| `kit.contract.harness_version` | `kit.contract.skill_pack_version` | |
+| `kit.tools.packs.harness_imports` | `kit.tools.packs.skill_pack_imports` | the import reader of the pack table |
+| `DecisionRegistry.harness_written` | `DecisionRegistry.skill_pack_written` | `kit.registry` |
+| `confirm = harness` (decision keys) | `confirm = skill_pack` | the value in the `confirm` column of `ssot/decision_keys.tsv`; `kit.registry.CONFIRM` |
+| message code `decision_harness_written` | `decision_skill_pack_written` | `kit/message_codes.d/decisions.tsv` |
+| message code `doctor_harness` | `doctor_skill_pack` | `kit/message_codes.d/doctor.tsv` |
+| `origin: "harness"` (merged message registry) | `origin: "skill_pack"` | `kit.messages.registry()` |
+| key `harness` in the `--json` meta and in `doctor --json` | key `skill_pack` | `kit.contract`, `kit.doctor`; `kit.guards.json_contract` checks it |
+| doctor check id `harness` | `skill_pack` | `kit.doctor` |
+| `FAKE_HARNESS_*` | `FAKE_SKILL_PACK_*` | the fake used by the console and golden tests |
+| `kit/tests/fake_harness/`, `fake_harness.py` | `kit/tests/fake_skill_pack/`, `fake_skill_pack.py` | test stand-ins |
+| `{{harness_name}}`, `{{harness_dir}}` | `{{skill_pack_name}}`, `{{skill_pack_dir}}` | placeholders in `templates/client/` |
+| `harness.py` (a project's entry file) | `skill_pack.py` | name used in the docs and the tier table only |
+| prose "harness", "harnesses" | "skill pack", "skill packs" | docs, docstrings, messages |
+
+Not renamed: the repository and directory name `Agent-Harness-playbook` and the title "Agent Harness Playbook" (the
+repository's own name), the names of other projects (`shop-harness`, `adcut-harness`, `amazon-ads-harness`, ...), the
+old entries of this file and the generic phrase "test harness" (the little runner in each `tests/_t.py`).
+Each of these is one mechanical search and replace in a project; the whole suite of the playbook (`python3 run_all.py`)
+passes on the new names.
+
+### Other
+- `hosts/zylos` 0.3.1: wording only (the usage line of `bin/detach.js`, comments and the README say "skill pack"); no behaviour change. Copy the folder again to take it.
+- `docs/lessons.md` and the other docs say "skill pack" for the noun; the sibling projects keep their own names.
 
 ## [0.30.1] - 2026-10-13
 ### Fixed
