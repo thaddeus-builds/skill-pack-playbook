@@ -1,6 +1,6 @@
 # {{name}} roadmap
 Updated: {{today}}
-<!-- The one roadmap format; kit.guards.roadmap holds it (tests/test_roadmap.py). One line per item, `- [ID] YYYY-MM-DD text`: the id's letter names the section (N now, W waiting on the owner, X next, D done, P parked, R decisions) and is never reused; the date is the day the row was written. At every session end set Updated and move rows (docs/session-handoff.md). Replace the example rows. -->
+<!-- The one roadmap format; kit.guards.roadmap holds it (tests/test_roadmap.py). One line per item, `- [ID] YYYY-MM-DD text`: the id's letter names the section (N now, W waiting on the owner, X next, D done, P parked, R decisions) and is never reused; the date is the day the row was written. At every session end set Updated and move rows (docs/session-handoff.md). Replace the example rows. Optional `## Milestones` right after Next: one row per integration unit, `- [M1] YYYY-MM-DD name. includes: X1, X2. closes when: the proof`; at most three open; when every item is Done the row leaves and a Done row records it (docs/operating.md, "Integrate by milestone"). -->
 ## Now
 - [N1] {{today}} the one turn in progress, in a sentence an agent can act on
 ## Waiting on owner
