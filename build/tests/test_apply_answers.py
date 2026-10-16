@@ -346,7 +346,7 @@ def test_what_is_written_is_what_the_owner_was_shown():
         g = row(os.path.join(w["ssot"], "glossary.tsv"), "term", "sampler")
         assert g["term"] in shown["intake-w1"] and g["definition"] in shown["intake-w1"]
         sid = next(a["story"] for a in out["applied"] if a["kind"] == "story")
-        assert sid == "S01"                                 # the first story of a new harness
+        assert sid == "S01"                                 # the first story of a new skill pack
         s = row(os.path.join(w["ssot"], "user-stories.tsv"), "id", sid)
         for text in [s["i_want"], s["so_that"], s["human_step"]] + [d[2:] for d in s["done_when"].split("; ")]:
             assert text in shown["intake-s2"], text

@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import _shop  # noqa: E402
 import _workbooks as X  # noqa: E402
 from kit import messages, workbook as W  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 from kit.testing.xlsx import HTTP, M, D, F, build, serial, write  # noqa: E402
 
@@ -55,7 +55,7 @@ def patched(data: bytes, edits: dict[str, bytes | None]) -> bytes:
 def code_of(fn) -> str | None:
     try:
         fn()
-    except HarnessError as e:
+    except SkillPackError as e:
         return getattr(e.message, "code", None)
     return None
 

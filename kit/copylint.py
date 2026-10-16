@@ -32,7 +32,7 @@ What it guards:
     never read as legal advice.
   * A broken rule is refused, never skipped: a bad regex, a match,
     severity or status outside its set, a missing id or term, a fact with
-    a pattern and no value (HarnessError, coded).
+    a pattern and no value (SkillPackError, coded).
 
 Paid for: the client's own reference ad said its dosage two ways (每天3次
 in one line, 每天一次 in another); the literal banned-term list had no way
@@ -47,7 +47,7 @@ import re
 import unicodedata
 from typing import Iterable
 
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 
 MATCHES = ("literal", "regex")
@@ -91,8 +91,8 @@ def _same(a: str, b: str) -> bool:
         return False
 
 
-def _field_invalid(rule: str, column: str, value, allowed: str) -> HarnessError:
-    return HarnessError(msg(
+def _field_invalid(rule: str, column: str, value, allowed: str) -> SkillPackError:
+    return SkillPackError(msg(
         "copylint_rule_field_invalid",
         f"rule {rule}: {column} {value!r} is not allowed ({allowed}); fix "
         f"the rule file, nothing was linted",
@@ -103,7 +103,7 @@ def _compile(rule: str, pattern: str) -> re.Pattern:
     try:
         return re.compile(pattern)
     except re.error as e:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "copylint_rule_regex_invalid",
             f"rule {rule}: {pattern!r} is not a valid regex ({e}); fix the "
             f"rule file, nothing was linted",

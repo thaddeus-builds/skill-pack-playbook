@@ -38,16 +38,16 @@ Rules: no confirm, approve or apply on the owner's behalf; no paid data calls; r
 - The source project's host scheduler sent the agent a prompt, not a command. Write it closed: absolute paths, "run only these commands", what success looks like, "on success report nothing", "on failure send the owner the error lines", a verified reply channel.
 - Find tasks by name (names are not unique), keep exactly one, act on each by its id, and judge each call by its output, not its exit code.
 - On the source host (Zylos), agent tool calls stop at about 10 minutes; check your host's limit. A longer job runs detached: it writes a log ending `EXIT <code>` and a job file with its pid and start time; the agent polls the log. Pulls are read-only and resumable, so a killed job is simply rerun.
-- Keep the harness, its data folder and its virtualenv on the internal disk. An external disk the OS unmounts at screen lock kills a detached job without its exit line (the playbook's `docs/lessons.md`, "Paid generation jobs").
+- Keep the skill pack, its data folder and its virtualenv on the internal disk. An external disk the OS unmounts at screen lock kills a detached job without its exit line (the playbook's `docs/lessons.md`, "Paid generation jobs").
 
 ## New host, or a replaced host agent: what can it reach?
 
 Ask these read-only questions; answers name keys, never values. Re-ask them when the host agent is replaced.
 
-1. Which OS user runs the agent, and who owns the harness folder and the data folder?
+1. Which OS user runs the agent, and who owns the skill pack folder and the data folder?
 2. Does that user have sudo?
 3. The agent's permission mode and deny rules: can the agent itself edit them?
 4. The secrets file's mode and key names: can the agent read it?
-5. Do the host's own connectors expose write actions on the client's platform account, and can the harness's read credential also write? Keep credentials behind one seam (env, or a host command that prints a short-lived token) so the harness stays the only writer.
+5. Do the host's own connectors expose write actions on the client's platform account, and can the skill pack's read credential also write? Keep credentials behind one seam (env, or a host command that prints a short-lived token) so the skill pack stays the only writer.
 
 If the agent can read the code and the keys, only a barrier it cannot edit protects them. Options, cheapest first: ship only runtime files; audit outputs and tracebacks; a read sandbox in settings the agent can't change; a second OS user behind one narrow command; the core off the box.

@@ -1,5 +1,5 @@
 # amazon-ads-harness (ppc). `uv run scripts/ppc.py` reads its own PEP 723 header.
-[harness]
+[skill_pack]
 name = "ppc"
 cwd = "{root}"
 

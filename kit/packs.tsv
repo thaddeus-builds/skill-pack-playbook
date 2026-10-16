@@ -1,7 +1,7 @@
 module	pack	note
 __init__	base	the package
-config	base	harness.toml, the one binding
-contract	base	--json document, HarnessError, exit codes
+config	base	skill-pack.toml, the one binding
+contract	base	--json document, SkillPackError, exit codes
 dates	base	the one clock
 messages	base	coded messages
 paths	base	data dir and DB path

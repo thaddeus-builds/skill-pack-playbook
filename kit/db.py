@@ -1,11 +1,11 @@
 """The SQLite layer (stdlib sqlite3): one file per client holding the
-harness's cache tables (rebuildable from raw) beside the kit's human
+skill pack's cache tables (rebuildable from raw) beside the kit's human
 tables (kit.schema_base: never rebuildable), and the guards that keep the
 human data alive.
 
 What it guards:
 
-  * a file stamped by a newer harness (user_version > spec.version) is
+  * a file stamped by a newer skill pack (user_version > spec.version) is
     refused before anything is read or changed, read-only opens and the
     dry-run check included (SchemaTooNew, code schema_too_new);
   * a read-only open never creates anything: a missing file is no_db,
@@ -57,7 +57,7 @@ Deviations (SPEC §db), each additive:
     command or None, which becomes LossyRebuild's `next`.
   * Extra helpers: transaction(), check_rebuild() (the --dry-run view of
     a rebuild, reference parity), table_sql(), triggers(),
-    HumanTableDrift. SchemaTooNew / LossyRebuild are HarnessErrors (the
+    HumanTableDrift. SchemaTooNew / LossyRebuild are SkillPackErrors (the
     reference used SystemExit / RuntimeError), so fail() codes them.
   * Human-table drift is checked before a write-mode open changes
     anything (the reference checked after its bootstrap), and an added
@@ -88,7 +88,7 @@ from typing import Callable, Iterable, Iterator, Mapping
 
 from kit import dates, paths, schema_base
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import joined, msg
 
 TYPES = {"TEXT": "TEXT", "INTEGER": "INTEGER", "REAL": "REAL",
@@ -238,8 +238,8 @@ def with_human(cache: Mapping[str, dict], *, version: int,
                frozen_columns: Mapping[str, Iterable[str]] | None = None,
                human_added_later: Iterable[str] = (),
                backups_keep: int = 30) -> SchemaSpec:
-    """The harness's cache tables + the kit's human tables (schema_base)
-    + the harness's own extra human tables. The kit's human tables keep
+    """The skill pack's cache tables + the kit's human tables (schema_base)
+    + the skill pack's own extra human tables. The kit's human tables keep
     the kit's triggers; `append_only` / `frozen_columns` name extra human
     tables only, which default to refusing DELETE."""
     extra = dict(extra_human or {})
@@ -267,7 +267,7 @@ def schema_hash(spec: SchemaSpec) -> str:
     """16 hex chars over the file's shape: every table's columns (in
     order) and types, pk, not_null, unique, defaults, which tables are
     human, the triggers and the views. Not docs, grains, period columns,
-    backups_keep nor the version: a harness pins (version, hash) in a
+    backups_keep nor the version: a skill pack pins (version, hash) in a
     test, so changing the shape without bumping the version fails."""
     shape = {
         "tables": {n: {"columns": [[c, ty] for c, ty
@@ -390,7 +390,7 @@ def stale_tables(spec: SchemaSpec, con: sqlite3.Connection) -> list[str]:
 
 
 def unknown_tables(spec: SchemaSpec, con: sqlite3.Connection) -> list[str]:
-    """Tables the spec does not know (left by an older harness and never
+    """Tables the spec does not know (left by an older skill pack and never
     refreshed); SQLite's own sqlite_* tables are not reported."""
     return sorted(t for t in _objects(con, "table")
                   if t not in spec.tables and not t.startswith("sqlite_"))
@@ -419,21 +419,21 @@ def _desc(cols: Iterable[str], pk: Iterable[str]) -> str:
     return f"{', '.join(cols)} (primary key {', '.join(pk) or 'none'})"
 
 
-class SchemaTooNew(HarnessError):
-    """The file was stamped by a newer harness: refused before anything is
+class SchemaTooNew(SkillPackError):
+    """The file was stamped by a newer skill pack: refused before anything is
     read or changed."""
 
     def __init__(self, path: Path | str, found: int, knows: int):
         self.path, self.found, self.knows = str(path), found, knows
         super().__init__(
             msg("schema_too_new",
-                f"{path} was written by schema v{found}; this harness knows "
-                f"v{knows} — update the harness checkout. Nothing was read "
+                f"{path} was written by schema v{found}; this skill pack knows "
+                f"v{knows} — update the skill pack checkout. Nothing was read "
                 f"or changed", path=str(path), found=found, knows=knows),
             [f"git -C {shlex.quote(str(config().root))} pull"])
 
 
-class LossyRebuild(HarnessError):
+class LossyRebuild(SkillPackError):
     """A stale-table rebuild would drop periods raw cannot refill. Raised
     before anything is dropped. `losses` = [(table, periods held, the
     held periods raw lacks, sorted)]; `next` = backfill(table, lacking)
@@ -454,7 +454,7 @@ class LossyRebuild(HarnessError):
         super().__init__(parts[0] if len(parts) == 1 else joined(parts), nxt)
 
 
-class HumanTableDrift(HarnessError):
+class HumanTableDrift(SkillPackError):
     """A human table on disk differs from the spec: never dropped, never
     migrated automatically."""
 
@@ -470,13 +470,13 @@ class HumanTableDrift(HarnessError):
             [f"{config().cli} doctor"])
 
 
-def _no_db(path: Path) -> HarnessError:
+def _no_db(path: Path) -> SkillPackError:
     """contract.missing_db_error()'s refusal, for any path."""
     cfg = config()
     hook = cfg.raw.get("contract", {}).get("no_db_next")
     steps = (([hook] if isinstance(hook, str) else list(hook)) if hook
              else ["doctor", "facts init"])
-    return HarnessError(
+    return SkillPackError(
         msg("no_db", f"No database at {path}", path=str(path)),
         [s if s.startswith(f"{cfg.cli} ") else f"{cfg.cli} {s}"
          for s in steps])
@@ -498,7 +498,7 @@ def _refuse_newer(spec: SchemaSpec, path: Path) -> None:
         finally:
             con.close()
     except sqlite3.DatabaseError as e:
-        raise HarnessError(
+        raise SkillPackError(
             msg("db_unreadable", f"{path} cannot be read as a database: "
                 f"{e}. Nothing was changed", path=str(path), detail=str(e)),
             [f"{config().cli} doctor"]) from None
@@ -512,7 +512,7 @@ def _check_human(spec: SchemaSpec, con: sqlite3.Connection, *,
     for t in spec.human_tables:
         if t not in have:
             if read_only and t not in spec.human_added_later:
-                raise HarnessError(
+                raise SkillPackError(
                     msg("db_human_table_missing",
                         f"The database has no human table {t} — open it "
                         f"once with a verb that writes to create it; "
@@ -547,7 +547,7 @@ def transaction(con: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
 def keep_human_rows(spec: SchemaSpec, con: sqlite3.Connection
                     ) -> Iterator[sqlite3.Connection]:
     """One transaction that refuses to commit if it leaves any human table
-    with fewer rows than it started with: rolled back, HarnessError
+    with fewer rows than it started with: rolled back, SkillPackError
     human_rows_would_shrink. No sanctioned write deletes a human row, so
     a shrink is always a bug; every writer of a human table (and the
     bootstrap in connect()) runs inside this."""
@@ -558,7 +558,7 @@ def keep_human_rows(spec: SchemaSpec, con: sqlite3.Connection
         lost = "; ".join(f"{t} {before[t]} → {after[t]}"
                          for t in spec.human_tables if after[t] < before[t])
         if lost:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "human_rows_would_shrink",
                 f"Refused: this write would remove human rows ({lost}); "
                 f"rolled back, nothing changed. Human tables are never "

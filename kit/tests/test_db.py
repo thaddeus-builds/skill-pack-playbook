@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """kit.db + kit.schema_base: human data survives every path into the file.
 
-Ported from the reference harness's test_db_minimal.py and
+Ported from the reference skill pack's test_db_minimal.py and
 test_human_tables_survive.py, on a generic cache (orders by day, sales
 by week, a stock snapshot):
 
@@ -26,7 +26,7 @@ by week, a stock snapshot):
   [6] human-table drift (columns or pk) always raises, before anything
       changes, read-only too; a missing human table is refused on a
       read-only open unless declared human_added_later
-  [7] a file stamped by a newer harness is refused on every open and the
+  [7] a file stamped by a newer skill pack is refused on every open and the
       dry run, before any read: bytes unchanged, no backup; read-only
       never stamps, write mode stamps
   [8] a read-only open of a missing file is no_db and creates nothing
@@ -59,7 +59,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import db, messages, schema_base  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 ORDERS = {"columns": {"date": "TEXT", "sku": "TEXT", "units": "INTEGER",
@@ -97,7 +97,7 @@ def quiet(fn):
     return out, err.getvalue()
 
 
-def refusal(fn, exc=HarnessError):
+def refusal(fn, exc=SkillPackError):
     """(the exception, its message code) when fn() raises `exc`; anything
     else propagates."""
     e = raises(fn, exc)
@@ -380,10 +380,10 @@ def t2_triggers() -> None:
           e is not None and "frozen" in str(e), e)
     c = raw(path)
     c.execute("CREATE TRIGGER stock_no_delete BEFORE DELETE ON stock "
-              "BEGIN SELECT 1; END")    # the harness's own, on a cache table
+              "BEGIN SELECT 1; END")    # the skill pack's own, on a cache table
     c.close()
     quiet(lambda: db.connect(s4, path).close())
-    check("a trigger of the harness's own on a cache table is left alone",
+    check("a trigger of the skill pack's own on a cache table is left alone",
           "stock_no_delete" in objects(path, "trigger"))
 
 
@@ -658,7 +658,7 @@ def t6_human_drift() -> None:
 
 
 def t7_too_new() -> None:
-    print("\n[7] a file stamped by a newer harness is refused before any "
+    print("\n[7] a file stamped by a newer skill pack is refused before any "
           "read")
     s = spec()
     path = fresh(s)
@@ -706,7 +706,7 @@ def t8_no_db() -> None:
     where = Path(tmp_dir("db-")) / "nope"
     path = where / "shop.db"
     e, code = refusal(lambda: db.connect(s, path, read_only=True))
-    check("missing file: no_db with the harness's next step",
+    check("missing file: no_db with the skill pack's next step",
           code == "no_db" and e.message.params == {"path": str(path)}
           and e.next == ["shop facts init"], e)
     check("… neither the file nor its directory was created",
@@ -816,7 +816,7 @@ def t11_hash() -> None:
     print("\n[11] schema_hash: pinned, stable, moves only with the shape")
     base = db.schema_hash(db.with_human({}, version=1))
     check("the kit's human tables are pinned (a change here means every "
-          "harness bumps its schema version; then re-pin)",
+          "skill pack bumps its schema version; then re-pin)",
           base == "5c8623e090b32a33", base)
     h = db.schema_hash(spec())
     check("stable across calls and cache insertion order",

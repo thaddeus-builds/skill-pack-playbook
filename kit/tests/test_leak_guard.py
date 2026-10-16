@@ -74,7 +74,7 @@ def repo(toml: str = "") -> tuple[Path, Path, str]:
     terms.write_text(TERMS, encoding="utf-8")
     files = {"a.md": "nothing here\n"}
     if toml:
-        files["harness.toml"] = toml
+        files["skill-pack.toml"] = toml
     return r, terms, commit(r, files, "start")
 
 
@@ -244,7 +244,7 @@ def main() -> int:
           lines)
 
     print("\n[3] where the lists are, and fail closed")
-    toml = ('[harness]\nname = "acme"\ncli = "acme"\nenv_prefix = "ACME"\n'
+    toml = ('[skill_pack]\nname = "acme"\ncli = "acme"\nenv_prefix = "ACME"\n'
             '[guards.leak]\nterms = ["../lists/*.txt", "~/no-such-dir/*.txt"]\n')
     r, terms, base = repo(toml)
     head = commit(r, {"e.md": "Widgetco\n"}, "e")
@@ -266,7 +266,7 @@ def main() -> int:
     other.write_text("re:^Widgetco$\n", encoding="utf-8")
     code, lines, _ = run(r, "--range", rng,
                          environ={"ACME_CLIENT_TERMS": f"{other}{os.pathsep}"})
-    check("<PREFIX>_CLIENT_TERMS is read after harness.toml's lists",
+    check("<PREFIX>_CLIENT_TERMS is read after skill-pack.toml's lists",
           code == 1 and hits(lines) == ["<sha> e.md:1: term on line 1 of "
                                         "list 2", "<sha> e.md:1: term on line"
                                         " 2 of list 1"], lines)
@@ -292,7 +292,7 @@ def main() -> int:
               and not leaks(err), (code, lines, err))
 
     bare, _, _ = repo()
-    refused("no harness.toml and no --terms", repo_dir=bare)
+    refused("no skill-pack.toml and no --terms", repo_dir=bare)
     refused("a named list that is missing", "--terms",
             str(terms.parent / "gone.txt"))
     refused("a named list missing beside one that exists", "--terms",
@@ -313,7 +313,7 @@ def main() -> int:
     empty.write_text("re:(widgetco\n", encoding="utf-8")
     refused("a bad regular expression, its text not echoed", "--terms",
             str(empty))
-    bad, _, _ = repo('[harness]\nenv_prefix = "ACME"\n[guards.leak]\n'
+    bad, _, _ = repo('[skill_pack]\nenv_prefix = "ACME"\n[guards.leak]\n'
                      'terms = "one.txt"\n')
     refused("[guards.leak] terms that is not a list", repo_dir=bad)
     code, _, err = run(r, "--terms", str(terms), "--range", "nope..HEAD")
@@ -333,8 +333,8 @@ def main() -> int:
     lists = d / "workspaces" / "client-a" / "data"
     lists.mkdir(parents=True)
     (lists / "client_terms.txt").write_text(TERMS, encoding="utf-8")
-    commit(r, {"harness.toml": (
-        '[harness]\nname = "acme"\ncli = "acme"\nenv_prefix = "ACME"\n'
+    commit(r, {"skill-pack.toml": (
+        '[skill_pack]\nname = "acme"\ncli = "acme"\nenv_prefix = "ACME"\n'
         f'[guards.leak]\nterms = ["{d}/workspaces/*/data/client_terms.txt"]\n'),
         "a.md": "clean\n"}, "start")
     git(r, "remote", "add", "origin", str(remote))

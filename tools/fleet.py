@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Where each harness's vendored copies stand against this playbook.
+"""Where each skill pack's vendored copies stand against this playbook.
 
-    python3 tools/fleet.py status HARNESS... [--json]
-    python3 tools/fleet.py diff HARNESS [FILE...]
+    python3 tools/fleet.py status SKILL_PACK... [--json]
+    python3 tools/fleet.py diff SKILL_PACK [FILE...]
 
-For each harness it reads the kit (<scripts_dir>/kit/), the console
+For each skill pack it reads the kit (<scripts_dir>/kit/), the console
 (console/) and the Zylos adapter (zylos/), whichever it holds, and compares
 each file with the playbook's current copy (kit/, console/, hosts/zylos/):
 
@@ -21,9 +21,9 @@ each file with the playbook's current copy (kit/, console/, hosts/zylos/):
 `edited` lists the files that differ from the copy's own MANIFEST.sha256
 (an edit made after vendoring). The verdict per copy is `in sync`,
 `behind` (re-vendor) or `local changes` (decide each file first). Phase 1 of
-RESTRUCTURE.md: bring every harness to one kit version.
+RESTRUCTURE.md: bring every skill pack to one kit version.
 
-`diff` prints a unified diff, harness copy against the playbook's current
+`diff` prints a unified diff, skill pack copy against the playbook's current
 file, for each file that is not the same (or only the FILEs named, as
 `kit/facts.py`, `console/core.py` or `zylos/lib.js`).
 
@@ -46,7 +46,7 @@ from pathlib import Path
 PLAYBOOK = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {"tests", "__pycache__"}
 SKIP_FILES = {"MANIFEST.sha256", ".DS_Store"}
-# The adapter files a harness does not copy (hosts/zylos/README.md), and the
+# The adapter files a skill pack does not copy (hosts/zylos/README.md), and the
 # one it writes itself.
 ZYLOS_NOT_COPIED = {"ecosystem.config.cjs.template", "manifest.example.json"}
 ZYLOS_OWN = {"manifest.json"}
@@ -118,18 +118,18 @@ def read_toml(path: Path) -> dict:
         return {}
 
 
-def parts(harness: Path, playbook: Path) -> list[dict]:
-    """The copies a harness can hold: label, playbook dir, copy dir, VERSION file in the playbook."""
-    h = read_toml(harness / "harness.toml").get("harness", {})
+def parts(skill_pack: Path, playbook: Path) -> list[dict]:
+    """The copies a skill pack can hold: label, playbook dir, copy dir, VERSION file in the playbook."""
+    h = read_toml(skill_pack / "skill-pack.toml").get("skill_pack", {})
     scripts = str(h.get("scripts_dir") or "scripts")
     common = {"root": playbook}
     return [{**common, **p} for p in (
         {"label": "kit", "src": playbook / "kit", "src_rel": "kit",
-         "dest": harness / scripts / "kit", "version_file": "kit/VERSION", "skip": set()},
+         "dest": skill_pack / scripts / "kit", "version_file": "kit/VERSION", "skip": set()},
         {"label": "console", "src": playbook / "console", "src_rel": "console",
-         "dest": harness / "console", "version_file": "kit/VERSION", "skip": set()},
+         "dest": skill_pack / "console", "version_file": "kit/VERSION", "skip": set()},
         {"label": "zylos", "src": playbook / "hosts" / "zylos", "src_rel": "hosts/zylos",
-         "dest": harness / "zylos", "version_file": "hosts/zylos/VERSION",
+         "dest": skill_pack / "zylos", "version_file": "hosts/zylos/VERSION",
          "skip": ZYLOS_NOT_COPIED | ZYLOS_OWN},
     )]
 
@@ -173,7 +173,7 @@ def compare(part: dict, history: History) -> dict | None:
         else:
             row["state"] = "local" if rel in want else "extra"
             if rel not in want:
-                row.update(own=True, note="not in the playbook's history: a file of the harness's own")
+                row.update(own=True, note="not in the playbook's history: a file of the skill pack's own")
         rows.append(row)
     v, cur = dest / "VERSION", part["root"] / part["version_file"]
     version = v.read_text("utf-8").strip() if v.is_file() else None
@@ -189,17 +189,17 @@ def compare(part: dict, history: History) -> dict | None:
             "edited": manifest_edits(dest), "files": rows, "verdict": verdict}
 
 
-def status(harness: Path, playbook: Path, history: History) -> dict:
-    h = read_toml(harness / "harness.toml").get("harness", {})
-    copies = [c for p in parts(harness, playbook) if (c := compare(p, history))]
-    return {"harness": str(harness), "name": h.get("name"), "copies": copies,
+def status(skill_pack: Path, playbook: Path, history: History) -> dict:
+    h = read_toml(skill_pack / "skill-pack.toml").get("skill_pack", {})
+    copies = [c for p in parts(skill_pack, playbook) if (c := compare(p, history))]
+    return {"skill_pack": str(skill_pack), "name": h.get("name"), "copies": copies,
             "history": "ok" if history.ok and not history.shallow
             else "shallow: older and local cannot be told apart for old versions" if history.ok
             else "none: older and local cannot be told apart"}
 
 
 def render(doc: dict) -> str:
-    out = [f"{doc['name'] or '?'}  {doc['harness']}"]
+    out = [f"{doc['name'] or '?'}  {doc['skill_pack']}"]
     if doc["history"] != "ok":
         out.append(f"  history: {doc['history']}")
     if not doc["copies"]:
@@ -213,9 +213,9 @@ def render(doc: dict) -> str:
     return "\n".join(out)
 
 
-def diff(harness: Path, playbook: Path, only: list[str]) -> str:
+def diff(skill_pack: Path, playbook: Path, only: list[str]) -> str:
     out = []
-    for p in parts(harness, playbook):
+    for p in parts(skill_pack, playbook):
         if not p["dest"].is_dir():
             continue
         for rel in sorted(set(files(p["src"], p["skip"])) | set(files(p["dest"], p["skip"]))):
@@ -229,7 +229,7 @@ def diff(harness: Path, playbook: Path, only: list[str]) -> str:
             out.extend(difflib.unified_diff(
                 a.decode("utf-8", "replace").splitlines(keepends=True),
                 b.decode("utf-8", "replace").splitlines(keepends=True),
-                fromfile=f"harness/{name}", tofile=f"playbook/{p['src_rel']}/{rel}"))
+                fromfile=f"skill_pack/{name}", tofile=f"playbook/{p['src_rel']}/{rel}"))
     return "".join(out)
 
 
@@ -238,26 +238,26 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--playbook", default=str(PLAYBOOK), help=argparse.SUPPRESS)
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("status", help="each copy's version, verdict and differing files")
-    s.add_argument("harness", nargs="+")
+    s.add_argument("skill_pack", nargs="+")
     s.add_argument("--json", action="store_true")
-    d = sub.add_parser("diff", help="unified diffs, harness copy against the playbook")
-    d.add_argument("harness")
+    d = sub.add_parser("diff", help="unified diffs, skill pack copy against the playbook")
+    d.add_argument("skill_pack")
     d.add_argument("file", nargs="*", help="e.g. kit/facts.py; default every differing file")
     args = ap.parse_args(argv)
     playbook = Path(args.playbook).resolve()
-    harnesses = [Path(h).expanduser().resolve() for h in
-                 (args.harness if args.cmd == "status" else [args.harness])]
-    for h in harnesses:
+    skill_packs = [Path(h).expanduser().resolve() for h in
+                 (args.skill_pack if args.cmd == "status" else [args.skill_pack])]
+    for h in skill_packs:
         if not h.is_dir():
             print(f"error: {h} is not a directory", file=sys.stderr)
             return 2
     if args.cmd == "diff":
-        sys.stdout.write(diff(harnesses[0], playbook, args.file))
+        sys.stdout.write(diff(skill_packs[0], playbook, args.file))
         return 0
     history = History(playbook)
-    docs = [status(h, playbook, history) for h in harnesses]
+    docs = [status(h, playbook, history) for h in skill_packs]
     if args.json:
-        print(json.dumps({"playbook": str(playbook), "harnesses": docs}, indent=2))
+        print(json.dumps({"playbook": str(playbook), "skill_packs": docs}, indent=2))
     else:
         print("\n\n".join(render(doc) for doc in docs))
     return 0

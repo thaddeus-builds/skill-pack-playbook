@@ -36,7 +36,7 @@ ROOT = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # for the people changing the code and its CI; the index's reader-less files join these
 INTERNAL = (".gitattributes", "CLAUDE.md", ".claude", "tests", "evals",
             ".github", ".gitlab-ci.yml", "ssot/README.md")
-MUST_SHIP = ("README.md", "src/harness.py", "common/dates.py")
+MUST_SHIP = ("README.md", "src/skill_pack.py", "common/dates.py")
 RUNTIME = ("src", "common")                # code whose literal `x.tsv` names must ship
 INDEX, READER, NO_READER = "ssot/index.tsv", "reader", "—"
 OPENED = re.compile(r"""["']([\w.-]+\.tsv)["']""")

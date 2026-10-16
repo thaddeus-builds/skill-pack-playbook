@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The kit's tier registry, kit-tiers.tsv at the playbook root (docs/kit-and-tools.md, "The
 admission rule"), held to the kit's source. The registry and this test sit
-outside the bytes a harness vendors (kit/ minus tests/), so a tier change never
+outside the bytes a skill pack vendors (kit/ minus tests/), so a tier change never
 touches a vendored copy or kit/MANIFEST.sha256.
 
   [0] the registry of this repository is clean, and is not vendored
@@ -12,8 +12,8 @@ touches a vendored copy or kit/MANIFEST.sha256.
       and the package above a module: importing a.b runs a/__init__):
       core imports only core; stack imports core and stack
   [4] admission, from the registry's own data: a core row names at least two
-      harnesses using it in production (video-ads, kol, rednote: the scaffold
-      skeleton is no harness and never counts toward core; it counts toward
+      skill packs using it in production (video-ads, kol, rednote: the scaffold
+      skeleton is no skill pack and never counts toward core; it counts toward
       the cap on extra), an extra row at most one consumer; a row nothing
       imports (no consumer, or only forks) is extra and says "no consumer"
   [5] the registry's shape: columns, consumers as who:kind with a who from the
@@ -26,7 +26,7 @@ touches a vendored copy or kit/MANIFEST.sha256.
 
 Each rule is proven on a broken copy of the kit and the registry, one plant
 at a time, each undone before the next. The graph sees static imports only
-(kit/verbs.py loads the harness's own verbs file with importlib; no kit module
+(kit/verbs.py loads the skill pack's own verbs file with importlib; no kit module
 loads another that way).
 """
 
@@ -49,7 +49,7 @@ COLUMNS = ("module", "tier", "consumers", "evidence", "since", "note")
 TIERS = ("core", "stack", "extra")
 KINDS = ("prod", "skeleton", "test", "tool", "fork")
 WHO = ("video-ads", "kol", "rednote", "skeleton", "seo", "outreach", "source", "zylos", "playbook")   # docs/kit-and-tools.md, "Reading the registry"
-HARNESSES = ("video-ads", "kol", "rednote")     # the harnesses that vendor the kit: the only `prod`
+SKILL_PACKS = ("video-ads", "kol", "rednote")     # the skill packs that vendor the kit: the only `prod`
 HERE = ("skeleton", "playbook", "zylos")        # consumers that live in this repository: their evidence is read
 COUNTED = ("prod", "skeleton")                  # counted toward the cap on extra; only `prod` counts toward core
 MAY_IMPORT = {"core": {"core"}, "stack": {"core", "stack"}}
@@ -238,16 +238,16 @@ def problems(root: Path, repo: Path | None = None) -> list[str]:
         whos = [w for w, _ in pairs]
         out += [f"{m}: consumer {w!r} listed twice" for w in sorted({w for w in whos if whos.count(w) > 1})]
         out += [f"{m}: consumer {w!r} is not one of {', '.join(WHO)}" for w in sorted({w for w in whos if w not in WHO})]
-        out += [f"{m}: {w}:{k}: only {', '.join(HARNESSES)} use a module in production" for w, k in pairs
-                if k == "prod" and w in WHO and w not in HARNESSES]
+        out += [f"{m}: {w}:{k}: only {', '.join(SKILL_PACKS)} use a module in production" for w, k in pairs
+                if k == "prod" and w in WHO and w not in SKILL_PACKS]
         out += [f"{m}: {w}:{k}: the kind skeleton is for the skeleton, and the skeleton's kind is skeleton or test"
                 for w, k in pairs if (k == "skeleton" and w != "skeleton") or (w == "skeleton" and k not in ("skeleton", "test"))]
         counted = sorted({w for w, k in pairs if k in COUNTED})
-        harnesses = sorted({w for w, k in pairs if k == "prod" and w in HARNESSES})
-        if t == "core" and len(harnesses) < 2:
-            out.append(f"core {m}: {len(harnesses)} independent consumer(s) ({', '.join(harnesses) or 'none'}); "
-                       f"the rule needs 2 harnesses using it in production"
-                       + ("; the skeleton is not a harness" if "skeleton" in whos else ""))
+        skill_packs = sorted({w for w, k in pairs if k == "prod" and w in SKILL_PACKS})
+        if t == "core" and len(skill_packs) < 2:
+            out.append(f"core {m}: {len(skill_packs)} independent consumer(s) ({', '.join(skill_packs) or 'none'}); "
+                       f"the rule needs 2 skill packs using it in production"
+                       + ("; the skeleton is not a skill pack" if "skeleton" in whos else ""))
         if t == "extra" and len(counted) > 1:
             out.append(f"extra {m}: {len(counted)} independent consumers ({', '.join(counted)}); at most 1, "
                        f"so promote it or recount")
@@ -296,8 +296,8 @@ def docs_problems(readme: str, unmerged: list[str] | tuple[str, ...] = ()) -> li
     out = []
     if not re.search(r"^#+ The admission rule$", readme, re.M):
         out.append('no "The admission rule" heading')
-    for needle in (NAME, "kit/tests/test_tiers.py", "Packs decide what a harness vendors",
-                   "never toward core", "at least two independent harnesses use it in production"):
+    for needle in (NAME, "kit/tests/test_tiers.py", "Packs decide what a skill pack vendors",
+                   "never toward core", "at least two independent skill packs use it in production"):
         if needle not in readme:
             out.append(f"does not say {needle!r}")
     out += [f"does not name the consumer `{w}`" for w in WHO if f"`{w}`" not in readme]
@@ -396,7 +396,7 @@ def main() -> int:
           "testing" in g["testing.check"]
           and "testing" not in imports(src["testing.check"].read_text(encoding="utf-8"), "testing"),
           sorted(g["testing.check"]))
-    check("the registry is outside what a harness vendors",
+    check("the registry is outside what a skill pack vendors",
           not any(NAME in r or "test_tiers" in r for r in manifest.files(KIT)))
 
     cp = Copy()
@@ -455,7 +455,7 @@ def main() -> int:
              {NAME: cell("dates", "consumers", "video-ads:prod; kol:test; seo:fork")})
     cp.plant("a core row with no consumer", "core dates: 0 independent consumer(s) (none)",
              {NAME: cell("dates", "consumers", "")})
-    cp.plant("one harness listed twice", "copylint: consumer 'kol' listed twice",
+    cp.plant("one skill pack listed twice", "copylint: consumer 'kol' listed twice",
              {NAME: cell("copylint", "consumers", "kol:prod; kol:skeleton")})
     cp.plant("an extra row with two consumers", "extra takes: 2 independent consumers (kol, video-ads); at most 1",
              {NAME: cell("takes", "consumers", "video-ads:prod; kol:prod")})
@@ -469,28 +469,28 @@ def main() -> int:
              {NAME: cell("retry", "consumers", "outreach:fork")})
     cp.holds("tests, tools and forks never count: an extra row may list any number of them",
              {NAME: cell("takes", "consumers", "video-ads:prod; kol:test; playbook:fork; seo:fork; outreach:fork")})
-    cp.plant("the skeleton and one harness are not two harnesses: kol and rednote are built from it",
-             "core config: 1 independent consumer(s) (kol); the rule needs 2 harnesses using it in production; "
-             "the skeleton is not a harness",
+    cp.plant("the skeleton and one skill pack are not two skill packs: kol and rednote are built from it",
+             "core config: 1 independent consumer(s) (kol); the rule needs 2 skill packs using it in production; "
+             "the skeleton is not a skill pack",
              {NAME: cell("config", "consumers", "skeleton:skeleton; kol:prod")})
-    cp.plant("two consumers that are no harness (a skeleton and a test) are not two",
+    cp.plant("two consumers that are no skill pack (a skeleton and a test) are not two",
              "core config: 0 independent consumer(s) (none)",
              {NAME: cell("config", "consumers", "skeleton:skeleton; zylos:test")})
-    cp.holds("two harnesses in production: a core row is clean",
+    cp.holds("two skill packs in production: a core row is clean",
              {NAME: cell("config", "consumers", "video-ads:prod; kol:prod")})
     cp.holds("stack has no count rule: one consumer, or five",
              {NAME: cell("market", "consumers", "kol:prod; rednote:prod; video-ads:prod")})
 
     print("\n[5] the registry's shape")
-    cp.plant("an invented consumer is not a second harness", "dates: consumer 'kol2' is not one of video-ads, kol, rednote",
+    cp.plant("an invented consumer is not a second skill pack", "dates: consumer 'kol2' is not one of video-ads, kol, rednote",
              {NAME: cell("dates", "consumers", "video-ads:prod; kol2:prod")})
     cp.plant("a consumer name with a typo", "config: consumer 'rednot' is not one of",
              {NAME: cell("config", "consumers", "kol:prod; rednot:prod")})
     cp.plant("a production use by a project that does not vendor the kit", "retry: outreach:prod: only video-ads, kol, rednote",
              {NAME: cell("retry", "consumers", "kol:prod; outreach:prod")})
-    cp.plant("the zylos adapter is not a harness", "env: zylos:prod: only video-ads, kol, rednote",
+    cp.plant("the zylos adapter is not a skill pack", "env: zylos:prod: only video-ads, kol, rednote",
              {NAME: cell("env", "consumers", "zylos:prod; seo:fork; source:fork")})
-    cp.plant("the kind skeleton under a harness", "retry: kol:skeleton: the kind skeleton is for the skeleton",
+    cp.plant("the kind skeleton under a skill pack", "retry: kol:skeleton: the kind skeleton is for the skeleton",
              {NAME: cell("retry", "consumers", "kol:skeleton")})
     cp.plant("the skeleton as production code", "execute: skeleton:prod: only video-ads, kol, rednote",
              {NAME: cell("execute", "consumers", "skeleton:prod")})
@@ -502,7 +502,7 @@ def main() -> int:
              {NAME: cell("queue", "evidence", "README.md")})
     cp.plant("evidence in the wrong home: the skeleton's use shown by a playbook file",
              "queue: skeleton:skeleton has no evidence: a file of this repository under scaffold/skeleton/",
-             {NAME: cell("queue", "evidence", "scaffold/new_harness.py")})
+             {NAME: cell("queue", "evidence", "scaffold/new_skill_pack.py")})
     cp.plant("evidence that does not import the module", "queue: evidence scaffold/skeleton/scripts/pending.py does not use kit.queue",
              {NAME: cell("queue", "evidence", "scaffold/skeleton/scripts/pending.py")})
     cp.plant("the zylos evidence of a file that does not import kit.env",
@@ -510,7 +510,7 @@ def main() -> int:
              {NAME: cell("env", "evidence", "hosts/zylos/tests/test_manifest.py:21 (from kit.env import parse); seo:scripts/_lib/envchain.py")})
     cp.plant("the zylos evidence, KEEP: tools.vendor named by a README that does not name it",
              "tools.vendor: evidence hosts/zylos/tests/run.py does not use kit.tools.vendor",
-             {NAME: cell("tools.vendor", "evidence", "scaffold/new_harness.py; hosts/zylos/tests/run.py")})
+             {NAME: cell("tools.vendor", "evidence", "scaffold/new_skill_pack.py; hosts/zylos/tests/run.py")})
     cp.plant("a (via X) whose X the file does not import", "guards.ssot: evidence scaffold/skeleton/tests/test_ssot.py does not use "
              "kit.guards.ssot through kit.db",
              {NAME: cell("guards.ssot", "evidence", "scaffold/skeleton/tests/test_ssot.py (via db)")})
@@ -552,7 +552,7 @@ def main() -> int:
           and not (dest.parent / NAME).exists())
     rc, out, _ = capture(vendor.main, ["--help"])
     check("vendor.py has no option that picks tiers (the README says none exists)",
-          rc == 0 and "--harness" in out and not re.search(r"\btiers?\b", out, re.I), out)
+          rc == 0 and "--skill-pack" in out and not re.search(r"\btiers?\b", out, re.I), out)
 
     print("\n[7] docs/kit-and-tools.md names the registry and this test")
     readme = (PLAYBOOK / "docs" / "kit-and-tools.md").read_text(encoding="utf-8")
@@ -560,8 +560,8 @@ def main() -> int:
           docs_problems(readme) == [], docs_problems(readme))
     check("the check fails on a README without the section",
           len(docs_problems("# Agent Harness Playbook\n")) == 1 + 5 + len(WHO)
-          and docs_problems(readme.replace("Packs decide what a harness vendors", "x"))
-          == ["does not say 'Packs decide what a harness vendors'"])
+          and docs_problems(readme.replace("Packs decide what a skill pack vendors", "x"))
+          == ["does not say 'Packs decide what a skill pack vendors'"])
     check("…on a README that lets the skeleton count toward core, or leaves a consumer name out",
           docs_problems(readme.replace("never toward core", "also toward core"))
           == ["does not say 'never toward core'"]

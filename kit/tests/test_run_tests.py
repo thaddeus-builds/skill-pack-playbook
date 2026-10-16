@@ -132,7 +132,7 @@ def main() -> int:
     check("run_functions(): each test_* function is one check",
           rc == 0 and "RESULT: 2 passed" in out, out)
     rc, out, _ = gate({"test_marker.py": MARKER})
-    check("every file runs with KIT_TEST_RUN=1 (a harness tells a test by it)",
+    check("every file runs with KIT_TEST_RUN=1 (a skill pack tells a test by it)",
           rc == 0, out)
     rc, out, _ = gate({"test_uv.py": UV_LOCK})
     check("uv's own lock file is not the test's leak", rc == 0, out)

@@ -1,10 +1,10 @@
 """Which market a verb acts on, and the declaration door.
 
-Ported from the reference harness's `_lib/market_gate.py`. A market is
+Ported from the reference skill pack's `_lib/market_gate.py`. A market is
 always named, never assumed:
 
   * validate()          an explicit market must be one of the closed set
-                        `[harness].markets` (matched case-insensitively,
+                        `[skill_pack].markets` (matched case-insensitively,
                         returned in its declared spelling, so `us` and `US`
                         never become two partitions); anything else is
                         market_not_a_market.
@@ -20,7 +20,7 @@ always named, never assumed:
                         which makes "recorded into the wrong partition"
                         unreachable rather than merely discouraged.
 
-A harness with `markets = []` keeps no partition: every function returns
+A skill pack with `markets = []` keeps no partition: every function returns
 or accepts the one pseudo-market "_" (declared() is ["_"] whatever the DB
 holds), and an explicit market other than "_" is refused
 (market_unpartitioned), the same way everywhere.
@@ -47,14 +47,14 @@ import shlex
 from typing import TYPE_CHECKING
 
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 
 if TYPE_CHECKING:          # a type only: a puller imports validate() and
     import sqlite3         # must not reach the database (the layering rule)
 
 MARKET_KEY = "market_declared"   # the client fact whose confirmed row declares a market
-PSEUDO = "_"                     # the one market of a harness with no partition
+PSEUDO = "_"                     # the one market of a skill pack with no partition
 
 
 def _markets() -> tuple[str, ...]:
@@ -67,24 +67,24 @@ def _init_next() -> list[str]:
 
 def validate(code: str | None) -> str:
     """The canonical spelling of `code` in the closed set, else
-    HarnessError(market_not_a_market) (market_unpartitioned when the
-    harness keeps no partition and `code` is not "_")."""
+    SkillPackError(market_not_a_market) (market_unpartitioned when the
+    skill pack keeps no partition and `code` is not "_")."""
     markets = _markets()
     text = (code or "").strip()
     if not markets:
         if text == PSEUDO:
             return PSEUDO
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "market_unpartitioned",
-            f"{code!r}: this harness keeps no market partition — omit "
+            f"{code!r}: this skill pack keeps no market partition — omit "
             f"--market (its one market is {PSEUDO!r})", market=code))
     canon = {m.casefold(): m for m in markets}.get(text.casefold())
     if canon is None:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "market_not_a_market",
-            f"{code!r} is not a market of this harness. Valid: "
-            f"{', '.join(markets)} (the set is closed: [harness].markets "
-            f"in harness.toml)", market=code, markets=list(markets)))
+            f"{code!r} is not a market of this skill pack. Valid: "
+            f"{', '.join(markets)} (the set is closed: [skill_pack].markets "
+            f"in skill-pack.toml)", market=code, markets=list(markets)))
     return canon
 
 
@@ -97,7 +97,7 @@ def declared(con: sqlite3.Connection | None, *,
              include_pending: bool = False) -> list[str]:
     """The declared markets, sorted: those with a confirmed MARKET_KEY fact
     (with `include_pending`, a pending one counts too), limited to the
-    closed set. ["_"] for a harness with no partition."""
+    closed set. ["_"] for a skill pack with no partition."""
     markets = _markets()
     if not markets:
         return [PSEUDO]
@@ -116,7 +116,7 @@ def require_declared(con: sqlite3.Connection | None, market: str) -> None:
         validate(market)            # "_" passes; anything else: unpartitioned
         return
     if market not in declared(con):
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "market_not_onboarded",
             f"market {market!r} is not onboarded — no confirmed "
             f"`{MARKET_KEY}` fact for it. Run `{config().cli} facts init` "
@@ -140,13 +140,13 @@ def resolve(con: sqlite3.Connection | None, explicit: str | None, *,
         return ms[0]
     cli = config().cli
     if not ms:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "market_none_declared",
             f"no market is declared in this DB — nothing is onboarded yet. "
             f"Run `{cli} facts init` to declare one."), _init_next())
     nxt = ([shlex.join([*cmd, "--market", m]) for m in ms] if cmd
            else [f"{cli} facts list --market {m}" for m in ms])
-    raise HarnessError(msg(
+    raise SkillPackError(msg(
         "market_ambiguous",
         f"{len(ms)} markets declared ({', '.join(ms)}) — pass --market to "
         f"say which.", markets=ms), nxt)

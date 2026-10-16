@@ -16,11 +16,11 @@
 //                                 carries --relay-verbs (serve.py wants both)
 //   <console.args…>               the rest, as the manifest gives them
 //
-// Keys are read like the harness reads them (process env, then the .env
-// chain). <PREFIX>_CONFIRM_CODE_SECRET, which the relay's harness runs need
+// Keys are read like the skill pack reads them (process env, then the .env
+// chain). <PREFIX>_CONFIRM_CODE_SECRET, which the relay's skill pack runs need
 // to issue and check a click's one-time code, is a fresh random value made at
 // each start and exported to the console's process only: never written to a
-// file (the harness never loads it from one: kit/env.py), never printed. Both
+// file (the skill pack never loads it from one: kit/env.py), never printed. Both
 // calls of one click run under the same start. Exits 2 on a bad port or host,
 // 127 without uv, else with the console's status. Stdlib only.
 
@@ -44,7 +44,7 @@ if (!uv) {
 fs.mkdirSync(h.CONSOLE_DIR, { recursive: true, mode: 0o700 });
 const env = h.cliEnv();
 env[h.CONFIRM_SECRET_VAR] = crypto.randomBytes(32).toString('hex');
-// the relay's harness runs find uv the same way
+// the relay's skill pack runs find uv the same way
 env.PATH = [path.dirname(uv), env.PATH].filter(Boolean).join(path.delimiter);
 const child = spawn(uv, ['run', '--no-project', c.entry, ...c.argv], { stdio: 'inherit', env });
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => child.kill(sig));

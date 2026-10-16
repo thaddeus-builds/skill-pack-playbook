@@ -6,7 +6,7 @@
 //      by an earlier release (<data dir>/.zylos-tasks.json);
 //   3. copy the console's Caddy block into <data dir>/caddy-block.saved (the
 //      uninstall deletes it from the Caddyfile; post-install names the copy).
-// The data dir (the harness's state, .env, console log, logs) is never
+// The data dir (the skill pack's state, .env, console log, logs) is never
 // touched. Exits 1 with the reason on stderr when a job can't be stopped or
 // a task can't be listed or removed.
 

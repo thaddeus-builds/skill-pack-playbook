@@ -1,6 +1,6 @@
 """The decisions verb: every human judgement about one entity, in one
 generic table (schema_base `decisions` + `decisions_history`), keyed per
-market. Ported from the reference harness's scripts/decisions.py and the
+market. Ported from the reference skill pack's scripts/decisions.py and the
 readers of its _lib/decisions.py; the registry (which entity types and
 keys exist, their value domains, their `confirm` column) is
 kit.registry.DecisionRegistry, and anything it does not list is refused.
@@ -13,7 +13,7 @@ What it guards:
     the value a human last confirmed, so a proposal never changes a result
     (`effective`). A key the registry marks `confirm = none` is in force
     the moment it is set (never one that can move money); a key marked
-    `harness` is written only by a hook inside another confirm, so `set`
+    `skill_pack` is written only by a hook inside another confirm, so `set`
     and `confirm` refuse it.
   * `confirm ET ID… KEY`: several ids of one type and key pass ONE
     challenge (the human retypes the word `confirm`, or relays back one
@@ -65,7 +65,7 @@ Hooks (the reference's stage rules, generalised):
     write_confirm) and returns report lines; `confirmed` / `recorded`
     name the keys listed under those names in --json.
 
-Readers for harness code: effective(), pending(), row(), last_change(),
+Readers for skill pack code: effective(), pending(), row(), last_change(),
 set_history(); plan_confirm() is the exact challenge `confirm` would run
 (pending asks copy its subject rather than guess it).
 
@@ -83,7 +83,7 @@ report:
     force unchanged) where the reference only appended history.
   * confirm and withdraw also set the row's updated_at and changed_by.
   * Coded refusals where the reference raised plain text:
-    decision_source_required, decision_harness_written (the reference's
+    decision_source_required, decision_skill_pack_written (the reference's
     decision_with_stage_only). New: decision_changed_meanwhile.
   * --reason / --source are refused as coded messages (reason_required,
     decision_source_required), not argparse usage errors; every verb takes
@@ -110,7 +110,7 @@ from typing import Any, Callable, Iterable, Mapping
 from kit import db, human
 from kit import market as mk
 from kit.config import config
-from kit.contract import HarnessError, add_json_arg, run_main
+from kit.contract import SkillPackError, add_json_arg, run_main
 from kit.contract import Parser as contract_parser
 from kit.db import SchemaSpec
 from kit.messages import joined, msg
@@ -304,12 +304,12 @@ def _write_withdraw(con: sqlite3.Connection, r: dict, reason: str) -> None:
 
 # ---- refusals --------------------------------------------------------------
 
-def _refuse_harness_written(registry: DecisionRegistry, et: str,
+def _refuse_skill_pack_written(registry: DecisionRegistry, et: str,
                             key: str) -> None:
-    if registry.harness_written(et, key):
+    if registry.skill_pack_written(et, key):
         raise human.Refused(msg(
-            "decision_harness_written",
-            f"{et} {key} is written only by the harness, inside another "
+            "decision_skill_pack_written",
+            f"{et} {key} is written only by the skill pack, inside another "
             f"human confirm — it cannot be set or confirmed by itself",
             entity_type=et, key=key))
 
@@ -321,7 +321,7 @@ def _not_found(m: str, et: str, eid: str, key: str):
 
 def _check_entity_type(registry: DecisionRegistry, et: str | None) -> None:
     if et is not None and et not in registry.entity_types():
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "decision_entity_type_unknown",
             f"unknown entity_type {et!r} "
             f"({', '.join(registry.entity_types())})",
@@ -331,7 +331,7 @@ def _check_entity_type(registry: DecisionRegistry, et: str | None) -> None:
 def _check_confirm_args(registry: DecisionRegistry, et: str,
                         eids: list[str], key: str, value: str | None) -> None:
     registry.check_key(et, key)
-    _refuse_harness_written(registry, et, key)
+    _refuse_skill_pack_written(registry, et, key)
     if value is not None and len(eids) != 1:
         raise human.Refused(msg("decision_value_one_id",
                                 "--value confirms exactly one id"))
@@ -596,7 +596,7 @@ def cmd_get(con: sqlite3.Connection, a: argparse.Namespace, ctx: dict) -> Any:
     m = ctx["market"]
     r = row(con, m, a.entity_type, a.entity_id, a.key)
     if r is None:
-        raise HarnessError(_not_found(m, a.entity_type, a.entity_id, a.key))
+        raise SkillPackError(_not_found(m, a.entity_type, a.entity_id, a.key))
     r = _with_effective(r)
     if a.json:
         return r
@@ -730,7 +730,7 @@ def _run(argv: list[str], *, spec: SchemaSpec, registry: DecisionRegistry,
     if a.verb in ("list", "history"):
         _check_entity_type(registry, a.entity_type)
     if a.verb == "set":
-        _refuse_harness_written(registry, a.entity_type, a.key)
+        _refuse_skill_pack_written(registry, a.entity_type, a.key)
         registry.check_entity_id(a.entity_type, a.entity_id)
         ctx["source"] = _source(a.source)
     if a.verb == "confirm":

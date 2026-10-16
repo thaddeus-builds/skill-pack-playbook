@@ -7,7 +7,7 @@ Three lanes. Every change, value and action belongs to exactly one.
 - **Meaning:** glossary words, user stories, business rules (owner files).
 - **Numbers:** threshold values, costs, targets.
 - **Money:** approving each action that spends or moves money.
-- **Contract:** whether the harness may write to a client's account at all, and paid data calls (with a cap).
+- **Contract:** whether the skill pack may write to a client's account at all, and paid data calls (with a cap).
 - **Risky merges:** any change that touches the risky list below.
 - **Release:** installing a version on a client host ("confirm vX", typed by the owner).
 

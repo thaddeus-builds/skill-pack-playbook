@@ -9,7 +9,7 @@ pending_title_decision	label,entity_type,entity_id,value	{label} of {entity_type
 pending_why_decision	entity_type,entity_id,key,value,by,at,source,effective,why	{entity_type} {entity_id} {key} = {value} waits for a person: {by} set it on {at} (source {source}). Until it is confirmed, {effective} stays in force. It is used for: {why}	{entity_type} {entity_id} {key} = {value} 等待本人确认：{by} 于 {at} 设置（来源 {source}）。确认之前仍以 {effective} 为准。用途：{why}
 pending_if_no_decision	effective	{effective} stays in force; the agent withdraws the proposal or sets another value	仍以 {effective} 为准；助手会撤回提议或改设别的值
 pending_title_queue	kind,target_ref,market	Approve {kind} on {target_ref} ({market})?	批准对 {target_ref}（{market}）执行 {kind} 吗？
-pending_why_queue	created_at,basis,because	The harness proposed this on {created_at} from the data it read (basis {basis}). Nothing is sent until a person approves, and execute refuses it if that data moves. The rule says: {because}	系统于 {created_at} 根据读取的数据（依据 {basis}）提出此操作。本人批准前不会发送；数据若有变动，执行时会被拒绝。规则说明：{because}
+pending_why_queue	created_at,basis,because	The skill pack proposed this on {created_at} from the data it read (basis {basis}). Nothing is sent until a person approves, and execute refuses it if that data moves. The rule says: {because}	系统于 {created_at} 根据读取的数据（依据 {basis}）提出此操作。本人批准前不会发送；数据若有变动，执行时会被拒绝。规则说明：{because}
 pending_effect_queue	kind,target_ref,expected	{kind} on {target_ref}: {expected}	对 {target_ref} 执行 {kind}：{expected}
 pending_if_no_queue		Nothing is sent. The agent records the no with a reason code, and the next proposal run reads it	不会发送任何内容。助手会记录拒绝原因代码，下次提案时会参考
 pending_gate_bad_word	id,word	{id}: no gate, {word} cannot be a console verb word; confirm it at the terminal	{id}：无法通过控制台确认，{word} 不能作为命令词；请在终端确认

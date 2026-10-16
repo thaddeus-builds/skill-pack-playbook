@@ -1,7 +1,7 @@
 """The engine's parts, one at a time: the diff walker and its verdicts, the
 Masker, the refusals (output inside a work tree, a write switch, an unsafe
 name), the frozen copy of a live folder, the case env, the verb table read
-with ast (a dict, or the list of Verb calls a scaffolded harness holds), the
+with ast (a dict, or the list of Verb calls a scaffolded skill pack holds), the
 pin, and the midnight rule. Each check that guards something
 also runs on an input that must trip it."""
 
@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent)]
 import _t  # noqa: E402
 import engine  # noqa: E402
-import fake_harness as fh  # noqa: E402
+import fake_skill_pack as fh  # noqa: E402
 
 UTC = dt.timezone.utc
 START = dt.datetime(2031, 1, 15, 9, 30, tzinfo=UTC)
@@ -184,7 +184,7 @@ KIT_VERBS = ('from kit.verbs import Verb\n\nVERBS = [\n'
 KIT_FILES = {"VERB_FILE": "scripts/verbs.py", "ENTRY": "scripts/tool.py"}
 
 
-def test_verbs_are_also_read_from_the_list_of_verb_calls_a_scaffolded_harness_holds():
+def test_verbs_are_also_read_from_the_list_of_verb_calls_a_scaffolded_skill_pack_holds():
     with _t.tmpdir() as tree:
         (tree / "scripts").mkdir()
         (tree / "scripts" / "tool.py").write_text("raise SystemExit('imported')\n")   # the dispatcher holds no table
@@ -214,7 +214,7 @@ def test_the_verb_list_the_scaffolder_writes_is_read_whole():
     assert len(declared) >= 20, declared                                                   # the real table, not a stub
     with _t.tmpdir() as tree:
         (tree / "scripts").mkdir()
-        (tree / "scripts" / "verbs.py").write_text(text.replace("{{name}}", "x-harness").replace("{{cli}}", "x"))
+        (tree / "scripts" / "verbs.py").write_text(text.replace("{{name}}", "x-skill-pack").replace("{{cli}}", "x"))
         with naming(**KIT_FILES):
             verbs = engine.verbs_of(tree)
     assert len(verbs) == len(declared) and ("facts", "list") in verbs and ("execute", "apply") in verbs and ("test",) in verbs

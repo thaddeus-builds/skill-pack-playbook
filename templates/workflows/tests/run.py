@@ -10,7 +10,7 @@ also fails a file that leaves anything in its private TMPDIR. Exit 0 only when a
 least one file ran and every file passed. The tests need `node` (sim.js).
 
 This runner works inside the playbook: it imports the playbook's `kit/` from the
-root of the checkout, three folders up. A harness copies the scripts and
+root of the checkout, three folders up. A skill pack copies the scripts and
 `refcheck.py` (see ../README.md), not these tests.
 """
 

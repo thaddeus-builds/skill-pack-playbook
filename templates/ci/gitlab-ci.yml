@@ -1,4 +1,4 @@
-# A harness's whole CI on GitLab, from the first commit. Copy it to the repo
+# A skill pack's whole CI on GitLab, from the first commit. Copy it to the repo
 # root as .gitlab-ci.yml, point tests/run.py and adapter/ at your own paths,
 # add your platforms to the secret scan, and fill in the host versions.
 #
@@ -57,7 +57,7 @@ secret scan:
     - |
       cat > /tmp/secret-patterns.txt <<'PATTERNS'
       # One extended regex per line; blank lines and lines starting with # are skipped.
-      # --- Base: every harness keeps these ---
+      # --- Base: every skill pack keeps these ---
       # private keys (service-account files, SSH, TLS)
       -----BEGIN ([A-Z]+ )?PRIVATE KEY-----
       # cloud access-key ids, long-term and session

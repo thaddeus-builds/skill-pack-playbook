@@ -1,10 +1,10 @@
 """The generic workbook store: a client's workbook as cache tables a
-harness keeps beside its own, found through the client's map
+skill pack keeps beside its own, found through the client's map
 (kit.workbook_map), with a change record between two imports of the same
 workbook. No table or column here names a business field; what a column
-means is the map's, and what a harness makes of it is the harness's.
+means is the map's, and what a skill pack makes of it is the skill pack's.
 
-The tables (TABLES, in kit.db's table format; a harness adds them to its
+The tables (TABLES, in kit.db's table format; a skill pack adds them to its
 cache tables and its ingest rebuilds them from raw):
 
   wb_file    one row per distinct file content (sha256): which workbook,
@@ -50,7 +50,7 @@ What it guards:
     the map types email, person or url, and any text that looks like an
     e-mail address, are masked by summary() and mask(); an issue carries
     a ref, never a value;
-  * records() gives a harness's projection what the owner confirmed only:
+  * records() gives a skill pack's projection what the owner confirmed only:
     typed values (an empty cell is None, never 0), each with its source
     cell `<sha12>:<sheet>!<ref>`, and an issue for a value that does not
     fit its type.
@@ -646,7 +646,7 @@ def records(imp: Import, wmap: Map, table_id: str
     return out, [i[2] for i in issues]
 
 
-# ---- what a harness prints ---------------------------------------------
+# ---- what a skill pack prints ---------------------------------------------
 
 def summary(rows: dict[str, list[dict]], workbook: str | None = None
             ) -> dict:
@@ -711,6 +711,6 @@ def summary(rows: dict[str, list[dict]], workbook: str | None = None
 
 
 def personal_columns(rows: dict[str, list[dict]]) -> list[str]:
-    """Every column path the store holds as personal (for a harness's own
+    """Every column path the store holds as personal (for a skill pack's own
     output guard)."""
     return sorted({r["path"] for r in rows["wb_column"] if r["personal"]})

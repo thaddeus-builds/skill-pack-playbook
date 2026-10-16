@@ -9,9 +9,9 @@ format), sorted by path, covering every file under DIR except the
 top-level tests/ dir, __pycache__ dirs, *.pyc, .DS_Store and the manifest
 itself. A vendored copy that anyone edited locally (a changed, added or
 removed file, VERSION included) no longer matches: `check()` names each
-difference, and the harness's drift guard fails on it.
+difference, and the skill pack's drift guard fails on it.
 
-Stdlib only; runs without a bound harness.
+Stdlib only; runs without a bound skill pack.
 
 Test: kit/tests/test_manifest.py.
 """

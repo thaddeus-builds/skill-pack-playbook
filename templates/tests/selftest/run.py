@@ -4,7 +4,7 @@
 # dependencies = []
 # ///
 """Run the test kit's own tests (selftest/test_*.py) with the kit's runner,
-templates/tests/run.py, under its rules. Not copied into a harness.
+templates/tests/run.py, under its rules. Not copied into a skill pack.
 
     python3 templates/tests/selftest/run.py            all files
     python3 templates/tests/selftest/run.py installed  files with "installed" in the name

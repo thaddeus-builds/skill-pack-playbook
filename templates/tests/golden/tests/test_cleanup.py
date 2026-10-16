@@ -17,7 +17,7 @@ sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import _t  # noqa: E402
-import fake_harness as fh  # noqa: E402
+import fake_skill_pack as fh  # noqa: E402
 
 
 def setup(d: Path) -> tuple[Path, Path]:

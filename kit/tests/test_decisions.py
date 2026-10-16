@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """The decisions verb (kit/decisions.py) holds each of its guards, on the
-fake "shop" harness (ssot/decision_keys.tsv: product stage / stage_since /
-stage_record (harness) / floor_price / artwork (sha256) / agent_score
+fake "shop" skill pack (ssot/decision_keys.tsv: product stage / stage_since /
+stage_record (skill pack) / floor_price / artwork (sha256) / agent_score
 (confirm = none) / note, campaign channel). Ported from the reference
-harness's tests/test_decisions.py; its domain rules (stage order, the
-entry date, the snapshot) come back here as the hooks a harness passes.
+skill pack's tests/test_decisions.py; its domain rules (stage order, the
+entry date, the snapshot) come back here as the hooks a skill pack passes.
 
   1. The registry is closed: an unknown key, entity type, id or value
      (every domain, sha256 included) is refused, coded, before any DB is
-     opened or created; --reason and --source are required; a `harness`
+     opened or created; --reason and --source are required; a `skill_pack`
      key cannot be set or confirmed; read verbs never create the DB.
   2. set = pending; only the gate (a TTY retype, or a relayed --code with
      its audit) puts it in force; a confirmed value stays in force while a
@@ -35,7 +35,7 @@ entry date, the snapshot) come back here as the hooks a harness passes.
      frozen record inside the confirm's own write, and a failing hook
      rolls the whole confirm back.
  10. Markets: writes need a declared market, several declared = ambiguous
-     with reruns, one entity per market; a harness with markets = [] keeps
+     with reruns, one entity per market; a skill pack with markets = [] keeps
      everything under "_".
  11. Readers and protection: effective / pending / row / last_change /
      set_history; triggers; a value that changed while the human answered
@@ -186,12 +186,12 @@ def test_registry_closed() -> None:
          "decision_value_not_sha256"),
         ("an empty text", ["set", "product", "SKU-1", "note", "  "],
          "decision_value_empty"),
-        ("a `harness` key set by hand",
+        ("a `skill_pack` key set by hand",
          ["set", "product", "SKU-1", "stage_record", '{"a": 1}'],
-         "decision_harness_written"),
-        ("a `harness` key confirmed by hand",
+         "decision_skill_pack_written"),
+        ("a `skill_pack` key confirmed by hand",
          ["confirm", "product", "SKU-1", "stage_record", "--value", "{}"],
-         "decision_harness_written"),
+         "decision_skill_pack_written"),
         ("--value with two ids",
          ["confirm", "product", "SKU-1", "SKU-2", "stage", "--value", "live"],
          "decision_value_one_id"),
@@ -813,7 +813,7 @@ FAIL_APPLY: list = []
 
 def stage_guard(con, *, market, entity_type, entity_id, key, value, row,
                 code):
-    """A harness rule: a product never moves back to an earlier stage
+    """A skill pack rule: a product never moves back to an earlier stage
     unless a human says so (the reference's stage rollback)."""
     if (entity_type, key) != ("product", "stage"):
         return None
@@ -832,7 +832,7 @@ def stage_guard(con, *, market, entity_type, entity_id, key, value, row,
 
 def stage_follow(con, *, market, entity_type, entity_id, key, value, row,
                  changed):
-    """A harness rule: confirming a stage settles its stage_since (a
+    """A skill pack rule: confirming a stage settles its stage_since (a
     pending date is confirmed with it and bound into the code; else today
     is recorded) and freezes a stage_record when the stage changes."""
     if (entity_type, key) != ("product", "stage"):
@@ -1087,11 +1087,11 @@ def test_markets() -> None:
     check("a read without --market, two declared: ambiguous too",
           rc == 2 and coded(out)[0] == "market_ambiguous", out)
 
-    print("  -- a harness with markets = [] keeps one market, \"_\"")
+    print("  -- a skill pack with markets = [] keeps one market, \"_\"")
     root = Path(tmp_dir("solo-"))
     (root / "ssot").mkdir()
-    (root / "harness.toml").write_text(
-        '[harness]\nname = "solo"\ncli = "solo"\nenv_prefix = "SOLO"\n'
+    (root / "skill-pack.toml").write_text(
+        '[skill_pack]\nname = "solo"\ncli = "solo"\nenv_prefix = "SOLO"\n'
         'languages = ["en", "zh"]\nmarkets = []\n[ssot]\n'
         'decision_keys = "ssot/decision_keys.tsv"\n', encoding="utf-8")
     shutil.copy(_shop.SHOP / "ssot" / "decision_keys.tsv", root / "ssot")
@@ -1211,7 +1211,7 @@ def test_closure() -> None:
           probs)
     check("the fragment holds the verb's codes (the registry's own "
           "decision_* codes stay in registry.tsv)",
-          set(mine) == {"decision_not_found", "decision_harness_written",
+          set(mine) == {"decision_not_found", "decision_skill_pack_written",
                         "decision_source_required", "decision_value_one_id",
                         "decision_already_confirmed", "decision_withdrawn",
                         "decision_confirm_refused",

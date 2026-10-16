@@ -12,8 +12,8 @@
      malformed or reserved row fails the load.
   3. DecisionRegistry: every domain of the grammar (int:a..b incl. an open
      side, number:a..b, a|b|c, date, json, text, sha256) accepts its
-     canonical form and refuses with its code; a harness-registered domain
-     works and its refusals are coded; confirm_exempt / harness_written;
+     canonical form and refuses with its code; a skill-pack-registered domain
+     works and its refusals are coded; confirm_exempt / skill_pack_written;
      entity ids; unknown entity type or key; malformed rows fail the load.
   4. Thresholds: the default, overridden per market by a CONFIRMED
      threshold_<name> fact only (pending or non-numeric ones are not in
@@ -21,7 +21,7 @@
      is reported (assumed(), meta.assumed_thresholds, the ASSUMED
      warning); a bad --assume is refused with `next`; listing, bounds,
      superseded names.
-  5. The registries resolve their files from harness.toml, with one
+  5. The registries resolve their files from skill-pack.toml, with one
      label column per declared language.
   6. registry.py's msg() calls are closed over its fragment.
 """
@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import config, contract, messages, registry  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.messages import msg  # noqa: E402
 from kit.registry import (DecisionRegistry, FactKeys, Thresholds,  # noqa: E402
                           read_tsv)
@@ -68,7 +68,7 @@ def tsv(head: str, *rows: str, raw: str | None = None) -> Path:
 
 
 def coded(fn) -> dict | None:
-    e = raises(fn, HarnessError)
+    e = raises(fn, SkillPackError)
     return None if e is None else {**messages.code(e.message), "next": e.next}
 
 
@@ -225,11 +225,11 @@ def test_fact_keys() -> None:
 
 def scenario(v: str) -> str:
     if v == "coded":
-        raise ValueError(msg("decision_value_empty", "coded by the harness"))
-    if v == "harness":
-        raise HarnessError(msg("decision_value_empty", "its own error"))
+        raise ValueError(msg("decision_value_empty", "coded by the skill pack"))
+    if v == "skill_pack":
+        raise SkillPackError(msg("decision_value_empty", "its own error"))
     if v.lower() not in ("launch", "scale"):
-        raise ValueError("not a scenario of this harness")
+        raise ValueError("not a scenario of this skill pack")
     return v.lower()
 
 
@@ -238,7 +238,7 @@ DECS = tsv(DEC_HEAD,
            "product|t|priority|t|int:1..5|t|human|t|priority|t|优先级|t||t|",
            "product|t|budget_share|t|number:0..1|t|human|t|share|t|份额|t||t|",
            "product|t|launch_on|t|date|t|human|t|launch|t|上线日|t||t|",
-           "product|t|snapshot|t|json|t|harness|t|snapshot|t|快照|t||t|",
+           "product|t|snapshot|t|json|t|skill_pack|t|snapshot|t|快照|t||t|",
            "product|t|brief_hash|t|sha256|t|human|t|brief|t|脚本校验|t||t|",
            "product|t|note|t|text|t|none|t|note|t|备注|t||t|",
            "creator|t|scenario|t|scenario|t|human|t|scenario|t|场景|t||t|",
@@ -305,9 +305,9 @@ def test_decision_registry() -> None:
              {"value": 11, "min": None, "max": 10}),
             ("creator", "scenario", "exit", "decision_value_invalid",
              {"value": "exit", "domain": "scenario",
-              "detail": "not a scenario of this harness"}),
+              "detail": "not a scenario of this skill pack"}),
             ("creator", "scenario", "coded", "decision_value_empty", {}),
-            ("creator", "scenario", "harness", "decision_value_empty", {})):
+            ("creator", "scenario", "skill_pack", "decision_value_empty", {})):
         r = coded(lambda: reg.validate(et, key, raw))
         check(f"{key} {raw!r}: {code}",
               r == {"code": code, "params": params, "next": []}, r)
@@ -328,10 +328,10 @@ def test_decision_registry() -> None:
           and reg.confirm_exempt("creator", "rating")
           and not reg.confirm_exempt("product", "hands_off")
           and not reg.confirm_exempt("product", "retired"))
-    check("harness_written: only confirm = harness",
-          reg.harness_written("product", "snapshot")
-          and not reg.harness_written("product", "note"))
-    check("entity ids: the harness's pattern, else any non-blank id",
+    check("skill_pack_written: only confirm = skill_pack",
+          reg.skill_pack_written("product", "snapshot")
+          and not reg.skill_pack_written("product", "note"))
+    check("entity ids: the skill pack's pattern, else any non-blank id",
           reg.check_entity_id("product", "P12") == "P12"
           and reg.check_entity_id("creator", "anna.lee") == "anna.lee")
     for et, eid in (("product", "X1"), ("product", "P1 "), ("creator", ""),
@@ -352,18 +352,18 @@ def test_decision_registry() -> None:
             ("a number bound not a number", "number:0..x", "human"),
             ("a repeated choice", "yes|yes", "human"),
             ("an empty choice", "yes||no", "human"),
-            ("confirm not human|none|harness", "text", "maybe")):
+            ("confirm not human|none|skill_pack", "text", "maybe")):
         load_fails(f"decision_keys: {label}", lambda: DecisionRegistry(
             tsv(DEC_HEAD, base.format(d=domain, c=confirm))))
     load_fails("decision_keys: a (entity_type, key) listed twice",
                lambda: DecisionRegistry(tsv(
                    DEC_HEAD, base.format(d="text", c="human"),
                    base.format(d="date", c="human"))))
-    load_fails("decision_keys: a harness domain named like a built-in",
+    load_fails("decision_keys: a skill pack domain named like a built-in",
                lambda: DecisionRegistry(DECS, domains={"date": scenario,
                                                        "scenario": scenario}))
-    load_fails("decision_keys: a harness domain the TSV needs but the "
-               "harness did not register", lambda: DecisionRegistry(DECS))
+    load_fails("decision_keys: a skill pack domain the TSV needs but the "
+               "skill pack did not register", lambda: DecisionRegistry(DECS))
 
 
 # ---- 4 ---------------------------------------------------------------------
@@ -546,9 +546,9 @@ def test_thresholds() -> None:
 
 # ---- 5 ---------------------------------------------------------------------
 
-def test_harness_paths() -> None:
-    print("[5] files from harness.toml; labels per language")
-    check("FactKeys() reads the shop harness's [ssot].fact_keys",
+def test_skill_pack_paths() -> None:
+    print("[5] files from skill-pack.toml; labels per language")
+    check("FactKeys() reads the shop skill pack's [ssot].fact_keys",
           "unit_cost" in FactKeys().settable())
     bare = Path(tmp_dir("reg-bare-")) / "shop"
     shutil.copytree(_shop.SHOP, bare, ignore=shutil.ignore_patterns(
@@ -558,14 +558,14 @@ def test_harness_paths() -> None:
         r = coded(lambda: FactKeys())
     finally:
         _shop.use()
-    check("a harness declaring ssot/fact_keys.tsv with none on disk: "
+    check("a skill pack declaring ssot/fact_keys.tsv with none on disk: "
           "registry_file_missing",
           r and r["code"] == "registry_file_missing"
           and r["params"]["path"].endswith("shop/ssot/fact_keys.tsv"), r)
-    d = Path(tmp_dir("reg-harness-"))
+    d = Path(tmp_dir("reg-skill-pack-"))
     (d / "ssot").mkdir()
-    (d / "harness.toml").write_text(
-        '[harness]\nname = "one"\ncli = "one"\nenv_prefix = "ONE"\n'
+    (d / "skill-pack.toml").write_text(
+        '[skill_pack]\nname = "one"\ncli = "one"\nenv_prefix = "ONE"\n'
         'languages = ["en"]\nmarkets = ["HK"]\n[ssot]\n'
         'fact_keys = "ssot/fact_keys.tsv"\nconstants = "ssot/c.tsv"\n',
         encoding="utf-8")
@@ -575,10 +575,10 @@ def test_harness_paths() -> None:
     config.use(d)
     try:
         fk = FactKeys()
-        check("FactKeys() reads [ssot].fact_keys; a harness declaring only "
+        check("FactKeys() reads [ssot].fact_keys; a skill pack declaring only "
               "en needs only label_en", fk.settable() == ("fee",))
         r = coded(lambda: DecisionRegistry())
-        check("a registry harness.toml does not declare: "
+        check("a registry skill-pack.toml does not declare: "
               "registry_file_missing naming the [ssot] key",
               r == {"code": "registry_file_missing",
                     "params": {"path": "[ssot].decision_keys"}, "next": []}, r)
@@ -609,7 +609,7 @@ def test_closure() -> None:
 def main() -> int:
     _shop.use()
     for fn in (test_read_tsv, test_fact_keys, test_decision_registry,
-               test_thresholds, test_harness_paths, test_closure):
+               test_thresholds, test_skill_pack_paths, test_closure):
         fn()
     return finish()
 

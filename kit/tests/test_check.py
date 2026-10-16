@@ -132,10 +132,10 @@ def main() -> int:
     check("clean_env: an explicit prefix", "SHOP_DB" not in clean_env("SHOP_"))
     data = tmp_dir("sandbox-")
     env = sandbox.sandbox_env(data, EXTRA="x", SHOPPING=None)
-    check("sandbox_env: the data dir, no env files, utf-8, the bound harness",
+    check("sandbox_env: the data dir, no env files, utf-8, the bound skill pack",
           env["SHOP_DATA_DIR"] == data and env["SHOP_AUTH_ENV_PATHS"] == "none"
           and env["PYTHONUTF8"] == "1"
-          and env["KIT_HARNESS_ROOT"] == str(cfg.root))
+          and env["KIT_SKILL_PACK_ROOT"] == str(cfg.root))
     check("sandbox_env: no inherited SHOP_* nor KIT_TTY; extra on top; None "
           "removes", "SHOP_DB" not in env and "KIT_TTY" not in env
           and env["EXTRA"] == "x" and "SHOPPING" not in env)

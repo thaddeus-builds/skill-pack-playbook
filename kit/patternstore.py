@@ -1,8 +1,8 @@
 """A per-client pattern store: what one client's past outputs taught, kept as abstract rows in that client's own
-database, and read back as shrunk rates with their counts. Design and rules for any harness: docs/pattern-store.md.
+database, and read back as shrunk rates with their counts. Design and rules for any skill pack: docs/pattern-store.md.
 
-A pattern is context x ICP archetype x playbook: three groups whose fields the harness names (`Shape`), every value an
-id of a closed vocabulary the harness passes (or null: not observed, or not counted). An evidence row holds the counts of
+A pattern is context x ICP archetype x playbook: three groups whose fields the skill pack names (`Shape`), every value an
+id of a closed vocabulary the skill pack passes (or null: not observed, or not counted). An evidence row holds the counts of
 the items (ads, posts, emails) that had exactly one pattern vector: `n`, the independent families they come from, and,
 for a source with outcomes, how they ranked. What the kit guards:
 
@@ -11,7 +11,7 @@ for a source with outcomes, how they ranked. What the kit guards:
     missing key, a value of the wrong type (a bool is no count), a bad outcome sum, an outcome on a presence-only
     source, and an id that does not recompute (`row_id()`: the first 16 hex of the sha256 of the row without its id,
     as canonical JSON);
-  * sources are never pooled: each row names one source of the harness's `Shape` (any number of them), and a source
+  * sources are never pooled: each row names one source of the skill pack's `Shape` (any number of them), and a source
     without outcomes (competitors, say) carries counts only, never good or bad;
   * a coded field counts only when two independent coders agree at the floor (`agreement()`, `meets_floor()`: 0.70 by
     default, read from the counts, never from a rounded rate);
@@ -19,13 +19,13 @@ for a source with outcomes, how they ranked. What the kit guards:
     (anchored off 0 and 1), the prior worth `lo` to `hi` tests (method-of-moments kappa, clipped), with an interval
     (Beta quantiles) and competition ranks (1, 2, 2, 4), never a single winner; a field with fewer than two labelled
     cells gets counts only, with the reason;
-  * the store only grows: `TABLES` (kit.db's format; the harness passes them as extra human tables with `APPEND_ONLY`,
+  * the store only grows: `TABLES` (kit.db's format; the skill pack passes them as extra human tables with `APPEND_ONLY`,
     so kit.db's triggers refuse an UPDATE, a DELETE and an INSERT over a key), a row retracted by appending a reason,
     an export superseding the live rows it no longer makes (`plan()`, `apply()`), a retraction by hand kept until a
     reinstatement lifts it.
 
-The vocabularies, the sources, which fields are judgement (mapped by the agent) and how a harness reads its outputs are
-the harness's; this module only validates, groups, stores and shrinks. Stdlib only; nothing here reads the clock (the
+The vocabularies, the sources, which fields are judgement (mapped by the agent) and how a skill pack reads its outputs are
+the skill pack's; this module only validates, groups, stores and shrinks. Stdlib only; nothing here reads the clock (the
 caller passes `now`). Test: kit/tests/test_patternstore.py.
 """
 
@@ -53,7 +53,7 @@ PERIOD = re.compile(r"(\d{4}-(?:0[1-9]|1[0-2]))/(\d{4}-(?:0[1-9]|1[0-2]))")
 BASE_KEYS = ("schema", "id", "source", "period", "label_rule", *GROUPS, "n", "families")
 
 
-# ---------------------------------------------------------------- the shape a harness declares
+# ---------------------------------------------------------------- the shape a skill pack declares
 
 @dataclass(frozen=True)
 class Seq:
@@ -76,7 +76,7 @@ class Source:
 
 @dataclass(frozen=True)
 class Shape:
-    """The harness's row: its schema id, the fields of each group, its sources, the fields never null
+    """The skill pack's row: its schema id, the fields of each group, its sources, the fields never null
     ("context.category"), and the outcome labels (the last one is the thin/unlabelled one)."""
     schema: str
     context: tuple[str, ...]
@@ -125,7 +125,7 @@ def _vocab_kind(v: object) -> bool:
 
 
 def shape_problems(shape: Shape, vocab: Mapping[str, Any]) -> list[str]:
-    """What is wrong with a harness's shape and vocabularies (empty: sound). Run it once, in the harness's own test: a
+    """What is wrong with a skill pack's shape and vocabularies (empty: sound). Run it once, in the skill pack's own test: a
     field named twice, a field or extra with no vocabulary, an id that is not a token (a sentence is no id), a source
     named twice or with no label rule, a vocabulary that is not a non-empty list, set, {key: list} or Seq (a bare
     string is not one), an extra that shadows a row key, a `required` path that is no field, fewer than two
@@ -228,7 +228,7 @@ def validate(row: object, shape: Shape, vocab: Mapping[str, Any]) -> list[str]:
     """The problems of one evidence row (empty: valid). Never raises. A problem names the field, never the value."""
     try:
         return _validate(row, shape, vocab)
-    except Exception as e:                    # a harness's odd vocabulary must not crash an export: report it
+    except Exception as e:                    # a skill pack's odd vocabulary must not crash an export: report it
         return [f"the row could not be checked ({type(e).__name__})"]
 
 
@@ -292,7 +292,7 @@ def group(items: Iterable[Mapping], shape: Shape) -> list[dict]:
     """Per-item records -> evidence rows: one row per (source, period, label_rule, context, icp, play), with `n`, the
     family tokens and, for a source with outcomes, the outcome counts. An item is {source, period, label_rule, context,
     icp, play, family (its own id: hashed here), outcome (one of shape.outcomes; ignored on a presence source)}. A
-    source's extra fields are the harness's: add them, then `with_id()` again. Order: the shape's sources, most items
+    source's extra fields are the skill pack's: add them, then `with_id()` again. Order: the shape's sources, most items
     first, then the id. Check every row with `validate()` before anything is written."""
     cells: dict[str, dict] = {}
     for a in items:
@@ -350,7 +350,7 @@ def counted(stats: Mapping[str, Mapping], floor: float = FLOOR) -> list[str]:
 def agreed_values(a: Mapping[str, Mapping[str, Any]], b: Mapping[str, Mapping[str, Any]],
                   fields: Iterable[str]) -> dict[str, dict]:
     """{item: {field: value}} for the counted `fields` where both coders gave the same non-null value. A disagreement
-    is null here; an adjudicated value is the harness's to add, and must be one of the two."""
+    is null here; an adjudicated value is the skill pack's to add, and must be one of the two."""
     out: dict[str, dict] = {}
     for i in sorted(set(a) | set(b)):
         for f in fields:
@@ -499,7 +499,7 @@ TABLES: dict[str, dict] = {
                     "recorded_at": _T, "recorded_by": _T},
         "pk": ("id",),
         "not_null": ("scope", "row_id", "source", "period", "n", "payload", "recorded_at", "recorded_by"),
-        "doc": "One evidence row of a scope (a project, a product line: the harness's word), abstract only, as "
+        "doc": "One evidence row of a scope (a project, a product line: the skill pack's word), abstract only, as "
                "canonical JSON under its content id. Live while no pattern_retractions row names it. Append-only.",
         "grain": "evidence row x export",
     },
@@ -564,7 +564,7 @@ def _by_hand(r: Mapping) -> bool:
 def live_rows(con, scope: str | None = None) -> list[dict]:
     """The live rows of `scope` (None: every scope of this one client's file; a row id live under two scopes is one
     row, and a row id retracted by hand in any scope read, not lifted, is out), as their payloads. A store never holds
-    another client's rows: the harness opens this client's file only."""
+    another client's rows: the skill pack opens this client's file only."""
     recs = records(con, scope)
     out_ids = {r["row_id"] for r in recs if _by_hand(r)}
     out: dict[str, dict] = {}
@@ -579,7 +579,7 @@ def plan(live: Mapping[str, Mapping], kept: Mapping[str, Mapping], rows: Sequenc
     """What an export does to a scope, from `state()`: `insert` the rows neither live nor kept out; `supersede` the live
     records the export no longer makes, of the sources it `read` (a source not read keeps its rows live: `unread`
     counts them); `lift` the kept-out records `reinstate` names (their rows are then inserted anew); `unknown` the
-    `reinstate` ids that name no kept-out row (the harness refuses them); `kept` what stays out; `duplicates` the rows
+    `reinstate` ids that name no kept-out row (the skill pack refuses them); `kept` what stays out; `duplicates` the rows
     dropped because an earlier row of this export has the same id (each id is inserted once)."""
     read, kept = set(read), dict(kept)
     lift, unknown = [], []
@@ -605,7 +605,7 @@ def plan(live: Mapping[str, Mapping], kept: Mapping[str, Mapping], rows: Sequenc
 
 def apply(con, scope: str, p: Mapping, now: str, by: str) -> None:
     """Append what `plan()` decided: the reinstatements, the `superseded` retractions (every live record of the id),
-    then the new rows. Run it inside the harness's write transaction (kit.db.keep_human_rows), after every row passed
+    then the new rows. Run it inside the skill pack's write transaction (kit.db.keep_human_rows), after every row passed
     `validate()`. A row whose id does not recompute is refused (ValueError) before anything is written."""
     bad = [r.get("id") for r in p["insert"] if not isinstance(r, Mapping) or r.get("id") != row_id(r)]
     if bad:
@@ -624,11 +624,11 @@ def apply(con, scope: str, p: Mapping, now: str, by: str) -> None:
 
 
 def retract(con, scope: str, rid: str, reason: str, now: str, by: str) -> dict | None:
-    """Append a retraction by hand of the live row `rid` of `scope` (the reason a token of the harness's own list, never
+    """Append a retraction by hand of the live row `rid` of `scope` (the reason a token of the skill pack's own list, never
     `superseded`), every live record of it. The row's record (with `records`), or None when no live row has that id.
-    Inside the harness's transaction."""
+    Inside the skill pack's transaction."""
     if not _token(reason) or reason == SUPERSEDED:
-        raise ValueError(f"a reason given by hand is a token of the harness's list, never {SUPERSEDED}")
+        raise ValueError(f"a reason given by hand is a token of the skill pack's list, never {SUPERSEDED}")
     got = state(con, scope)[0].get(rid)
     if got is None:
         return None

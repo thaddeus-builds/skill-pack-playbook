@@ -1,6 +1,6 @@
 # Golden diff
 
-A refactor must leave every `--json` document and every page exactly as it was. This tool proves it: it runs every case of your harness on BASE and on HEAD, on the same data under the same clock, and diffs the two. Two files you copy into your harness: `engine.py` (generic, you do not edit it) and `cases.py` (the hook you fill once). Stdlib-only Python 3.11+ on macOS or Linux, plus git. *(untried as copied here: the rules and their tests come from the source project, where the original code ran on real data; these files have run only against their own tests and a toy harness)*
+A refactor must leave every `--json` document and every page exactly as it was. This tool proves it: it runs every case of your skill pack on BASE and on HEAD, on the same data under the same clock, and diffs the two. Two files you copy into your skill pack: `engine.py` (generic, you do not edit it) and `cases.py` (the hook you fill once). Stdlib-only Python 3.11+ on macOS or Linux, plus git. *(untried as copied here: the rules and their tests come from the source project, where the original code ran on real data; these files have run only against their own tests and a toy skill pack)*
 
 ```mermaid
 flowchart LR
@@ -19,9 +19,9 @@ Worktrees and temp folders are removed afterwards, also on a failure or a SIGTER
 
 ## Adopt it
 
-1. Copy `engine.py` and `cases.py` to `tests/golden/` in your harness. It is a tool, not a test: keep it out of your test runner's glob and out of every release.
-2. Give your harness the four seams `cases.py`'s docstring lists: one dispatcher with a verb table (a dict keyed by tuples of words, or a list of `Verb(words, ...)` calls like the kit's `scripts/verbs.py`), every clock read through one function, every child script started through one function, and the data folder named by one env variable. A harness made by `scaffold/new_harness.py` already has all four (the clock is `kit.dates.now`, the runner `kit.runner.script_cmd`, the data folder `<PREFIX>_DATA_DIR`); `cases.py`'s docstring has the values to set for it.
-3. Fill `cases.py`: the names at its top, then `seed`, `plan`, `learn` and `pages`. Every value there fits the fake harness in `tests/fake_harness.py`; replace each with yours. List your harness's dependencies in `engine.py`'s PEP 723 header: every case runs in its interpreter.
+1. Copy `engine.py` and `cases.py` to `tests/golden/` in your skill pack. It is a tool, not a test: keep it out of your test runner's glob and out of every release.
+2. Give your skill pack the four seams `cases.py`'s docstring lists: one dispatcher with a verb table (a dict keyed by tuples of words, or a list of `Verb(words, ...)` calls like the kit's `scripts/verbs.py`), every clock read through one function, every child script started through one function, and the data folder named by one env variable. A skill pack made by `scaffold/new_skill_pack.py` already has all four (the clock is `kit.dates.now`, the runner `kit.runner.script_cmd`, the data folder `<PREFIX>_DATA_DIR`); `cases.py`'s docstring has the values to set for it.
+3. Fill `cases.py`: the names at its top, then `seed`, `plan`, `learn` and `pages`. Every value there fits the fake skill pack in `tests/fake_skill_pack.py`; replace each with yours. List your skill pack's dependencies in `engine.py`'s PEP 723 header: every case runs in its interpreter.
 4. Run the self-checks below, then commit it, before the first refactor.
 
 ## Run it
@@ -82,9 +82,9 @@ python3 templates/tests/golden/tests/run.py          # every tests/test_*.py
 python3 templates/tests/golden/tests/run.py compare  # only files with "compare" in the name
 ```
 
-The runner is the kit's test gate (`kit/testing/run_tests.py`), imported from the playbook's root: run it inside the playbook checkout. A harness copies `engine.py` and `cases.py` only (Adopt it, step 1), not these tests.
+The runner is the kit's test gate (`kit/testing/run_tests.py`), imported from the playbook's root: run it inside the playbook checkout. A skill pack copies `engine.py` and `cases.py` only (Adopt it, step 1), not these tests.
 
-They build a fake harness as a git repository with a few commits and run the engine on it as an operator would: HEAD vs HEAD twice gives 0 with the hash seed unpinned, a set-order bug differs, a comment-only commit gives 0 even strict, a changed registry default is caught, output inside a work tree is refused. Each guard above was also broken, one at a time, in a copy of the module; its test failed every time.
+They build a fake skill pack as a git repository with a few commits and run the engine on it as an operator would: HEAD vs HEAD twice gives 0 with the hash seed unpinned, a set-order bug differs, a comment-only commit gives 0 even strict, a changed registry default is caught, output inside a work tree is refused. Each guard above was also broken, one at a time, in a copy of the module; its test failed every time.
 
 ## What this deliberately is not
 

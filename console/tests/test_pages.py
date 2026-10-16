@@ -804,7 +804,7 @@ def test_a_gated_ask_shows_what_will_be_written_folded_before_the_button():
 
 
 def test_a_gated_choice_lists_what_each_option_would_write_not_your_answer():
-    """The label is the agent's word for an option; the value is what the harness
+    """The label is the agent's word for an option; the value is what the skill pack
     is told. The folded box gives both, one row per option."""
     log = Log()
     opts = [{"value": "9999", "label": "Yes, keep 50 dollars"}, {"value": "50", "label": "No, lower it to 40", "note": "n"},
@@ -1217,7 +1217,7 @@ def test_result_page_words_each_line_and_has_one_way_out():
         assert res[0].text() == f"Ask A {T('result.line_ok', lang, value='Yes')}"
         assert T("result.wrote", lang, message="unit cost confirmed") in res[1].text()
         assert T("err.gate_refused", lang) in res[2].text()
-        assert T("result.refused", lang, message="daily limit not confirmed") in res[2].text()   # the harness's own words
+        assert T("result.refused", lang, message="daily limit not confirmed") in res[2].text()   # the skill pack's own words
         assert res[3].text() == f"Ask D {T('err.changed', lang)}"
         assert "The ask changed since" not in res[3].text()                # core's English is not the console's word
         assert res[4].text() == T("err.other", lang)                       # an unknown code is not a crash
@@ -1255,8 +1255,8 @@ def test_a_refusal_gives_the_typed_comment_back_escaped_and_a_saved_answer_does_
         assert res[3].text() == res[4].text().replace("Ask E", "Ask D") == f"Ask D {T('err.not_open', lang)}"    # none typed, no line
 
 
-def test_a_harness_that_gave_no_clear_answer_says_the_answer_may_have_been_saved():
-    assert "gate_unsure" in pages.UNSURE and "gate_unsure" in pages.HARNESS_SAYS
+def test_a_skill_pack_that_gave_no_clear_answer_says_the_answer_may_have_been_saved():
+    assert "gate_unsure" in pages.UNSURE and "gate_unsure" in pages.SKILL_PACK_SAYS
     for lang in LANGS:
         line = {"ok": False, "id": "a", "title": "Ask A", "value": None, "code": "gate_unsure", "message": "garbled <i>output</i>"}
         d = Doc(pages.render_result(ctx(lang), [line]))
@@ -1296,16 +1296,16 @@ def test_error_page_words_the_code_and_keeps_technical_text_folded():
         assert Doc(pages.render_error(ctx(lang), "not_open")).find("details", "tech") is None
 
 
-def test_error_page_shows_the_harnesss_own_words_for_its_refusals_but_folds_the_rest():
+def test_error_page_shows_the_skill_packs_own_words_for_its_refusals_but_folds_the_rest():
     for lang in LANGS:
         for code in ("gate_refused", "gate_changed", "gate_timeout"):
-            d = Doc(pages.render_error(ctx(lang), code, "the harness said <b>no</b>"))
+            d = Doc(pages.render_error(ctx(lang), code, "the skill pack said <b>no</b>"))
             box = d.find("div", "res")
             assert box.find("p").text() == T("err." + code, lang)                # the console's sentence first
-            assert T("result.refused", lang, message="the harness said <b>no</b>") in box.text()      # its words under it, as text
+            assert T("result.refused", lang, message="the skill pack said <b>no</b>") in box.text()      # its words under it, as text
             assert d.find("details", "tech") is None and "<b>no</b>" not in d.source
         # another code keeps its detail folded, and a refusal with no words has no empty line
-        assert "the harness said" not in Doc(pages.render_error(ctx(lang), "changed", "the harness said")).find("div", "res").text()
+        assert "the skill pack said" not in Doc(pages.render_error(ctx(lang), "changed", "the skill pack said")).find("div", "res").text()
         assert len(Doc(pages.render_error(ctx(lang), "gate_timeout")).find("div", "res").find_all("p")) == 1
 
 

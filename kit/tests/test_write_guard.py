@@ -21,7 +21,7 @@ records every call; nothing leaves the process.
     declared a read, overlapping keys …) is a ValueError at Guard();
   * Writer: refusal -> check -> send; a transport exception becomes
     WriteFailed and is never retried (one transport call); refusal is
-    re-checked on every call; refusals are coded HarnessErrors whose
+    re-checked on every call; refusals are coded SkillPackErrors whose
     failure document names the code;
   * write_guard never imports kit.retry.
 """
@@ -81,8 +81,8 @@ class FakeTransport:
 
 
 def code(fn) -> str | None:
-    """The message code of the HarnessError fn() raised (None: returned)."""
-    e = raises(fn, contract.HarnessError)
+    """The message code of the SkillPackError fn() raised (None: returned)."""
+    e = raises(fn, contract.SkillPackError)
     return getattr(e.message, "code", None) if e else None
 
 
@@ -110,7 +110,7 @@ def main() -> int:
           c == "write_not_allowed" and empty._send.calls == [], c)
 
     print("\n[2] refusal order: kill env, STOP file, opt-in")
-    check("env names follow the bound harness",
+    check("env names follow the bound skill pack",
           g.kill_env == "SHOP_KILL" and g.opt_in_env == "SHOP_ALLOW_WRITES")
     stop = data / "STOP"
     t = FakeTransport()
@@ -223,7 +223,7 @@ def main() -> int:
           and ck("PUT", "/v1/flags", {"flags": [
               {"sku": "a", "active": False}]}).key == "flags")
     pause = {"prices": [{"sku": "s1", "state": "PAUSED"}]}
-    check("OWN: an id the harness did not create is refused",
+    check("OWN: an id the skill pack did not create is refused",
           code(lambda: ck("PUT", "/v1/prices", pause)) == "write_not_own"
           and code(lambda: ck("PUT", "/v1/prices", pause,
                               frozenset({"s2"}))) == "write_not_own")
