@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""kit.guards.pages: a page the harness delivers is drawn by the harness, so no shipped file links to a hosted artifact.
+"""kit.guards.pages: a page the skill pack delivers is drawn by the skill pack, so no shipped file links to a hosted artifact.
 On SYNTHETIC files only (neutral names, a made-up artifact id).
 
   [0] the rule on its planted forms: a markdown link, a bare host, a code-session link, a public share, capitals,
       JSON-escaped and percent-encoded slashes; the sound text and look-alike hosts are no hit
-  [1] a harness on disk (git): a link in a shipped file of any text type (every extension, none, upper case) is reported
+  [1] a skill pack on disk (git): a link in a shipped file of any text type (every extension, none, upper case) is reported
       by path and line and never by the link; the same link in an export-ignore (internal) file is not; the vendored kit
-      and the console (only when they hold a MANIFEST.sha256) are not read, a console of the harness's own is; a file
+      and the console (only when they hold a MANIFEST.sha256) are not read, a console of the skill pack's own is; a file
       with a NUL byte, over 5 MB, a symlink, a file deleted from the disk and a directory named like a file are not read
-      and do not crash; harness.toml is read outside its [guards.pages] tables; a repository with nothing tracked is a
-      problem; a harness with no git is read whole, less .git, virtualenvs and caches
+      and do not crash; skill-pack.toml is read outside its [guards.pages] tables; a repository with nothing tracked is a
+      problem; a skill pack with no git is read whole, less .git, virtualenvs and caches
   [2] [guards.pages]: allow (with its reason, passing; with max, a link added later is a problem; no reason, a path that
-      is gone, a file that holds no link now, a file that does not ship: each a problem), hosts (a host the harness
+      is gone, a file that holds no link now, a file that does not ship: each a problem), hosts (a host the skill pack
       adds; a bad one is a problem), a bad allow table is a problem
   [3] the day-one suite runs the rule (suites.page_links)
 """
@@ -53,10 +53,10 @@ def write(root: Path, rel: str, text: str) -> None:
 
 
 def build(extra: str = "", *, repo: bool = True) -> Path:
-    """A harness whose files are clean; `extra` is appended to its harness.toml."""
+    """A skill pack whose files are clean; `extra` is appended to its skill-pack.toml."""
     root = Path(tmp_dir("page-links-")) / "shop"
     shutil.copytree(_shop.SHOP, root, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"))
-    toml = root / "harness.toml"
+    toml = root / "skill-pack.toml"
     text = toml.read_text(encoding="utf-8")
     text = re.sub(r"\[release\]\n(?:.*\n)*?(?=\n\[)", "", text)          # the fake shop's own release table
     toml.write_text(text + TOML + extra, encoding="utf-8")
@@ -98,10 +98,10 @@ def test_rule() -> None:
           pages.hits(f"a\x0cb\u2028c\n{LINK}") == [2])
 
 
-def test_harness() -> None:
-    print("\n[1] a harness on disk")
+def test_skill_pack() -> None:
+    print("\n[1] a skill pack on disk")
     root = build()
-    check("the clean harness passes", pages.check_links(root) == [], pages.check_links(root))
+    check("the clean skill pack passes", pages.check_links(root) == [], pages.check_links(root))
     for rel, text, where in (("SKILL.md", f"# Skill\nSee {LINK}\n", "SKILL.md:2"),
                              ("README.md", f"[draft]({LINK})\n", "README.md:1"),
                              ("scripts/shop.py", f"url = '{LINK}'\n", "scripts/shop.py:1"),
@@ -112,10 +112,10 @@ def test_harness() -> None:
                              ("NOTES.MD", f"{LINK}\n", "NOTES.MD:1"),
                              ("docs/page.j2", f"{{{{ x }}}} {LINK}\n", "docs/page.j2:1"),
                              ("app/page.tsx", f"const u = '{LINK}'\n", "app/page.tsx:1"),
-                             ("harness.toml", f"# {LINK}\n", "harness.toml"),
+                             ("skill-pack.toml", f"# {LINK}\n", "skill-pack.toml"),
                              ("ssot/links.tsv", f"a\t{LINK}\n", "ssot/links.tsv:1")):
         r = build()
-        put(r, rel, (open(r / rel).read() if rel == "harness.toml" else "") + text)
+        put(r, rel, (open(r / rel).read() if rel == "skill-pack.toml" else "") + text)
         got = pages.check_links(r)
         check(f"a link in {rel} is reported by path and line", len(got) == 1 and got[0].startswith(where + ":"), got)
         check(f"…never by the link itself", all("DEMO-abc123" not in g and f"{H}/artifact" not in g for g in got), got)
@@ -135,7 +135,7 @@ def test_harness() -> None:
         r = build()
         put(r, "scripts/kit/guards/pages.py", f"HOSTS = ('{LINK}',)\n")
         put(r, "console/own.md", f"{LINK}\n")
-        check("…but a console or a scripts/kit of the harness's own, with no MANIFEST.sha256, is", len(pages.check_links(r)) == 2,
+        check("…but a console or a scripts/kit of the skill pack's own, with no MANIFEST.sha256, is", len(pages.check_links(r)) == 2,
               pages.check_links(r))
         r = build()
         put(r, "scripts/other/README.md", f"{LINK}\n")
@@ -185,11 +185,11 @@ def test_harness() -> None:
     write(r, ".github/workflow.yml", LINK)
     check("…but other dot-directories (.claude, .github) are read", len(pages.check_links(r)) == 2, pages.check_links(r))
     r = build()
-    toml = (r / "harness.toml").read_text()
-    put(r, "harness.toml", toml + f'\n[guards.pages]\nhosts = ["example.test/page"]\n\n[other]\nnote = "{LINK}"\n')
+    toml = (r / "skill-pack.toml").read_text()
+    put(r, "skill-pack.toml", toml + f'\n[guards.pages]\nhosts = ["example.test/page"]\n\n[other]\nnote = "{LINK}"\n')
     got = pages.check_links(r)
-    check("harness.toml is read outside its [guards.pages] tables (a link after them is caught, the host it names is not)",
-          len(got) == 1 and got[0].startswith("harness.toml"), got)
+    check("skill-pack.toml is read outside its [guards.pages] tables (a link after them is caught, the host it names is not)",
+          len(got) == 1 and got[0].startswith("skill-pack.toml"), got)
     check("a link wrapped across lines is reported at its first line", pages.hits(f"x {H}/\nartifact/abc") == [1])
     check("…also when the next line opens with a comment mark, a quote mark or a bullet",
           all(pages.hits(f"{H}/\n{m} artifact/abc") == [1] for m in ("#", ">", "*", "//", "-")))
@@ -206,11 +206,11 @@ def test_harness() -> None:
 
 
 def test_scripts_dir_dot() -> None:
-    print("\n[1b] a harness whose kit sits at kit/ (scripts_dir = \".\")")
+    print("\n[1b] a skill pack whose kit sits at kit/ (scripts_dir = \".\")")
     r = build()
-    toml = (r / "harness.toml").read_text()
+    toml = (r / "skill-pack.toml").read_text()
     import re as _re
-    put(r, "harness.toml", _re.sub(r'scripts_dir = "[^"]*"', 'scripts_dir = "."', toml))
+    put(r, "skill-pack.toml", _re.sub(r'scripts_dir = "[^"]*"', 'scripts_dir = "."', toml))
     put(r, "kit/MANIFEST.sha256", "x\n")
     put(r, "kit/guards/pages.py", f"HOSTS = ('{LINK}',)\n")
     check("the vendored kit at kit/ is skipped when scripts_dir is \".\"", pages.check_links(r) == [], pages.check_links(r))
@@ -258,7 +258,7 @@ def test_config() -> None:
         check("an allow row for a file that does not ship is a problem", len(got) == 1 and "does not ship" in got[0], got)
     r = build('[guards.pages]\nhosts = ["example.test/page"]\n')
     put(r, "README.md", "see https://example.test/page/abc\n")
-    check("a host the harness adds", len(pages.check_links(r)) == 1)
+    check("a host the skill pack adds", len(pages.check_links(r)) == 1)
     r = build()
     put(r, "README.md", "see https://example.test/page/abc\n")
     check("…is no host until it is added", pages.check_links(r) == [])
@@ -278,16 +278,16 @@ def test_suite() -> None:
     print("\n[3] the day-one suite")
     r = build()
     res = suites.page_links(r)
-    check("suites.page_links: the rule's self-test and the harness's check, both clean",
+    check("suites.page_links: the rule's self-test and the skill pack's check, both clean",
           [p for _, p in res] == [[], []], res)
     put(r, "SKILL.md", f"{LINK}\n")
     res = suites.page_links(r)
-    check("…and the harness's check fails on a shipped link", res[0][1] == [] and len(res[1][1]) == 1, res)
+    check("…and the skill pack's check fails on a shipped link", res[0][1] == [] and len(res[1][1]) == 1, res)
 
 
 if __name__ == "__main__":
     test_rule()
-    test_harness()
+    test_skill_pack()
     test_scripts_dir_dot()
     test_config()
     test_suite()

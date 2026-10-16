@@ -2,17 +2,17 @@
 values the agent read from it (kit.workbook_map's values.tsv) are confirmed
 together, once per version, never one number at a time.
 
-The flow, with the harness's own verbs around it:
+The flow, with the skill pack's own verbs around it:
 
   1. the agent writes the map's files with every new row `proposed` and
-     the harness stores them as a staged bundle (no gate: nothing in it is
+     the skill pack stores them as a staged bundle (no gate: nothing in it is
      read yet);
   2. ask() is the one console ask for that bundle (the `staged=` hook of
-     kit.pending), its gate the harness's confirm verb for this version;
+     kit.pending), its gate the skill pack's confirm verb for this version;
   3. that verb calls plan() and then confirm(): one retype at a terminal,
      or one relayed code, bound to exactly what plan() found; the values
      are written as confirmed facts (kit.facts.apply_file);
-  4. the harness stores plan()["files"] (the same bundle with every row
+  4. the skill pack stores plan()["files"] (the same bundle with every row
      confirmed) as the bundle in force, with confirm()'s record.
 
 What it guards:
@@ -25,7 +25,7 @@ What it guards:
     version and the confirmed one's (hashes of every byte of the files),
     the number of map rows, and every value in full;
   * every value is checked as `facts set` checks it, before the gate
-    (kit.facts.plan_file): a value the harness would refuse never reaches
+    (kit.facts.plan_file): a value the skill pack would refuse never reaches
     the owner;
   * nothing is written before the gate passes, and a fact that moved
     meanwhile refuses all of them.
@@ -89,7 +89,7 @@ def subject(verb: list[str], p: dict) -> str:
 def ask(name: str, p: dict, *, verb: list[str],
         source: str | None = None) -> dict:
     """The staged file for kit.pending's `staged=` hook: one ask, its gate
-    `verb` (the harness's confirm verb for this version, plain words) and
+    `verb` (the skill pack's confirm verb for this version, plain words) and
     an `expect` that is exactly plan()'s items. Each value is shown in the
     canonical form the gate binds and writes (4.20 is shown 4.2)."""
     return {"name": name, "version": p["staged"].version, "source": source,
@@ -109,7 +109,7 @@ def confirm(spec: db.SchemaSpec, con: sqlite3.Connection, p: dict, *,
     """The one gate for the whole file, then its values written confirmed
     (kit.facts.apply_file, `source` on each). -> {"changed_by", "why",
     "rows": every row id it confirmed, "facts": the fact rows written},
-    the record the harness keeps with the confirmed bundle. Off a TTY
+    the record the skill pack keeps with the confirmed bundle. Off a TTY
     without --code: kit.human.CodeRequired, nothing written."""
     why = human.why(reason)
     lines = [f"  {k.split(':', 1)[0]} {k.split(':', 1)[1].replace('|', ' / ')}"

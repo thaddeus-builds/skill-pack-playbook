@@ -24,13 +24,13 @@ The file (templates/ROADMAP.md is the starting point):
   7. a Links item is `name: where`, with no ID.
 
 `check_file(path)` checks one file (a missing one is a problem);
-`check_roadmap(root)` checks a harness's: harness.toml `[guards.roadmap]
+`check_roadmap(root)` checks a skill pack's: skill-pack.toml `[guards.roadmap]
 file`, else whichever of `docs/ROADMAP.md` and `ROADMAP.md` exists (both is
 a problem: one home). `self_test()` plants each break and returns the rules
 that missed theirs.
 
-Paid for: the video-ads harness has kept its roadmap in this format, held
-by its own test, since 2026-10-01, and a second harness adopted it; before,
+Paid for: the video-ads skill pack has kept its roadmap in this format, held
+by its own test, since 2026-10-01, and a second skill pack adopted it; before,
 one roadmap was prose in its own layout, another a memory note that did not
 travel to the next machine, and neither could be searched for what waited
 on the owner.
@@ -44,7 +44,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from kit.guards import harness, section
+from kit.guards import skill_pack, section
 
 SECTIONS = ("Now", "Waiting on owner", "Next", "Done", "Parked", "Decisions", "Links")
 LETTER = {"Now": "N", "Waiting on owner": "W", "Next": "X", "Done": "D",
@@ -148,10 +148,10 @@ def check_file(path: Path | str, name: str | None = None) -> list[str]:
 
 
 def where(root: Path | str | None = None) -> tuple[Path, str, list[str]]:
-    """The harness's roadmap as (path, its name under the root, problems):
+    """The skill pack's roadmap as (path, its name under the root, problems):
     `[guards.roadmap] file`, else the one of PLACES that exists (the first
     when neither does); two of them is a problem."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     base = Path(root) if root is not None else cfg.root
     rel = section(cfg, "guards", "roadmap").get("file")
     if rel:

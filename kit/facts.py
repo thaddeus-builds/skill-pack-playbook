@@ -1,7 +1,7 @@
 """The client facts verb, `<cli> facts init|list|get|set|confirm|unconfirm|
 history|rollback|restore`: the one sanctioned writer of client_facts.
 
-Ported from the reference harness's scripts/facts.py. What it guards:
+Ported from the reference skill pack's scripts/facts.py. What it guards:
 
   * Trust lives in the data. `init`, `set` and `rollback` write PENDING
     values (is_assumption = 1). Only `confirm` raises trust, through the
@@ -48,7 +48,7 @@ Ported from the reference harness's scripts/facts.py. What it guards:
     --json every verb prints exactly one document, refusals and usage
     errors included.
 
-Readers for harness code: confirmed(), effective(), pending().
+Readers for skill pack code: confirmed(), effective(), pending().
 
 A client file's values, one gate with the file (plan_file, apply_file):
 the values the agent read from a client's file (kit.workbook_map's
@@ -56,11 +56,11 @@ values.tsv) are confirmed by the same human gate as the rest of that file,
 not one by one. plan_file() checks each (market, key, value) exactly as
 `set` would (a registered key, its bounds and canonical form, a confirmed
 market declaration; never the declaration itself) BEFORE any gate runs,
-and returns the items the harness puts in that gate's subject and the
+and returns the items the skill pack puts in that gate's subject and the
 version every write to those facts moves. apply_file() writes them
 confirmed, with the gate's channel as changed_by and history action
 `confirm`, after checking again that none of them moved meanwhile. It is
-a write that raises trust: only a harness verb that has just passed
+a write that raises trust: only a skill pack verb that has just passed
 kit.human.confirm() for a subject holding plan["items"] and
 plan["version"] calls it, as `confirm` calls its own write.
 
@@ -83,7 +83,7 @@ Deviations from the reference and from the SPEC, each deliberate:
     its one document.
   * Refusals exit 2 (kit.contract), not 1. The wizard's prompts go to
     stderr and are read from stdin without builtins.input. The wizard's
-    questions are the harness's `init_questions` ([{"key", "prompt"?}],
+    questions are the skill pack's `init_questions` ([{"key", "prompt"?}],
     checked against the registry when main() starts), not keys a
     source project hard-coded.
   * An answer that `init` finds on disk is compared in canonical form, so
@@ -110,7 +110,7 @@ from typing import Any, Callable
 
 from kit import contract, dates, db, human, market, schema_base
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.market import MARKET_KEY
 from kit.messages import Msg, coded, msg
 from kit.registry import FACT_PREFIX, KEY_RE, FactKeys, Thresholds
@@ -211,8 +211,8 @@ def _done(run: _Run, note: Msg, doc: dict, nxt: list[str] = ()) -> dict | None:
     return None
 
 
-def _not_found(key: str, m: str) -> HarnessError:
-    return HarnessError(msg("fact_not_found",
+def _not_found(key: str, m: str) -> SkillPackError:
+    return SkillPackError(msg("fact_not_found",
                             f"no fact {key!r} for market {m!r}",
                             key=key, market=m))
 
@@ -230,7 +230,7 @@ def _market(run: _Run, explicit: str | None, *, door: bool) -> str:
         if not ms:
             return market.resolve(con, None, cmd=run.cmd)  # market_none_declared
         if len(ms) > 1:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_market_ambiguous",
                 f"{len(ms)} markets are declared or waiting for "
                 f"confirmation ({', '.join(ms)}) — pass --market to say "
@@ -244,7 +244,7 @@ def _market(run: _Run, explicit: str | None, *, door: bool) -> str:
 
 def _key_shape(key: str) -> None:
     if not KEY_RE.match(key):
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "fact_key_malformed",
             f"key {key!r} must be snake_case ^[a-z][a-z0-9_]*$ and carry no "
             f"units (e.g. unit_cost, not cost_4_2)", key=key))
@@ -298,7 +298,7 @@ def _apply_set(con: sqlite3.Connection, m: str, key: str, stored: str,
         # the confirmed number would vanish from the table every rule reads.
         # Lowering trust is its own recorded step; a new value is a person's.
         cli = _cli()
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "fact_set_confirmed", f"{key} [{m}] = {existing['value']} was "
             f"confirmed by a person; {action} does not replace it with "
             f"{stored}. Nothing was written", key=key, market=m,
@@ -430,7 +430,7 @@ def cmd_set(run: _Run) -> dict | None:
     reason = human.why(a.reason)
     source = (a.source or "").strip()
     if not source:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "fact_source_required",
             "--source is required: where the value came from (e.g. "
             "owner_interview_<YYYY-MM-DD>), not who typed it; history's "
@@ -492,7 +492,7 @@ def cmd_confirm(run: _Run) -> dict | None:
     with db.keep_human_rows(run.spec, con):
         if (_last_id(con, m, a.key) != last
                 or _state(_fetch(con, m, a.key)) != _state(existing)):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_changed_meanwhile",
                 f"{a.key} [{m}] changed while the human was being asked; "
                 f"the confirmation no longer matches it. Nothing was "
@@ -541,7 +541,7 @@ def plan_file(con: sqlite3.Connection,
     for m, key, raw in values:
         m = market.validate(m)
         if key == MARKET_KEY:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_file_declaration",
                 f"a client file cannot declare a market ({MARKET_KEY} "
                 f"[{m}]); `facts init` does", market=m))
@@ -551,7 +551,7 @@ def plan_file(con: sqlite3.Connection,
         value = keys.validate(key, raw, thresholds=thresholds)
         market.require_declared(con, m)
         if key in items.get(m, {}):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_file_twice", f"{key} [{m}] is stated twice",
                 key=key, market=m))
         existing = _fetch(con, m, key)
@@ -570,7 +570,7 @@ def plan_file(con: sqlite3.Connection,
 def apply_file(spec: db.SchemaSpec, con: sqlite3.Connection, plan: dict, *,
                channel: str, reason: str, source: str,
                client: str | None = None) -> list[dict]:
-    """Write plan_file()'s values confirmed, after the harness's gate
+    """Write plan_file()'s values confirmed, after the skill pack's gate
     passed for a subject holding plan["items"] and plan["version"]
     (`channel` is what kit.human.confirm returned). A value already
     confirmed as it is writes nothing. -> the rows written. Refused,
@@ -587,7 +587,7 @@ def apply_file(spec: db.SchemaSpec, con: sqlite3.Connection, plan: dict, *,
             m, key = r["market"], r["key"]
             if (_last_id(con, m, key) != r["last"]
                     or _state(_fetch(con, m, key)) != r["state"]):
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "fact_changed_meanwhile",
                     f"{key} [{m}] changed while the human was being asked; "
                     f"the confirmation no longer matches it. Nothing was "
@@ -656,20 +656,20 @@ def cmd_rollback(run: _Run) -> dict | None:
         rows = _dicts(con.execute(f"SELECT {', '.join(HIST_COLS)} FROM "
                                   f"{HISTORY} WHERE id=?", (a.to,)))
         if not rows:
-            raise HarnessError(
+            raise SkillPackError(
                 msg("fact_history_not_found", f"no history row #{a.to}",
                     id=a.to),
                 [shlex.join([_cli(), "facts", "history", a.key,
                              "--market", m])])
         h = rows[0]
         if (h["key"], h["market"]) != (a.key, m):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_history_other",
                 f"history row #{a.to} is {h['key']} [{h['market']}], not "
                 f"{a.key} [{m}]. Nothing was written.", id=a.to, key=a.key,
                 market=m, row_key=h["key"], row_market=h["market"]))
         if h["new_value"] is None:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_history_no_value", f"history row #{a.to} wrote no "
                 f"value. Nothing was written.", id=a.to))
         stored = _stored(run, a.key, h["new_value"])
@@ -704,11 +704,11 @@ def _ask(prompt: str) -> str:
     try:
         line = sys.stdin.readline() if sys.stdin is not None else ""
     except KeyboardInterrupt:
-        raise HarnessError(msg("fact_init_interrupted",
+        raise SkillPackError(msg("fact_init_interrupted",
                                "init aborted at the keyboard. Nothing was "
                                "written.")) from None
     if not line:
-        raise HarnessError(msg("fact_init_eof",
+        raise SkillPackError(msg("fact_init_eof",
                                "init aborted: no answer for the last question "
                                "(end of input). Nothing was written."))
     answer = line.rstrip("\r\n")
@@ -730,22 +730,22 @@ def _ask_market(con: sqlite3.Connection) -> str:
     for _ in range(MAX_ATTEMPTS):
         raw = _ask(f"market (one of {', '.join(markets)}): ")
         if not raw.strip():
-            raise HarnessError(msg("fact_init_no_market",
+            raise SkillPackError(msg("fact_init_no_market",
                                    "init aborted: no market given. Nothing "
                                    "was written."))
         try:
             return market.validate(raw)
-        except HarnessError as e:
+        except SkillPackError as e:
             _say(f"  {e} — try again.")
-    raise HarnessError(msg(
+    raise SkillPackError(msg(
         "fact_init_bad_market", f"init aborted: no valid market after "
         f"{MAX_ATTEMPTS} attempts. Nothing was written.",
         attempts=MAX_ATTEMPTS, markets=list(markets)))
 
 
 def _would_overwrite(key: str, m: str, current: str, typed: str
-                     ) -> HarnessError:
-    return HarnessError(msg(
+                     ) -> SkillPackError:
+    return SkillPackError(msg(
         "fact_init_would_overwrite",
         f"{key} is already {current!r} for market {m}; refusing to overwrite "
         f"it with {typed!r}. Nothing was written. To change it deliberately, "
@@ -770,7 +770,7 @@ def _ask_value(run: _Run, m: str, key: str, prompt: str,
             return None
         try:
             stored = run.keys.validate(key, raw, thresholds=run.thresholds)
-        except HarnessError as e:
+        except SkillPackError as e:
             _say(f"  {e} — try again.")
             continue
         if current is None:
@@ -778,7 +778,7 @@ def _ask_value(run: _Run, m: str, key: str, prompt: str,
         if stored == shown:
             return None
         raise _would_overwrite(key, m, shown, stored)
-    raise HarnessError(msg(
+    raise SkillPackError(msg(
         "fact_init_bad_answer", f"init aborted: no valid answer for {key} "
         f"after {MAX_ATTEMPTS} attempts. Nothing was written.", key=key,
         attempts=MAX_ATTEMPTS))
@@ -787,7 +787,7 @@ def _ask_value(run: _Run, m: str, key: str, prompt: str,
 def cmd_init(run: _Run) -> dict | None:
     """The one door through which a market enters the DB: its declaration
     (`market_declared`, pending unless a human retypes the market at a
-    terminal), then the harness's init questions, as pending facts.
+    terminal), then the skill pack's init questions, as pending facts.
     Collect-all-then-write: every answer is read and validated before the
     first row is written, in one transaction."""
     cfg, con = config(), run.con
@@ -882,7 +882,7 @@ def _load_backup(path: str) -> sqlite3.Connection:
     kit's columns; the decisions pair is optional."""
     p = Path(path)
     if not p.is_file():
-        raise HarnessError(msg("fact_backup_missing", f"no such file: {path}",
+        raise SkillPackError(msg("fact_backup_missing", f"no such file: {path}",
                                path=str(path)))
     con = None
     try:
@@ -903,7 +903,7 @@ def _load_backup(path: str) -> sqlite3.Connection:
     except (sqlite3.Error, UnicodeDecodeError, OSError) as e:
         if con is not None:
             con.close()
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "fact_backup_unusable", f"{path} is not a usable backup (a SQLite "
             f"file or a SQL dump holding the human tables): {e}",
             path=str(path), detail=str(e))) from None
@@ -998,7 +998,7 @@ def cmd_restore(run: _Run) -> dict | None:
         by, now = human.changed_by("tty"), human.now()
         with db.keep_human_rows(run.spec, con):
             if _plans(run, src) != plans:
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "fact_restore_moved", f"the database changed while the "
                     f"restore from {a.src} was being confirmed. Nothing was "
                     f"written.", path=a.src))
@@ -1047,7 +1047,7 @@ class _Parser(argparse.ArgumentParser):
     so --json keeps its one document."""
 
     def error(self, message: str):
-        raise HarnessError(msg("fact_usage", f"{self.prog}: {message}",
+        raise SkillPackError(msg("fact_usage", f"{self.prog}: {message}",
                                detail=message), [f"{self.prog} --help"])
 
 
@@ -1117,10 +1117,10 @@ def _parser(cli: str) -> argparse.ArgumentParser:
 
 def _questions(init_questions: list[dict] | None, keys: FactKeys,
                thresholds: Thresholds | None) -> list[tuple[str, str]]:
-    """[(key, prompt)] from the harness's init questions, checked once:
+    """[(key, prompt)] from the skill pack's init questions, checked once:
     a known dict shape, a settable key, no key twice. The prompt defaults
-    to the key's label in the harness's first language. A bad list is a
-    ValueError: a bug in the harness, not a runtime condition."""
+    to the key's label in the skill pack's first language. A bad list is a
+    ValueError: a bug in the skill pack, not a runtime condition."""
     out: list[tuple[str, str]] = []
     settable = keys.settable(thresholds)
     for q in init_questions or []:
@@ -1182,7 +1182,7 @@ def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
     return contract.run_main(run, argv, cmd=cmd)
 
 
-# ---- readers for harness code ----------------------------------------------
+# ---- readers for skill pack code ----------------------------------------------
 
 def effective(con: sqlite3.Connection | None, market: str, key: str
               ) -> tuple[str, bool] | None:

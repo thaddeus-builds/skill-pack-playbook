@@ -24,7 +24,7 @@ Turn one recorded client meeting into drafts the owner can accept, change or dro
 > - Keep the client's words; do not translate their terms into ours.
 > - Mark anything you are unsure about with `unsure: true`.
 > - Give every item an `iid`: its bucket's letter and a number, counted per bucket (`g1 g2 …` goals, `w1 …` words, `s1 …` stories, `n1 …` numbers, `q1 …` questions). Continue after the client's highest `iid` in the earlier intake files; never reuse one.
-> - Give every item an `audience`: `client` (meaning, stories, numbers) or `builder` (the shape of the harness itself: host, repository, how data gets in).
+> - Give every item an `audience`: `client` (meaning, stories, numbers) or `builder` (the shape of the skill pack itself: host, repository, how data gets in).
 > - A story and a number each carry a `quote`: the client's exact words, never translated. A number's `value` is digits (`45`, `0.5`) or the range the client gave (`20-30`); their words stay in the `quote`.
 
 ## Output shape

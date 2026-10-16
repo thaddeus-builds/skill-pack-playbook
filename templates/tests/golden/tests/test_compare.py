@@ -1,9 +1,9 @@
-"""The self-checks, run on a fake harness with a few commits: two runs of one
+"""The self-checks, run on a fake skill pack with a few commits: two runs of one
 tree give 0 differences with the hash seed unpinned, and a set-order bug
 does not; a commit that changes no document gives 0 even strict; a changed
 registry default is caught; a page that raises fails the run; a fixture edit
 alone gives 0, because both sides read BASE's fixtures; every clock, the child verbs' too, reads the pin; a case
-sees no credential, no write switch and not the operator's HOME. The engine runs as a harness runs
+sees no credential, no write switch and not the operator's HOME. The engine runs as a skill pack runs
 it: its own copy, committed in the repo it compares."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import _t  # noqa: E402
-import fake_harness as fh  # noqa: E402
+import fake_skill_pack as fh  # noqa: E402
 
 PIN = "2031-01-15T12:00:00+00:00"
 
@@ -137,8 +137,8 @@ def test_a_case_never_reads_the_operators_home():
         repo, tmp = fh.build(d), d / "tmp"
         tmp.mkdir()
         operator = d / "operator-home"
-        (operator / ".fake-harness").mkdir(parents=True)
-        (operator / ".fake-harness" / "credentials").write_text("k-home-not-for-cases\n")
+        (operator / ".fake-skill-pack").mkdir(parents=True)
+        (operator / ".fake-skill-pack" / "credentials").write_text("k-home-not-for-cases\n")
         snap = d / "snap"
         p = fh.engine(repo, "snapshot", str(snap), tmp=tmp, HOME=str(operator))
         assert p.returncode == 0, p.stdout + p.stderr

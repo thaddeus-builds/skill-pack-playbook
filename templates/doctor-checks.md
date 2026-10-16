@@ -1,6 +1,6 @@
 # Doctor checks
 
-The doctor is the one command an operator, a host agent or an install runs before trusting a harness. It reads: it never writes, pulls, or creates the database. Build it on day one with the rows below, then add a row each time a bug teaches you a new one.
+The doctor is the one command an operator, a host agent or an install runs before trusting a skill pack. It reads: it never writes, pulls, or creates the database. Build it on day one with the rows below, then add a row each time a bug teaches you a new one.
 
 ## How it behaves
 
@@ -16,7 +16,7 @@ The doctor is the one command an operator, a host agent or an install runs befor
 | Check | Warns when | The fix it names | The bug it caught |
 | --- | --- | --- | --- |
 | Data root set | The data root is unset, or its value came from a home-level env file | Set it in the process env and turn the env-file chain off | A home-level env file filled every variable a process left unset, so a client with no data root of its own landed in another client's data |
-| Data outside the checkout | Any resolved path (data root, database, raw) lies inside the harness checkout | Move the data root out of the repository | Agent shells reset their working directory, and credentials, the database and raw files were scattered across folders |
+| Data outside the checkout | Any resolved path (data root, database, raw) lies inside the skill pack checkout | Move the data root out of the repository | Agent shells reset their working directory, and credentials, the database and raw files were scattered across folders |
 | Env files private | An env file in the chain is readable by group or others | `chmod 600 <file>` | An env file holding secrets was readable by other users |
 | Credentials present | A key the configured platform needs is unset, or an optional group is half-set | Set the named keys, or unset the group | The check required one platform's key of every platform: a false MISSING on every correct setup |
 | Credentials work (`--live`) | One read-only token exchange per platform is refused; no answer is UNREACHABLE, a warning only | Re-authorize, or check the network | A network error was reported as a rejected key |
@@ -29,14 +29,14 @@ The doctor is the one command an operator, a host agent or an install runs befor
 | Scope declared | No scope is declared yet (not set up) | Run the init command | The check assumed one default scope for every client, so every other client got a permanent warning naming facts it had just set |
 | Required inputs | A declared scope lacks a key its rules need | Set the key (pending); a person confirms it | Every profit verdict rested on an assumed break-even until the client's unit cost was set |
 | Access gaps | The last pull recorded a named access gap (an optional report refused) | Information only: request the access if the client wants that report | None yet: a client without an optional access is a normal client, so this stays information and `--strict` passes |
-| Vendor API version alive | The API version the harness pins (in `harness.toml`) is past, or within 30 days of, the vendor's published end-of-life date (a dated fact with its source) | Move the pin to a live version, re-run the fixtures, re-scan the vendor lens | *Seen once:* a Meta Marketing API pin (v24.0) was found six days before the vendor retired it, by a research pass rather than a check; after that date, raw files would have recorded a version Meta no longer served |
+| Vendor API version alive | The API version the skill pack pins (in `skill-pack.toml`) is past, or within 30 days of, the vendor's published end-of-life date (a dated fact with its source) | Move the pin to a live version, re-run the fixtures, re-scan the vendor lens | *Seen once:* a Meta Marketing API pin (v24.0) was found six days before the vendor retired it, by a research pass rather than a check; after that date, raw files would have recorded a version Meta no longer served |
 
-The kit's `doctor` (`scripts/kit/doctor.py`) implements the setup, environment, database and writes rows; the database rows use `SchemaTooNew`, `stale_tables()` and `unknown_tables()` of `scripts/kit/db.py`. A row it lacks (the snapshot comparison, renamed keys, required inputs, access gaps) is the harness's own check to add.
+The kit's `doctor` (`scripts/kit/doctor.py`) implements the setup, environment, database and writes rows; the database rows use `SchemaTooNew`, `stale_tables()` and `unknown_tables()` of `scripts/kit/db.py`. A row it lacks (the snapshot comparison, renamed keys, required inputs, access gaps) is the skill pack's own check to add.
 
 ## A warning line
 
 ```
-  WARNING: DATA_ROOT came from ~/.harness.env (home-level: any client that leaves it unset lands here)
+  WARNING: DATA_ROOT came from ~/.skill_pack.env (home-level: any client that leaves it unset lands here)
     -> export DATA_ROOT in the process env and set ENV_FILES=none
 3 warning(s): each names its fix above.
 ```

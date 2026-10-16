@@ -69,8 +69,8 @@ already approved and paid for (so a re-roll is a new request, and nothing
 here overwrites or deletes). Every price was pending while the allowance
 approved spend against them (so `confirmed`, and kit.prices).
 
-Deviations from the source: refusals are kit.contract.HarnessError
-(TakeRefused) carrying coded messages, renamed `take_*` so a harness still
+Deviations from the source: refusals are kit.contract.SkillPackError
+(TakeRefused) carrying coded messages, renamed `take_*` so a skill pack still
 holding the old registry can load the kit; the gate is kit.human, where the
 person retypes the total rather than a fixed word; `charge` needs
 `approved_by`; the currency is always named by the caller, never assumed;
@@ -91,14 +91,14 @@ from pathlib import Path
 from typing import Callable
 
 from kit import atomic, dates, human
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 
 KEY_RE = re.compile(r"[0-9a-f]{64}")
 EPSILON = 1e-9          # float sums of prices: a plan exactly at the cap fits
 
 
-class TakeRefused(HarnessError):
+class TakeRefused(SkillPackError):
     """A take or a plan refused: nothing was called, cached or charged."""
 
 

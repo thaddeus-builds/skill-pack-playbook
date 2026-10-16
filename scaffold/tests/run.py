@@ -2,7 +2,7 @@
 """Run the scaffolder's tests through the kit's gate (kit.testing.run_tests).
 
     python3 scaffold/tests/run.py            every scaffold/tests/test_*.py
-    python3 scaffold/tests/run.py harness    files whose name contains it
+    python3 scaffold/tests/run.py skill_pack    files whose name contains it
 """
 
 import sys

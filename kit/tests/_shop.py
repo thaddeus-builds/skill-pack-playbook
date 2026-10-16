@@ -1,10 +1,10 @@
 """Shared set-up for the kit's own tests (not a test file: no test_ prefix).
 
     import _shop                        # after the sys.path line
-    cfg = _shop.use()                   # bind the fake "shop" harness
+    cfg = _shop.use()                   # bind the fake "shop" skill pack
     data = _shop.data_dir()             # a sandbox SHOP_DATA_DIR, exported
 
-`use()` binds kit/tests/fake_harness (cli "shop", env prefix SHOP, markets
+`use()` binds kit/tests/fake_skill_pack (cli "shop", env prefix SHOP, markets
 US/CA, languages en/zh) through kit.config.use, which clears every kit
 cache. `data_dir()` makes a fresh sandbox dir (removed when the file
 exits), strips every inherited SHOP_* var from os.environ, and exports
@@ -20,12 +20,12 @@ from kit import config
 from kit.testing.check import tmp_dir
 
 HERE = Path(__file__).resolve().parent
-SHOP = HERE / "fake_harness"
+SHOP = HERE / "fake_skill_pack"
 KIT = HERE.parent
 PLAYBOOK = KIT.parent
 
 
-def use() -> config.HarnessConfig:
+def use() -> config.SkillPackConfig:
     return config.use(SHOP)
 
 

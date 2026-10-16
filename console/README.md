@@ -13,7 +13,7 @@ flowchart LR
       BR["Browser<br/>one column, top down"]:::owner
       CON <-->|"page · click"| BR
     end
-    GATE["A harness<br/>its own human gate"]
+    GATE["A skill pack<br/>its own human gate"]
     AG -->|"writes ask · withdraw · applied · say"| LOG
     LOG -. "read by wait · answers" .-> AG
     CON -->|"writes answer · reopen · note, signed"| LOG
@@ -39,7 +39,7 @@ stateDiagram-v2
 ```
 
 - An answer is bound to the ask as it was shown. To revise an open ask, post the same id again: a page still showing the old one is refused (`changed`), never answered wrongly.
-- The owner can reopen until the agent records `applied`, and not once a harness's gate has written the answer (`already_applied`: that is a new question). Each row of `answers` carries `apply` (`ID@SEQ`); `applied ID@SEQ` is refused (`changed`) if the owner answered again since the agent read it.
+- The owner can reopen until the agent records `applied`, and not once a skill pack's gate has written the answer (`already_applied`: that is a new question). Each row of `answers` carries `apply` (`ID@SEQ`); `applied ID@SEQ` is refused (`changed`) if the owner answered again since the agent read it.
 - An id is never reused: once an ask is answered or withdrawn, `add` refuses it (`id_used`). A "no" is an answer too, and is recorded with `applied`. In JSON an applied ask is `status: answered` with `applied` set.
 
 ## A clear ask
@@ -106,15 +106,15 @@ flowchart LR
     D -. "next ask" .-> A
 ```
 
-## Gate: connect a harness
+## Gate: connect a skill pack
 
-An ask may carry a `gate`, so that a click also passes through the harness's **own** human gate (a one-time code bound to exactly what will be written). The console plays the human's side of it; the harness needs no change to its gate, only to speak this:
+An ask may carry a `gate`, so that a click also passes through the skill pack's **own** human gate (a one-time code bound to exactly what will be written). The console plays the human's side of it; the skill pack needs no change to its gate, only to speak this:
 
 ```mermaid
 sequenceDiagram
     participant H as Owner (browser)
     participant C as Console (serve.py, relay.py)
-    participant G as Harness command
+    participant G as Skill pack command
     H->>C: Answer
     C->>C: ask open and unchanged, value and comment valid
     C->>G: 1 the verb, value and reason, no terminal
@@ -122,11 +122,11 @@ sequenceDiagram
     C->>C: 3 subject matches what was shown, else stop
     C->>G: 4 the same call plus the code and who answers
     G-->>C: done (exit 0) or a refusal
-    C->>C: write the answer with the harness's words
+    C->>C: write the answer with the skill pack's words
     C-->>H: result page
 ```
 
-What a harness must meet:
+What a skill pack must meet:
 
 1. Called as `<cmd> <verb…> [--market=M] [--value=V] --reason=R --json`, stdin closed, in a session of its own with no terminal: a gate that reads `/dev/tty` can be satisfied only by a person at the operator's terminal, never by a click. It prints one JSON document.
 2. Without `--code` it answers `{"code": "confirm_code_required", "params": {"confirm_code": "…"}, "subject": {…}}`; `subject` is what the code is bound to.
@@ -134,7 +134,7 @@ What a harness must meet:
 4. Every value the console adds is one `--name=value` argument, so a value or code starting with `-` is never read as a flag.
 5. Its words come back in `message`, `error` or `result` (a string); the owner sees one clean line of at most 300 characters.
 6. A reply that is not a challenge ends the exchange at step 1 (exit 0 = fine, e.g. already confirmed).
-7. Each call gets 60 seconds, then the harness and its children are killed. After a timeout (`gate_timeout`), or a step-4 call that ends with no document carrying `error` or `message` (a crash, garbage, silence: `gate_unsure`), **the harness may have written**: the console records nothing, the ask stays open, and the owner is told to ask the agent to check first.
+7. Each call gets 60 seconds, then the skill pack and its children are killed. After a timeout (`gate_timeout`), or a step-4 call that ends with no document carrying `error` or `message` (a crash, garbage, silence: `gate_unsure`), **the skill pack may have written**: the console records nothing, the ask stays open, and the owner is told to ask the agent to check first.
 
 The ask names the verb and the payload; the operator names the command:
 
@@ -143,15 +143,15 @@ The ask names the verb and the payload; the operator names the command:
          "expect": {"items": {"unit_cost": "$value"}}}
 ```
 
-`expect` is what the owner is told will be written (`$value` = their answer). The console sends the code only if the harness's `subject` matches what `expect` names exactly: every key and value, a nested object key for key, so an extra item is refused. Only the top level of `subject` may say more (its envelope: verb, market, version). `expect` holds no empty `{}` or `[]`. `value_arg` adds `--value=<answer>`; a `choose` or `provide` gate must set it and put `"$value"` in `expect`, so the answer is what the code is bound to. `market` (optional, one plain word) adds `--market=<market>`, for a harness with several markets that cannot tell which one from the verb; put the same market in `expect` so the subject has to name it. A "no" never goes through the gate.
+`expect` is what the owner is told will be written (`$value` = their answer). The console sends the code only if the skill pack's `subject` matches what `expect` names exactly: every key and value, a nested object key for key, so an extra item is refused. Only the top level of `subject` may say more (its envelope: verb, market, version). `expect` holds no empty `{}` or `[]`. `value_arg` adds `--value=<answer>`; a `choose` or `provide` gate must set it and put `"$value"` in `expect`, so the answer is what the code is bound to. `market` (optional, one plain word) adds `--market=<market>`, for a skill pack with several markets that cannot tell which one from the verb; put the same market in `expect` so the subject has to name it. A "no" never goes through the gate.
 
 ```bash
-uv run console/serve.py --relay-cmd "uv run my_harness.py" --relay-verbs "facts confirm,queue approve"
+uv run console/serve.py --relay-cmd "uv run my_skill_pack.py" --relay-verbs "facts confirm,queue approve"
 ```
 
 | Flag | Meaning |
 | --- | --- |
-| `--relay-cmd` | The harness command. It is the operator's; an ask file cannot change it |
+| `--relay-cmd` | The skill pack command. It is the operator's; an ask file cannot change it |
 | `--relay-verbs` | Comma-separated verb prefixes that may run; anything else is refused. Both flags, or neither |
 | `--default-reason` | The `--reason` when the owner wrote no comment (default `console`) |
 
@@ -169,7 +169,7 @@ An ask whose gate verb is not allowed, or any gated ask when there is no relay, 
 | A saved note or reopen answers 303, so a reload cannot write twice; one click per ask at a time | `test_serve.py` |
 | No inline script or style; CSP, no-store, no framing; static files by exact name | `test_serve.py`, `test_pages.py` |
 | Everything the agent wrote is shown as text; only http(s) links | `test_pages.py` |
-| The harness call: no shell, no terminal, allowed verbs only, `=` arguments, code sent only for a subject that matches what was shown, never logged, console secret withheld, killed with its children on a timeout | `test_relay.py`, `test_serve.py` |
+| The skill pack call: no shell, no terminal, allowed verbs only, `=` arguments, code sent only for a subject that matches what was shown, never logged, console secret withheld, killed with its children on a timeout | `test_relay.py`, `test_serve.py` |
 | The log keeps every line: each write is flushed to disk, a torn write is cut off, a corrupt line refuses, writers queue on a lock | `test_core.py` |
 | Core and pages import no network or process code; only `relay.py` starts a process | `test_boundary.py` |
 | These docs name only real files, flags, verbs and diagrams; the quick start prints what is shown here; nothing that must not be public is in the files a commit would publish | `test_docs.py` |
@@ -208,8 +208,8 @@ A file passes only if it exits 0 and prints `RESULT: N passed`; a test file that
 
 ## What this deliberately is not
 
-- **No domain pages.** The agent presents what is asked in its own words; a harness may keep its own pages beside this one.
+- **No domain pages.** The agent presents what is asked in its own words; a skill pack may keep its own pages beside this one.
 - **No chat app.** Nothing here knows any messenger; the agent tells the owner in chat that asks wait.
 - **No database.** One file you can read, back up and `grep`.
 - **No accounts, no login of its own.** One named user per console, or the login proxy's header.
-- **No widening.** A click confirms or approves inside what the harness already allows; typing is for a `provide` value the harness validates. An ask that would widen an allowlist, a cap or a write switch is answered in chat.
+- **No widening.** A click confirms or approves inside what the skill pack already allows; typing is for a `provide` value the skill pack validates. An ask that would widen an allowlist, a cap or a write switch is answered in chat.

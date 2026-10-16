@@ -1,6 +1,6 @@
 # Data bug classes
 
-Most data bugs a channel harness ships are not new. They fall into a few classes that come back on every platform. Each row is one class, with the fixture test that pins it.
+Most data bugs a channel skill pack ships are not new. They fall into a few classes that come back on every platform. Each row is one class, with the fixture test that pins it.
 
 **Before the first report,** write one small fixture test for each of these ten: `zero-as-null`, `not-recorded`, `failed-lookup-null`, `sparse-report`, `unmatched-days`, `window-found`, `count-not-set`, `unordered-pick`, `unvalidated-raw`, `units-and-ids`. Each is a fixture with the edge case and one assertion. The other rows land with the part they guard: proposals with the queue, alerts with the first alert rule.
 

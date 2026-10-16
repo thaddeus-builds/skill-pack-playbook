@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// The harness CLI for the agent: zylos-core links this file (SKILL.md `bin`,
+// The skill pack CLI for the agent: zylos-core links this file (SKILL.md `bin`,
 // manifest cli.bin) as $ZYLOS_DIR/bin/<cli.bin>. That dir is not on the
 // agent's PATH, so the hooks and prompts call it by its absolute path. It
 // runs `uv run --no-project <skill dir>/<cli.entry> <args…>` in the caller's

@@ -6,7 +6,7 @@
 // nothing into the skill dir; state lives in the data dir.
 //
 //   hard: zylos-core >= manifest min_zylos; the data dir (0700); uv (pinned
-//         installer, sha256-checked); Python runtime.python; the harness CLI
+//         installer, sha256-checked); Python runtime.python; the skill pack CLI
 //         (manifest cli.entry) resolves its PEP 723 env (`--help`)
 //   soft: endpoints reachable; `<cli> <cli.doctor>`; the declared scope
 //         (manifest scope); the console entry and its Caddy block

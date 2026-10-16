@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scaffold/new_harness.py: a new harness, green before its first feature.
+"""scaffold/new_skill_pack.py: a new skill pack, green before its first feature.
 
   [1] --dry-run lists what it would write and writes nothing; a folder that
       is not empty, one inside the playbook (scaffold/out/, ignored, aside),
@@ -7,7 +7,7 @@
       exit 2
   [2] the generated tree (markets HK, TW): no `{{` left; fill markers only
       in the files the build fills; exactly the thirteen tests templates/
-      README.md names, plus tests/run.py; harness.toml and the ssot
+      README.md names, plus tests/run.py; skill-pack.toml and the ssot
       headers carry what the kit reads; the vendored copies match their
       manifests
   [3] `git init`, commit, and its own suite through its own CLI
@@ -16,7 +16,7 @@
       the hook, installed as printed, refuses a push with no list
   [4] every CODEOWNERS path exists
   [5] every item of the day-one checklist (docs/stages.md) maps to a
-      generated file (scaffold/new_harness.py DAY_ONE)
+      generated file (scaffold/new_skill_pack.py DAY_ONE)
   [6] the CLI answers: --help lists every verb, verbs --json, doctor
   [7] --update-kit re-vendors and touches nothing else; a second run
       changes nothing
@@ -42,12 +42,12 @@ os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
 
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 
-SCAFFOLD = PLAYBOOK / "scaffold" / "new_harness.py"
+SCAFFOLD = PLAYBOOK / "scaffold" / "new_skill_pack.py"
 ENV = {k: v for k, v in os.environ.items()
-       if k != "KIT_HARNESS_ROOT" and not k.startswith("ACME_")}
+       if k != "KIT_SKILL_PACK_ROOT" and not k.startswith("ACME_")}
 
 sys.path.insert(0, str(SCAFFOLD.parent))
-import new_harness as nh  # noqa: E402
+import new_skill_pack as nh  # noqa: E402
 
 
 def scaffold(*argv: str) -> tuple[int, str, str]:
@@ -57,7 +57,7 @@ def scaffold(*argv: str) -> tuple[int, str, str]:
 
 
 def args(d: Path, *extra: str) -> list[str]:
-    return ["--dir", str(d), "--name", "acme-harness", "--cli", "acme",
+    return ["--dir", str(d), "--name", "acme-skill-pack", "--cli", "acme",
             "--prefix", "ACME", *extra]
 
 
@@ -117,7 +117,7 @@ def test_refusals() -> None:
             ("a market twice", args(d, "--markets", "HK,HK")),
             ("an unknown pack", args(d, "--packs", "video")),
             ("base as a pack (it always comes)", args(d, "--packs", "base")),
-            ("--update-kit on a folder with no harness.toml",
+            ("--update-kit on a folder with no skill-pack.toml",
              ["--dir", str(full), "--update-kit"])):
         rc, out, err = scaffold(*argv)
         check(f"refused: {label} (exit 2, one line, nothing written)",
@@ -165,11 +165,11 @@ def test_tree(root: Path) -> None:
               "from kit.testing import suites" in text
               and "raise SystemExit(finish())" in text
               and len(text.splitlines()) < 30)
-    cfg = tomllib.loads((root / "harness.toml").read_text(encoding="utf-8"))
-    h = cfg["harness"]
-    check("harness.toml: the names, the markets, the languages",
+    cfg = tomllib.loads((root / "skill-pack.toml").read_text(encoding="utf-8"))
+    h = cfg["skill_pack"]
+    check("skill-pack.toml: the names, the markets, the languages",
           (h["name"], h["cli"], h["env_prefix"], h["db_file"])
-          == ("acme-harness", "acme", "ACME", "acme.db")
+          == ("acme-skill-pack", "acme", "ACME", "acme.db")
           and h["markets"] == ["HK", "TW"] and h["languages"] == ["en", "zh"]
           and "scripts/acme.py" in cfg["release"]["must_ship"])
     kd = root / "scripts" / "kit"
@@ -259,15 +259,15 @@ def test_codeowners(root: Path) -> None:
         encoding="utf-8").splitlines() if ln.strip() and not ln.startswith("#")]
     paths = [p for p, *_ in lines]
     missing = [p for p in paths if not (root / p.strip("/")).exists()]
-    check("every CODEOWNERS path exists in the new harness",
+    check("every CODEOWNERS path exists in the new skill pack",
           len(paths) >= 12 and not missing, missing)
     check("every path is owned by the --owner handle",
           all(owner == ["@boss"] for _, *owner in lines), lines)
     check("the risky list is there: the kit, the console, the writer, "
-          "execute, the schema, harness.toml",
+          "execute, the schema, skill-pack.toml",
           {"/scripts/kit/", "/console/", "/scripts/_lib/writer.py",
            "/scripts/execute_actions.py", "/scripts/_lib/schema.py",
-           "/harness.toml"} <= set(paths), paths)
+           "/skill-pack.toml"} <= set(paths), paths)
 
 
 # ------------------------------------------------------------------ [5]
@@ -337,14 +337,14 @@ def test_other_shape() -> None:
     root = Path(tmp_dir("scaffold-flat-")).resolve() / "acme"
     rc, out, err = scaffold(*args(root, "--langs", "en,zh,ja", "--packs", "data,compliance"))
     check("generated", rc == 0, err)
-    cfg = tomllib.loads((root / "harness.toml").read_text(encoding="utf-8"))
+    cfg = tomllib.loads((root / "skill-pack.toml").read_text(encoding="utf-8"))
     kd = root / "scripts" / "kit"
     check("[kit] packs as given; the copy holds them and not the others",
           cfg["kit"]["packs"] == ["data", "compliance"] and (kd / "retry.py").is_file()
           and (kd / "copylint.py").is_file() and not (kd / "takes.py").exists())
     check("markets = [], languages en, zh, ja",
-          cfg["harness"]["markets"] == []
-          and cfg["harness"]["languages"] == ["en", "zh", "ja"])
+          cfg["skill_pack"]["markets"] == []
+          and cfg["skill_pack"]["languages"] == ["en", "zh", "ja"])
     head = (root / "ssot" / "message_codes.tsv").read_text(
         encoding="utf-8").split("\n")[0].split("\t")
     check("the message registry has a meaning column per language",

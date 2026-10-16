@@ -1,12 +1,12 @@
-"""relay.py against fake_harness.py (every mode) and small scripted harnesses.
+"""relay.py against fake_skill_pack.py (every mode) and small scripted skill packs.
 
 Each test names the rule it holds: run the gate twice, never send the code for
 a payload that was not shown (an extra item is not the same write; the
-harness's envelope may say more), a second call that gives no clear answer is
+skill pack's envelope may say more), a second call that gives no clear answer is
 `gate_unsure`, one argument per thing the human typed and one `--name=value`
 element for everything the console adds (a code starting with `-` included),
 the allowlist, the timeouts (and the whole process tree dying), no code
-anywhere, one clean line of text, and no exception for anything a harness can
+anywhere, one clean line of text, and no exception for anything a skill pack can
 do.
 """
 
@@ -30,16 +30,16 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, ".."))
 import _t  # noqa: E402
 import core  # noqa: E402
-import fake_harness  # noqa: E402
+import fake_skill_pack  # noqa: E402
 import relay  # noqa: E402
 
-FAKE = os.path.join(HERE, "fake_harness.py")
+FAKE = os.path.join(HERE, "fake_skill_pack.py")
 VERBS = [["facts", "confirm"], ["queue", "approve"]]
 VERB = ["facts", "confirm", "unit_cost"]
 ISO = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
 CH = "confirm_code_required"
 
-# a scripted harness: answers call n with step n (the last step repeats) and
+# a scripted skill pack: answers call n with step n (the last step repeats) and
 # records each call's argv, so a test can say what was and was not run
 CANNED = '''import json, os, sys
 with open(os.environ["CANNED"]) as f:      # the path of the scripted steps (a file: see Canned)
@@ -61,7 +61,7 @@ sys.stdout.flush()
 sys.exit(step.get("exit", 0))
 '''
 
-# a harness that writes on the second call and then dies (how: crash, signal,
+# a skill pack that writes on the second call and then dies (how: crash, signal,
 # close = exits 0 with nothing on stdout, garbage = exits 0 with text)
 WRITES_THEN_DIES = '''import json, os, signal, sys
 if not any(x.startswith("--code=") for x in sys.argv[1:]):
@@ -83,7 +83,7 @@ print("Traceback (most recent call last):")
 sys.exit(1)
 '''
 
-# a harness whose options are read by argparse: its code starts with a dash
+# a skill pack whose options are read by argparse: its code starts with a dash
 ARGPARSE = '''import argparse, json, re, sys
 p = argparse.ArgumentParser()
 p.add_argument("words", nargs="*")
@@ -137,13 +137,13 @@ def approve_ask(step: str = "approve", **gate) -> dict:
 
 
 class Rig:
-    """The fake harness in one mode, with a log of its calls and its codes."""
+    """The fake skill pack in one mode, with a log of its calls and its codes."""
 
     def __init__(self, d: str, mode: str = "ok", **knobs):
         self.log = os.path.join(d, "calls.jsonl")
         self.state = os.path.join(d, "state.json")
-        self.env = dict(os.environ, FAKE_HARNESS_MODE=mode,
-                        FAKE_HARNESS_LOG=self.log, FAKE_HARNESS_STATE=self.state,
+        self.env = dict(os.environ, FAKE_SKILL_PACK_MODE=mode,
+                        FAKE_SKILL_PACK_LOG=self.log, FAKE_SKILL_PACK_STATE=self.state,
                         **knobs)
         self.cmd = [sys.executable, FAKE]
 
@@ -171,7 +171,7 @@ class Rig:
 
 
 class Canned:
-    """A harness that answers with the scripted steps."""
+    """A skill pack that answers with the scripted steps."""
 
     def __init__(self, d: str, *steps: dict):
         self.script = os.path.join(d, "canned.py")
@@ -206,7 +206,7 @@ class Canned:
 
 
 def chal(code: str = "c0de1234", **over) -> dict:
-    """A step: the harness's challenge for the standard provide ask, value 12."""
+    """A step: the skill pack's challenge for the standard provide ask, value 12."""
     doc = {"code": CH, "error": "A confirm code is required.",
            "params": {"confirm_code": code},
            "subject": {"verb": "facts confirm", "items": {"unit_cost": 12}}}
@@ -321,7 +321,7 @@ def test_a_yes_or_no_answer_passes_no_value():
             assert not any(a.startswith("--value") for a in c2["argv"])
 
 
-def test_a_no_never_reaches_the_harness():
+def test_a_no_never_reaches_the_skill_pack():
     with _t.tmpdir() as d:
         rig = Rig(d)
         for step, v in (("approve", "no"), ("confirm", "no"), ("approve", " no "),
@@ -363,7 +363,7 @@ def test_a_document_that_is_not_a_challenge_is_the_answer():
                  False, "No such key: unit_cost"),
                 ({"out": {"ok": True}, "exit": 0}, True, ""),
                 ({"out": {}, "exit": 1}, False, core.CODES["gate_refused"]),
-                # the exit code is the harness's verdict, not a field it prints
+                # the exit code is the skill pack's verdict, not a field it prints
                 ({"out": {"ok": True, "message": "fine"}, "exit": 1}, False, "fine"),
                 ({"out": {"error": "the error", "message": "the message"}, "exit": 3},
                  False, "the error"),
@@ -379,13 +379,13 @@ def test_a_document_that_is_not_a_challenge_is_the_answer():
                 assert res["code"] == "gate_refused"
 
 
-def test_no_secret_is_refused_in_the_harness_own_words():
+def test_no_secret_is_refused_in_the_skill_pack_own_words():
     with _t.tmpdir() as d:
         rig = Rig(d, "no_secret")
         res = rig.run(provide_ask(), "12")
         assert_shape(res)
         assert res["code"] == "gate_refused" and not res["ok"]
-        assert res["message"] == fake_harness.NO_SECRET
+        assert res["message"] == fake_skill_pack.NO_SECRET
         assert len(rig.calls()) == 1 and rig.codes() == {}
 
 
@@ -424,9 +424,9 @@ def test_a_subject_that_is_not_what_was_shown_never_gets_the_code():
             assert "c0de1234" not in json.dumps(res)
 
 
-def test_the_harness_envelope_may_say_more_than_the_ask_names():
+def test_the_skill_pack_envelope_may_say_more_than_the_ask_names():
     # what the ask names must match; the top level of the subject may carry
-    # more (the harness's own verb, market, version…)
+    # more (the skill pack's own verb, market, version…)
     with _t.tmpdir() as d:
         doc = chal()["out"]
         doc["subject"] = {"verb": "facts confirm", "market": "XX", "version": 3,
@@ -434,7 +434,7 @@ def test_the_harness_envelope_may_say_more_than_the_ask_names():
         c = Canned(d, {"out": doc, "exit": 2}, done())
         assert c.run(provide_ask(), "12")["ok"]
         assert len(c.calls()) == 2
-        # the fake harness's subject has a `verb` the ask does not name
+        # the fake skill pack's subject has a `verb` the ask does not name
         assert Rig(d).run(provide_ask(), "12")["ok"]
 
 
@@ -448,7 +448,7 @@ def test_an_item_the_ask_did_not_name_is_a_change_and_the_code_is_never_sent():
         assert len(rig.calls()) == 1 and never_sent_a_code(rig.calls())
         (code, entry), = rig.codes().items()
         assert entry["used"] is False and code not in json.dumps(res)
-        assert fake_harness.EXTRA not in json.dumps(res)
+        assert fake_skill_pack.EXTRA not in json.dumps(res)
 
         def subject(items):
             doc = chal()["out"]
@@ -534,7 +534,7 @@ def test_a_subject_spelled_oddly_is_a_change_never_an_exception():
 def test_the_challenges_exit_status_does_not_matter():
     with _t.tmpdir() as d:
         for status in ("0", "2", "7"):
-            rig = Rig(d, FAKE_HARNESS_CHALLENGE_EXIT=status)
+            rig = Rig(d, FAKE_SKILL_PACK_CHALLENGE_EXIT=status)
             rig.reset()
             res = rig.run(provide_ask(), "12")
             assert res["ok"], (status, res)
@@ -542,7 +542,7 @@ def test_the_challenges_exit_status_does_not_matter():
 
 def test_a_hung_first_call_times_out_and_the_whole_tree_is_killed():
     with _t.tmpdir() as d:
-        rig = Rig(d, "slow", FAKE_HARNESS_GRANDCHILD="1")
+        rig = Rig(d, "slow", FAKE_SKILL_PACK_GRANDCHILD="1")
         t0 = time.monotonic()
         res = rig.run(provide_ask(), "12", timeout=1.0)
         assert time.monotonic() - t0 < 5
@@ -555,7 +555,7 @@ def test_a_hung_first_call_times_out_and_the_whole_tree_is_killed():
 
 def test_a_hung_second_call_times_out_and_says_it_may_have_written():
     with _t.tmpdir() as d:
-        rig = Rig(d, "slow", FAKE_HARNESS_SLOW_RUN="2", FAKE_HARNESS_GRANDCHILD="1")
+        rig = Rig(d, "slow", FAKE_SKILL_PACK_SLOW_RUN="2", FAKE_SKILL_PACK_GRANDCHILD="1")
         res = rig.run(provide_ask(), "12", timeout=1.5)
         assert_shape(res)
         assert res["code"] == "gate_timeout" and not res["ok"], res
@@ -565,20 +565,20 @@ def test_a_hung_second_call_times_out_and_says_it_may_have_written():
         assert_stopped(rig.log + ".beat.child", rig.log + ".beat.grandchild")
 
 
-def test_a_slow_harness_within_the_timeout_is_fine():
+def test_a_slow_skill_pack_within_the_timeout_is_fine():
     with _t.tmpdir() as d:
-        rig = Rig(d, "slow", FAKE_HARNESS_SLOW_SECS="0.3")
+        rig = Rig(d, "slow", FAKE_SKILL_PACK_SLOW_SECS="0.3")
         res = rig.run(provide_ask(), "12", timeout=5.0)
         assert res["ok"], res
 
 
-def test_a_refused_second_call_is_refused_with_the_harness_words():
+def test_a_refused_second_call_is_refused_with_the_skill_pack_words():
     with _t.tmpdir() as d:
         rig = Rig(d, "fail")
         res = rig.run(provide_ask(), "12")
         assert_shape(res)
         assert res["code"] == "gate_refused" and not res["ok"]
-        assert res["message"] == fake_harness.REFUSED
+        assert res["message"] == fake_skill_pack.REFUSED
         assert len(rig.calls()) == 2
         for c in rig.codes():
             assert c not in json.dumps(res)
@@ -599,7 +599,7 @@ def test_the_document_is_all_of_stdout_or_its_last_line():
                 ("one line", json.dumps(doc)),
                 ("pretty printed", json.dumps(doc, indent=2)),
                 ("trailing blanks", json.dumps(doc) + "\n\n  \n"),
-                ("a banner", "Harness 1.2 {starting}\n" + json.dumps(doc)),
+                ("a banner", "Skill pack 1.2 {starting}\n" + json.dumps(doc)),
                 ("a json log line", '{"level": "info"}\n' + json.dumps(doc)),
                 ("a windows newline", "banner\r\n" + json.dumps(doc) + "\r\n")):
             c = Canned(d, {"out": out, "exit": 0})
@@ -630,7 +630,7 @@ def test_output_that_is_not_a_document_is_refused_never_raised():
 
 
 def test_a_second_call_without_a_clear_answer_is_unsure():
-    # the harness may have written before it stopped: neither "refused" nor "ok"
+    # the skill pack may have written before it stopped: neither "refused" nor "ok"
     with _t.tmpdir() as d:
         silent = [{"out": "boom"}, {"out": ""}, {"out": "", "exit": 1},
                   {"out": "boom", "exit": 1}, {"out": "boom", "exit": 3},
@@ -659,7 +659,7 @@ def test_a_second_call_without_a_clear_answer_is_unsure():
 
 
 def test_a_second_call_that_says_it_refused_stays_refused():
-    # the harness answered: it wrote nothing, and said why
+    # the skill pack answered: it wrote nothing, and said why
     with _t.tmpdir() as d:
         for step, text in (
                 ({"out": {"error": "Not allowed", "code": "denied"}, "exit": 1}, "Not allowed"),
@@ -678,7 +678,7 @@ def test_a_second_call_that_says_it_refused_stays_refused():
             c.reset()
 
 
-def test_a_second_call_that_exits_zero_is_the_harness_saying_it_worked():
+def test_a_second_call_that_exits_zero_is_the_skill_pack_saying_it_worked():
     with _t.tmpdir() as d:
         for step, message in (({"out": {"ok": True}, "exit": 0}, ""),
                               ({"out": {"result": "just a result"}, "exit": 0}, "just a result"),
@@ -691,7 +691,7 @@ def test_a_second_call_that_exits_zero_is_the_harness_saying_it_worked():
             c.reset()
 
 
-def test_a_harness_that_wrote_and_then_died_is_unsure_not_refused():
+def test_a_skill_pack_that_wrote_and_then_died_is_unsure_not_refused():
     with _t.tmpdir() as d:
         script, written = os.path.join(d, "writes_then_dies.py"), os.path.join(d, "WRITTEN")
         with open(script, "w") as f:
@@ -750,10 +750,10 @@ def test_a_code_that_starts_with_a_dash_is_still_one_argument():
         assert not {"--code", "--relay-user", "--relay-at"} & set(argv)
         assert "-abc-123" not in json.dumps(res)
 
-        # why it matters: a harness that reads its options with argparse takes
+        # why it matters: a skill pack that reads its options with argparse takes
         # `--code=-abc-123` but would call `--code -abc-123` a missing argument
-        # (it got the code intact: the relay scrubs it from the harness's echo)
-        script = os.path.join(d, "argparse_harness.py")
+        # (it got the code intact: the relay scrubs it from the skill pack's echo)
+        script = os.path.join(d, "argparse_skill_pack.py")
         with open(script, "w") as f:
             f.write(ARGPARSE)
         res = relay.run(provide_ask(), "12", cmd=[sys.executable, script], verbs=VERBS,
@@ -762,7 +762,7 @@ def test_a_code_that_starts_with_a_dash_is_still_one_argument():
 
 
 def test_a_gate_market_is_one_argument_and_the_subject_must_name_it():
-    """A harness with several markets is told which one by `--market=M`, one
+    """A skill pack with several markets is told which one by `--market=M`, one
     element right after the verb; a subject for another market is a change."""
     with _t.tmpdir() as d:
         ask = provide_ask(market="TW", expect={"market": "TW", "items": {"unit_cost": "$value"}})
@@ -798,7 +798,7 @@ def test_a_command_that_cannot_start_is_unavailable():
         with open(garbage, "wb") as f:
             f.write(b"\x00\x01\x02 not a program")
         os.chmod(garbage, 0o755)
-        for cmd in ([os.path.join(d, "no", "such", "harness")], ["no-such-harness-xyz"],
+        for cmd in ([os.path.join(d, "no", "such", "skill_pack")], ["no-such-skill-pack-xyz"],
                     [plain], [d], [garbage]):
             res = relay.run(provide_ask(), "12", cmd=cmd, verbs=VERBS, user="alice",
                             reason="r", timeout=5.0)
@@ -806,7 +806,7 @@ def test_a_command_that_cannot_start_is_unavailable():
             assert res["code"] == "gate_unavailable" and not res["ok"], (cmd, res)
             assert d not in res["message"], "the operator's paths stay off the page"
         rig = Rig(d)
-        for cmd in ([], "harness", [sys.executable, 5], ["a\x00b"], None,
+        for cmd in ([], "skill_pack", [sys.executable, 5], ["a\x00b"], None,
                     (sys.executable, FAKE)):
             res = rig.run(provide_ask(), "12", cmd=cmd)
             assert res["code"] == "gate_unavailable" and not res["ok"], (cmd, res)
@@ -894,7 +894,7 @@ def test_what_the_human_types_is_one_argument_and_never_runs():
         assert not os.path.exists("X")
 
         # the surrounding blanks of an answer are not part of it (the store
-        # records the same normalized value the harness is told)
+        # records the same normalized value the skill pack is told)
         rig.reset()
         assert rig.run(provide_ask(), " -1 ")["ok"]
         assert rig.calls()[0]["argv"][3] == "--value=-1"
@@ -959,7 +959,7 @@ def test_the_code_is_in_no_result_and_no_log_line():
         assert any("--code=***" in t for t in texts), texts
         assert all(r.levelno == logging.DEBUG for r in records), "values are debug-only"
 
-        # a harness that echoes the code back has it scrubbed
+        # a skill pack that echoes the code back has it scrubbed
         echo = {"error": "Code @CODE@ was rejected", "code": "x",
                 "result": {"tried": "@CODE@", "nested": [{"k": "@CODE@"}], "@CODE@": 1}}
         ok = {"message": "Confirmed with @CODE@", "result": {"tried": "@CODE@", "nested": [["@CODE@"]]}}
@@ -975,7 +975,7 @@ def test_the_code_is_in_no_result_and_no_log_line():
             c.reset()
 
 
-def test_the_harness_text_is_one_short_clean_line():
+def test_the_skill_pack_text_is_one_short_clean_line():
     with _t.tmpdir() as d:
         for text, want in (("line one\nline two", "line one line two"),
                            ("\x1b[31mred\x1b[0m done", "[31mred [0m done"),
@@ -997,8 +997,8 @@ def test_the_harness_text_is_one_short_clean_line():
         assert res["message"] == core.CODES["gate_refused"]
 
 
-def test_the_result_is_the_four_keys_whatever_the_harness_prints():
-    # the harness's own `result` (a dict, a list, a huge one) never comes back
+def test_the_result_is_the_four_keys_whatever_the_skill_pack_prints():
+    # the skill pack's own `result` (a dict, a list, a huge one) never comes back
     with _t.tmpdir() as d:
         def go(result, **doc):
             step = {"out": {"message": "m", "result": result, **doc}, "exit": 0}
@@ -1056,7 +1056,7 @@ def test_the_child_has_no_terminal_no_stdin_and_not_the_consoles_secret():
         # env left out: the child inherits ours, minus the secret
         rig.reset()
         with patched_environ(CONSOLE_SECRET="t" * 40, **{k: v for k, v in rig.env.items()
-                                                          if k.startswith("FAKE_HARNESS")}):
+                                                          if k.startswith("FAKE_SKILL_PACK")}):
             res = relay.run(provide_ask(), "12", cmd=rig.cmd, verbs=VERBS,
                             user="alice", reason="r", timeout=10.0)
         assert res["ok"], res
@@ -1088,11 +1088,11 @@ def test_answers_in_parallel_do_not_share_anything():
 
 
 def _fake(rig: Rig, *argv: str, mode: str = "ok") -> tuple[int, dict | str]:
-    """One call of the fake harness itself, in this process."""
+    """One call of the fake skill pack itself, in this process."""
     out = io.StringIO()
-    with patched_environ(FAKE_HARNESS_MODE=mode, FAKE_HARNESS_LOG=rig.log,
-                         FAKE_HARNESS_STATE=rig.state), contextlib.redirect_stdout(out):
-        status = fake_harness.main(list(argv))
+    with patched_environ(FAKE_SKILL_PACK_MODE=mode, FAKE_SKILL_PACK_LOG=rig.log,
+                         FAKE_SKILL_PACK_STATE=rig.state), contextlib.redirect_stdout(out):
+        status = fake_skill_pack.main(list(argv))
     text = out.getvalue().strip()
     try:
         return status, json.loads(text.splitlines()[-1])
@@ -1100,8 +1100,8 @@ def _fake(rig: Rig, *argv: str, mode: str = "ok") -> tuple[int, dict | str]:
         return status, text
 
 
-def test_the_fake_harness_is_a_faithful_stand_in():
-    # relay.py's tests are only as good as the harness they run against
+def test_the_fake_skill_pack_is_a_faithful_stand_in():
+    # relay.py's tests are only as good as the skill pack they run against
     with _t.tmpdir() as d:
         rig = Rig(d)
         base = ["facts", "confirm", "k", "--value=12", "--reason=r", "--json"]
@@ -1139,10 +1139,10 @@ def test_the_fake_harness_is_a_faithful_stand_in():
         assert _fake(rig, "facts", "confirm", "k", "--value=a", "--json", mode="changed")[1]["subject"]["items"] == {"k": "a!"}
         status, doc = _fake(rig, *base, mode="extra")           # one more item, and it would be written
         assert status == 2 and doc["subject"] == {"verb": "facts confirm",
-                                                  "items": {"k": 12, fake_harness.EXTRA: 12}}
+                                                  "items": {"k": 12, fake_skill_pack.EXTRA: 12}}
         status, done_doc = _fake(rig, *base, f"--code={doc['params']['confirm_code']}", *who, mode="extra")
-        assert status == 0 and done_doc["result"]["confirmed"] == {"k": 12, fake_harness.EXTRA: 12}
-        assert "extra" in fake_harness.MODES
+        assert status == 0 and done_doc["result"]["confirmed"] == {"k": 12, fake_skill_pack.EXTRA: 12}
+        assert "extra" in fake_skill_pack.MODES
         assert _fake(rig, "facts", "confirm", "k", "--json", mode="no_secret")[0] == 2
         status, text = _fake(rig, "facts", "confirm", "k")
         assert status == 0 and "--json" in text                                  # not a document
@@ -1155,9 +1155,9 @@ def test_the_fake_harness_is_a_faithful_stand_in():
         assert code not in logged and '"--code=***"' in logged                   # the code is never logged
 
 
-def test_run_never_raises_whatever_the_harness_or_the_caller_does():
+def test_run_never_raises_whatever_the_skill_pack_or_the_caller_does():
     with _t.tmpdir() as d:
-        # a harness that crashes, one that is killed by a signal, one that closes
+        # a skill pack that crashes, one that is killed by a signal, one that closes
         # stdout: on the first call nothing can have been written, so a refusal
         crash = os.path.join(d, "crash.py")
         with open(crash, "w") as f:

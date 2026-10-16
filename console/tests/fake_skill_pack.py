@@ -3,11 +3,11 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""A stand-in for a harness's human gate, for the tests of relay.py and serve.py.
+"""A stand-in for a skill pack's human gate, for the tests of relay.py and serve.py.
 
 It speaks the console's relay protocol and nothing else:
 
-    fake_harness.py <verb…> [--value=V] [--reason=R] [--json]
+    fake_skill_pack.py <verb…> [--value=V] [--reason=R] [--json]
                     [--code=C --relay-user=U --relay-at=T]
 
 Every option that takes a value takes it in the `--name=value` form, as the
@@ -21,9 +21,9 @@ else "yes"; a numeric string becomes a number, so a match has to be by value).
 With `--code` it accepts a code it issued, once, for the same verb and value,
 and only with the relay's identity (`--relay-user=web:<name>`, `--relay-at=` in
 UTC seconds); any other code is refused. State (the codes) is in the file named
-by `FAKE_HARNESS_STATE`.
+by `FAKE_SKILL_PACK_STATE`.
 
-`FAKE_HARNESS_MODE` (default `ok`):
+`FAKE_SKILL_PACK_MODE` (default `ok`):
 
     ok         the whole exchange works
     no_secret  no confirm-code secret configured: no challenge, an error, exit 2
@@ -35,12 +35,12 @@ by `FAKE_HARNESS_STATE`.
     noisy      ok, plus a banner before each document on stdout and a JSON
                line on stderr after it (only stdout is the answer)
 
-Other knobs: `FAKE_HARNESS_LOG` (a file; one JSON line per call with its argv
-with the code shown as `--code=***`, cwd, pid and how it was started), `FAKE_HARNESS_SLOW_RUN`
-(1 or 2: which call hangs, default 1), `FAKE_HARNESS_SLOW_SECS` (how long,
-default 30), `FAKE_HARNESS_GRANDCHILD=1` (a hanging call also forks a hanging
+Other knobs: `FAKE_SKILL_PACK_LOG` (a file; one JSON line per call with its argv
+with the code shown as `--code=***`, cwd, pid and how it was started), `FAKE_SKILL_PACK_SLOW_RUN`
+(1 or 2: which call hangs, default 1), `FAKE_SKILL_PACK_SLOW_SECS` (how long,
+default 30), `FAKE_SKILL_PACK_GRANDCHILD=1` (a hanging call also forks a hanging
 child of its own, like a wrapper that starts the real program),
-`FAKE_HARNESS_CHALLENGE_EXIT` (the challenge's exit code, default 2).
+`FAKE_SKILL_PACK_CHALLENGE_EXIT` (the challenge's exit code, default 2).
 A hanging process appends a byte to `<LOG>.beat.child` (or `.grandchild`) every
 50 ms: a test sees that it was killed when the file stops growing.
 """
@@ -65,7 +65,7 @@ CHALLENGE = "confirm_code_required"
 MODES = ("ok", "no_secret", "changed", "extra", "slow", "fail", "noisy")
 EXTRA = "unrequested"
 NO_SECRET = "Confirm codes are not enabled here; confirm at a terminal instead."
-REFUSED = "The harness refused this value: it is outside what the policy allows."
+REFUSED = "The skill pack refused this value: it is outside what the policy allows."
 BAD_CODE = "That confirm code is not valid."
 NUMBER = re.compile(r"-?\d+(\.\d+)?")
 STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
@@ -115,8 +115,8 @@ def bind(a: dict) -> str:
 
 @contextlib.contextmanager
 def state():
-    path = (os.environ.get("FAKE_HARNESS_STATE")
-            or os.path.join(tempfile.gettempdir(), "fake_harness_state.json"))
+    path = (os.environ.get("FAKE_SKILL_PACK_STATE")
+            or os.path.join(tempfile.gettempdir(), "fake_skill_pack_state.json"))
     with open(path + ".lock", "a") as lock:
         if fcntl:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -131,7 +131,7 @@ def state():
 
 
 def record(argv: list[str], a: dict | None, mode: str) -> None:
-    path = os.environ.get("FAKE_HARNESS_LOG")
+    path = os.environ.get("FAKE_SKILL_PACK_LOG")
     if not path:
         return
     shown = ["--code=***" if x.startswith("--code=") else x for x in argv]
@@ -158,13 +158,13 @@ def record(argv: list[str], a: dict | None, mode: str) -> None:
 def emit(doc: dict, code: int) -> int:
     print(json.dumps(doc))
     sys.stdout.flush()
-    if os.environ.get("FAKE_HARNESS_MODE") == "noisy":
+    if os.environ.get("FAKE_SKILL_PACK_MODE") == "noisy":
         print(json.dumps({"ok": False, "error": "noise on stderr"}), file=sys.stderr)
     return code
 
 
 def beat(role: str, secs: float) -> None:
-    path = os.environ.get("FAKE_HARNESS_LOG")
+    path = os.environ.get("FAKE_SKILL_PACK_LOG")
     end = time.monotonic() + secs
     while time.monotonic() < end:
         if path:
@@ -174,8 +174,8 @@ def beat(role: str, secs: float) -> None:
 
 
 def linger() -> None:
-    secs = float(os.environ.get("FAKE_HARNESS_SLOW_SECS", "30"))
-    if os.environ.get("FAKE_HARNESS_GRANDCHILD") == "1" and os.fork() == 0:
+    secs = float(os.environ.get("FAKE_SKILL_PACK_SLOW_SECS", "30"))
+    if os.environ.get("FAKE_SKILL_PACK_GRANDCHILD") == "1" and os.fork() == 0:
         beat("grandchild", secs)
         os._exit(0)
     beat("child", secs)
@@ -192,7 +192,7 @@ def first(a: dict, mode: str) -> int:
                  "params": {"confirm_code": code},
                  "subject": subject(a, changed=mode == "changed",
                                     extra=mode == "extra")},
-                int(os.environ.get("FAKE_HARNESS_CHALLENGE_EXIT", "2")))
+                int(os.environ.get("FAKE_SKILL_PACK_CHALLENGE_EXIT", "2")))
 
 
 def second(a: dict, mode: str) -> int:
@@ -213,7 +213,7 @@ def second(a: dict, mode: str) -> int:
 
 
 def main(argv: list[str]) -> int:
-    mode = os.environ.get("FAKE_HARNESS_MODE", "ok")
+    mode = os.environ.get("FAKE_SKILL_PACK_MODE", "ok")
     try:
         a = parse(argv)
     except Usage as e:
@@ -221,16 +221,16 @@ def main(argv: list[str]) -> int:
         return emit({"error": str(e), "code": "bad_request"}, 2)
     record(argv, a, mode)
     if mode not in MODES:
-        return emit({"error": f"unknown FAKE_HARNESS_MODE {mode!r}",
+        return emit({"error": f"unknown FAKE_SKILL_PACK_MODE {mode!r}",
                      "code": "bad_request"}, 2)
     run = 1 if a["code"] is None else 2
-    if mode == "slow" and run == int(os.environ.get("FAKE_HARNESS_SLOW_RUN", "1")):
+    if mode == "slow" and run == int(os.environ.get("FAKE_SKILL_PACK_SLOW_RUN", "1")):
         linger()
     if not a["json"]:
-        print("fake harness: pass --json")
+        print("fake skill pack: pass --json")
         return 0
     if mode == "noisy":
-        print("fake-harness 0.1 starting")
+        print("fake-skill-pack 0.1 starting")
         print("reading the gate configuration")
     return first(a, mode) if run == 1 else second(a, mode)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""kit.patternstore: a per-client pattern store, on a SYNTHETIC harness (a coffee shop's short videos).
+"""kit.patternstore: a per-client pattern store, on a SYNTHETIC skill pack (a coffee shop's short videos).
 
   [1] the shape and its vocabularies: sound, and each kind of fault found (a vocabulary of the wrong kind or empty,
       an extra that shadows a row key)

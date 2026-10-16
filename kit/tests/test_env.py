@@ -9,9 +9,9 @@
     sourced (quotes stripped, `|` and `$` kept, `export ` dropped);
   * sources are named; require() raises a coded EnvError; credential
     prefixes default; load_into_environ() never overrides and remembers
-    where each value came from; chain() follows the bound harness;
+    where each value came from; chain() follows the bound skill pack;
   * a gate secret, the gate's test seam, a test marker, the binding, a
-    loader variable or a harness's own listed name in a file is never
+    loader variable or a skill pack's own listed name in a file is never
     loaded, and refused() names it (an ordinary key still loads).
 """
 
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import config, env  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 
@@ -135,8 +135,8 @@ def main() -> int:
           ch.resolve("X_HOME") == ("home", str(home))
           and ch.resolve("X_ABSENT_ANYWHERE") == (None, None))
     e = raises(lambda: ch.require("X_ABSENT_ANYWHERE"), env.EnvError)
-    check("require: a coded EnvError (a HarnessError) naming what was searched",
-          isinstance(e, HarnessError) and e.message.code == "env_required"
+    check("require: a coded EnvError (a SkillPackError) naming what was searched",
+          isinstance(e, SkillPackError) and e.message.code == "env_required"
           and e.message.params["name"] == "X_ABSENT_ANYWHERE"
           and str(home) in e.message.params["searched"]
           and e.next == ["shop doctor"], e)
@@ -169,7 +169,7 @@ def main() -> int:
     for k in ("X_BOTH", "X_HOME", "X_DATA"):
         os.environ.pop(k, None)
 
-    print("\n[8] chain() follows the bound harness")
+    print("\n[8] chain() follows the bound skill pack")
     c = env.chain()
     check("chain() uses SHOP_AUTH_ENV_PATHS / SHOP_DATA_DIR, no HOME file",
           c.paths_var == "SHOP_AUTH_ENV_PATHS"
@@ -177,12 +177,12 @@ def main() -> int:
           and c.default_paths() == [str(data / ".env")])
     check("chain() is cached", env.chain() is c)
     other = Path(tmp_dir("h-"))
-    write(other / "harness.toml", '[harness]\nname = "o"\ncli = "o"\n'
+    write(other / "skill-pack.toml", '[skill_pack]\nname = "o"\ncli = "o"\n'
           'env_prefix = "OTHER"\nhome_env_file = "~/.other.env"\n'
           '[env]\ndefault_prefixes = {OTHER_API_PREFIX = "API"}\n')
     config.use(other)
     c2 = env.chain()
-    check("config.use() rebuilds it for the new harness",
+    check("config.use() rebuilds it for the new skill pack",
           c2 is not c and c2.paths_var == "OTHER_AUTH_ENV_PATHS"
           and c2.home_file == "~/.other.env"
           and c2.default_prefixes == {"OTHER_API_PREFIX": "API"})
@@ -191,7 +191,7 @@ def main() -> int:
     print("\n[9] a gate secret, the seam, a binding: never from a file")
     planted = ("SHOP_CONFIRM_CODE_SECRET", "OTHER_CONFIRM_CODE_SECRET",
                "CONSOLE_SECRET", "KIT_TTY", "PYTEST_CURRENT_TEST",
-               "KIT_HARNESS_ROOT", "PYTHONPATH", "DYLD_INSERT_LIBRARIES",
+               "KIT_SKILL_PACK_ROOT", "PYTHONPATH", "DYLD_INSERT_LIBRARIES",
                "LD_PRELOAD", "SHOP_TEST_SEAM", "KIT_TEST_RUN")
     forms = ("{n}=planted-{i}\n", "export {n}=planted-{i}\n",
              "  {n} = 'planted-{i}'\n", "export  {n}  =planted-{i}\n")
@@ -217,7 +217,7 @@ def main() -> int:
               "forms), with its file, never a value",
               seamed.refused() == [(str(data / ".env"), n) for n in planted]
               and "planted" not in repr(seamed.refused()))
-        check("the harness's own name is refused only when it lists it",
+        check("the skill pack's own name is refused only when it lists it",
               "SHOP_TEST_SEAM" in ch.load() and "SHOP_TEST_SEAM" not in
               seamed.load())
         os.environ["SHOP_CONFIRM_CODE_SECRET"] = "from-process"
@@ -234,12 +234,12 @@ def main() -> int:
                 os.environ.pop(n, None)
             else:
                 os.environ[n] = v
-    write(other / "harness.toml", '[harness]\nname = "o"\ncli = "o"\n'
+    write(other / "skill-pack.toml", '[skill_pack]\nname = "o"\ncli = "o"\n'
           'env_prefix = "OTHER"\n[env]\nnever_from_file = ["OTHER_SEAM"]\n')
     config.use(other)
     check("chain() takes [env].never_from_file",
           env.chain().never == ("OTHER_SEAM",))
-    write(other / "harness.toml", '[harness]\nname = "o"\ncli = "o"\n'
+    write(other / "skill-pack.toml", '[skill_pack]\nname = "o"\ncli = "o"\n'
           'env_prefix = "OTHER"\n[env]\nnever_from_file = "OTHER_SEAM"\n')
     config.use(other)
     check("… and refuses one that is not a list of names",

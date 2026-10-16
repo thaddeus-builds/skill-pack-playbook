@@ -1,4 +1,4 @@
-"""The sample harness's one clock: the only module that reads the calendar.
+"""The sample skill pack's one clock: the only module that reads the calendar.
 
 Everything else calls `dates.now()`, `dates.today()` or `dates.host_today()`
 through the module, so one patch of `dates.now` pins every read.

@@ -1,17 +1,17 @@
-"""Packs: which kit modules a harness vendors.
+"""Packs: which kit modules a skill pack vendors.
 
 Every kit module belongs to one pack in kit/packs.tsv (module, pack, note).
-A harness names the packs it takes in harness.toml:
+A skill pack names the packs it takes in skill-pack.toml:
 
     [kit]
     packs = ["compliance"]
 
-`base` and `testkit` are always taken. With no `[kit] packs` a harness takes
+`base` and `testkit` are always taken. With no `[kit] packs` a skill pack takes
 every pack, as before packs existed. A module imports only `base` and its
 own pack (`testkit` may import `base` and itself); kit/tests/test_packs.py
 holds the table and the code to that.
 
-Used by kit/tools/vendor.py. Stdlib only; runs without a bound harness.
+Used by kit/tools/vendor.py. Stdlib only; runs without a bound skill pack.
 Test: kit/tests/test_packs.py.
 """
 
@@ -66,31 +66,31 @@ def module_of(rel: str, known: set[str]) -> str | None:
     return None
 
 
-def declared(harness: Path, names: set[str]) -> list[str] | None:
-    """The packs `harness.toml` names under `[kit] packs`, checked against `names`; None when absent."""
+def declared(skill_pack: Path, names: set[str]) -> list[str] | None:
+    """The packs `skill-pack.toml` names under `[kit] packs`, checked against `names`; None when absent."""
     try:
-        raw = tomllib.loads((harness / "harness.toml").read_text("utf-8"))
+        raw = tomllib.loads((skill_pack / "skill-pack.toml").read_text("utf-8"))
     except OSError:
         return None
     except tomllib.TOMLDecodeError as e:
-        raise PackError(f"harness.toml: {e}") from None
+        raise PackError(f"skill-pack.toml: {e}") from None
     kit = raw.get("kit", {})
     if not isinstance(kit, dict) or "packs" not in kit:
         return None
     packs = kit["packs"]
     if not isinstance(packs, list) or not all(isinstance(p, str) for p in packs):
-        raise PackError("harness.toml: [kit] packs must be a list of pack names")
+        raise PackError("skill-pack.toml: [kit] packs must be a list of pack names")
     unknown = sorted(set(packs) - names)
     if unknown:
-        raise PackError(f"harness.toml: [kit] packs names an unknown pack: {', '.join(unknown)}"
+        raise PackError(f"skill-pack.toml: [kit] packs names an unknown pack: {', '.join(unknown)}"
                         f" (the packs: {', '.join(sorted(names))})")
     return packs
 
 
-def chosen(harness: Path, kit_dir: Path) -> set[str]:
-    """The packs a harness vendors: what it declares plus base and testkit, or every pack."""
+def chosen(skill_pack: Path, kit_dir: Path) -> set[str]:
+    """The packs a skill pack vendors: what it declares plus base and testkit, or every pack."""
     names = set(table(kit_dir).values())
-    packs = declared(harness, names)
+    packs = declared(skill_pack, names)
     return names if packs is None else set(packs) | set(ALWAYS)
 
 
@@ -125,12 +125,12 @@ def imports(source: str, known: set[str]) -> set[str]:
     return out
 
 
-def harness_imports(harness: Path, kit_dest: Path, known: set[str]) -> dict[str, list[str]]:
-    """{kit module: [files]} for every import of the kit in the harness's own Python code
+def skill_pack_imports(skill_pack: Path, kit_dest: Path, known: set[str]) -> dict[str, list[str]]:
+    """{kit module: [files]} for every import of the kit in the skill pack's own Python code
     (the vendored kit itself, hidden folders and virtual environments are not read)."""
     out: dict[str, list[str]] = {}
-    for p in sorted(harness.rglob("*.py")):
-        rel = p.relative_to(harness)
+    for p in sorted(skill_pack.rglob("*.py")):
+        rel = p.relative_to(skill_pack)
         if SKIP_DIRS & set(rel.parts) or any(s.startswith(".") for s in rel.parts[:-1]) \
                 or kit_dest == p or kit_dest in p.parents:
             continue

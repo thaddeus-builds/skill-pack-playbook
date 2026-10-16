@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""kit/tools/vendor.py: plain copies of kit/ and console/ in a harness.
+"""kit/tools/vendor.py: plain copies of kit/ and console/ in a skill pack.
 
-  * kit/ lands at <harness>/<scripts_dir>/kit/ and console/ at
-    <harness>/console/ (+ VERSION), both without tests/, each with a
+  * kit/ lands at <skill-pack>/<scripts_dir>/kit/ and console/ at
+    <skill-pack>/console/ (+ VERSION), both without tests/, each with a
     MANIFEST.sha256 that checks clean, and `import kit` works from the
     copy;
   * a second run changes nothing and says so (idempotent);
@@ -31,12 +31,12 @@ def snapshot(d: Path) -> dict[str, int]:
 
 
 def main() -> int:
-    h = Path(tmp_dir("harness-"))
-    (h / "harness.toml").write_text('[harness]\nname = "v"\ncli = "v"\n'
+    h = Path(tmp_dir("skill-pack-"))
+    (h / "skill-pack.toml").write_text('[skill_pack]\nname = "v"\ncli = "v"\n'
                                     'env_prefix = "V"\n')
 
     print("[1] a first vendor run")
-    rc, out, err = capture(vendor.main, ["--harness", str(h)])
+    rc, out, err = capture(vendor.main, ["--skill-pack", str(h)])
     kd, cd = h / "scripts" / "kit", h / "console"
     check("exit 0; kit and console reported as added",
           rc == 0 and "kit: " in out and "added" in out
@@ -56,13 +56,13 @@ def main() -> int:
          "import sys; sys.path.insert(0, %r); import kit; "
          "print(kit.__version__, kit.KIT_DIR)" % str(h / "scripts")],
         capture_output=True, text=True,
-        env={k: v for k, v in os.environ.items() if k != "KIT_HARNESS_ROOT"})
+        env={k: v for k, v in os.environ.items() if k != "KIT_SKILL_PACK_ROOT"})
     check("`import kit` resolves to the vendored copy",
           r.stdout.startswith(kit.__version__ + " " + str(kd.resolve())), r)
 
     print("\n[2] idempotent")
     before = snapshot(h)
-    rc, out, _ = capture(vendor.main, ["--harness", str(h)])
+    rc, out, _ = capture(vendor.main, ["--skill-pack", str(h)])
     check("a second run: 'up to date' for both, no file touched",
           rc == 0 and out.count("up to date") == 2 and snapshot(h) == before,
           out)
@@ -74,37 +74,37 @@ def main() -> int:
           manifest.check(kd) == ["changed: dates.py",
                                  "not in MANIFEST.sha256: stray.py"],
           manifest.check(kd))
-    rc, out, _ = capture(vendor.main, ["--harness", str(h), "--dry-run"])
+    rc, out, _ = capture(vendor.main, ["--skill-pack", str(h), "--dry-run"])
     check("--dry-run reports and writes nothing",
           "updated  scripts/kit/dates.py" in out
           and "removed  scripts/kit/stray.py" in out
           and (kd / "stray.py").exists() and manifest.check(kd) != [], out)
-    rc, out, _ = capture(vendor.main, ["--harness", str(h), "--kit"])
+    rc, out, _ = capture(vendor.main, ["--skill-pack", str(h), "--kit"])
     check("--kit restores the file, removes the stray, console untouched",
           rc == 0 and "updated  scripts/kit/dates.py" in out
           and "removed  scripts/kit/stray.py" in out and "console" not in out
           and manifest.check(kd) == [] and not (kd / "stray.py").exists(), out)
 
     print("\n[4] scripts_dir and refusals")
-    h2 = Path(tmp_dir("harness-"))
-    (h2 / "harness.toml").write_text('[harness]\nname = "w"\ncli = "w"\n'
+    h2 = Path(tmp_dir("skill-pack-"))
+    (h2 / "skill-pack.toml").write_text('[skill_pack]\nname = "w"\ncli = "w"\n'
                                      'env_prefix = "W"\nscripts_dir = "lib"\n')
-    rc, out, _ = capture(vendor.main, ["--harness", str(h2), "--kit"])
-    check("the kit goes under the harness's scripts_dir; --kit only",
+    rc, out, _ = capture(vendor.main, ["--skill-pack", str(h2), "--kit"])
+    check("the kit goes under the skill pack's scripts_dir; --kit only",
           rc == 0 and (h2 / "lib" / "kit" / "raw.py").is_file()
           and not (h2 / "console").exists(), out)
-    rc, _, err = capture(vendor.main, ["--harness", str(_shop.PLAYBOOK)])
+    rc, _, err = capture(vendor.main, ["--skill-pack", str(_shop.PLAYBOOK)])
     check("the playbook itself is refused", rc == 2 and "playbook" in err, err)
-    rc, _, err = capture(vendor.main, ["--harness", str(h / "nope")])
-    check("a missing harness dir is refused", rc == 2, err)
+    rc, _, err = capture(vendor.main, ["--skill-pack", str(h / "nope")])
+    check("a missing skill pack dir is refused", rc == 2, err)
 
     print("\n[5] packs")
     check("with no [kit] packs every pack is vendored (as before packs)",
           (kd / "takes.py").is_file() and (kd / "retry.py").is_file()
           and (kd / "guards" / "ssot.py").is_file())
-    (h / "harness.toml").write_text((h / "harness.toml").read_text()
+    (h / "skill-pack.toml").write_text((h / "skill-pack.toml").read_text()
                                     + '\n[kit]\npacks = ["data"]\n')
-    rc, out, err = capture(vendor.main, ["--harness", str(h), "--kit"])
+    rc, out, err = capture(vendor.main, ["--skill-pack", str(h), "--kit"])
     check("[kit] packs = [\"data\"]: base, data and testkit stay; the others go",
           rc == 0 and "kit packs: base, data, testkit" in out
           and (kd / "facts.py").is_file() and (kd / "retry.py").is_file()
@@ -122,25 +122,25 @@ def main() -> int:
          "execute, cli, doctor, stories, pending; from kit.testing import suites; "
          "from kit.guards import drift, evals; print('ok')" % str(h / "scripts")],
         capture_output=True, text=True,
-        env={k: v for k, v in os.environ.items() if k != "KIT_HARNESS_ROOT"})
+        env={k: v for k, v in os.environ.items() if k != "KIT_SKILL_PACK_ROOT"})
     check("base and testkit import without the packs left out",
           r.stdout.strip() == "ok", r.stderr)
 
     (h / "scripts" / "make_ad.py").write_text(
         "def run():\n    from kit import takes\n    from kit.copylint import lint\n")
-    rc, _, err = capture(vendor.main, ["--harness", str(h), "--kit"])
-    check("a harness file importing a left-out module is refused, named with its pack",
+    rc, _, err = capture(vendor.main, ["--skill-pack", str(h), "--kit"])
+    check("a skill pack file importing a left-out module is refused, named with its pack",
           rc == 2 and "scripts/make_ad.py: imports kit.copylint (pack compliance)" in err
           and "scripts/make_ad.py: imports kit.takes (pack generation)" in err, err)
-    (h / "harness.toml").write_text((h / "harness.toml").read_text().replace(
+    (h / "skill-pack.toml").write_text((h / "skill-pack.toml").read_text().replace(
         'packs = ["data"]', 'packs = ["data", "compliance", "generation"]'))
-    rc, out, _ = capture(vendor.main, ["--harness", str(h), "--kit"])
+    rc, out, _ = capture(vendor.main, ["--skill-pack", str(h), "--kit"])
     check("adding the packs it imports brings the modules back",
           rc == 0 and (kd / "takes.py").is_file() and (kd / "copylint.py").is_file()
           and manifest.check(kd) == [], out)
-    (h / "harness.toml").write_text((h / "harness.toml").read_text().replace(
+    (h / "skill-pack.toml").write_text((h / "skill-pack.toml").read_text().replace(
         '"generation"]', '"generation", "video"]'))
-    rc, _, err = capture(vendor.main, ["--harness", str(h), "--kit"])
+    rc, _, err = capture(vendor.main, ["--skill-pack", str(h), "--kit"])
     check("an unknown pack is refused, naming the packs",
           rc == 2 and "unknown pack: video" in err and "compliance" in err, err)
     return finish()

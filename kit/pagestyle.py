@@ -1,6 +1,6 @@
-"""One look for the pages a harness writes to guide making and to show the reasoning behind it (a plan's map, the next
+"""One look for the pages a skill pack writes to guide making and to show the reasoning behind it (a plan's map, the next
 batch, a make page, an insight page), so a person reads every such page the same way. Design and rules for any
-harness: docs/page-style.md.
+skill pack: docs/page-style.md.
 
 The rules the style carries, and the part that keeps each:
 
@@ -38,17 +38,17 @@ The rules the style carries, and the part that keeps each:
                                             into, print opens every fold); filled in one pass, so a text that holds a
                                             placeholder's name stays text; no grid wider than a 320px phone's column
 
-Every visible word is the harness's: Style(words, lang) lays a harness's words over EN (the defaults; ZH is a ready
+Every visible word is the skill pack's: Style(words, lang) lays a skill pack's words over EN (the defaults; ZH is a ready
 Simplified Chinese set) and refuses an unknown key, an empty word, a template without its {n} or a more line that does
 not name the owner's fold (ValueError, naming the key). The module-level functions are an English Style's. Nothing
-here reads a file: a harness reads its own term table and passes the words.
+here reads a file: a skill pack reads its own term table and passes the words.
 
-problems(page) is the check a harness's own tests run on every page it writes, one line for each rule a page can
+problems(page) is the check a skill pack's own tests run on every page it writes, one line for each rule a page can
 break: the skeleton (doctype, lang, the CSP, the style's stylesheet and script as they are, nothing loaded from
-outside the page, exactly two scripts, the page data escaped and strict JSON), the harness's own CSS dimming or
+outside the page, exactly two scripts, the page data escaped and strict JSON), the skill pack's own CSS dimming or
 recolouring no state, a status bar or number tiles before the decision, exactly one decision zone, at most one copy
 button, only there and with its hint, no command, flag, id or hash in the visible text outside the zones (plus the
-harness's own patterns), at most three warnings on the page, a more line that names the owner's fold, the owner's fold
+skill pack's own patterns), at most three warnings on the page, a more line that names the owner's fold, the owner's fold
 folded and last, every card inside a row, a state's icon (and, given a Style, its word) on every chip, node and cell, a
 title and a link on every cell and none past the map's edge, every in-page link pointing at something on the page, a
 node with nothing under it saying why, no grid wider than a phone. What only the module's own code can break (the
@@ -84,7 +84,7 @@ WORDS = (
     ("state_down", "the down state (likely worse: the next batch makes less of it)"),
     ("state_closed", "the closed state (a person closed it)"),
     ("sep", "between the parts of a legend line"),
-    ("money", "an amount of money, {n} the number (the currency is the harness's: '¥{n}', '${n}', '{n} €')"),
+    ("money", "an amount of money, {n} the number (the currency is the skill pack's: '¥{n}', '${n}', '{n} €')"),
     ("dots", "the line beside ten dots, {n} of them filled"),
     ("warnings", "the warnings box's title"),
     ("more", "the one line for the warnings not shown, {n} their count: it says where they are"),
@@ -490,7 +490,7 @@ _LOAD_ATTR = re.compile(r"""<[A-Za-z][^>]*?\s(?:src|srcset|poster)\s*=\s*(?:"\s*
                         r"""(?!data:)[^\s"'>])""", re.I)
 _LOAD_HREF = re.compile(r"""<(?:image|use|feimage)\b[^>]*?\s(?:xlink:)?href\s*=\s*["']?\s*(?!#|data:)[^\s"'>]""", re.I)
 _LOAD_CSS = re.compile(r"""url\(\s*["']?\s*(?!data:|#)[^\s"')]|@import""", re.I)
-# a state's text and its fill (the pairs the contrast is worked out on): a harness's CSS leaves them as they are
+# a state's text and its fill (the pairs the contrast is worked out on): a skill pack's CSS leaves them as they are
 _STATE_TOKENS = ("ink", "u-f", "t-f", "p-f", "p-t", "d-f", "d-t", "c-f", "c-t")
 _LENGTH = re.compile(r"(\d*\.?\d+)(px|r?em)", re.I)
 
@@ -549,7 +549,7 @@ def _no_constant(name: str):
 
 def problems(page: str, *, commands: Iterable[str | re.Pattern] = (), style: "Style | None" = None) -> list[str]:
     """Each rule of the style `page` breaks, one line each (an empty list: it keeps them all; the module docstring and
-    docs/page-style.md list them). `commands`: the harness's own patterns for a command (its CLI's name, say), looked
+    docs/page-style.md list them). `commands`: the skill pack's own patterns for a command (its CLI's name, say), looked
     for in the visible text outside the decision and the folds beside CODE_PATTERNS; `style`: the Style that wrote it,
     so the lang and each chip's and cell's word are checked too."""
     out: list[str] = []
@@ -577,7 +577,7 @@ def problems(page: str, *, commands: Iterable[str | re.Pattern] = (), style: "St
         out.append("a remote or relative src, href, url() or @import on the page: an image is inline (data:) or none")
     dims = _dims("\n".join([s.replace(CSS, "", 1) for s in sheets] + attrs))
     if dims:
-        out.append(f"the harness's CSS dims or recolours a state's text: {dims[0]}")
+        out.append(f"the skill pack's CSS dims or recolours a state's text: {dims[0]}")
     n = len(re.findall(r"<script\b", page, re.I))
     if n != 2:
         out.append(f"{n} scripts, not two (the page data and the style's script)")
@@ -679,7 +679,7 @@ def problems(page: str, *, commands: Iterable[str | re.Pattern] = (), style: "St
 # ---- the style: the parts that show words ------------------------------------------------
 
 class Style:
-    """The page style with a harness's words (laid over EN: wordset()) and its pages' lang. Every name the module
+    """The page style with a skill pack's words (laid over EN: wordset()) and its pages' lang. Every name the module
     exports (__all__) but Style and DEFAULT is here too, so a Style stands in for the module: the parts that show a
     word are its methods (money(x) in its own template), the pure helpers and the constants its attributes, and its
     problems() checks its own words and lang."""
@@ -822,7 +822,7 @@ class Style:
 
     def page(self, title: str, body: str, data=None, *, extra_css: str = "") -> str:
         """The whole document: `body` (HTML) inside <main>, `data` as the page data (JSON) for agents. One pass over
-        the template, so a text that holds a placeholder's name is never filled in. `extra_css` is the harness's own
+        the template, so a text that holds a placeholder's name is never filled in. `extra_css` is the skill pack's own
         (it may not close the style element)."""
         if "</" in extra_css:
             raise ValueError("pagestyle page: extra_css may not hold </")

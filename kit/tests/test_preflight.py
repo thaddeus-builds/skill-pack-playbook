@@ -10,7 +10,7 @@ schema (kit/preflight.py), and refused with every problem coded.
      type the kit does not know, a body that is not an object.
   3. The two refusals it was paid for: a wav typed audio/x-wav, and 0.0
      for an enum whose one option is "0".
-  4. check() raises ONE coded HarnessError listing every problem, "nothing
+  4. check() raises ONE coded SkillPackError listing every problem, "nothing
      was sent", with its `next`.
   5. preflight.py's msg() calls are closed over its fragment.
 """
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import messages, preflight  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish  # noqa: E402
 
 SCHEMA = {
@@ -151,9 +151,9 @@ def test_check_raises() -> None:
         preflight.check(SCHEMA, body, what="clip_render",
                         next=["shop catalog refresh"])
         e = None
-    except HarnessError as err:
+    except SkillPackError as err:
         e = err
-    check("a HarnessError is raised", e is not None)
+    check("a SkillPackError is raised", e is not None)
     if e is None:
         return
     m = e.message

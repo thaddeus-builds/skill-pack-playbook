@@ -1,4 +1,4 @@
-"""The closed registries a harness keeps in ssot/: fact keys, decision keys,
+"""The closed registries a skill pack keeps in ssot/: fact keys, decision keys,
 thresholds. What may be stored is closed: a key, a value domain, a bound
 not in these TSVs is refused where it is typed, with a coded message.
 
@@ -22,11 +22,11 @@ not in these TSVs is refused where it is typed, with a coded message.
                         confirm, label_<lang>…, story, why`; domain grammar
                         int:a..b | number:a..b (a side may be empty =
                         unbounded) | a|b|c | date | json | text | sha256,
-                        plus the harness's own `domains={"name": fn}`
+                        plus the skill pack's own `domains={"name": fn}`
                         (fn(value) -> canonical str; raise to refuse).
                         confirm = human | none (in force at once: never
-                        for a key that can move money) | harness (written
-                        only by the harness inside another human confirm;
+                        for a key that can move money) | skill pack (written
+                        only by the skill pack inside another human confirm;
                         the reference's `with_stage`, generalised).
   * Thresholds          ssot/constants.tsv `name, default, unit, min, max,
                         group, label_<lang>…, explain, why`. In effect for
@@ -35,7 +35,7 @@ not in these TSVs is refused where it is typed, with a coded message.
                         the market's CONFIRMED `threshold_<name>` fact over
                         the TSV default. A pending fact is not in effect.
 
-Labels: one `label_<lang>` column per language of `[harness].languages`.
+Labels: one `label_<lang>` column per language of `[skill_pack].languages`.
 
 Deviation (SPEC §registry, Thresholds.get): the SPEC sentence lists the
 confirmed fact before --assume; the reference (constants.in_effect) puts
@@ -49,7 +49,7 @@ market are the plain TSV defaults (no assume, no facts).
 Additions: FactKeys.validate(…, thresholds=) routes `threshold_<name>`
 keys to Thresholds (the reference's SETTABLE_FACT_KEYS held both);
 DecisionRegistry(entity_ids={et: regex}) + check_entity_id() port the
-reference's per-entity-type id check; `confirm = harness` (above);
+reference's per-entity-type id check; `confirm = skill_pack` (above);
 Thresholds(superseded={old: new}) + superseded_overrides() for doctor;
 out_of_bounds() for doctor too: a confirmed client value today's min..max
 refuses, so the default stands until someone asks the client again.
@@ -72,7 +72,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.market import MARKET_KEY
 from kit.messages import Msg, msg
 
@@ -80,7 +80,7 @@ KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 FACT_PREFIX = "threshold_"
 FACT_TYPES = ("number", "text", "date")      # and choice:a|b
 DOMAINS = ("date", "json", "text", "sha256")  # and int:a..b, number:a..b, a|b|c
-CONFIRM = ("human", "none", "harness")
+CONFIRM = ("human", "none", "skill_pack")
 _NUMBER = re.compile(r"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
 _INT = re.compile(r"^[+-]?\d+$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -88,8 +88,8 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 # ---- the strict TSV reader -------------------------------------------------
 
-def _bad(path: Path | str, problem: str) -> HarnessError:
-    return HarnessError(msg("registry_file_invalid", f"{path}: {problem}",
+def _bad(path: Path | str, problem: str) -> SkillPackError:
+    return SkillPackError(msg("registry_file_invalid", f"{path}: {problem}",
                             path=str(path), problem=problem))
 
 
@@ -102,7 +102,7 @@ def read_tsv(path: Path | str, required: Iterable[str], *,
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise HarnessError(msg("registry_file_missing",
+        raise SkillPackError(msg("registry_file_missing",
                                f"{path}: no such registry file",
                                path=str(path))) from None
     except (OSError, UnicodeDecodeError) as e:
@@ -153,13 +153,13 @@ def _labels() -> list[str]:
 
 
 def _source(path: Path | str | None, key: str) -> Path:
-    """`path`, else the bound harness's [ssot].<key>."""
+    """`path`, else the bound skill pack's [ssot].<key>."""
     if path is not None:
         return Path(path)
     p = config().ssot_path(key)
     if p is None:
-        raise HarnessError(msg("registry_file_missing",
-                               f"harness.toml declares no [ssot].{key}",
+        raise SkillPackError(msg("registry_file_missing",
+                               f"skill-pack.toml declares no [ssot].{key}",
                                path=f"[ssot].{key}"))
     return p
 
@@ -281,14 +281,14 @@ class FactKeys:
 
     def validate(self, key: str, raw: str, *,
                  thresholds: "Thresholds | None" = None) -> str:
-        """The canonical value to store for `key`, or a coded HarnessError
+        """The canonical value to store for `key`, or a coded SkillPackError
         naming what is wrong. `threshold_<name>` keys go to `thresholds`."""
         r = self._rows.get(key)
         if r is None:
             if thresholds is not None and key in thresholds.keys():
                 return thresholds.validate(key, raw)
             keys = list(self.settable(thresholds))
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_key_unknown",
                 f"unknown key {key!r} — nothing reads it. Keys: "
                 f"{', '.join(keys)}. A new key is added to the fact key "
@@ -304,11 +304,11 @@ def _fact_value(key: str, raw: str, kind: str, choices: tuple[str, ...],
     if kind == "number":
         d = _decimal(v)
         if d is None:
-            raise HarnessError(msg("fact_value_not_number",
+            raise SkillPackError(msg("fact_value_not_number",
                                    f"{key} must be a number, got {raw!r}",
                                    key=key, value=raw))
         if (lo is not None and d < lo) or (hi is not None and d > hi):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_value_out_of_range",
                 f"{key}={_canon(d)} is outside the allowed range "
                 f"{_span(lo, hi)}", key=key, value=raw, min=_num(lo),
@@ -318,19 +318,19 @@ def _fact_value(key: str, raw: str, kind: str, choices: tuple[str, ...],
         try:
             return date.fromisoformat(v).isoformat()
         except ValueError:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_value_not_date",
                 f"{key}: {raw!r} is not an ISO date (YYYY-MM-DD)",
                 key=key, value=raw)) from None
     if kind == "choice":
         if v not in choices:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_value_not_choice",
                 f"{key}: {raw!r} must be one of {', '.join(choices)}",
                 key=key, value=raw, choices=list(choices)))
         return v
     if not v:
-        raise HarnessError(msg("fact_value_empty",
+        raise SkillPackError(msg("fact_value_empty",
                                f"{key}: a value cannot be empty", key=key))
     return v
 
@@ -340,13 +340,13 @@ def _fact_value(key: str, raw: str, kind: str, choices: tuple[str, ...],
 Domain = Callable[[str], str]
 
 
-def _parse_domain(cell: str, harness: dict[str, Domain]
+def _parse_domain(cell: str, skill_pack: dict[str, Domain]
                   ) -> tuple[str, object] | None:
     """(kind, arg) of a domain cell, None when it is not one."""
     if cell in DOMAINS:
         return cell, None
-    if cell in harness:
-        return "harness", cell
+    if cell in skill_pack:
+        return "skill_pack", cell
     for kind, pattern in (("int", _INT), ("number", _NUMBER)):
         if cell.startswith(kind + ":"):
             lo, sep, hi = cell[len(kind) + 1:].partition("..")
@@ -374,7 +374,7 @@ class DecisionRegistry:
         self.domains = dict(domains or {})
         for name in self.domains:
             if name in DOMAINS or not KEY_RE.match(name):
-                raise _bad(self.path, f"harness domain {name!r}: a new "
+                raise _bad(self.path, f"skill pack domain {name!r}: a new "
                            f"snake_case name, not a built-in domain")
         self.entity_ids = {et: re.compile(p) if isinstance(p, str) else p
                            for et, p in (entity_ids or {}).items()}
@@ -392,7 +392,7 @@ class DecisionRegistry:
             if spec is None:
                 raise _bad(self.path, f"{ident}: domain {r['domain']!r} is not "
                            f"int:a..b, number:a..b, a|b|c, "
-                           f"{', '.join(DOMAINS)} or a harness domain")
+                           f"{', '.join(DOMAINS)} or a skill pack domain")
             if r["confirm"] not in CONFIRM:
                 raise _bad(self.path, f"{ident}: confirm must be "
                                       f"{'|'.join(CONFIRM)}")
@@ -411,17 +411,17 @@ class DecisionRegistry:
                                        if not k.startswith("_")}
 
     def check_key(self, entity_type: str, key: str) -> None:
-        """HarnessError unless (entity_type, key) is registered."""
+        """SkillPackError unless (entity_type, key) is registered."""
         if (entity_type, key) in self._rows:
             return
         if entity_type not in self.entity_types():
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "decision_entity_type_unknown",
                 f"unknown entity_type {entity_type!r} "
                 f"({', '.join(self.entity_types())})",
                 entity_type=entity_type, entity_types=self.entity_types()))
         allowed = sorted(self.keys(entity_type))
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "decision_key_unknown",
             f"unknown key {key!r} for entity_type {entity_type!r} — not in "
             f"the decision registry (allowed: {', '.join(allowed)})",
@@ -433,19 +433,19 @@ class DecisionRegistry:
 
     def check_entity_id(self, entity_type: str, entity_id: str) -> str:
         """`entity_id` when it looks like an id of `entity_type` (the
-        harness's `entity_ids` pattern; none declared = any non-blank)."""
+        skill pack's `entity_ids` pattern; none declared = any non-blank)."""
         pattern = self.entity_ids.get(entity_type)
         ok = bool(entity_id and entity_id.strip() == entity_id) and (
             pattern is None or pattern.fullmatch(entity_id) is not None)
         if not ok:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "decision_entity_id_invalid",
                 f"{entity_id!r} is not a valid {entity_type} id",
                 entity_id=entity_id, entity_type=entity_type))
         return entity_id
 
     def validate(self, entity_type: str, key: str, value: str) -> str:
-        """The canonical value to store, or a coded HarnessError."""
+        """The canonical value to store, or a coded SkillPackError."""
         self.check_key(entity_type, key)
         kind, arg = self._rows[(entity_type, key)]["_spec"]
         return self._value(kind, arg, value)
@@ -457,11 +457,11 @@ class DecisionRegistry:
         r = self._rows.get((entity_type, key))
         return r is not None and r["confirm"] == "none"
 
-    def harness_written(self, entity_type: str, key: str) -> bool:
-        """True when the key is `confirm = harness`: only the harness writes
+    def skill_pack_written(self, entity_type: str, key: str) -> bool:
+        """True when the key is `confirm = skill_pack`: only the skill pack writes
         it, inside another human confirm; `set`/`confirm` refuse it."""
         r = self._rows.get((entity_type, key))
-        return r is not None and r["confirm"] == "harness"
+        return r is not None and r["confirm"] == "skill_pack"
 
     def _value(self, kind: str, arg, value: str) -> str:
         v = (value or "").strip()
@@ -474,20 +474,20 @@ class DecisionRegistry:
                 d = Decimal(t) if _INT.match(t) else None
             if d is None:
                 if kind == "int":
-                    raise HarnessError(msg(
+                    raise SkillPackError(msg(
                         "decision_value_not_integer",
                         f"{v!r} is not an integer", value=v))
-                raise HarnessError(msg("decision_value_not_number",
+                raise SkillPackError(msg("decision_value_not_number",
                                        f"{v!r} is not a number", value=v))
             if (lo is not None and d < lo) or (hi is not None and d > hi):
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "decision_value_out_of_range",
                     f"{_canon(d)} is outside {_span(lo, hi)}",
                     value=_num(d), min=_num(lo), max=_num(hi)))
             return str(int(d)) if kind == "int" else _canon(d)
         if kind == "choice":
             if v not in arg:
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "decision_value_not_choice",
                     f"{v!r} must be one of {', '.join(arg)}",
                     value=v, choices=list(arg)))
@@ -496,7 +496,7 @@ class DecisionRegistry:
             try:
                 return date.fromisoformat(v).isoformat()
             except ValueError:
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "decision_value_not_date",
                     f"{v!r} is not an ISO date (YYYY-MM-DD)",
                     value=v)) from None
@@ -506,34 +506,34 @@ class DecisionRegistry:
             except (ValueError, RecursionError):
                 doc = None
             if not isinstance(doc, dict):
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "decision_value_not_json",
                     "the value must be one JSON object", value=v))
             return json.dumps(doc, ensure_ascii=False, sort_keys=True,
                               separators=(",", ":"))
         if kind == "sha256":
             if not _SHA256.match(v.lower()):
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "decision_value_not_sha256",
                     f"{v!r} is not a sha256 (64 hex digits)", value=v))
             return v.lower()
-        if kind == "harness":
-            return self._harness_value(arg, v)
+        if kind == "skill_pack":
+            return self._skill_pack_value(arg, v)
         if not v:
-            raise HarnessError(msg("decision_value_empty",
+            raise SkillPackError(msg("decision_value_empty",
                                    "a value cannot be empty"))
         return v
 
-    def _harness_value(self, name: str, v: str) -> str:
+    def _skill_pack_value(self, name: str, v: str) -> str:
         try:
             out = self.domains[name](v)
-        except HarnessError:
+        except SkillPackError:
             raise
         except ValueError as e:
             first = e.args[0] if e.args else None
             if isinstance(first, Msg):
-                raise HarnessError(first) from None
-            raise HarnessError(msg(
+                raise SkillPackError(first) from None
+            raise SkillPackError(msg(
                 "decision_value_invalid", f"{v!r} is not a valid {name}: {e}",
                 value=v, domain=name, detail=str(e))) from None
         if not isinstance(out, str):
@@ -605,7 +605,7 @@ class Thresholds:
     def _row(self, name: str) -> dict:
         r = self._rows.get(name)
         if r is None:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "threshold_unknown", f"{name!r} is not a threshold (known: "
                 f"{', '.join(self._rows)})", name=name,
                 names=list(self._rows)))
@@ -613,7 +613,7 @@ class Thresholds:
 
     def validate(self, key: str, raw: str) -> str:
         """The canonical value of fact `threshold_<name>` (or bare name),
-        within the TSV min..max, or a coded HarnessError."""
+        within the TSV min..max, or a coded SkillPackError."""
         name = key.removeprefix(FACT_PREFIX)
         r = self._row(name)
         return _fact_value(FACT_PREFIX + name, raw, "number", (), r["_lo"],
@@ -638,14 +638,14 @@ class Thresholds:
             key, sep, raw = (x.strip() for x in pair.partition("="))
             name = key.removeprefix(FACT_PREFIX)
             if not sep or key == name or name not in self._rows:
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "assume_unknown_threshold", f"--assume {pair!r}: not "
                     f"threshold_<name>=<value> for a known threshold",
                     pair=pair), nxt)
             try:
                 value = self.validate(key, raw)
-            except HarnessError as e:
-                raise HarnessError(msg(
+            except SkillPackError as e:
+                raise SkillPackError(msg(
                     "assume_bad_value", f"--assume {pair!r}: {e}", key=key,
                     value=raw), nxt) from None
             out[name] = float(value)

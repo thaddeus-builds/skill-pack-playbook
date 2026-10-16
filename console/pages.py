@@ -14,14 +14,14 @@ a prefix needs no configuration.
     flash_text(lang, key)            the banner words for a finished redirect, or None
 
 ctx: lang, title, user (None = read-only), token (the POST token), relay
-(None or [] = no harness; else the verb prefixes the operator allows, each a
+(None or [] = no skill pack; else the verb prefixes the operator allows, each a
 list of words), now (ISO Z), secret (bytes | None, to verify signatures),
 flash ({kind: ok|error, text}, optional: a banner at the top of a page).
 `lines` for a result: {ok, id, title, value, code, message}, plus an optional
 `reason` (the `Refused.params["reason"]` of a bad_value) that picks the exact
 sentence and an optional `comment` (what the person typed), given back on a
-refusal so nothing typed is lost. For a refusal from the harness
-(`HARNESS_SAYS`) `message` is the harness's own English, shown escaped under
+refusal so nothing typed is lost. For a refusal from the skill pack
+(`SKILL_PACK_SAYS`) `message` is the skill pack's own English, shown escaped under
 the console's sentence.
 
 The forms drawn here are what serve.py reads (all `method=post`):
@@ -77,9 +77,9 @@ SHOW_MESSAGES = 20
 SHOW_HISTORY = 100
 # a payload's true, false and null, as they are written in it
 JSON_WORDS = {"True": "true", "False": "false", "None": "null"}
-# refusals whose message is the harness's own words, shown as it wrote them
-HARNESS_SAYS = ("gate_refused", "gate_changed", "gate_timeout", "gate_unsure")
-UNSURE = ("gate_timeout", "gate_unsure", "not_recorded")        # the harness may have been written
+# refusals whose message is the skill pack's own words, shown as it wrote them
+SKILL_PACK_SAYS = ("gate_refused", "gate_changed", "gate_timeout", "gate_unsure")
+UNSURE = ("gate_timeout", "gate_unsure", "not_recorded")        # the skill pack may have been written
 # what a finished redirect (`?done=<key>`) says: a page cannot be made to say anything else
 FLASH = {"reopened": "flash.reopened", "noted": "flash.noted"}
 # what a yes/no answer is called, per step
@@ -351,7 +351,7 @@ def _flat(x, path=""):
 
 
 def _tech(t: _T, k: dict) -> str:
-    """What the harness will be told, before the button. Technical, so folded.
+    """What the skill pack will be told, before the button. Technical, so folded.
     What the person typed is "your answer"; for a choice each option gets its
     own row with the value it would write, so the value sent is never hidden
     behind a label."""
@@ -379,7 +379,7 @@ def _ifno(t: _T, k: dict) -> str:
 
 def _radios(t: _T, k: dict, rec, only: str | None = None) -> str:
     """The choices. `only` narrows a yes/no to one answer (a refusal never needs
-    the harness), which is then the checked one, and marked as suggested only
+    the skill pack), which is then the checked one, and marked as suggested only
     if the agent did suggest it."""
     if k["step"] == "choose":
         opts = [(o["value"], o["label"], o.get("note")) for o in k["options"]]
@@ -650,7 +650,7 @@ def _res(t: _T, line: dict) -> str:
             body += f'<p class="txt">{t("result.wrote", message=msg)}</p>'
     else:
         body = f'<p>{_err(t, line.get("code"), line.get("reason"))}</p>'
-        if msg and line.get("code") in HARNESS_SAYS:     # the harness's own words
+        if msg and line.get("code") in SKILL_PACK_SAYS:     # the skill pack's own words
             body += f'<p class="txt">{t("result.refused", message=msg)}</p>'
         if line.get("comment"):                           # nothing typed is lost with a refusal
             body += f'<p class="txt">{t("result.comment", comment=line["comment"])}</p>'
@@ -674,10 +674,10 @@ def render_result(ctx: dict, lines: list[dict]) -> str:
 
 def render_error(ctx: dict, code: str, message: str = "") -> str:
     t = _T(_lang(ctx))
-    said = code in HARNESS_SAYS and message
+    said = code in SKILL_PACK_SAYS and message
     tech = (f'<details class="tech"><summary>{t("err.details")}</summary><p>{_e(message)}</p></details>'
             if message and not said else "")
-    harness = f'<p class="txt">{t("result.refused", message=message)}</p>' if said else ""
+    skill_pack = f'<p class="txt">{t("result.refused", message=message)}</p>' if said else ""
     body = (f'<div class="head"><h1>{t("err.head")}</h1></div>'
-            f'<div class="res bad"><p>{_err(t, code)}</p>{harness}</div>{tech}{_back(t)}')
+            f'<div class="res bad"><p>{_err(t, code)}</p>{skill_pack}</div>{tech}{_back(t)}')
     return _shell(ctx, t, title=t("err.head"), body=body, href="./?lang=", identity=False)

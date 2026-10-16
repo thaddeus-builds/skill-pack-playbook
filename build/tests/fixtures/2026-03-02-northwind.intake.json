@@ -72,7 +72,7 @@
     {"iid": "q3", "audience": "client", "text": "Who may approve a push when you are away?",
      "source": "2026-03-02 00:25:40",
      "suggest": {"value": "Nobody: pushes wait until I am back", "because": "You said nothing should spend before you say yes."}},
-    {"iid": "q4", "audience": "builder", "text": "Which machine runs the harness?",
+    {"iid": "q4", "audience": "builder", "text": "Which machine runs the skill pack?",
      "source": "doc:kickoff-brief.pdf#page 2",
      "options": ["the shop's own server", "our server"],
      "suggest": {"value": "the shop's own server", "because": "The order data already lives there."}},

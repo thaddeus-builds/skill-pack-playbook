@@ -1,4 +1,4 @@
-"""The one clock and the small date helpers every harness layer shares.
+"""The one clock and the small date helpers every skill pack layer shares.
 
 `now()` is the one stdlib calendar read in the kit (kit/tests/
 test_clock.py holds that rule on every kit module); `today()` is its UTC

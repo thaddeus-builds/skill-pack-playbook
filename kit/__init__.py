@@ -1,8 +1,8 @@
-"""The harness kit: the generic half of an agent harness (stdlib only,
-Python >= 3.11). A harness binds it once with `harness.toml` (kit.config).
+"""The skill pack kit: the generic half of an agent skill pack (stdlib only,
+Python >= 3.11). A skill pack binds it once with `skill-pack.toml` (kit.config).
 
 Importing `kit` loads nothing but the version, so a puller can import
-`kit.dates` or `kit.atomic` without a harness config, a DB or a registry.
+`kit.dates` or `kit.atomic` without a skill pack config, a DB or a registry.
 Test: kit/tests/test_config.py (the version matches kit/VERSION).
 """
 

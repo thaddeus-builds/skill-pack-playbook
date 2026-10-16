@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import human, messages, prices  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 CFG = _shop.use()
@@ -73,20 +73,20 @@ def price_file(*rows: str, head: str = HEAD) -> Path:
 
 
 def code_of(fn) -> str | None:
-    e = raises(fn, HarnessError)
+    e = raises(fn, SkillPackError)
     return getattr(getattr(e, "message", None), "code", None)
 
 
 def at_tty(answer: str, fn):
     """fn() with a person at the KIT_TTY seam typing `answer`; returns
-    (result or None, the HarnessError or None, answers left unread)."""
+    (result or None, the SkillPackError or None, answers left unread)."""
     path = Path(tmp_dir("tty-")) / "answers.txt"
     path.write_text(answer + "\n", encoding="utf-8")
     os.environ["KIT_TTY"] = str(path)
     try:
         try:
             return fn(), None, path.read_text()
-        except HarnessError as e:
+        except SkillPackError as e:
             return None, e, path.read_text()
     finally:
         os.environ.pop("KIT_TTY", None)

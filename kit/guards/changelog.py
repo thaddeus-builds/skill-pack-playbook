@@ -10,7 +10,7 @@ rules:
      descending, dates never increasing, each release with at least one
      `### ` section;
   3. the `version:` in SKILL.md's frontmatter (what the host reads and the
-     release carries) is the newest release heading. A harness that has not
+     release carries) is the newest release heading. A skill pack that has not
      released yet (no release heading) is at 0.1.0;
   4. every `vX.Y.Z` tag the checkout holds has a heading (no tags, or no
      git: nothing to compare).
@@ -86,7 +86,7 @@ def check_changelog(root: Path | str) -> list[str]:
             if m.group(1) != want:
                 problems.append(
                     f"SKILL.md is at {m.group(1)} but the newest CHANGELOG entry is "
-                    f"{want if rel else 'none (a harness not yet released is at ' + FIRST + ')'}: "
+                    f"{want if rel else 'none (a skill pack not yet released is at ' + FIRST + ')'}: "
                     f"a version bump needs its entry")
     missing = [t for t in tags(root) if t not in set(names)]
     if missing:

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""kit.testing.suites: the day-one suites, on a harness the playbook's
-scaffolder generates (scaffold/new_harness.py, run as a subprocess), and
+"""kit.testing.suites: the day-one suites, on a skill pack the playbook's
+scaffolder generates (scaffold/new_skill_pack.py, run as a subprocess), and
 each on a planted violation, so no suite can pass by looking at nothing.
 
-  [1] every suite is green on the fresh harness (markets HK, TW)
+  [1] every suite is green on the fresh skill pack (markets HK, TW)
   [2] run_tests: tests/run.py replaced by something else
   [3] ssot: an owner row with no agent sibling; a stage signed before the
       step it comes after; an agent-only row asked is green with its ask,
@@ -21,7 +21,7 @@ each on a planted violation, so no suite can pass by looking at nothing.
   [10] kit_drift: a local edit to the vendored kit
   [10b] roadmap: a Waiting row that names no row it unblocks; a second
       roadmap at the root
-  [11] a harness without markets: the gate and the json contract hold
+  [11] a skill pack without markets: the gate and the json contract hold
   [12] never_table: a gated verb added to the table with no row in SKILL.md's
       Never table; the table moved below the rules
 """
@@ -43,15 +43,15 @@ from kit import db, schema_base  # noqa: E402
 from kit.testing import suites  # noqa: E402
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 
-SCAFFOLD = _shop.PLAYBOOK / "scaffold" / "new_harness.py"
+SCAFFOLD = _shop.PLAYBOOK / "scaffold" / "new_skill_pack.py"
 HAS_GIT = shutil.which("git") is not None
 
 
 def generate(*extra: str) -> Path:
-    root = Path(tmp_dir("suites-harness-")).resolve() / "acme"
-    env = {k: v for k, v in os.environ.items() if k != "KIT_HARNESS_ROOT"}
+    root = Path(tmp_dir("suites-skill-pack-")).resolve() / "acme"
+    env = {k: v for k, v in os.environ.items() if k != "KIT_SKILL_PACK_ROOT"}
     r = subprocess.run([sys.executable, str(SCAFFOLD), "--dir", str(root),
-                        "--name", "acme-harness", "--cli", "acme",
+                        "--name", "acme-skill-pack", "--cli", "acme",
                         "--prefix", "ACME", "--owner", "@boss",
                         "--repo-home", "the team's git host", *extra],
                        capture_output=True, text=True, timeout=300, env=env)
@@ -151,14 +151,14 @@ p.parse_args()
 
 
 def main() -> int:
-    print("[1] every suite on a fresh harness (markets HK, TW)")
+    print("[1] every suite on a fresh skill pack (markets HK, TW)")
     root = generate("--markets", "HK,TW")
     got = every(root)
     for name, results in got.items():
         check(f"{name}: green ({len(results)} check(s))",
               results and not failing(results),
               [(label, p) for label, p in results if p])
-    check("the suites bound the generated harness",
+    check("the suites bound the generated skill pack",
           suites.bind(root).root == root)
 
     print("\n[2] run_tests")
@@ -192,22 +192,22 @@ def main() -> int:
     undo()
     undo = planted(root, "scripts/space_set.py", SPACE_SET)
     caught("a script that writes a client's value into ssot/constants.tsv",
-           suites.ssot(root), "no harness code writes under ssot/")
+           suites.ssot(root), "no skill pack code writes under ssot/")
     undo()
     check("…and green again once it is undone",
           not failing(suites.ssot(root)), failing(suites.ssot(root)))
     undo = planted(root, "scripts/space_set.py", SPACE_SET)
     undo_index = planted(root, "ssot/index.tsv", "not\tan index\n")
-    caught("ssot_writes alone (a harness's own test_ssot.py) reads no index "
+    caught("ssot_writes alone (a skill pack's own test_ssot.py) reads no index "
            "and still catches the write", suites.ssot_writes(root),
-           "no harness code writes under ssot/")
+           "no skill pack code writes under ssot/")
     undo_index()
     undo()
 
     print("\n[4] layering")
     undo = planted(root, "scripts/compute_x.py", "from _lib import writer\n")
     caught("a compute importing the writer", suites.layering(root),
-           "the layering rules of harness.toml hold")
+           "the layering rules of skill-pack.toml hold")
     undo()
 
     print("\n[4b] clock")
@@ -307,7 +307,7 @@ def main() -> int:
     undo()
     check("…and green again once it is undone", not failing(suites.roadmap(root)))
 
-    print("\n[11] a harness without markets")
+    print("\n[11] a skill pack without markets")
     flat = generate()
     for name in ("gate", "json_contract", "human_tables", "ssot"):
         results = (suites.human_tables(flat, spec_of(flat))

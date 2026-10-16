@@ -1,13 +1,13 @@
 """The append-only raw store: raw only grows.
 
-Everything a harness pulls or imports lands here first, under
+Everything a skill pack pulls or imports lands here first, under
 `<DATA_DIR>/raw/<source>/<name>`, and ingest rebuilds the DB from it. The
 rule this module holds is the lesson of a rebuild that shrank 3,072 rows
 to 329: a raw file is written once and never replaced, so the DB can
 always be rebuilt from everything ever pulled.
 
   * write-once: saving the same name with identical bytes is a no-op;
-    with different bytes it is HarnessError(raw_would_overwrite) and the
+    with different bytes it is SkillPackError(raw_would_overwrite) and the
     file on disk is untouched;
   * atomic and race-safe: the bytes go to a temp sibling, then a hard link
     claims the name (it fails if the name exists, so two concurrent writers
@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from kit import paths
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 
 RAW = "raw"
@@ -43,7 +43,7 @@ def _plain(name: str) -> str:
     if (not isinstance(name, str) or not name or name in (".", "..")
             or name.startswith(".") or "/" in name or "\\" in name
             or "\0" in name):
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "raw_bad_name",
             f"{name!r} is not a plain file or folder name (no path separator,"
             f" no leading dot, not empty)", name=str(name)))
@@ -64,8 +64,8 @@ def _same(path: Path, data: bytes) -> bool:
         return False
 
 
-def _refuse(source: str, name: str) -> HarnessError:
-    return HarnessError(msg(
+def _refuse(source: str, name: str) -> SkillPackError:
+    return SkillPackError(msg(
         "raw_would_overwrite",
         f"raw/{source}/{name} already holds different bytes; a raw file is "
         f"written once and never replaced — save the new data under a new "
@@ -139,7 +139,7 @@ def import_file(source: str, src: Path | str) -> Path:
             raise OSError
         data = src.read_bytes()
     except OSError:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "raw_import_missing",
             f"Nothing to import: {src} is not a readable file",
             path=str(src))) from None

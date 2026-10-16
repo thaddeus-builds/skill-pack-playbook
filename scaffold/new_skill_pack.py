@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Generate a new harness skeleton: green before its first feature.
+"""Generate a new skill pack skeleton: green before its first feature.
 
-    python3 scaffold/new_harness.py --name acme-harness --cli acme \\
-        --prefix ACME --dir ../acme-harness [--markets AA,BB] \\
+    python3 scaffold/new_skill_pack.py --name acme-skill-pack --cli acme \\
+        --prefix ACME --dir ../acme-skill-pack [--markets AA,BB] \\
         [--packs compliance,data] [--owner @handle] [--repo-home WHERE] \\
         [--langs en,zh] [--dry-run]
-    python3 scaffold/new_harness.py --dir ../acme-harness --update-kit
+    python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack --update-kit
 
 What it writes (BUILD.md, B1):
 
   * every template with a rendered target (RENDERED below; templates/README.md
     lists the others as used, not copied, or written by a later build step),
     placeholders filled ({{name}}, {{cli}}, {{env_prefix}}, {{owner}},
-    {{repo_home}}, {{today}}): harness.toml, CLAUDE.md, SKILL.md, README.md,
+    {{repo_home}}, {{today}}): skill-pack.toml, CLAUDE.md, SKILL.md, README.md,
     references/workflows.md, .gitignore, .gitlab-ci.yml, .gitlab/CODEOWNERS,
     docs/ (decision rights, the install and triage checklists, the data bug
     classes, the doctor's checks, the owner review loop, vendor API
@@ -29,24 +29,24 @@ What it writes (BUILD.md, B1):
     names, each a thin call into kit.testing.suites, plus tests/run.py;
   * the kit and the console vendored (kit/tools/vendor.py) into
     scripts/kit/ and console/, each with its VERSION and MANIFEST.sha256;
-  * .gitattributes rendered from harness.toml and the ssot index
+  * .gitattributes rendered from skill-pack.toml and the ssot index
     (kit.guards.release.render_gitattributes).
 
 It refuses a --dir that exists and is not empty, or that sits inside this
 playbook (except under scaffold/out/, an ignored preview folder); it takes
 no data path; it leaves no `{{` behind. `--dry-run`
 prints the file list and writes nothing. `--update-kit` vendors the kit
-and the console again into an existing harness and touches nothing else.
+and the console again into an existing skill pack and touches nothing else.
 
 Next: `git init`, commit, `python3 scripts/<cli>.py test` (the suite is
 green before the first feature; CI runs the same); then, before the first
 push and in this order: create the client-term list outside the
 repository, seeded with the client's name from the intake; name it in
-harness.toml (`[guards.leak] terms`); install the leak guard as the
+skill-pack.toml (`[guards.leak] terms`); install the leak guard as the
 pre-push hook (HOOK); push. The hook refuses a push while no list is
 named, so it is installed only once one is.
 
-Test: scaffold/tests/test_new_harness.py.
+Test: scaffold/tests/test_new_skill_pack.py.
 """
 
 from __future__ import annotations
@@ -68,9 +68,9 @@ from kit.tools import packs as kit_packs, vendor  # noqa: E402
 # the pre-push hook the next steps install (kit/tools/leak_guard.py)
 HOOK = "scripts/kit/tools/pre-push.sample"
 
-# template (under templates/) -> target (under the harness)
+# template (under templates/) -> target (under the skill pack)
 RENDERED = {
-    "harness.toml": "harness.toml",
+    "skill-pack.toml": "skill-pack.toml",
     "AGENT_INSTRUCTIONS.md": "CLAUDE.md",
     "SKILL.md": "SKILL.md",
     "README-operator.md": "README.md",
@@ -98,8 +98,8 @@ FILLED = {"SKILL.md", "README.md", "references/workflows.md",
 SKELETON_TARGETS = {"scripts/cli.py": "scripts/{cli}.py",
                     "claude/README.md": ".claude/README.md",
                     "env.example": ".env.example"}
-# ssot files a new harness starts with, as their header row; alert rules
-# come with the harness's own alert compute (B6)
+# ssot files a new skill pack starts with, as their header row; alert rules
+# come with the skill pack's own alert compute (B6)
 SSOT_HEADERS = ["glossary.tsv", "glossary.agent.tsv", "user-stories.tsv",
                 "user-stories.agent.tsv", "policies.tsv", "policies.agent.tsv",
                 "fact_keys.tsv", "decision_keys.tsv", "message_codes.tsv",
@@ -113,7 +113,7 @@ GENERATED_TESTS = ("test_run_tests.py", "test_ssot.py", "test_layering.py",
 
 # The day-one checklist in docs/stages.md, item by item (the item's first
 # words), and the generated file(s) that answer it. A new checklist item
-# fails scaffold/tests/test_new_harness.py until it is mapped here.
+# fails scaffold/tests/test_new_skill_pack.py until it is mapped here.
 DAY_ONE = {
     "Meeting intake": ["ssot/stages.agent.tsv"],
     "A review page before the first paid batch": ["docs/owner-review-loop.md",
@@ -199,7 +199,7 @@ def render_toml(text: str, markets: list[str], langs: list[str],
 
 
 def codeowners(text: str, files: set[str]) -> str:
-    """The template's blocks whose paths the new harness has; a block for a
+    """The template's blocks whose paths the new skill pack has; a block for a
     path it does not have yet (the client console's) is left out."""
     blocks, out = text.split("\n\n"), []
     for block in blocks:
@@ -218,7 +218,7 @@ def _covered(path: str, files: set[str]) -> bool:
 
 def labels(head: list[str], langs: list[str]) -> list[str]:
     """A header with its per-language columns (label_*, meaning_*) for the
-    harness's languages, in place of the template's en and zh."""
+    skill pack's languages, in place of the template's en and zh."""
     out = []
     for c in head:
         m = re.match(r"^(label|meaning)_(en|zh)$", c)
@@ -282,7 +282,7 @@ def plan(values: dict[str, str], markets: list[str], langs: list[str],
     for src, target in RENDERED.items():
         text = fill((TEMPLATES / src).read_text(encoding="utf-8"), values,
                     f"templates/{src}")
-        if src == "harness.toml":
+        if src == "skill-pack.toml":
             text = render_toml(text, markets, langs, packs)
         files[target] = text
     vendored = {"scripts/kit/raw.py", "console/ask.py", "console/serve.py",
@@ -305,16 +305,16 @@ OUT = Path(__file__).resolve().parent / "out"   # a preview folder, ignored
 
 def check_dir(d: Path, *, update: bool) -> None:
     if (d == PLAYBOOK or PLAYBOOK in d.parents) and OUT not in d.parents:
-        raise Refused(f"{d} is inside the playbook checkout: a harness is a "
+        raise Refused(f"{d} is inside the playbook checkout: a skill pack is a "
                       f"repository of its own")
     if update:
-        if not (d / "harness.toml").is_file():
-            raise Refused(f"{d} holds no harness.toml: --update-kit vendors "
-                          f"into an existing harness")
+        if not (d / "skill-pack.toml").is_file():
+            raise Refused(f"{d} holds no skill-pack.toml: --update-kit vendors "
+                          f"into an existing skill pack")
         return
     if d.exists() and (not d.is_dir() or any(d.iterdir())):
         raise Refused(f"{d} exists and is not empty: the scaffolder writes "
-                      f"a new harness only")
+                      f"a new skill pack only")
 
 
 def write(d: Path, files: dict[str, str]) -> None:
@@ -367,12 +367,12 @@ def values_of(a: argparse.Namespace) -> tuple[dict[str, str], list[str],
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="scaffold/new_harness.py",
-        description="Generate a new harness skeleton from templates/ and "
+        prog="scaffold/new_skill_pack.py",
+        description="Generate a new skill pack skeleton from templates/ and "
                     "vendor the kit and the console into it.")
-    p.add_argument("--dir", required=True, help="the new harness's folder "
+    p.add_argument("--dir", required=True, help="the new skill pack's folder "
                    "(absent or empty; outside this playbook)")
-    p.add_argument("--name", help="the harness's name, e.g. acme-harness")
+    p.add_argument("--name", help="the skill pack's name, e.g. acme-skill-pack")
     p.add_argument("--cli", help="the CLI word, e.g. acme")
     p.add_argument("--prefix", help="the env prefix, e.g. ACME")
     p.add_argument("--markets", default="", help="the closed set of scopes, "
@@ -390,7 +390,7 @@ def parser() -> argparse.ArgumentParser:
                    help="print the file list, write nothing")
     p.add_argument("--update-kit", action="store_true",
                    help="vendor the kit and the console again into an "
-                        "existing harness; touch nothing else")
+                        "existing skill pack; touch nothing else")
     return p
 
 
@@ -400,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         check_dir(d, update=a.update_kit)
         if a.update_kit:
-            return vendor.main(["--harness", str(d)]
+            return vendor.main(["--skill-pack", str(d)]
                                + (["--dry-run"] if a.dry_run else []))
         values, markets, langs, packs = values_of(a)
         files = plan(values, markets, langs, packs)
@@ -410,14 +410,14 @@ def main(argv: list[str] | None = None) -> int:
     if a.dry_run:
         for rel in sorted(files):
             print(f"  write    {rel}")
-        print("  write    .gitattributes (from harness.toml and ssot/index.tsv)")
+        print("  write    .gitattributes (from skill-pack.toml and ssot/index.tsv)")
         print(f"  vendor   {'scripts/kit/'} and console/ (kit/tools/vendor.py)")
         print(f"dry run: {len(files) + 1} files and two vendored copies "
               f"for {d}; nothing written")
         return 0
     d.mkdir(parents=True, exist_ok=True)
     write(d, files)
-    rc = vendor.main(["--harness", str(d)])
+    rc = vendor.main(["--skill-pack", str(d)])
     if rc != 0:
         return rc
     write(d, {".gitattributes": gitattributes(d)})
@@ -433,7 +433,7 @@ def main(argv: list[str] | None = None) -> int:
 def next_steps(d: Path, values: dict) -> list[str]:
     """What to run after the scaffold, in order: the client-term list
     exists and is named before the leak guard's hook is installed, so the
-    hook never stands between a new harness and its first push."""
+    hook never stands between a new skill pack and its first push."""
     lists = f"~/<workspaces>/{values['name']}/*/data/client_terms.txt"
     return [
         f"next: cd {d} && git init && git add -A && git commit -m "
@@ -442,7 +442,7 @@ def next_steps(d: Path, values: dict) -> list[str]:
         f"  1. create the client-term list outside this repository, seeded "
         f"with the client's name from the intake (one term per line), e.g. "
         f"{lists.replace('*', '<client>')}",
-        f"  2. name it in harness.toml: [guards.leak] terms = [\"{lists}\"]",
+        f"  2. name it in skill-pack.toml: [guards.leak] terms = [\"{lists}\"]",
         f"  3. install the leak guard as the pre-push hook: install -m 755 "
         f"{HOOK} .git/hooks/pre-push",
         "  4. push",

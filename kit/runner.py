@@ -1,8 +1,8 @@
-"""How one harness script runs another, and reads its one JSON document.
+"""How one skill pack script runs another, and reads its one JSON document.
 
 `script_cmd` is the argv that runs a script: this interpreter
 (`sys.executable`), or `uv run <script>` when KIT_RUNNER=uv and uv is on
-PATH (a harness whose scripts declare their own PEP 723 dependencies);
+PATH (a skill pack whose scripts declare their own PEP 723 dependencies);
 uv missing = this interpreter, as a direct run would be.
 
 `run_json` is how a verb snapshots another verb's `--json` (a queue
@@ -10,7 +10,7 @@ snapshotting a compute, a story check running a read verb): a failed
 child printed its one failure document on stdout (kit.contract.fail), so
 that is where its reason, fix commands and message code are; stderr
 holds only notices or a crash's traceback. A failure is `ChildFailed`, a
-HarnessError that keeps the child's own code (messages.relayed), so the
+SkillPackError that keeps the child's own code (messages.relayed), so the
 parent's fail() reports the child's reason, not a generic one.
 
 Test: kit/tests/test_runner.py.
@@ -25,7 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 
 RUNNER_ENV = "KIT_RUNNER"
 
@@ -37,7 +37,7 @@ def script_cmd(target: Path | str, args: list[str]) -> list[str]:
             else [sys.executable, str(target), *args])
 
 
-class ChildFailed(HarnessError):
+class ChildFailed(SkillPackError):
     """A child script failed. str() = its failure document's `error`;
     `next` = its fix commands; `code` = its {code, params}. A child that
     died without a document (a crash): stderr's last line, [] and None."""
@@ -46,7 +46,7 @@ class ChildFailed(HarnessError):
         try:
             from kit.messages import relayed
             message = relayed(code, error)
-        except Exception:        # no bound harness: keep the plain text
+        except Exception:        # no bound skill pack: keep the plain text
             message = error
         super().__init__(message, next)
         self.code = code

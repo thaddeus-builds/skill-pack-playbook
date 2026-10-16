@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """`<cli> pending` (kit/pending.py) turns every row waiting on a human into
-one valid console ask, on the fake "shop" harness.
+one valid console ask, on the fake "shop" skill pack.
 
   1. A read verb: no DB = no_db, nothing created; nothing waiting = no asks.
   2. Every pending fact (number / choice / date / threshold), decision
      (number / choice / text / sha256) and queue item becomes exactly one
-     ask of the right step, with evidence from the harness's own rows
-     (source "harness …"), recommend.because left null and flagged; the
+     ask of the right step, with evidence from the skill pack's own rows
+     (source "skill pack …"), recommend.because left null and flagged; the
      console refuses them as they are and, once the agent writes
      `because`, `console/ask.py add --dry-run` accepts every one.
   3. The gate block is what the kit's gate binds: every gated ask,
      answered through console/relay.py (in a child process, against a
-     harness command that runs kit.facts / kit.decisions / kit.queue),
+     skill pack command that runs kit.facts / kit.decisions / kit.queue),
      passes relay's subject check and writes exactly that row, @relay
      (a provided value other than the recommendation too).
   4. Several markets declared or waiting: each fact or decision gate names
@@ -66,8 +66,8 @@ TH = Thresholds(FIX / "constants.tsv")
 IDS = {"product": r"SKU-[A-Z0-9]+", "campaign": r"[0-9]+"}
 REG = DecisionRegistry(entity_ids=IDS)
 
-# the harness command console/relay.py runs: `<cmd> facts|decisions|queue …`
-HARNESS = r'''
+# the skill pack command console/relay.py runs: `<cmd> facts|decisions|queue …`
+SKILL_PACK = r'''
 import os, sys
 sys.path.insert(0, os.environ["PLAYBOOK"])
 from pathlib import Path
@@ -150,7 +150,7 @@ def prop(target, payload, **kw):
 
 def filled(asks: list[dict]) -> list[dict]:
     return [{**a, "recommend": {**a["recommend"],
-                                "because": "the harness's own numbers"}}
+                                "because": "the skill pack's own numbers"}}
             for a in asks]
 
 
@@ -167,9 +167,9 @@ def console_add(asks: list[dict]) -> dict:
 
 
 def relay(ask: dict, value: str) -> dict:
-    d = Path(tmp_dir("harness-"))
-    script = d / "shop_harness.py"
-    script.write_text(HARNESS, encoding="utf-8")
+    d = Path(tmp_dir("skill-pack-"))
+    script = d / "shop_skill_pack.py"
+    script.write_text(SKILL_PACK, encoding="utf-8")
     child_env = sandbox_env(DATA, PLAYBOOK=str(_shop.PLAYBOOK), FIX=str(FIX),
                             PYTHONDONTWRITEBYTECODE="1",
                             **{SECRET: "s3cret"})
@@ -293,8 +293,8 @@ def test_asks_and_relay() -> None:
           and qa["recommend"] == {"value": "yes", "because": None}, qa)
     sources = [e.get("source") or e["table"]["caption"]
                for a in asks for e in a["evidence"]]
-    check("every evidence item is sourced from the harness",
-          sources and all("harness" in s for s in sources), sources)
+    check("every evidence item is sourced from the skill pack",
+          sources and all("skill_pack" in s for s in sources), sources)
     check("every ask is flagged: recommend.because null, about.fill, the "
           "coded pending_fill_because warning; the texts coded",
           all(a["recommend"]["because"] is None for a in asks)

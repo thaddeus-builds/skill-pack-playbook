@@ -12,10 +12,10 @@ format (console/README.md "A clear ask"; console/examples/*.json):
   * a pending decision -> `provide` / `choose` / `confirm` by its domain;
   * a pending queue item -> `approve`, its `effect` from the proposal's
     `expected`;
-  * a client file the harness has staged (the `staged=` hook: kit.workbook_map
+  * a client file the skill pack has staged (the `staged=` hook: kit.workbook_map
     rows and the values read from the file, kit.file_gate) -> ONE `confirm`
     for the whole file: what the agent read from it is confirmed together,
-    once per version, never one number at a time. The harness gives the verb
+    once per version, never one number at a time. The skill pack gives the verb
     and the payload its own gate binds; pending shows the values and the
     rows and attaches that gate.
 
@@ -36,8 +36,8 @@ What it guards:
     `expect` already holds the market, so the subject must name it too.
     Otherwise the ask has no gate and a coded warning says why (a person
     confirms at the terminal).
-  * Evidence comes from the harness's own rows, each item's source
-    labelled "harness (<table>)"; the agent's argument goes in
+  * Evidence comes from the skill pack's own rows, each item's source
+    labelled "skill_pack (<table>)"; the agent's argument goes in
     `recommend.because`, which pending leaves null: every ask is listed
     in `about[].fill`, and the console refuses the ask until the agent
     writes it.
@@ -51,7 +51,7 @@ for codes inside the ask).
 Deviation (SPEC §pending): the entry point is `main` (`pending_main` is
 an alias), with keyword hooks thresholds= (threshold_<name> facts) and
 on_confirm= (the decisions hook, so its bound values are in `expect`);
-asks, about and warnings are also returned by `asks()` for harness code.
+asks, about and warnings are also returned by `asks()` for skill pack code.
 
 Test: kit/tests/test_pending.py.
 """
@@ -70,7 +70,7 @@ from kit import contract, db, decisions, facts, human
 from kit import market as markets
 from kit import queue as q
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, code, coded, msg
 from kit.registry import (FACT_PREFIX, DecisionRegistry, FactKeys,
                           Thresholds)
@@ -114,7 +114,7 @@ def _fact(label: str, value: Any, table: str) -> dict | None:
         return None
     return {"label": _clip(label, LIMITS["label"]),
             "value": _clip(value, LIMITS["value"]),
-            "source": f"harness ({table})"}
+            "source": f"skill_pack ({table})"}
 
 
 def _table(caption: str, d: dict, table: str) -> dict | None:
@@ -122,7 +122,7 @@ def _table(caption: str, d: dict, table: str) -> dict | None:
             if k not in SKIP_EVIDENCE][:LIMITS["rows"]]
     if not rows:
         return None
-    return {"table": {"caption": _clip(f"{caption}. Source: harness "
+    return {"table": {"caption": _clip(f"{caption}. Source: skill_pack "
                                        f"({table})", LIMITS["caption"]),
                       "columns": ["Field", "Value"], "rows": rows}}
 
@@ -132,7 +132,7 @@ def _grid(caption: str, columns: list[str], rows: list[list[Any]],
     rows = [[_cell(c) for c in r] for r in rows][:LIMITS["rows"]]
     if not rows:
         return None
-    return {"table": {"caption": _clip(f"{caption}. Source: harness "
+    return {"table": {"caption": _clip(f"{caption}. Source: skill_pack "
                                        f"({table})", LIMITS["caption"]),
                       "columns": columns, "rows": rows}}
 
@@ -233,7 +233,7 @@ def _gate(ask_id: str, verb: list[str], expect: dict, value_arg: bool,
 def _market_word(m: str, relay_markets: list[str]) -> str | None:
     """The gate's `market` when the verb alone would not reach market m
     (several markets declared or waiting), else None (the ask is unchanged
-    for a harness with one market)."""
+    for a skill pack with one market)."""
     return None if relay_markets == [m] else m
 
 
@@ -343,7 +343,7 @@ def _decision_ask(con: sqlite3.Connection, r: dict, *,
                               r["key"], r["value"])
     try:
         shape = _decision_shape(registry.domain(et, key))
-    except HarnessError:                 # a key the registry no longer has
+    except SkillPackError:                 # a key the registry no longer has
         shape = {"step": "confirm"}
     row = registry.row(et, key) or {}
     label = row.get(f"label_{config().languages[0]}") or key
@@ -353,7 +353,7 @@ def _decision_ask(con: sqlite3.Connection, r: dict, *,
     try:
         plan = decisions.plan_confirm(con, m, et, [eid], key,
                                       registry=registry, on_confirm=on_confirm)
-    except HarnessError as e:
+    except SkillPackError as e:
         refused = e.message
     subj = plan["subject"] if plan and not plan["already"] else \
         human.subject("decisions confirm", m, et, {eid: {key: value}},
@@ -422,7 +422,7 @@ def _queue_ask(r: dict, warnings: list[Msg]) -> tuple[dict, dict]:
     because = str(ev.get("because") or "")
     at, basis = (r["created_at"] or "")[:16], r["basis"]
     why = _cut(msg("pending_why_queue",
-                   f"The harness proposed this on {at} from the data it read "
+                   f"The skill pack proposed this on {at} from the data it read "
                    f"(basis {basis[:12]}). Nothing is sent until a person "
                    f"approves, and execute refuses it if that data moves."
                    + (f" The rule says: {because}" if because else ""),
@@ -461,11 +461,11 @@ def _queue_ask(r: dict, warnings: list[Msg]) -> tuple[dict, dict]:
 
 
 def _file_ask(f: dict, warnings: list[Msg]) -> tuple[dict, dict]:
-    """One ask for one staged client file. `f` (the harness's): name (the
+    """One ask for one staged client file. `f` (the skill pack's): name (the
     file's id), version (the staged bundle's), source (where it lives, for
     the evidence), rows (how many map rows it confirms), shown ([[row id,
     content]], the rows to show), values ([{key, market, value, cell}]),
-    verb and expect (the harness's gate: the verb that confirms this
+    verb and expect (the skill pack's gate: the verb that confirms this
     version and the subject it binds), market (the gate's --market, when
     the verb needs one)."""
     name, version = str(f["name"]), str(f["version"])
@@ -519,7 +519,7 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
          staged: Callable | None = None) -> dict:
     """{asks, about, warnings, message} for every row waiting on a human
     (of `market`, or of every market): declarations first, then facts,
-    staged files (`staged(con)`, the harness's list of _file_ask's
+    staged files (`staged(con)`, the skill pack's list of _file_ask's
     dicts), decisions and queue items."""
     warnings: list[Msg] = []
     out: list[tuple[dict, dict]] = []
@@ -540,7 +540,7 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
     if registry is not None:
         for m in ([market] if market else confirmed):
             for r in decisions.pending(con, m):
-                if registry.harness_written(r["entity_type"], r["key"]):
+                if registry.skill_pack_written(r["entity_type"], r["key"]):
                     continue
                 out.append(_decision_ask(con, r, registry=registry,
                                          on_confirm=on_confirm,
@@ -563,7 +563,7 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
         warnings.insert(0, msg(
             "pending_fill_because",
             f"write recommend.because in each of the {len(out)} ask(s) (your "
-            f"argument, apart from the harness's evidence) before `ask.py "
+            f"argument, apart from the skill pack's evidence) before `ask.py "
             f"add`; the console refuses an ask without it", count=len(out)))
     return {**coded("message", summary), "market": market,
             "asks": [a for a, _ in out], "about": [b for _, b in out],
@@ -576,7 +576,7 @@ def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
          on_confirm: Callable | None = None,
          staged: Callable | None = None) -> int:
     """`<cli> pending [--market M] [--json]`; the exit code. `staged(con)`:
-    the harness's staged client files (see asks())."""
+    the skill pack's staged client files (see asks())."""
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = config()
     cmd = [cfg.cli, "pending", *argv]

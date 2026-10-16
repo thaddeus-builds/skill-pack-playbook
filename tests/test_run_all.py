@@ -30,7 +30,7 @@ The entry point is run over throwaway trees of planted suites, in this process
     has an account name in $USER when the run has none: the name of the OS account
     (the one kit.human.changed_by writes; the console's tests need a plain name and the
     kit's tests compare getpass.getuser() with it), proven on the real kit/tests/test_facts.py;
-  * the real list keeps the Zylos adapter's suite (the host every harness is
+  * the real list keeps the Zylos adapter's suite (the host every skill pack is
     adapted to), names node and git for every suite whose tests call them (each
     folder is scanned), and its RESULT parsing agrees with kit/testing/run_tests.py;
   * .github/workflows/ci.yml runs `python3 run_all.py` on push and pull request,
@@ -526,7 +526,7 @@ WANTS = {"node": re.compile(r"""which\(\s*["']node["']\s*\)"""),                
 
 def test_the_real_list_keeps_the_zylos_suite_and_names_the_tools_the_tests_need():
     by = {s.name: s for s in run_all.SUITES}
-    assert by["zylos"].run == "hosts/zylos/tests/run.py" and by["zylos"].needs == ("node",)   # the host every harness is adapted to
+    assert by["zylos"].run == "hosts/zylos/tests/run.py" and by["zylos"].needs == ("node",)   # the host every skill pack is adapted to
     assert os.path.isfile(os.path.join(REPO, "hosts", "zylos", "tests", "run.py"))
     assert all(s.covers for s in run_all.SUITES)
     for name, tool in (("console", "node"), ("workflows", "node"), ("kit", "git"), ("scaffold", "git"), ("golden", "git"),

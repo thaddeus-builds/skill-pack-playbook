@@ -1,6 +1,6 @@
 """How one sample verb runs another: the child prints one JSON document.
 
-Stdlib only, imports nothing of the harness: any layer may use it.
+Stdlib only, imports nothing of the skill pack: any layer may use it.
 """
 
 from __future__ import annotations

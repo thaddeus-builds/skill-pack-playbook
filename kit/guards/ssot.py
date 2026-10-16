@@ -36,7 +36,7 @@ owner-file lint.
   * no ssot text uses a banned term (`[guards.ssot].banned_terms`,
     {banned: preferred}).
 
-Parameters, all optional, in harness.toml `[guards.ssot]`:
+Parameters, all optional, in skill-pack.toml `[guards.ssot]`:
 index_columns {file, owner, reader, test, id, purpose -> header name},
 owner_kinds, cli_verbs, none ("—"), table_prefixes, file_exts, held
 [[file, id, column]…], banned_terms, status_column ("status"),
@@ -60,14 +60,14 @@ ssot/ is the builder's (docs/rules.md, "Registries: one place per
 value"): what a client sets or decides through its agent goes to that
 client's own database, never into an edit of ssot/. `check_writes(root)`
 returns, as `path:line` and never what is written, every call in the
-harness's code that writes under the ssot dir, by AST: Path
+skill pack's code that writes under the ssot dir, by AST: Path
 write_text / write_bytes / touch / unlink / mkdir / rmdir / rename /
 replace, `open` (builtin, Path, io, codecs, gzip, bz2, lzma, os) with a
 write mode (a mode that is not a literal counts as one), os.replace /
 rename / remove / unlink / mkdir / makedirs / link / symlink / truncate,
 shutil.copy / copy2 / copyfile / copytree / copymode / copystat (the
 destination) / move / rmtree, kit.atomic's open_atomic /
-write_json_atomic / write_bytes_atomic, and the harness's own helpers
+write_json_atomic / write_bytes_atomic, and the skill pack's own helpers
 named in `write_calls` (the path is their first argument). A path is
 under the ssot dir when its expression holds a string with the dir as
 path segments ("ssot", "ssot/x.tsv", f"{root}/ssot/x"), an identifier
@@ -94,7 +94,7 @@ elsewhere. A path the code builds out of sight (a parameter, a
 function's return) is not seen: the rule catches the plain case, not
 every case.
 
-The code is every .py under `write_code` (default: the whole harness;
+The code is every .py under `write_code` (default: the whole skill pack;
 each entry must find code), never the vendored kit, a test (a `tests`
 folder, test_*.py, *_test.py, conftest.py), a hidden folder,
 __pycache__, node_modules, a virtualenv (a folder with pyvenv.cfg) or
@@ -121,8 +121,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from kit.config import HarnessConfig
-from kit.guards import (NONE, SKIP_DIRS, harness, paths, read, report,
+from kit.config import SkillPackConfig
+from kit.guards import (NONE, SKIP_DIRS, skill_pack, paths, read, report,
                         section, strs, tsv)
 
 ORDER = ("file", "owner", "reader", "test", "id", "purpose")
@@ -141,7 +141,7 @@ PROPOSED = ("proposed", "asked")
 
 @dataclass(frozen=True)
 class Rules:
-    """Everything the ssot guard reads from one harness.toml."""
+    """Everything the ssot guard reads from one skill-pack.toml."""
     root: Path
     ssot_dir: str
     index: str
@@ -161,8 +161,8 @@ class Rules:
 
 
 def rules(root: Path | str | None = None,
-          cfg: HarnessConfig | None = None) -> Rules:
-    cfg = cfg or harness(root)
+          cfg: SkillPackConfig | None = None) -> Rules:
+    cfg = cfg or skill_pack(root)
     g = section(cfg, "guards", "ssot")
     ssot_dir = cfg.ssot.get("dir", "ssot").strip("/")
     constants = cfg.ssot.get("constants")
@@ -335,7 +335,7 @@ def check_index(root: Path | str | None = None) -> list[str]:
     ssot = r.root / r.ssot_dir
     tsvs = sorted(p.relative_to(r.root).as_posix() for p in ssot.rglob("*.tsv")
                   ) if ssot.is_dir() else []
-    # message-code fragments (kit.messages.harness_files) are rows of the
+    # message-code fragments (kit.messages.skill_pack_files) are rows of the
     # [ssot].message_codes registry: its index row covers them
     frag_dir = f"{r.ssot_dir}/message_codes.d/"
     covered = {t for t in tsvs if t.startswith(frag_dir)} \
@@ -907,7 +907,7 @@ def scan_writes(source: str, ssot_dir: str = "ssot",
                 calls: tuple[str, ...] = (), rel: str = "") -> list[WriteHit]:
     """The writes under `ssot_dir` in one module's source, (line, what);
     `known` = {scanned module: its module-level ssot names}, for the
-    modules it may import; `rel` = its harness-relative path (for its
+    modules it may import; `rel` = its skill-pack-relative path (for its
     relative imports)."""
     return _Writes(ssot_dir, dict(known or {}), calls, rel).run(
         ast.parse(source))
@@ -920,11 +920,11 @@ def _is_test(rel: str) -> bool:
             or name.endswith("_test.py") or name == "conftest.py")
 
 
-def write_settings(cfg: HarnessConfig) -> tuple[tuple[str, ...],
+def write_settings(cfg: SkillPackConfig) -> tuple[tuple[str, ...],
                                                 tuple[str, ...], dict, dict,
                                                 tuple[str, ...]]:
     """(code folders, skipped folders, the skip rows {path: reason},
-    writers {path: reason}, the harness's own write helpers). The vendored
+    writers {path: reason}, the skill pack's own write helpers). The vendored
     kit is always skipped; any other skip needs its reason (a list gives
     none, so each of its entries is reported)."""
     g = section(cfg, "guards", "ssot")
@@ -950,13 +950,13 @@ def _under(rel: str, folders) -> str | None:
 
 
 def _third_party(folder: Path) -> bool:
-    """A virtualenv or an installed-packages folder: not the harness's."""
+    """A virtualenv or an installed-packages folder: not the skill pack's."""
     return folder.name == "site-packages" or (folder / "pyvenv.cfg").is_file()
 
 
 def write_files(root: Path, code: tuple[str, ...], skip: tuple[str, ...]
                 ) -> list[str]:
-    """The .py files the rule reads (harness-relative, sorted)."""
+    """The .py files the rule reads (skill-pack-relative, sorted)."""
     out: set[str] = set()
     skip = tuple(s for s in skip if s.strip("/") not in ("", "."))
     for d in code:
@@ -979,10 +979,10 @@ def write_files(root: Path, code: tuple[str, ...], skip: tuple[str, ...]
 
 
 def check_writes(root: Path | str | None = None) -> list[str]:
-    """Every call in the harness's code that writes under the ssot dir,
+    """Every call in the skill pack's code that writes under the ssot dir,
     outside the builder's `writers` (module docstring); empty = ssot/ is
     edited only by the builder."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     base = Path(root) if root is not None else cfg.root
     d = cfg.ssot.get("dir", "ssot").strip("/")
     code, skip, skips, writers, calls = write_settings(cfg)
@@ -1202,6 +1202,6 @@ def check_ssot_writes(root: Path | str | None = None) -> bool:
     """writes_self_test() + check_writes() as kit.testing.check lines."""
     ok = report("ssot writes: the rule catches each planted write",
                 writes_self_test())
-    return report("ssot writes: no harness code writes under ssot/ (a "
+    return report("ssot writes: no skill pack code writes under ssot/ (a "
                   "client's value goes to its database)",
                   check_writes(root)) and ok
