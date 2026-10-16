@@ -117,6 +117,13 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.32.0] - 2026-10-17
+### Added
+- `kit.guards.roadmap`: an optional `## Milestones` section right after Next (rule 8 of its docstring). A row `- [M1] YYYY-MM-DD name. includes: X1, D2. closes when: the proof` is one integration unit; the guard refuses a row with no items or no proof, an item that is no row of the file or is not in Next/Done, an item in two milestones, a fourth open milestone, and a milestone whose items are all Done (it leaves and a Done row records it). A skill pack without the section is unchanged: nothing to do when re-vendoring.
+### Other
+- `docs/operating.md` rule 8, "Integrate by milestone, not by step": one branch per milestone, one commit per item (every commit with the whole local suite green; a refactor never shares a commit with a behaviour change), no merge request until the closing proof is green, a backup push without a pipeline (`git push -o ci.skip`), one merge request per milestone, an early one only for an owner's question (draft), a client's fix or the risky list, a milestone splits past about ten items or two weeks. `docs/roadmap.md` (planning item 6, executing item 3): a builder's branch merges into the milestone's branch, not main. Paid for in the video-ads skill pack: five merge requests in two days for one restructure, three stacked, each waiting for a pipeline the local suite had already answered.
+- `templates/gitlab-ci.yml` and `templates/ci/gitlab-ci.yml`: pipelines run for merge requests, the default branch and tags, no longer for each push to a branch; the `story id` job also accepts `M..` in a title. `templates/AGENT_INSTRUCTIONS.md` and `templates/ROADMAP.md` say so. A skill pack takes it by copying the two `workflow:` and `story id` blocks.
+
 ## [0.31.0] - 2026-10-16
 ### Changed (breaking: a project must follow the table below when it re-vendors)
 The noun "harness" is "skill pack" everywhere in the playbook: the kit, the console, the scaffolder, the build and
