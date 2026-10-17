@@ -44,6 +44,12 @@ What this module guarantees, and the tests hold it to:
     (`CONSOLE_SECRET`).
   * A skill pack that hangs is killed with everything it started, on either call.
 
+`fetch()` is the other thing the console asks of the skill pack: a page. It
+runs `<cmd> <verb…> --lang=L --json` the same way (no shell, no stdin, no
+terminal, the console's secret withheld, killed on a timeout) and returns the
+one JSON object it prints. A page verb is read-only by contract; the console
+cannot enforce that, but it can and does ignore everything but the document.
+
 Only this module in the console starts a process.
 """
 
@@ -151,6 +157,43 @@ def run(ask: dict, value: str, *, cmd: list[str], verbs: list[list[str]],
     if doc is None or (status != 0 and not _says(doc)):
         return fail("gate_unsure", core.CODES["gate_unsure"])
     return _answer(status, doc, verb, secret)
+
+
+MAX_PAGE = 1 << 20          # a page document bigger than this is not one
+
+
+def fetch(cmd: list[str], verb: list[str], *, lang: str = "en", timeout: float = 30.0,
+          env: dict | None = None) -> dict:
+    """Ask the skill pack for one page (or the tab counts).
+
+    -> {"ok": True, "doc": the JSON object} or {"ok": False, "code":
+       "page_unavailable" | "gate_timeout", "message": one plain line}
+
+    Never raises for a skill pack problem. Only an object counts as a document;
+    a non-zero exit is a failure even with a document, and its `error` or
+    `message` (cleaned, at most 300 characters) is what the person is told."""
+    if not (isinstance(cmd, list) and cmd and all(isinstance(w, str) and _sendable(w) for w in cmd)
+            and isinstance(verb, list) and verb and all(isinstance(w, str) and _sendable(w) for w in verb)):
+        return _fetch_fail(UNAVAILABLE)
+    argv = cmd + verb + [f"--lang={lang}", "--json"]
+    try:
+        status, out = _exec(argv, timeout, env, 1)
+    except _Timeout:
+        return {"ok": False, "code": "gate_timeout", "message": core.CODES["gate_timeout"]}
+    except OSError:
+        return _fetch_fail("The skill pack command could not be started.")
+    doc = _parse(out) if len(out) <= MAX_PAGE else None
+    if status != 0:
+        said = next((v for k in ("error", "message", "result") if isinstance(doc, dict)
+                     and isinstance(v := doc.get(k), str) and v.strip()), "")
+        return _fetch_fail(_plain(said)[:MAX_MESSAGE] or core.CODES["page_unavailable"])
+    if not isinstance(doc, dict):
+        return _fetch_fail("The skill pack answered in a way the console could not read.")
+    return {"ok": True, "doc": doc}
+
+
+def _fetch_fail(message: str) -> dict:
+    return {"ok": False, "code": "page_unavailable", "message": message}
 
 
 # ------------------------------------------------------------ checking --
