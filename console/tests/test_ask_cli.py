@@ -1180,7 +1180,7 @@ def test_it_is_a_stdlib_only_pep_723_script():
             imported |= {a.name.split(".")[0] for a in node.names}
         elif isinstance(node, ast.ImportFrom) and node.level == 0:
             imported.add(node.module.split(".")[0])
-    assert imported - {"core"} <= set(sys.stdlib_module_names), imported
+    assert imported - {"core", "manifest"} <= set(sys.stdlib_module_names), imported
 
 
 if __name__ == "__main__":
