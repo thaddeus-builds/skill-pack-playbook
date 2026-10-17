@@ -21,7 +21,8 @@ out of the agent's reach (env `CONSOLE_SECRET`) if you want the second.
 An ask is what the agent puts in front of the human. `validate_ask()` is the
 one definition of a clear ask (the playbook's owner-queue rules, enforced):
 a title, why now, evidence, a recommendation, and what "no" means; at most
-`MAX_OPEN` open at once. `check_value()` is the one definition of a valid
+`MAX_OPEN` open at once unless the skill pack's manifest sets another number
+(`Store.post(max_open=…)`). `check_value()` is the one definition of a valid
 answer. Everything the agent may send is in `ASK_FIELDS`.
 """
 
@@ -43,7 +44,7 @@ try:  # POSIX; the store is single-machine by design
 except ImportError:  # pragma: no cover
     fcntl = None
 
-MAX_OPEN = 10                                   # the owner's attention budget
+MAX_OPEN = 10                                   # the owner's attention budget; a skill pack's manifest may set another (manifest.py)
 STEPS = ("confirm", "approve", "choose", "provide")
 INPUT_TYPES = ("text", "number", "date", "url")
 ROLES = {"agent": ("ask", "withdraw", "applied", "say"),
@@ -900,14 +901,24 @@ class Store:
 
     # ---- the agent's side ----
     def post(self, name: str, asks: list, *, max_open: int = MAX_OPEN,
-             dry_run: bool = False) -> dict:
+             dry_run: bool = False, gate_verbs: list | None = None) -> dict:
+        """`max_open` is the number of open asks allowed (the caller's: the
+        manifest's, or MAX_OPEN). `gate_verbs` (a manifest's relay_verbs), when
+        given, makes an ask whose gate verb starts with none of them invalid
+        (`not_allowed` on `gate.verb`), so the console never draws it as a form
+        that can only be declined."""
         by = self._by("agent", name)
-        max_open = min(max_open, MAX_OPEN)
         clean, errors, seen = [], [], set()
         for n, raw in enumerate(asks):
             ask, errs = validate_ask(raw)
             label = raw["id"] if isinstance(raw, dict) and isinstance(raw.get("id"), str) and raw["id"] else f"#{n + 1}"
             errors += [{**e, "ask": label} for e in errs]
+            if ask and gate_verbs is not None and ask.get("gate") and not verb_allowed(gate_verbs, ask["gate"]["verb"]):
+                errors.append({"ask": label, "field": "gate.verb", "code": "not_allowed",
+                               "message": f"the verb {' '.join(ask['gate']['verb'])!r} is not in the manifest's "
+                                          f"relay_verbs ({_show_verbs(gate_verbs)}): add it there, or drop the gate "
+                                          "so the owner is told to confirm another way"})
+                ask = None
             if ask:
                 if ask["id"] in seen:
                     errors.append({"ask": label, "field": "id", "code": "duplicate",
@@ -1053,6 +1064,16 @@ class Store:
             raise Refused("not_answered" if status == "answered" else "not_open",
                           id=id, status=cur["status"])
         return cur
+
+
+def verb_allowed(verbs, verb) -> bool:
+    """Does `verb` (a list of words) start with one of the allowed prefixes (each a list of words)?"""
+    return isinstance(verb, list) and any(
+        isinstance(p, (list, tuple)) and p and verb[:len(p)] == list(p) for p in verbs or [])
+
+
+def _show_verbs(verbs) -> str:
+    return ", ".join(" ".join(v) for v in verbs) or "none"
 
 
 def check_comment(text) -> str:

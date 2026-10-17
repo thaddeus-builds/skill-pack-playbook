@@ -555,9 +555,12 @@ def test_every_key_of_a_reply_that_the_agent_file_names_is_in_a_real_reply():
 
 def test_max_open_can_only_lower_as_the_docs_say():
     with _t.tmpstore() as store:
-        got = store.post("main", [example("confirm-word.json")], max_open=50, dry_run=True)
+        got = store.post("main", [example("confirm-word.json")], dry_run=True)
         assert got["budget"] == core.MAX_OPEN == 10
         assert store.post("main", [example("confirm-word.json")], max_open=3, dry_run=True)["budget"] == 3
+    with _t.tmpdir() as d:                  # and the verb, which is what the docs describe, never goes above it
+        shown = cli(d, "add", os.path.join(ROOT, "examples", "confirm-word.json"), "--max-open", "50", "--dry-run")
+        assert shown["budget"] == 10
     assert "can only lower" in doc(CONSOLE) and re.search(r"--max-open N` can only lower", doc(AGENT))
     subs = next(a for a in ask._parser()._actions if isinstance(a, argparse._SubParsersAction)).choices
     assert "only lower" in next(a.help for a in subs["add"]._actions if "--max-open" in a.option_strings)
