@@ -44,7 +44,7 @@ stateDiagram-v2
 
 ## A clear ask
 
-`add` refuses an ask that is not clear, and lists every problem at once. It checks that each part is there, not that it is true. At most 10 are open; an eleventh is refused (`--max-open N` can only lower that limit).
+`add` refuses an ask that is not clear, and lists every problem at once. It checks that each part is there, not that it is true. At most 10 are open; an eleventh is refused (`--max-open N` can only lower that limit; a skill pack's manifest can set a higher one, see [PAGES.md](PAGES.md)).
 
 | Field | What goes in it | Limit | Why the playbook wants it |
 | --- | --- | --- | --- |
@@ -157,6 +157,10 @@ uv run console/serve.py --relay-cmd "uv run my_skill_pack.py" --relay-verbs "fac
 
 An ask whose gate verb is not allowed, or any gated ask when there is no relay, draws no form: it tells the owner to confirm another way, before a click can fail. Such an ask also keeps its group from having an **Answer all as suggested** button, and that button is never drawn for a group holding an `approve` ask: approving is read one ask at a time.
 
+## Pages and buttons
+
+A skill pack registers its own pages in the same top bar, with buttons the console relays to its gate, and says in one manifest which verbs a click may run (`--manifest`); `ask.py add` refuses a gated ask whose verb is not among them. How to write one: [PAGES.md](PAGES.md).
+
 ## Safety
 
 | What is checked | Test |
@@ -171,7 +175,7 @@ An ask whose gate verb is not allowed, or any gated ask when there is no relay, 
 | Everything the agent wrote is shown as text; only http(s) links | `test_pages.py` |
 | The skill pack call: no shell, no terminal, allowed verbs only, `=` arguments, code sent only for a subject that matches what was shown, never logged, console secret withheld, killed with its children on a timeout | `test_relay.py`, `test_serve.py` |
 | The log keeps every line: each write is flushed to disk, a torn write is cut off, a corrupt line refuses, writers queue on a lock | `test_core.py` |
-| Core and pages import no network or process code; only `relay.py` starts a process | `test_boundary.py` |
+| Core, pages, frame and manifest import no network or process code; only `relay.py` starts a process | `test_boundary.py` |
 | These docs name only real files, flags, verbs and diagrams; the quick start prints what is shown here; nothing that must not be public is in the files a commit would publish | `test_docs.py` |
 
 **What the gate is and is not.** The signature and the gate are an **accident guard**: an agent that edits the log or runs the wrong verb cannot pass for the owner. They are not a wall. **By default there is no login: anyone who can reach the port answers as `--user`** (default: the OS account `serve.py` runs as, never `$USER` or `$LOGNAME`), an agent on the same machine included, by opening the page and posting a form like a browser; that is why it binds to loopback. An agent that can read the folder's `secret` file can also sign. **The login is the boundary.** For more: put the console behind a login proxy (below), give only the console process `CONSOLE_SECRET` (16 or more characters; a shorter one is refused, and `serve.py` exits 2) so no `secret` file exists, and keep that and the port out of the agent's reach. The agent's `verified` then reads `null`, and the operator runs `ask.py verify` (refused, `no_secret`, where there is no secret to check with).
@@ -208,7 +212,7 @@ A file passes only if it exits 0 and prints `RESULT: N passed`; a test file that
 
 ## What this deliberately is not
 
-- **No domain pages.** The agent presents what is asked in its own words; a skill pack may keep its own pages beside this one.
+- **No domain pages of its own.** The agent presents what is asked in its own words; a skill pack adds its pages and buttons through its manifest ([PAGES.md](PAGES.md)), inside this frame.
 - **No chat app.** Nothing here knows any messenger; the agent tells the owner in chat that asks wait.
 - **No database.** One file you can read, back up and `grep`.
 - **No accounts, no login of its own.** One named user per console, or the login proxy's header.
