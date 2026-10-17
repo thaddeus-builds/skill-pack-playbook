@@ -38,7 +38,9 @@ sys.path.insert(0, ROOT)
 import _t  # noqa: E402
 import ask  # noqa: E402
 import core  # noqa: E402
+import frame  # noqa: E402
 import i18n  # noqa: E402
+import manifest  # noqa: E402
 import pages  # noqa: E402
 import relay  # noqa: E402
 import run as runner  # noqa: E402
@@ -46,8 +48,9 @@ import serve  # noqa: E402
 
 CONSOLE, AGENT, TOP = "console/README.md", "console/AGENT.md", "docs/consoles.md"
 QUEUE, INSTR = "templates/owner-queue-item.md", "templates/AGENT_INSTRUCTIONS.md"
-DOCS = (CONSOLE, AGENT, TOP, QUEUE, INSTR)
-SKILL_PACK_FLAGS = {"--value", "--market", "--reason", "--json", "--code", "--relay-user",
+PAGES_DOC = "console/PAGES.md"
+DOCS = (CONSOLE, AGENT, TOP, QUEUE, INSTR, PAGES_DOC)
+SKILL_PACK_FLAGS = {"--lang", "--value", "--market", "--reason", "--json", "--code", "--relay-user",
                  "--relay-at"}                                    # a skill pack's, not ours
 SCHEMATIC = {"--name"}                                                                       # `--name=value`, the shape
 LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
@@ -170,14 +173,14 @@ def test_every_link_and_path_the_docs_name_exists():
 def test_every_flag_the_docs_show_is_real_and_the_ones_that_matter_are_shown():
     real = flags_of(serve._parser()) | flags_of(ask._parser()) | {"--help"}
     assert {"--user-header", "--max-open", "--relay-verbs", "--since"} <= real
-    for rel in (CONSOLE, AGENT, QUEUE):
+    for rel in (CONSOLE, AGENT, QUEUE, PAGES_DOC):
         shown = set(FLAG.findall(doc(rel)))
         assert shown, rel
         assert not shown - real - SKILL_PACK_FLAGS - SCHEMATIC, (rel, sorted(shown - real - SKILL_PACK_FLAGS - SCHEMATIC))
     assert "--gone" in set(FLAG.findall("`--gone`")) - real                # the check would notice
     said = "".join(doc(r) for r in (CONSOLE, AGENT))
     for flag in ("--user", "--user-header", "--allow-host", "--host", "--port", "--relay-cmd", "--relay-verbs",
-                 "--default-reason", "--max-open", "--since", "--where", "--dir", "--as"):
+                 "--default-reason", "--max-open", "--since", "--where", "--dir", "--as", "--manifest"):
         assert flag in real and flag in said, flag
 
 
@@ -863,6 +866,64 @@ def test_nothing_that_must_not_be_public_is_in_the_repository():
         except UnicodeDecodeError:
             found = leaks(rel, raw.decode("latin-1"), binary=True)
         assert not found, found
+
+
+def json_blocks(text: str) -> list:
+    return [json.loads(b) for b in re.findall(r"```json\n(.*?)\n```", text, re.S)]
+
+
+def test_pages_md_shows_a_manifest_and_a_page_the_console_accepts_and_names_its_real_keys():
+    text = doc(PAGES_DOC)
+    man, page = json_blocks(text)
+    parsed = manifest.parse(man)
+    assert parsed["pages"][0]["blocking"] is True and parsed["max_open"] == 20 and parsed["counts"]
+    assert set(man) == manifest.KEYS and set(man["pages"][0]) == manifest.PAGE_KEYS      # the example shows every key
+    cleaned = frame.clean(page)
+    assert cleaned["bad"] == [] and cleaned["count"] == 2
+    kinds = set()
+
+    def walk(blocks):
+        for b in blocks:
+            kinds.add(b["type"])
+            walk(b.get("blocks", []))
+    walk(page["blocks"])
+    assert kinds == set(frame.TYPES) - {"link"}                              # the example uses every type but the link
+    assert "`link` (http and https only)" in text
+    for t in frame.TYPES:
+        assert f"`{t}`" in text, t
+    (h, b), = frame.buttons("space", cleaned).items()
+    assert b["label"] == "Confirm delivery" and core.verb_allowed(parsed["relay_verbs"], b["gate"]["verb"])
+    broken = dict(man, colour=1)
+    try:
+        manifest.parse(broken)
+    except manifest.ManifestError:
+        pass
+    else:
+        raise AssertionError("the example check would not notice a bad manifest")
+
+
+def test_the_numbers_pages_md_gives_are_the_real_limits():
+    text = doc(PAGES_DOC)
+    for said in (f"{frame.MAX_BLOCKS} blocks", f"{frame.MAX_DEPTH} levels", f"text {frame.BLOCK_LIMITS['text']} characters",
+                 f"{frame.BLOCK_LIMITS['columns']} columns by {frame.BLOCK_LIMITS['rows']} rows",
+                 f"At most {manifest.MAX_PAGES}.", f"(1 to {manifest.MAX_OPEN_CEILING}; default {core.MAX_OPEN}",
+                 f"for {int(serve.COUNTS_TTL)} seconds", f"hangs ({int(serve.PAGE_TIMEOUT)} seconds)",
+                 f"Waiting is {manifest.BUILTIN_ORDER['waiting']} and History {manifest.BUILTIN_ORDER['history']}"):
+        assert said in text, said
+    assert core.verb_allowed([["queue", "approve"]], ["queue", "approve", "n7"])           # the prefix rule it describes
+    assert not core.verb_allowed([["queue", "approve"]], ["queue", "approvals"])
+    assert not core.verb_allowed([["queue", "approve"]], ["queue"])
+    assert PAGES_DOC.endswith("PAGES.md") and "PAGES.md" in doc(CONSOLE)                    # the README points at it
+
+
+def test_the_pages_md_diagram_is_sound_and_names_real_files_and_the_flows_it_draws_exist():
+    blocks = MERMAID.findall(doc(PAGES_DOC))
+    assert len(blocks) == 1 and sound(blocks[0]) is None
+    for name in re.findall(r"\b([a-z_]+\.py)\b", blocks[0]):
+        assert os.path.exists(os.path.join(ROOT, name)), name
+    for needle in ("manifest.json", "events.jsonl", "invalid_ask"):
+        assert needle in blocks[0]
+    assert "action" in core.ROLES["human"] and "invalid_ask" in core.CODES
 
 
 if __name__ == "__main__":

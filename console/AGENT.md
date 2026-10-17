@@ -15,7 +15,7 @@ The owner answers you on a web page. You reach it only through `console/ask.py` 
 
 - Ask only what changes meaning, carries a number or moves money. Do the mechanical rest yourself and say in chat what you did.
 - One decision per ask. Never ask again what an answer settled: check `ask.py list --status all` first.
-- Keep at most 10 open. `add` refuses more; `--max-open N` can only lower that limit, never raise it. `ask.py withdraw ID… --reason "…"` any ask that went stale.
+- Keep at most 10 open (or the manifest's `max_open`). `add` refuses more; `--max-open N` can only lower that limit, never raise it. With `CONSOLE_MANIFEST` set, `add` also refuses a `gate` on a verb the console is not allowed to run. `ask.py withdraw ID… --reason "…"` any ask that went stale.
 - Never ask the owner to widen what may be written (an allowlist, a cap, a write switch): that is answered in chat, not on this page.
 
 ## A clear ask

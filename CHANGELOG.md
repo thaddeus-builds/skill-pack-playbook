@@ -117,6 +117,28 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.33.0] - 2026-10-17
+### Added
+- `console/manifest.py`, `console/frame.py`, `console/PAGES.md`: a skill pack registers its own pages and buttons with the
+  console. One manifest file (`serve.py --manifest FILE` or `$CONSOLE_MANIFEST`; `ask.py --manifest FILE` or the same
+  variable) declares `cmd`, `relay_verbs`, `max_open`, an optional `counts` verb and `pages` (name, zh/en title, order,
+  the read-only verb that prints the page as JSON blocks, `blocking`). The pages join the built-in Waiting and History in
+  one top bar with a number on each tab (the bar scrolls inside itself at 375 px), at `page-<name>`. A page `button`
+  is relayed to the skill pack's gate with the console's own words: the form carries only the page and a hash, the page
+  is drawn again at the click, and the click is the signed, append-only `action` event (a new human event type; `fold`
+  gains `actions`; `ask.py verify` checks it). Read `console/PAGES.md` to write one; nothing changes for a skill pack that
+  passes no manifest.
+- `ask.py add` refuses (`invalid_ask`, field `gate.verb`, code `not_allowed`, naming the verb and the allowed ones) a gated
+  ask whose verb the manifest's `relay_verbs` do not allow, instead of leaving the owner a form that can only be declined.
+  A button on an unallowed verb is drawn as a sentence, and a forged click on it is refused (`verb_not_allowed`).
+### Changed
+- The cap of 10 open asks is the default of the manifest's `max_open` (1 to 100), no longer a constant of the store:
+  `core.Store.post(max_open=...)` takes the caller's number (it no longer clamps it to `MAX_OPEN`); `ask.py add` passes
+  the manifest's, or `MAX_OPEN`, and `--max-open N` still can only lower it. The budget line and meter of the Waiting page
+  follow it. New codes `verb_not_allowed` and `page_unavailable`; new `relay.fetch()` runs a page verb the way
+  `relay.run()` runs a gate (no shell, no stdin, no terminal, the console's secret withheld, killed on a timeout).
+  Copy the console again to take it (`python3 kit/tools/vendor.py --skill-pack PATH --console`).
+
 ## [0.32.0] - 2026-10-17
 ### Added
 - `kit.guards.roadmap`: an optional `## Milestones` section right after Next (rule 8 of its docstring). A row `- [M1] YYYY-MM-DD name. includes: X1, D2. closes when: the proof` is one integration unit; the guard refuses a row with no items or no proof, an item that is no row of the file or is not in Next/Done, an item in two milestones, a fourth open milestone, and a milestone whose items are all Done (it leaves and a Done row records it). A skill pack without the section is unchanged: nothing to do when re-vendoring.
