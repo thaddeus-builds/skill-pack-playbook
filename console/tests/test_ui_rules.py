@@ -335,6 +335,17 @@ def test_u08_same_bar_everywhere_usable_at_375_no_sideways_scroll_big_tap_target
     assert decls("body")["font"].startswith("16px/1.55")
 
 
+def test_u08_a_bar_with_many_pages_scrolls_inside_itself_and_the_page_never_does():
+    nav = [{"name": "waiting", "href": "./"}] + [{"name": f"p{i}", "href": f"page-p{i}", "title": f"Page number {i}", "count": i}
+                                                 for i in range(1, 5)] + [{"name": "history", "href": "history"}]
+    for lang in LANGS:
+        d = Doc(pages.render_inbox(Log().state(), ctx(lang, nav=nav)))
+        assert len(d.find("header", "bar").find("nav").find_all("a")) == 6 and d.find("header", "bar").find("a", "lang")
+    assert decls(".tabs")["overflow-x"] == "auto" and decls(".tabs")["min-width"] == "0"
+    assert decls(".tabs a")["flex"] == "0 0 auto" and decls(".tabs a")["white-space"] == "nowrap"
+    assert decls(".tabs a", "(max-width: 480px)")["flex"] == "1 0 auto"            # on a phone they share the row, and scroll past it
+
+
 def test_u08_the_stylesheet_defines_every_colour_it_uses_in_both_schemes():
     css = re.sub(r"/\*.*?\*/", "", read("static", "console.css"), flags=re.S)
     used = set(re.findall(r"var\((--[\w-]+)\)", css))
@@ -376,7 +387,7 @@ def test_u09_the_consoles_words_come_only_from_the_dictionary_the_agents_are_sho
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs:
             assert not re.fullmatch(r"[A-Za-z][A-Za-z ,.'’:-]*", node.value) or " " not in node.value.strip(), node.value
-    for name in ("pages.py", "serve.py"):
+    for name in ("pages.py", "serve.py", "frame.py"):
         if os.path.exists(os.path.join(ROOT, name)):
             src = read(name)
             assert not re.search(r"""(?:\bt|\braw)\(\s*f["']""", src), f"{name}: a key built in an f-string cannot be checked"

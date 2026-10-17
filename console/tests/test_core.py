@@ -977,7 +977,7 @@ def test_fold_order_groups_messages_seq():
     assert [x["id"] for x in core.open_asks(st)] == ["c", "d"]
     assert [(g, [x["id"] for x in asks]) for g, asks in core.groups(st)] == [("Words", ["c"]), ("", ["d"])]
     empty = core.fold([])
-    assert empty == {"asks": {}, "order": [], "messages": [], "problems": [], "seq": 0}
+    assert empty == {"asks": {}, "order": [], "messages": [], "problems": [], "actions": [], "seq": 0}
 
 
 def test_fold_is_pure():
@@ -1690,7 +1690,7 @@ def test_a_retired_advice_event_in_an_old_log_is_set_aside_not_a_crash():
 def test_the_agent_cannot_write_a_human_event_nor_the_reverse():
     assert set(core.ROLES) == {"agent", "human"}
     assert set(core.ROLES["agent"]) == {"ask", "withdraw", "applied", "say"}
-    assert set(core.ROLES["human"]) == {"answer", "reopen", "note"}
+    assert set(core.ROLES["human"]) == {"answer", "reopen", "note", "action"}
     with tmpstore() as s:
         with s._txn() as (box, append):
             for t in core.ROLES["human"]:

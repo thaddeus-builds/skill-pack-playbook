@@ -1175,5 +1175,50 @@ def test_run_never_raises_whatever_the_skill_pack_or_the_caller_does():
             assert res["code"] == "gate_refused" and not res["ok"], (how, res)
 
 
+# ------------------------------------------------- fetch: a page, not a gate --
+
+def _py(code):
+    return [sys.executable, "-c", code]
+
+
+def test_fetch_returns_the_one_json_object_the_page_verb_prints_with_the_argv_the_console_builds():
+    code = ("import json,os,sys; print('banner'); print(json.dumps({'argv': sys.argv[1:], 'secret': 'CONSOLE_SECRET' in os.environ,"
+            " 'tty': os.isatty(0)}))")
+    res = relay.fetch(_py(code), ["console", "page", "space"], lang="zh", timeout=10, env=dict(os.environ, CONSOLE_SECRET="s" * 32))
+    assert res == {"ok": True, "doc": {"argv": ["console", "page", "space", "--lang=zh", "--json"], "secret": False, "tty": False}}, res
+
+
+def test_fetch_never_raises_for_a_page_verb_that_fails_hangs_or_prints_something_else():
+    cases = {"exit 1 with its words": ("import sys,json; print(json.dumps({'error': 'The database is locked.'})); sys.exit(1)",
+                                       "The database is locked."),
+             "exit 1 with nothing": ("import sys; sys.exit(1)", core.CODES["page_unavailable"]),
+             "a document and a crash": ("import sys,json; print(json.dumps({'blocks': []})); sys.exit(3)", core.CODES["page_unavailable"]),
+             "not json": ("print('hello')", "could not read"), "a list": ("print('[1]')", "could not read"),
+             "silence": ("pass", "could not read"),
+             "a long line": ("import sys,json; print(json.dumps({'error': 'x' * 900 + '\\n y'})); sys.exit(1)", None)}
+    for what, (code, word) in cases.items():
+        res = relay.fetch(_py(code), ["console", "x"], timeout=10)
+        assert res["ok"] is False and res["code"] == "page_unavailable" and set(res) == {"ok", "code", "message"}, (what, res)
+        assert "\n" not in res["message"] and 0 < len(res["message"]) <= relay.MAX_MESSAGE, (what, res)
+        assert word is None or word in res["message"], (what, res)
+    big = relay.fetch(_py("print('{\"a\": \"' + 'x' * (1 << 21) + '\"}')"), ["console", "x"], timeout=10)
+    assert big["ok"] is False                                                           # a page bigger than the console reads
+    for cmd, verb in (([], ["x"]), ([sys.executable], []), ([sys.executable, "a\0b"], ["x"]), (["/no/such/program"], ["x"])):
+        res = relay.fetch(cmd, verb, timeout=5)
+        assert res["ok"] is False and res["code"] == "page_unavailable", (cmd, verb, res)
+
+
+def test_fetch_kills_a_hung_page_verb_with_everything_it_started():
+    with _t.tmpdir() as d:
+        beat = os.path.join(d, "beat")
+        code = ("import subprocess,sys,time; subprocess.Popen([sys.executable,'-c',"
+                f"\"import time\\nwhile True:\\n open({beat!r},'a').write('x'); time.sleep(0.05)\"]); time.sleep(60)")
+        t0 = time.monotonic()
+        res = relay.fetch(_py(code), ["console", "x"], timeout=1.0)
+        assert time.monotonic() - t0 < 5 and res["ok"] is False and res["code"] == "gate_timeout", res
+        assert_stopped(beat)
+
+
+
 if __name__ == "__main__":
     _t.main(globals())
