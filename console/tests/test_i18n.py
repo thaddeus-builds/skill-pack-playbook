@@ -36,7 +36,7 @@ def params(text):
 
 
 def sources():
-    return [n for n in ("pages.py", "serve.py") if os.path.exists(os.path.join(ROOT, n))]
+    return [n for n in ("pages.py", "serve.py", "frame.py") if os.path.exists(os.path.join(ROOT, n))]
 
 
 def scan(name):

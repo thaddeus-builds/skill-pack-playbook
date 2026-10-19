@@ -16,7 +16,11 @@ a prefix needs no configuration.
 ctx: lang, title, user (None = read-only), token (the POST token), relay
 (None or [] = no skill pack; else the verb prefixes the operator allows, each a
 list of words), now (ISO Z), secret (bytes | None, to verify signatures),
-flash ({kind: ok|error, text}, optional: a banner at the top of a page).
+flash ({kind: ok|error, text}, optional: a banner at the top of a page),
+nav (optional: the tabs, [{name, href, title?, count?}]; a built-in tab has no
+title and the dictionary names it; default Waiting and History), blocking (a
+number added to the Waiting tab), max_open (the open-ask budget; default
+core.MAX_OPEN).
 `lines` for a result: {ok, id, title, value, code, message}, plus an optional
 `reason` (the `Refused.params["reason"]` of a bad_value) that picks the exact
 sentence and an optional `comment` (what the person typed), given back on a
@@ -74,6 +78,8 @@ import core
 import i18n
 
 SHOW_MESSAGES = 20
+# the tabs of a console with no pages of a skill pack's own; ctx["nav"] replaces them
+NAV = ({"name": "waiting", "href": "./"}, {"name": "history", "href": "history"})
 SHOW_HISTORY = 100
 # a payload's true, false and null, as they are written in it
 JSON_WORDS = {"True": "true", "False": "false", "None": "null"}
@@ -221,15 +227,16 @@ def flash_text(lang: str, key) -> str | None:
 def _bar(t: _T, ctx: dict, tab, n_open: int, href: str) -> str:
     other = "zh" if t.lang == "en" else "en"
 
-    def tab_link(name, url, key, count=0):
+    def tab_link(name, url, label, count=0):
         cur = ' aria-current="page"' if tab == name else ""
         num = f' <span class="count">{count}</span>' if count else ""
-        return f'<a href="{url}"{cur}>{t(key)}{num}</a>'
+        return f'<a href="{url}"{cur}>{label}{num}</a>'
+    links = "".join(tab_link(x["name"], x["href"], _e(x["title"]) if x.get("title") else t("nav." + x["name"]),
+                             n_open + int(ctx.get("blocking") or 0) if x["name"] == "waiting" else x.get("count") or 0)
+                    for x in ctx.get("nav") or NAV)
     return (f'<header class="bar"><div class="bar-in">'
             f'<a class="brand" href="./">{_e(ctx.get("title"))}</a>'
-            f'<nav class="tabs" aria-label="{t("nav.label")}">'
-            f'{tab_link("waiting", "./", "nav.waiting", n_open)}'
-            f'{tab_link("history", "history", "nav.history")}</nav>'
+            f'<nav class="tabs" aria-label="{t("nav.label")}">{links}</nav>'
             f'<a class="lang" href="{href}{other}" lang="{other}" hreflang="{other}">{t("lang.other")}</a>'
             f'</div></header>')
 
@@ -535,10 +542,11 @@ def render_inbox(st: dict, ctx: dict) -> str:
     t = _T(_lang(ctx))
     groups = core.groups(st)
     n = sum(len(items) for _, items in groups)
-    over = n > core.MAX_OPEN
-    line = (t("budget.over", open=n, over=n - core.MAX_OPEN, max=core.MAX_OPEN) if over
-            else t("budget.line", open=n, max=core.MAX_OPEN))
-    segs = "".join("<b></b>" if i < n else "<i></i>" for i in range(core.MAX_OPEN))
+    cap = ctx.get("max_open") or core.MAX_OPEN
+    over = n > cap
+    line = (t("budget.over", open=n, over=n - cap, max=cap) if over
+            else t("budget.line", open=n, max=cap))
+    segs = "".join("<b></b>" if i < n else "<i></i>" for i in range(cap))
     parts = [f'<div class="head"><h1>{t("page.waiting")}</h1>'
              f'<span class="meter{" over" if over else ""}" aria-hidden="true">{segs}</span>'
              f'<p class="sub">{line}</p></div>']
