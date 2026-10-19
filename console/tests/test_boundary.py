@@ -2,7 +2,7 @@
 
 The agent's side (ask.py) never writes what a human writes, and the human's side
 (serve.py) never writes what an agent writes; the pure modules (core.py,
-pages.py) neither serve nor start anything; and only relay.py starts a process.
+pages.py, frame.py, manifest.py) neither serve nor start anything; and only relay.py starts a process.
 These are read from the source with the parser, not with a text search, so a
 call made through an alias, an import or getattr is still seen. Each check has
 a positive control (the code does use what it is allowed to) and the checker
@@ -122,13 +122,15 @@ def test_neither_side_imports_the_other_and_both_meet_only_in_core():
     ask, serve = imports(source("ask.py")), imports(source("serve.py"))
     assert not ask & {"serve", "pages", "relay", "i18n"}, ask
     assert "ask" not in serve, serve
-    assert "core" in ask and {"core", "pages", "relay", "i18n"} <= serve
+    assert not ask & {"frame"}, ask
+    assert "core" in ask and {"core", "pages", "relay", "i18n", "frame", "manifest"} <= serve
+    assert "manifest" in ask                                                     # the one thing both sides read besides the log
 
 
 # ----------------------------------------------- pure modules, one process starter --
 
 def test_core_and_pages_import_nothing_that_serves_connects_or_starts_a_process():
-    for name in ("core.py", "pages.py", "i18n.py"):
+    for name in ("core.py", "pages.py", "i18n.py", "frame.py", "manifest.py"):
         src = source(name)
         bad = imports(src) & (NETWORK | PROCESS_MODULES | {"importlib"})
         assert not bad, f"{name} imports {sorted(bad)}"
@@ -138,7 +140,7 @@ def test_core_and_pages_import_nothing_that_serves_connects_or_starts_a_process(
 
 def test_only_relay_py_starts_a_process():
     files = module_files()
-    assert {"core.py", "ask.py", "serve.py", "relay.py", "pages.py", "i18n.py"} <= set(files), files
+    assert {"core.py", "ask.py", "serve.py", "relay.py", "pages.py", "i18n.py", "frame.py", "manifest.py"} <= set(files), files
     for name in files:
         src = source(name)
         starts = imports(src) & PROCESS_MODULES

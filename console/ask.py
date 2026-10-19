@@ -22,6 +22,7 @@ console's secret: it only reads it to check signatures (`verify`, `verified`);
 with no secret `verify` is refused (`no_secret`), it does not pass.
 
     add [FILE|-] [--dry-run] [--max-open N]   post one ask or an array, all or nothing
+                                              (with a manifest: a gate verb it does not allow is refused here)
     list [--status open|answered|withdrawn|all]
     answers [--since SEQ] [--all]             what the human said, ready to apply
     wait [--since SEQ] [--timeout SEC]        block until the human says something new
@@ -59,6 +60,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import core  # noqa: E402
+import manifest as manifest_mod  # noqa: E402
 from core import Refused, Store  # noqa: E402
 
 EXAMPLES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples")
@@ -134,6 +136,8 @@ def _parser() -> Parser:
     p = Parser(prog="ask.py", description="The agent's side of the console. "
                "Every outcome is one JSON document on stdout.")
     p.add_argument("--dir", help="the console folder (default: $CONSOLE_DIR; never guessed)")
+    p.add_argument("--manifest", help="the skill pack's manifest (default: $CONSOLE_MANIFEST): its relay_verbs "
+                   "decide which gate verbs `add` accepts, its max_open how many asks may be open")
     p.add_argument("--as", dest="name", default="main",
                    help="who is asking, logged as agent:NAME (default: main)")
     sub = p.add_subparsers(dest="verb", required=True, metavar="VERB")
@@ -146,9 +150,10 @@ def _parser() -> Parser:
     v.add_argument("file", nargs="?", default="-", metavar="FILE",
                    help="a JSON file, or - for stdin (the default)")
     v.add_argument("--dry-run", action="store_true", help="check and count, write nothing")
-    v.add_argument("--max-open", type=_number(int, 1), default=core.MAX_OPEN, metavar="N",
+    v.add_argument("--max-open", type=_number(int, 1), default=None, metavar="N",
                    help="lower the limit of open asks to N; it can only lower it, "
-                        "never raise it above %(default)s (default %(default)s)")
+                        f"never raise it above {core.MAX_OPEN}, or the manifest's max_open when there is one "
+                        f"(default {core.MAX_OPEN} or the manifest's)")
     v = verb("list", cmd_list, "the asks and where each stands")
     v.add_argument("--status", choices=("open", "answered", "withdrawn", "all"), default="open")
     v = verb("answers", cmd_answers, "answers not yet applied, asks reopened and notes since SEQ")
@@ -224,10 +229,24 @@ def _read_asks(path: str) -> list:
     return doc if isinstance(doc, list) else [doc]
 
 
+def _manifest(a) -> dict | None:
+    """The skill pack's manifest if one is declared (--manifest or $CONSOLE_MANIFEST), else None."""
+    path = a.manifest or os.environ.get("CONSOLE_MANIFEST")
+    if not path:
+        return None
+    try:
+        return manifest_mod.load(path)
+    except manifest_mod.ManifestError as e:
+        raise Refused("bad_request", str(e)) from None
+
+
 def cmd_add(a):
     store = _store(a)
-    return {"ok": True, **store.post(a.name, _read_asks(a.file),
-                                     max_open=a.max_open, dry_run=a.dry_run)}
+    man = _manifest(a)
+    limit = manifest_mod.limit(man)
+    return {"ok": True, **store.post(a.name, _read_asks(a.file), dry_run=a.dry_run,
+                                     max_open=min(a.max_open, limit) if a.max_open else limit,
+                                     gate_verbs=man["relay_verbs"] if man else None)}
 
 
 def _brief_event(e, *keys):
@@ -351,7 +370,7 @@ def cmd_schema(a):
         if f in core.LIMITS:
             fields[f]["limit"] = core.LIMITS[f]
     return {"ok": True, "steps": list(core.STEPS), "fields": fields,
-            "limits": dict(core.LIMITS), "max_open": core.MAX_OPEN,
+            "limits": dict(core.LIMITS), "max_open": manifest_mod.limit(_manifest(a)),
             "answer_values": ANSWER_VALUES, "flow": FLOW, "examples": _examples()}
 
 

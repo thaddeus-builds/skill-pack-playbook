@@ -22,6 +22,7 @@ flowchart LR
 - A click can pass through a skill pack's own gate, so the proof stays where the rules live. It never widens what may be written: an ask that would widen an allowlist, a cap or a write switch is answered in chat (rule 8), not clicked. The agent's side is [`console/AGENT.md`](../console/AGENT.md).
 - No login of its own: by default whoever can reach the port answers as one named user, so it binds to loopback and refuses the network unless a login proxy names the user. macOS or Linux only.
 - `ask.py digest` is the decision record to forward.
+- A skill pack adds its own pages (in the same top bar) and buttons (relayed to its gate, signed in the same log) through one manifest, which also names the verbs a click may run: [`console/PAGES.md`](../console/PAGES.md).
 
 ## The client console is where clients answer
 

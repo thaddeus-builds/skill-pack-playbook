@@ -8,7 +8,7 @@ fold over the events (`fold()`), so the file is its own history and its own
 backup.
 
     agent writes (Store.post / withdraw / applied / say)   ask  withdraw  applied  say
-    human writes (Store.answer / reopen / note)   answer  reopen  note
+    human writes (Store.answer / reopen / note / act)   answer  reopen  note  action
 
 `ROLES` is that split, and the `append` that `Store._txn` hands out refuses an
 event type outside the caller's role, so the agent has no code path that writes an answer. A human
@@ -21,7 +21,8 @@ out of the agent's reach (env `CONSOLE_SECRET`) if you want the second.
 An ask is what the agent puts in front of the human. `validate_ask()` is the
 one definition of a clear ask (the playbook's owner-queue rules, enforced):
 a title, why now, evidence, a recommendation, and what "no" means; at most
-`MAX_OPEN` open at once. `check_value()` is the one definition of a valid
+`MAX_OPEN` open at once unless the skill pack's manifest sets another number
+(`Store.post(max_open=…)`). `check_value()` is the one definition of a valid
 answer. Everything the agent may send is in `ASK_FIELDS`.
 """
 
@@ -43,11 +44,11 @@ try:  # POSIX; the store is single-machine by design
 except ImportError:  # pragma: no cover
     fcntl = None
 
-MAX_OPEN = 10                                   # the owner's attention budget
+MAX_OPEN = 10                                   # the owner's attention budget; a skill pack's manifest may set another (manifest.py)
 STEPS = ("confirm", "approve", "choose", "provide")
 INPUT_TYPES = ("text", "number", "date", "url")
 ROLES = {"agent": ("ask", "withdraw", "applied", "say"),
-         "human": ("answer", "reopen", "note")}
+         "human": ("answer", "reopen", "note", "action")}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}\Z")
 # a token that can never be parsed as a flag: names, verbs, users
 TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,79}\Z")
@@ -88,6 +89,8 @@ CODES = {
     "bad_request": "The request is not one this console understands.",
     "forbidden": "Not allowed (no valid page token, host or user).",
     "too_large": "The request is too large.",
+    "verb_not_allowed": "That verb is not one the skill pack's manifest allows the console to run.",
+    "page_unavailable": "The skill pack could not draw that page.",
 }
 # what one field of an ask can be wrong with
 FIELD_CODES = ("required", "too_long", "bad_type", "bad_value", "unknown_field",
@@ -305,6 +308,13 @@ def _binds_value(x) -> bool:
     if isinstance(x, list):
         return any(_binds_value(v) for v in x)
     return x == "$value"
+
+
+def check_gate(g, step) -> tuple[dict | None, list[dict]]:
+    """(the gate as stored, []) or (None, its problems): the one definition of
+    a well-formed gate, for an ask and for a page button alike."""
+    errors: list[dict] = []
+    return _gate(errors, g, step), errors
 
 
 def _gate(errors, g, step):
@@ -642,12 +652,13 @@ def fold(events: list[dict]) -> dict:
                      `answer` is the current answer event
     order     ids by first appearance
     messages  say (agent) and note (human) events, in order
+    actions   action (human: a page button the skill pack's gate ran), in order
     problems  events that broke the rules (an answer to a withdrawn ask…),
               which the fold ignored: {seq, type, id, code}
     seq       the last event's seq (seq only grows: an event that does not
               raise it is a problem `bad_seq` and ignored)
     """
-    st = {"asks": {}, "order": [], "messages": [], "problems": [], "seq": 0}
+    st = {"asks": {}, "order": [], "messages": [], "problems": [], "actions": [], "seq": 0}
 
     def bad(e, code):
         st["problems"].append({"seq": e.get("seq"), "type": e.get("type"),
@@ -695,6 +706,8 @@ def fold(events: list[dict]) -> dict:
                 bad(e, "not_open")
         elif t in ("say", "note"):
             st["messages"].append(e)
+        elif t == "action":
+            st["actions"].append(e)
         else:
             bad(e, "unknown_type")
     return st
@@ -743,6 +756,9 @@ def _well_formed(e) -> bool:
                               and isinstance(e.get("gate"), (dict, type(None)))):
         return False
     if t in ("say", "note") and not isinstance(e.get("text"), str):
+        return False
+    if t == "action" and not (isinstance(e.get("label"), str) and isinstance(e.get("verb"), list)
+                              and isinstance(e.get("gate"), dict)):
         return False
     if t == "reopen" and not (isinstance(e.get("answer_seq"), int) and not isinstance(e["answer_seq"], bool)):
         return False
@@ -900,14 +916,24 @@ class Store:
 
     # ---- the agent's side ----
     def post(self, name: str, asks: list, *, max_open: int = MAX_OPEN,
-             dry_run: bool = False) -> dict:
+             dry_run: bool = False, gate_verbs: list | None = None) -> dict:
+        """`max_open` is the number of open asks allowed (the caller's: the
+        manifest's, or MAX_OPEN). `gate_verbs` (a manifest's relay_verbs), when
+        given, makes an ask whose gate verb starts with none of them invalid
+        (`not_allowed` on `gate.verb`), so the console never draws it as a form
+        that can only be declined."""
         by = self._by("agent", name)
-        max_open = min(max_open, MAX_OPEN)
         clean, errors, seen = [], [], set()
         for n, raw in enumerate(asks):
             ask, errs = validate_ask(raw)
             label = raw["id"] if isinstance(raw, dict) and isinstance(raw.get("id"), str) and raw["id"] else f"#{n + 1}"
             errors += [{**e, "ask": label} for e in errs]
+            if ask and gate_verbs is not None and ask.get("gate") and not verb_allowed(gate_verbs, ask["gate"]["verb"]):
+                errors.append({"ask": label, "field": "gate.verb", "code": "not_allowed",
+                               "message": f"the verb {' '.join(ask['gate']['verb'])!r} is not in the manifest's "
+                                          f"relay_verbs ({_show_verbs(gate_verbs)}): add it there, or drop the gate "
+                                          "so the owner is told to confirm another way"})
+                ask = None
             if ask:
                 if ask["id"] in seen:
                     errors.append({"ask": label, "field": "id", "code": "duplicate",
@@ -1022,6 +1048,16 @@ class Store:
                 raise Refused("changed", id=id)
             return append("human", "reopen", by, id=id, answer_seq=cur["answer"]["seq"])
 
+    def act(self, user: str, page: str, label: str, shown: str, verb: list[str], gate: dict) -> dict:
+        """Record one page-button click whose gate already ran and was ok (the
+        skill pack wrote). Signed like an answer; nothing in the fold depends
+        on it, it is the record of who clicked what, after seeing which."""
+        by = self._by("human", user)
+        if not (isinstance(gate, dict) and gate.get("ok") is True):
+            raise Refused("gate_unavailable", page=page)
+        with self._txn() as (box, append):
+            return append("human", "action", by, id=page, label=label, subject=shown, verb=list(verb), gate=gate)
+
     def note(self, user: str, text: str) -> dict:
         by = self._by("human", user)
         text = self._say(text, "note", "text")
@@ -1053,6 +1089,16 @@ class Store:
             raise Refused("not_answered" if status == "answered" else "not_open",
                           id=id, status=cur["status"])
         return cur
+
+
+def verb_allowed(verbs, verb) -> bool:
+    """Does `verb` (a list of words) start with one of the allowed prefixes (each a list of words)?"""
+    return isinstance(verb, list) and any(
+        isinstance(p, (list, tuple)) and p and verb[:len(p)] == list(p) for p in verbs or [])
+
+
+def _show_verbs(verbs) -> str:
+    return ", ".join(" ".join(v) for v in verbs) or "none"
 
 
 def check_comment(text) -> str:

@@ -977,7 +977,7 @@ def test_fold_order_groups_messages_seq():
     assert [x["id"] for x in core.open_asks(st)] == ["c", "d"]
     assert [(g, [x["id"] for x in asks]) for g, asks in core.groups(st)] == [("Words", ["c"]), ("", ["d"])]
     empty = core.fold([])
-    assert empty == {"asks": {}, "order": [], "messages": [], "problems": [], "seq": 0}
+    assert empty == {"asks": {}, "order": [], "messages": [], "problems": [], "actions": [], "seq": 0}
 
 
 def test_fold_is_pure():
@@ -1076,16 +1076,20 @@ def test_budget():
             s.post("bot", [ask(id=f"n{i}") for i in range(11)], dry_run=True)      # a dry run refuses too
 
 
-def test_max_open_can_only_be_lowered():
+def test_max_open_is_the_callers_number_and_defaults_to_the_playbooks():
+    """The budget is whatever the caller passes (ask.py passes the manifest's, or MAX_OPEN and
+    never more than it: tests/test_ask_cli.py); with nothing passed it is MAX_OPEN."""
     with tmpstore() as s:
-        r = s.post("bot", [ask(id=f"a{i}") for i in range(10)], max_open=99)
-        assert r["budget"] == 10 and r["open"] == 10
+        r = s.post("bot", [ask(id=f"a{i}") for i in range(10)])
+        assert r["budget"] == core.MAX_OPEN == 10 and r["open"] == 10
         with assert_raises("over_budget") as e:
-            s.post("bot", [ask(id="eleventh")], max_open=99)
+            s.post("bot", [ask(id="eleventh")])
         assert e.err.params["max"] == 10 and "eleventh" not in s.state()["asks"]
+        r = s.post("bot", [ask(id="eleventh"), ask(id="twelfth")], max_open=12)
+        assert r["budget"] == 12 and r["open"] == 12
         with assert_raises("over_budget"):
-            s.post("bot", [ask(id="eleventh")], max_open=10 ** 9, dry_run=True)
-        assert s.post("bot", [ask(id="a1", why="reworded")], max_open=99)["updated"] == ["a1"]
+            s.post("bot", [ask(id="thirteenth")], max_open=12, dry_run=True)
+        assert s.post("bot", [ask(id="a1", why="reworded")], max_open=12)["updated"] == ["a1"]
     with tmpstore() as s:
         assert s.post("bot", [ask(id="x")], max_open=1)["budget"] == 1
         with assert_raises("over_budget") as e:
@@ -1686,7 +1690,7 @@ def test_a_retired_advice_event_in_an_old_log_is_set_aside_not_a_crash():
 def test_the_agent_cannot_write_a_human_event_nor_the_reverse():
     assert set(core.ROLES) == {"agent", "human"}
     assert set(core.ROLES["agent"]) == {"ask", "withdraw", "applied", "say"}
-    assert set(core.ROLES["human"]) == {"answer", "reopen", "note"}
+    assert set(core.ROLES["human"]) == {"answer", "reopen", "note", "action"}
     with tmpstore() as s:
         with s._txn() as (box, append):
             for t in core.ROLES["human"]:
