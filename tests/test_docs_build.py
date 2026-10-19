@@ -1478,5 +1478,106 @@ def test_the_build_skill_follows_the_agent_skills_spec():
     assert 0 < len(desc) <= 1024, len(desc)
 
 
+OPENMAX = "docs/zylos-openmax.md"
+OPENMAX_TABLE = "Capabilities and their write tier"
+OPENMAX_RULES = ("The skill pack's door is the only caller of a write; the agent may read directly.",
+                 "The skill pack classes the write, from its registry, never from the verb name or the HTTP method.",
+                 "Trash and permanent delete are two writes with two codes; the door offers the first and not the second.",
+                 "A page has two ids, and a link takes only the node id.",
+                 "An upload names its destination, and the destination is part of what the code binds.",
+                 "An expiring link is a credential, and the archive does not keep it.",
+                 "A message cannot be unsent, so a send is L1 and a retry must be safe.",
+                 "An `@name` in the text wakes no one; the member id does, and the door checks it was stored.",
+                 "A card is a question, not a proof.",
+                 "An Issue's status is the platform's bookkeeping, not an approval.",
+                 "A platform automation wakes the agent; it does not switch a mode on.",
+                 "One org and one client per host, pinned.")
+OPENMAX_TRAPS = ("node_id", "artifactId", "mediaId", "5 GB", "member_id", "needs_selection", "text_card_proxy",
+                 "kb.page_restore_trash", "kb.page_restore`", "clientMsgId", "baseRevisionId", "WhatsApp")
+
+
+def openmax_rows(text: str) -> list[dict]:
+    """The chapter's table as registry rows (id, verb, change, tier, undo, auto) plus the ceiling and the OpenMax verb as
+    written. A registry verb is a lowercase word, so `kb.page_trash` is read as `kb_page_trash`; the undo cell's
+    backticks are dropped."""
+    rows = []
+    for line in section(text, OPENMAX_TABLE).splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if line.startswith("| O") and len(cells) == 8:
+            i, verb, change, tier, undo, auto, ceiling, _note = cells
+            norm = lambda v: v.strip("`").replace(".", "_")      # noqa: E731
+            rows.append({"id": i, "verb": norm(verb), "change": change, "tier": tier,
+                         "undo": norm(undo.replace("—", "")), "auto": auto, "ceiling": ceiling, "as_written": verb})
+    return rows
+
+
+def openmax_problems(text: str, readme: str, kit_tools: str) -> list[str]:
+    """What the OpenMax chapter fails to say, held to kit/autonomy.py: the table is a whole tier registry (check_tiers), each
+    row's ceiling is what its tier and auto give (L0 may lower any), every OpenMax verb is written `tool.verb`, no permanent
+    delete or `all` mention is above L1, the two restores are told apart in the undo cells, each rule is a numbered bold
+    item, the platform traps are named, the chapter says it is unproven, and the README and the tools page link it."""
+    sys.path.insert(0, REPO)
+    from kit import autonomy as A
+    out = []
+    rows = openmax_rows(text)
+    if len(rows) < 20:
+        out.append(f"{len(rows)} table rows")
+    out += A.check_tiers(A.canon([{k: v for k, v in r.items() if k in A.COLUMNS} for r in rows]))
+    for r in rows:
+        want = {"yes": "L3", "undo": "undo"}.get(r["auto"]) or ("L2" if r["tier"] == "B" else "L1")
+        if r["ceiling"] != want and r["ceiling"] != "L0":
+            out.append(f"{r['id']}: ceiling {r['ceiling']} is not {want}")
+        if not re.fullmatch(r"`[a-z-]+\.[a-z_-]+`", r["as_written"]):
+            out.append(f"{r['id']}: verb {r['as_written']} is not `tool.verb`")
+    for r in rows:
+        if r["verb"] in ("kb_page_delete", "kb_delete") and r["ceiling"] != "L0":
+            out.append(f"{r['id']}: a permanent delete is above L0")
+        if r["verb"] == "comm_send" and "all" in r["change"] and r["ceiling"] != "L1":
+            out.append(f"{r['id']}: a broadcast is not L1")
+        if r["verb"] == "kb_page_trash" and r["undo"] != "kb_page_restore_trash":
+            out.append(f"{r['id']}: a trash is undone by restore_trash")
+        if r["verb"] in ("kb_page_update", "kb_page_content_write") and r["undo"] != "kb_page_restore":
+            out.append(f"{r['id']}: an edit is undone by a revision restore")
+    items = re.split(r"^\d+\. ", section(text, "Rules at the OpenMax door"), flags=re.M)[1:]
+    out += [t for t in OPENMAX_RULES if not any(i.startswith(f"**{t}**") for i in items)]
+    out += [f"trap {t}" for t in OPENMAX_TRAPS if t not in text]
+    for h in ("Whose system is it", "What goes where", "Adopting it in a skill pack", "Not yet proven, and open"):
+        if not section(text, h):
+            out.append(f"section {h}")
+    if "*Not yet proven:*" not in text or "fake host" not in text:
+        out.append("does not say it is unproven")
+    if "(docs/zylos-openmax.md)" not in readme:
+        out.append("README link")
+    if "(zylos-openmax.md)" not in kit_tools:
+        out.append("tools link")
+    return out
+
+
+def test_the_openmax_chapter_is_a_whole_tier_registry_and_names_the_traps():
+    text, readme, tools = doc(OPENMAX), doc("README.md"), doc("docs/kit-and-tools.md")
+    assert openmax_problems(text, readme, tools) == [], openmax_problems(text, readme, tools)
+    assert len(openmax_rows(text)) >= 20
+    assert openmax_problems(text.replace("| O03 | `kb.page_trash` | a page the door created | B | `kb.page_restore_trash` | undo | undo |",
+                                         "| O03 | `kb.page_trash` | a page the door created | B | `kb.page_restore` | undo | undo |"),
+                            readme, tools) == ["O03: a trash is undone by restore_trash"]            # the two restores
+    assert openmax_problems(text.replace("| O02 | `kb.page_create` | a new page | B | `kb.page_trash` | yes |",
+                                         "| O02 | `kb.page_create` | a new page | B | — | yes |"), readme, tools)   # a yes with no undo
+    assert openmax_problems(text.replace("| `kb.page_delete` | permanent delete of a trashed page | A | — | no | L0 |",
+                                         "| `kb.page_delete` | permanent delete of a trashed page | A | — | no | L1 |"),
+                            readme, tools) == ["O11: a permanent delete is above L0"]
+    assert openmax_problems(text.replace("| A | `kb.page_restore` | no | L1 | needs", "| A | `kb.page_restore` | no | L2 | needs"),
+                            readme, tools) == ["O06: ceiling L2 is not L1"]
+    assert openmax_problems(text.replace("| `comm.member_add` |", "| `comm_member_add` |"), readme, tools) == [
+        "O18: verb `comm_member_add` is not `tool.verb`"]
+    for t in OPENMAX_RULES:                                                       # the check would notice each one gone
+        assert openmax_problems(text.replace(f"**{t}**", "**x**"), readme, tools) == [t], t
+    for t in OPENMAX_TRAPS:
+        assert f"trap {t}" in openmax_problems(text.replace(t, "x"), readme, tools), t
+    assert openmax_problems(text, readme.replace("(docs/zylos-openmax.md)", ""), tools) == ["README link"]
+    assert openmax_problems(text, readme, tools.replace("(zylos-openmax.md)", "")) == ["tools link"]
+    assert openmax_problems(text.replace("*Not yet proven:*", "x"), readme, tools) == ["does not say it is unproven"]
+    assert openmax_problems("# t\n", "", "")[0] == "0 table rows"
+
+
 if __name__ == "__main__":
     _t.main(globals())
