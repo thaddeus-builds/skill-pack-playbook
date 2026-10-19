@@ -126,6 +126,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/consoles.md](docs/consoles.md) | The owner console, the client console, one workspace per client |
 | [docs/autonomy.md](docs/autonomy.md) | Autonomy levels L0 to L5: what proof each write into someone else's system carries, scoped approvals and the owner's switch; the `autonomy` pack |
 | [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a skill pack small, hosting |
+| [docs/zylos-openmax.md](docs/zylos-openmax.md) | The Zylos / OpenMax host: which OpenMax verbs are writes, how far each reverts, the highest autonomy level each may reach, and the traps its docs call out (page and node ids, upload routes, mentions, cards) |
 | [docs/roadmap.md](docs/roadmap.md) | Planning a running skill pack: vision to pillars to story rows and milestones, owner questions with defaults, one story per session, feedback from testers; the SEO skill pack's roadmap as the example |
 | [docs/channels.md](docs/channels.md) | Reusing a skill pack for other channels; generated creative and real people |
 | [docs/kit-and-tools.md](docs/kit-and-tools.md) | What this repository holds, the kit's admission rule, every template |
