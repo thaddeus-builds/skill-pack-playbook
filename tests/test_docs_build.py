@@ -1478,5 +1478,99 @@ def test_the_build_skill_follows_the_agent_skills_spec():
     assert 0 < len(desc) <= 1024, len(desc)
 
 
+
+LIFECYCLE = "docs/lifecycle-and-capabilities.md"
+LIFECYCLE_STAGES = ("profile", "acquire", "identify", "enrich", "judge", "assign", "engage", "respond", "handoff", "nurture", "learn")
+LIFECYCLE_CROSS = ("x.store", "x.review", "x.gate", "x.compliance", "x.budget", "x.audit")
+LIFECYCLE_SECTIONS = ("The owner's design", "What is built, and what is only a design", "The stages and the capability catalog",
+                      "The pipeline page", "The profile stage", "Rules as data, with a parity test",
+                      "An optional provider: the TypeScript chain", "The write path, off by default",
+                      "Small lessons, with what each cost", "Adopting it in another skill pack", "Not yet proven, and open")
+LIFECYCLE_QUOTES = ("首先应该有一个抽象的最统一的流程", "outbound 本质上是 cold call")
+EXAMPLE = "example:"          # a path in the worked example's repository, which this one does not hold
+CITED_TOKEN = re.compile(r"`([^`\n]+)`")
+CITED_PATH = re.compile(r"(?:" + "|".join((*TOP_DIRS, "docs", "tests", "conformance", "tools")) + r")/[A-Za-z0-9_./-]*")
+MD_LINK = re.compile(r"\]\(([^)\s]+)\)")
+LIFECYCLE_EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def lifecycle_cited(text: str) -> list[str]:
+    """Every file path the chapter cites under this repository: a link target (resolved from docs/) and a backticked path that
+    starts at a top folder of the playbook. A path that starts `example:` belongs to the worked example and is not looked for."""
+    out = []
+    for target in MD_LINK.findall(text):
+        if re.match(r"[a-z]+:", target) or target.startswith("#"):
+            continue
+        out.append(os.path.relpath(os.path.normpath(os.path.join(REPO, "docs", target.split("#")[0])), REPO))
+    for tok in CITED_TOKEN.findall(text):
+        if not tok.startswith(EXAMPLE) and CITED_PATH.fullmatch(tok):
+            out.append(tok)
+    return out
+
+
+def lifecycle_problems(text: str, readme: str, tools: str) -> list[str]:
+    """What the lifecycle chapter fails to say: it names the eleven stages in order and the six cross-cutting rows, has its
+    sections, quotes the owner, separates built from design, numbers its rules without a gap, cites only files that exist
+    (the worked example's paths carry `example:`), holds no email address, and the README and the tools page link it."""
+    out = []
+    stages = [m[1] for m in re.findall(r"^\| (\d+) \| `(\w+)` \|", text, flags=re.M)]
+    if stages != list(LIFECYCLE_STAGES):
+        out.append(f"stages {stages}")
+    nums = [int(n) for n in re.findall(r"^\| (\d+) \| `\w+` \|", text, flags=re.M)]
+    if nums != list(range(len(LIFECYCLE_STAGES))):
+        out.append(f"stage numbers {nums}")
+    cross = re.findall(r"^\| `(x\.\w+)` \|", text, flags=re.M)
+    if cross != list(LIFECYCLE_CROSS):
+        out.append(f"cross rows {cross}")
+    out += [f"section {h}" for h in LIFECYCLE_SECTIONS if not section(text, h)]
+    out += [f"owner's words {q}" for q in LIFECYCLE_QUOTES if q not in text]
+    if "*Not yet proven:*" not in text or "Design only" not in text:
+        out.append("does not say what is only a design")
+    if "may name only catalog capabilities" not in text:
+        out.append("the wiring guard")
+    body = text.partition("## Adopting it in another skill pack")[0]
+    rules = [int(n) for n in re.findall(r"^(\d+)\. \*\*", body, flags=re.M)]
+    if rules != list(range(1, len(rules) + 1)) or len(rules) < 20:
+        out.append(f"rule numbers {rules}")
+    out += [f"cited file {p}" for p in lifecycle_cited(text) if not os.path.exists(os.path.join(REPO, p))]
+    if LIFECYCLE_EMAIL.search(text):
+        out.append("an email address")
+    if "(docs/lifecycle-and-capabilities.md)" not in readme:
+        out.append("README link")
+    if "(lifecycle-and-capabilities.md)" not in tools:
+        out.append("tools link")
+    return out
+
+
+def test_the_lifecycle_chapter_names_the_stages_cites_only_real_files_and_is_linked():
+    assert os.path.isfile(os.path.join(REPO, LIFECYCLE)), "the chapter is missing"
+    text, readme, tools = doc(LIFECYCLE), doc("README.md"), doc("docs/kit-and-tools.md")
+    assert lifecycle_problems(text, readme, tools) == [], lifecycle_problems(text, readme, tools)
+    cited = lifecycle_cited(text)
+    assert "docs/autonomy.md" in cited and "kit/write_guard.py" in cited and len(cited) >= 8, cited     # the reader does read paths
+    assert lifecycle_problems("# t\n", "", "")[0].startswith("stages []")
+    # each break is noticed, and by the one check that owns it
+    assert lifecycle_problems(text.replace("| 9 | `nurture` |", "| 9 | `nurtur` |"), readme, tools) == [
+        f"stages {[s if s != 'nurture' else 'nurtur' for s in LIFECYCLE_STAGES]}"]
+    assert lifecycle_problems(text.replace("| 10 | `learn` |", "| 10 | `study` |"), readme, tools)[0].startswith("stages ")
+    assert lifecycle_problems(text.replace("| `x.audit` |", "| `x.trace` |"), readme, tools)[0].startswith("cross rows")
+    assert lifecycle_problems(text.replace("## Small lessons, with what each cost", "## Lessons"), readme, tools) == [
+        "section Small lessons, with what each cost"]
+    assert lifecycle_problems(text.replace("首先应该有一个抽象的最统一的流程", "x"), readme, tools) == [
+        "owner's words 首先应该有一个抽象的最统一的流程"]
+    assert lifecycle_problems(text.replace("**Design only**", "built"), readme, tools) == ["does not say what is only a design"]
+    assert lifecycle_problems(text.replace("may name only catalog capabilities", "may name anything"), readme, tools) == ["the wiring guard"]
+    assert lifecycle_problems(text.replace("\n13. **", "\n14. **"), readme, tools)[0].startswith("rule numbers")
+    # a cited path that does not exist, a link that does not, and a worked-example path with its marker dropped
+    assert lifecycle_problems(text + "\nSee `docs/no-such-chapter.md`.\n", readme, tools) == ["cited file docs/no-such-chapter.md"]
+    assert lifecycle_problems(text + "\nSee [x](no-such-chapter.md).\n", readme, tools) == ["cited file docs/no-such-chapter.md"]
+    assert lifecycle_problems(text + "\nSee [x](../kit/no_such_module.py).\n", readme, tools) == ["cited file kit/no_such_module.py"]
+    assert lifecycle_problems(text.replace("`example:docs/pipeline/index.html`", "`docs/pipeline/index.html`"), readme, tools) == [
+        "cited file docs/pipeline/index.html"]
+    assert lifecycle_problems(text + "\nAsk someone@example.test.\n", readme, tools) == ["an email address"]
+    assert lifecycle_problems(text, readme.replace("(docs/lifecycle-and-capabilities.md)", ""), tools) == ["README link"]
+    assert lifecycle_problems(text, readme, tools.replace("(lifecycle-and-capabilities.md)", "")) == ["tools link"]
+
+
 if __name__ == "__main__":
     _t.main(globals())
