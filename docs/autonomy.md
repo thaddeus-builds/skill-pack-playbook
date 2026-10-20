@@ -36,6 +36,17 @@ The owner placed S46 and S47 at L3 and L4. This model puts them one level lower,
 
 SAE's split between L3 and L4 turns on fallback: at L3 the human takes over when asked, at L4 the system reaches a safe state alone. A skill pack always has a safe state of its own, which is to write nothing. So that split does not carry over. What does carry over is the operating domain (the registry rows a mode covers) and who sets the destination.
 
+### Owner's names for the levels
+
+Owners often count the levels by who decides, not by what proof the write carries. The numbers in this document do not change; this table maps the common names to them.
+
+| An owner may say | Level here | Note |
+| --- | --- | --- |
+| Approve every item one by one | L1 per-change consent | One person, one change, one code. The approve of the item is the destination, and each write still needs its code. |
+| Approve a batch of similar items | L2 scoped approval | One approve of a work item covers the writes the skill pack classes inside the scope frozen when it was proposed. |
+| Let the agent do the kinds I switched on, for a while | L3 owner-switched mode | A confirmed switch for a period; the person's approve of the work is still required. |
+| The agent decides what to start | L4 rule-started work (not built) | A tested rule picks the work; no per-item approve. |
+
 ## The shared mechanics
 
 `kit/autonomy.py` decides these from the skill pack's own data. Its codes are the SEO skill pack's message codes, and the skill pack words them.
