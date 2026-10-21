@@ -730,6 +730,16 @@ def test_release(root: Path) -> None:
                "[release].must_ship paths do not ship: ['SKILL.md']",
                "left out of the release but not internal: ['SKILL.md']",
                ".gitattributes: marks /SKILL.md export-ignore")
+    toml = "skill-pack.toml"
+    must = 'must_ship = ["SKILL.md", "README.md", "skill-pack.toml", "scripts/shop.py"]'
+    with planted(root, toml, replace=(must, must.replace('"scripts/shop.py"', '"scripts/kit"'))):
+        clean("a must_ship directory with files that ship", release.check_release(root))
+    with planted(root, toml, replace=(must, must.replace('"scripts/shop.py"', '"tests"'))):
+        caught("a must_ship directory that is internal", release.check_release(root),
+               "[release].must_ship paths do not ship: ['tests']")
+    with planted(root, toml, replace=(must, must.replace('"scripts/shop.py"', '"nowhere"'))):
+        caught("a must_ship path that is not tracked", release.check_release(root),
+               "[release].must_ship paths do not ship: ['nowhere']")
     with planted(root, ga, append="/ssot/constants.tsv export-ignore\n"):
         caught("a registry the index names a reader for, left out",
                release.check_release(root),

@@ -118,6 +118,10 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.33.1] - 2026-10-21
+### Fixed
+- `kit.guards.release`: a `[release].must_ship` entry that is a directory (for instance `kit` where `scripts_dir` is `.`) ships when a tracked file under it ships and none under it is internal; it was always reported as `[release].must_ship paths do not ship`, because only file paths were compared. Seen in the video-ads skill pack (kit 0.30.1), which dropped `kit` from its list meanwhile (issue 108).
+
 ## [0.33.0] - 2026-10-17
 ### Added
 - `console/manifest.py`, `console/frame.py`, `console/PAGES.md`: a skill pack registers its own pages and buttons with the
