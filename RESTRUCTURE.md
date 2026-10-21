@@ -1,6 +1,6 @@
 # Restructuring plan: a smaller parent
 
-Status: **accepted 2026-10-05** (decisions 1 and 2: packs as drawn, phase 1 first). Phase 1 is in progress: step 4 and the comparison tool are done; steps 1 to 3 need the skill pack checkouts. Phase 2 steps 1 to 5 are done in kit 0.7.0 (packs, selective vendoring, `--packs`); step 6 needs the skill pack checkouts. Phases 4 and 5 are done. Phase 3 waits until the skill packs have moved. Each phase lists the decisions it needs from the owner. Related issues: #19, #20, #22, #24, #26.
+Status: **accepted 2026-10-05** (decisions 1 and 2: packs as drawn, phase 1 first). Phase 1 is in progress: step 4 and the comparison tool are done; steps 1 to 3 need the skill pack checkouts. Phase 2 steps 1 to 5 are done in kit 0.7.0 (packs, selective vendoring, `--packs`); step 6 needs the skill pack checkouts. Phases 4 and 5 are done. Phase 3 is done for the registry (2026-10-21: `kit-tiers.tsv` and its test are deleted; the consumers script and the prose-pinning tests are not). Each phase lists the decisions it needs from the owner. Related issues: #19, #20, #22, #24, #26.
 
 ## Why
 
@@ -118,6 +118,8 @@ Since the skill packs converge in phase 1, they can converge directly on 0.7.0 a
 2. Add `kit/tools/consumers.py`, which prints who imports what across skill pack checkouts given on the command line. It is used when deciding a promotion or a deletion, never in CI.
 3. Remove README text that tests require, such as the paragraph for each "FRAGILE" core row. Keep the tests that guard behaviour.
 4. Keep the kit rules: stdlib only, no domain words, the kit and console never import each other, every message coded.
+
+**Done 2026-10-21 for steps 1 and 4.** `kit-tiers.tsv` and `kit/tests/test_tiers.py` are deleted; `docs/kit-and-tools.md` states the admission rule in terms of packs; the layering rule it held is `kit/tests/test_packs.py` (a pack imports only `base` and itself). Consumers per module are no longer written down: the history of `kit-tiers.tsv` has the last count. Steps 2 and 3 (the `consumers.py` script, and the tests that pin prose in `tests/test_docs_build.py` and `console/tests/test_docs.py`) are open.
 
 **Done when** no test reads a prose document for a required paragraph, except `test_docs_build.py`'s check that every path a doc names exists.
 
