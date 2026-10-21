@@ -119,7 +119,7 @@ Since the skill packs converge in phase 1, they can converge directly on 0.7.0 a
 3. Remove README text that tests require, such as the paragraph for each "FRAGILE" core row. Keep the tests that guard behaviour.
 4. Keep the kit rules: stdlib only, no domain words, the kit and console never import each other, every message coded.
 
-**Done 2026-10-21 for steps 1 and 4.** `kit-tiers.tsv` and `kit/tests/test_tiers.py` are deleted; `docs/kit-and-tools.md` states the admission rule in terms of packs; the layering rule it held is `kit/tests/test_packs.py` (a pack imports only `base` and itself). Consumers per module are no longer written down: the history of `kit-tiers.tsv` has the last count. Steps 2 and 3 (the `consumers.py` script, and the tests that pin prose in `tests/test_docs_build.py` and `console/tests/test_docs.py`) are open.
+**Done 2026-10-21 for steps 1 and 4.** `kit-tiers.tsv` and `kit/tests/test_tiers.py` are deleted; `docs/kit-and-tools.md` states the admission rule in terms of packs; the layering rule it held is `kit/tests/test_packs.py` (a pack imports only `base` and itself). Consumers per module are no longer written down: the history of `kit-tiers.tsv` has the last count. Step 2 is `tools/consumers.py` (not `kit/tools/`: it is playbook tooling, so no skill pack receives it). Step 3, the tests that pin prose in `tests/test_docs_build.py` and `console/tests/test_docs.py`, is open.
 
 **Done when** no test reads a prose document for a required paragraph, except `test_docs_build.py`'s check that every path a doc names exists.
 
