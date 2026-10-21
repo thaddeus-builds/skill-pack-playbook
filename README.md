@@ -112,6 +112,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 2. B1 scaffolds it: `python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack --name acme-skill-pack --cli acme --prefix ACME --packs data`. It vendors the kit packs the skill pack takes ([kit/README.md](kit/README.md), "Packs"), the console, and the thirteen day-one tests, and is green before its first feature.
 3. For a skill pack that already exists, `python3 tools/fleet.py status PATH…` says where its vendored copies stand against this playbook, and `python3 kit/tools/vendor.py --skill-pack PATH` brings them up to date.
 4. To show the owner how the project is going on one page, an agent loads [skills/progress-page/SKILL.md](skills/progress-page/SKILL.md); the handoff runs it at the end of each session.
+5. To show what a skill pack can do and how it works on one page, the skill pack draws its own overview from its registries ([templates/system-overview.md](templates/system-overview.md)); the pipeline above is the same for every skill pack and stays here.
 
 **Check the whole playbook with one command.** [`run_all.py`](run_all.py) runs every test suite in the repository and ends with one `RESULT:` line; it exits 1 if any suite fails. `python3 run_all.py --list` names the suites and `python3 run_all.py kit console` runs some. [CI](.github/workflows/ci.yml) runs it on every pull request and on every push to main.
 
