@@ -13,7 +13,8 @@ returns every problem of these rules:
     reader is not —): the registries ship, the planning files don't;
   * every `.tsv` runtime code opens by its literal name ships (runtime =
     `[release].runtime`, default the scripts dir);
-  * every `[release].must_ship` path ships, and so do the vendored kit
+  * every `[release].must_ship` path ships (a directory ships when a file
+    under it ships and none under it is internal), and so do the vendored kit
     (<scripts_dir>/kit/) and console (console/): no internal entry may
     cover them;
   * nothing else is left out;
@@ -64,6 +65,16 @@ def parents(path: str) -> list[str]:
 def under(path: str, prefixes) -> bool:
     return any(path == p or path.startswith(p.rstrip("/") + "/")
                for p in prefixes)
+
+
+def _ships(path: str, tracked, ships, internal_files) -> bool:
+    """A must_ship file ships; a directory ships when a file under it ships
+    and none under it is internal."""
+    if path in tracked or path in ships:
+        return path in ships
+    below = [f for f in tracked if under(f, (path,))]
+    return any(f in ships for f in below) \
+        and not any(f in internal_files for f in below)
 
 
 def shipped(root: Path | str) -> tuple[list[str], set[str]] | None:
@@ -188,7 +199,8 @@ def check_release(root: Path | str | None = None) -> list[str]:
         out.append(f".tsv files runtime code opens by name do not ship: "
                    f"{unshipped}")
 
-    missing = sorted(set(must_ship) - ships)
+    missing = sorted(p for p in set(must_ship) if not _ships(
+        p, tracked, ships, internal_files))
     if missing:
         out.append(f"[release].must_ship paths do not ship: {missing}")
     for d in (f"{cfg.scripts_dir}/kit", "console"):
