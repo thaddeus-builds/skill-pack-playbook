@@ -42,11 +42,11 @@ The shape is [intake.schema.json](intake.schema.json), which `build/check_intake
 }
 ```
 
-Optional: `quote` on a goal or a question; on a question, `about` (the iids it concerns), `options` (the answers, when they can be listed) and `suggest` (`{"value": …, "because": …}`); `unsure` and `note` on any item.
+Optional: `quote` on a goal or a question; on a question, `about` (the iids it concerns), `options` (the answers, when they can be listed) and `suggest` (`{"value": …, "because": …}`); `unsure` and `note` on any item. In a client hub: `packs` on any item, the CLI words of the packs it is for (`["gads"]`), with the meeting's `packs` as the default; and the meeting's `transcript`, the transcript's path relative to the intake file, which the check reads to find each quote in the speaker block at its time.
 
 ## After the meeting
 
-1. Run `python3 build/check_intake.py` on the file. It refuses an item that does not fit the shape before anything reaches the owner.
+1. Run `python3 build/check_intake.py` on the file (in a client hub, on all of `<hub>/intake/*.json` with `--packs`). It refuses an item that does not fit the shape before anything reaches the owner.
 2. Pick the **at most 10** items that change meaning or carry a number. Everything else waits for the next review.
 3. The owner accepts, changes or drops each one.
 4. Accepted words → glossary rows; accepted stories → story rows; accepted numbers → **pending** facts with `source: client_meeting_<date>` (a human still confirms them before any rule uses them).
