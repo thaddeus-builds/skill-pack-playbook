@@ -7,6 +7,7 @@
 
     intake_to_asks.py --intake FILE... --pick IID,IID... [--max N]
                       [--audience client|builder] [--console-dir DIR] [--ask PATH]
+                      [--hub] [--pack CLI]
 
 Prints the asks as one JSON array, ready for `console/ask.py add FILE`. On a
 refusal it prints {ok: false, code, message, problems} and exits 2, and no ask
@@ -21,13 +22,17 @@ is printed. It writes nothing: posting is the agent's step.
 
 Every ask has evidence with a source, a recommendation with its reason and
 what "no" means. Its id is "intake-<iid>", so an item is never asked twice
-under two ids. What apply_answers.py later writes is shown here in full: the
+under two ids. In a client hub (--hub) an intake ask is the hub's own: its id
+is "hub-intake-<iid>" and its group "From the meeting of <date> · <packs>",
+one section per meeting in the client's one console. --pack CLI keeps a round
+to one pack: a pick whose packs (its own, or its meeting's) do not name CLI
+is refused. What apply_answers.py later writes is shown here in full: the
 intake schema keeps every such text within the console's limits.
 
 Refused (each is a test in build/tests/test_intake_to_asks.py): an intake file
 check_intake.py does not pass; more picks than --max (at most 10, the owner's
 budget); an unknown, repeated or goal iid; a question with no suggestion; an
-item for the other audience; with --console-dir, an item already answered or
+item for the other audience or, with --pack, another pack; with --console-dir, an item already answered or
 withdrawn there, or more new asks than the open budget leaves.
 """
 
@@ -47,6 +52,8 @@ ASK = os.path.join(HERE, "..", "console", "ask.py")
 MAX_OPEN = 10                 # the console's budget; --max can only lower it
 TITLE, WHY = 120, 400         # the console's limits for these two fields
 PREFIX = "intake-"
+HUB_PREFIX = "hub-intake-"     # the hub's own ask about an intake item
+GROUP_LIMIT = 60               # the console's limit for a group
 KIND = {"words": "word", "stories": "story", "numbers": "number", "questions": "question"}
 GROUP = {"words": "Words we use", "stories": "What to build",
          "numbers": "Numbers you gave us", "questions": "Open questions"}
@@ -63,8 +70,15 @@ class Refusal(Exception):
                     "problems": problems or []}
 
 
-def ask_id(iid: str) -> str:
-    return PREFIX + iid
+def ask_id(iid: str, hub: bool = False) -> str:
+    return (HUB_PREFIX if hub else PREFIX) + iid
+
+
+def hub_group(x: dict) -> str:
+    """A hub ask's console section: its meeting and the packs it is for."""
+    packs = ci.item_packs(x["item"], x["meeting"])
+    return shorten(f"From the meeting of {when(x)}" + (f" · {', '.join(packs)}" if packs else ""),
+                   GROUP_LIMIT)
 
 
 def shorten(text: str, limit: int) -> str:
@@ -253,17 +267,18 @@ def run_ask(ask_path: str, console_dir: str, *args: str) -> dict:
     return doc
 
 
-def plan_against_console(picks: list[str], ask_path: str, console_dir: str, limit: int):
+def plan_against_console(picks: list[str], ask_path: str, console_dir: str, limit: int,
+                         hub: bool = False):
     """Never ask again what is settled, and stay inside the open budget."""
     doc = run_ask(ask_path, console_dir, "list", "--status", "all")
     status = {r["id"]: r["status"] for r in doc.get("asks", [])}
-    settled = [i for i in picks if status.get(ask_id(i)) in ("answered", "withdrawn")]
+    settled = [i for i in picks if status.get(ask_id(i, hub)) in ("answered", "withdrawn")]
     if settled:
         raise Refusal("already_asked", f"already answered or withdrawn in the console: "
                       f"{', '.join(settled)}; an answered item is not asked again",
-                      [{"iid": i, "code": "already_asked", "message": status[ask_id(i)]}
+                      [{"iid": i, "code": "already_asked", "message": status[ask_id(i, hub)]}
                        for i in settled])
-    new = [i for i in picks if ask_id(i) not in status]
+    new = [i for i in picks if ask_id(i, hub) not in status]
     room = limit - doc.get("open", 0)
     if len(new) > room:
         raise Refusal("over_budget", f"{doc.get('open', 0)} asks are open; {len(new)} new "
@@ -274,7 +289,7 @@ def plan_against_console(picks: list[str], ask_path: str, console_dir: str, limi
 
 def build(intake: list[str], picks: list[str], limit: int = MAX_OPEN,
           audience: str | None = None, console_dir: str | None = None,
-          ask_path: str = ASK) -> list[dict]:
+          ask_path: str = ASK, hub: bool = False, pack: str | None = None) -> list[dict]:
     if not 1 <= limit <= MAX_OPEN:
         raise Refusal("bad_request", f"--max is 1 to {MAX_OPEN}: it can lower the owner's budget, never raise it")
     if not picks:
@@ -302,9 +317,21 @@ def build(intake: list[str], picks: list[str], limit: int = MAX_OPEN,
                           "each person answers in a console of their own",
                           [{"iid": i, "code": "wrong_audience",
                             "message": idx[i]["item"].get("audience")} for i in other])
+    if pack:
+        other = [i for i in picks if pack not in ci.item_packs(idx[i]["item"], idx[i]["meeting"])]
+        if other:
+            raise Refusal("wrong_pack", f"{', '.join(other)} are not for {pack}: neither the item "
+                          "nor its meeting names it in `packs`",
+                          [{"iid": i, "code": "wrong_pack",
+                            "message": ",".join(ci.item_packs(idx[i]["item"], idx[i]["meeting"])) or "no packs"}
+                           for i in other])
     if console_dir:
-        plan_against_console(picks, ask_path, console_dir, limit)
-    return [to_ask(i, idx) for i in picks]
+        plan_against_console(picks, ask_path, console_dir, limit, hub)
+    asks = [to_ask(i, idx) for i in picks]
+    if hub:
+        for i, a in zip(picks, asks):
+            a.update(id=ask_id(i, hub=True), group=hub_group(idx[i]))
+    return asks
 
 
 class Parser(argparse.ArgumentParser):
@@ -331,10 +358,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--console-dir", metavar="DIR",
                    help="check the picks against this console (ask.py list --status all)")
     p.add_argument("--ask", default=ASK, metavar="PATH", help="the console's ask.py")
+    p.add_argument("--hub", action="store_true",
+                   help="the client hub's own asks: ids hub-intake-<iid>, one group per meeting")
+    p.add_argument("--pack", metavar="CLI", help="only items whose packs name this pack")
     try:
         a = p.parse_args(argv)
         picks = [s.strip() for s in a.pick.split(",") if s.strip()]
-        out = build(a.intake, picks, a.max, a.audience, a.console_dir, a.ask)
+        out = build(a.intake, picks, a.max, a.audience, a.console_dir, a.ask, a.hub, a.pack)
     except Help as h:
         sys.stdout.write(json.dumps({"ok": True, "help": str(h)}) + "\n")
         return 0

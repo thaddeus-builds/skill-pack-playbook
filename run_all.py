@@ -60,7 +60,7 @@ TAIL = 40
 ACCOUNT = "run-all"                   # $USER for the suites when the run has none and its account has no plain name
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,79}")      # what serve.py --user accepts (console/core.py TOKEN_RE)
 SKIP_DIRS = {"__pycache__", "node_modules"}      # and every folder that starts with "."
-SKIP_PATHS = {"scaffold/out"}                     # the folder scaffold/new_harness.py may preview a harness in (git-ignored)
+SKIP_PATHS = {"scaffold/out"}                     # the folder scaffold/new_skill_pack.py may preview a skill pack in (git-ignored)
 TREE = "run.py files"                             # the name of the check that every run.py is accounted for
 
 
@@ -73,21 +73,21 @@ class Suite(NamedTuple):
 
 SUITES = (
     Suite("docs", "tests/run.py", (), "the build docs held to the files, and run_all.py"),
-    Suite("kit", "kit/tests/run.py", ("git", "node"), "the shared harness modules and their guards (pagestyle's copy script runs under node)"),
-    Suite("scaffold", "scaffold/tests/run.py", ("git",), "the scaffolder: a generated harness is green before its first feature"),
+    Suite("kit", "kit/tests/run.py", ("git", "node"), "the shared skill pack modules and their guards (pagestyle's copy script runs under node)"),
+    Suite("scaffold", "scaffold/tests/run.py", ("git",), "the scaffolder: a generated skill pack is green before its first feature"),
     Suite("build", "build/tests/run.py", (), "the build-time tools: intake check, asks, apply"),
     Suite("console", "console/tests/run.py", ("git", "node"), "the owner console and its docs (console.js runs under node)"),
     Suite("zylos", "hosts/zylos/tests/run.py", ("node",), "the Zylos / OpenMax host adapter (its hooks and bin are Node)"),
-    Suite("templates", "templates/tests/selftest/run.py", ("git",), "the day-one test templates, installed in a sample harness"),
+    Suite("templates", "templates/tests/selftest/run.py", ("git",), "the day-one test templates, installed in a sample skill pack"),
     Suite("workflows", "templates/workflows/tests/run.py", ("git", "node"), "the workflow script templates (run under a node simulator)"),
-    Suite("golden", "templates/tests/golden/tests/run.py", ("git",), "the golden-diff tool, on a fake harness"),
+    Suite("golden", "templates/tests/golden/tests/run.py", ("git",), "the golden-diff tool, on a fake skill pack"),
 )
 
 NOT_SUITES = {
-    "templates/tests/run.py": "a template: the runner a harness copies into its tests/. Run here it runs the day-one test "
-                              "templates outside a harness and fails; the `templates` suite installs them in a sample harness",
-    "scaffold/skeleton/tests/run.py": "a template: the runner the scaffolder writes into a new harness (placeholders, and the "
-                                      "vendored kit on its path); the `scaffold` suite runs it inside a generated harness",
+    "templates/tests/run.py": "a template: the runner a skill pack copies into its tests/. Run here it runs the day-one test "
+                              "templates outside a skill pack and fails; the `templates` suite installs them in a sample skill pack",
+    "scaffold/skeleton/tests/run.py": "a template: the runner the scaffolder writes into a new skill pack (placeholders, and the "
+                                      "vendored kit on its path); the `scaffold` suite runs it inside a generated skill pack",
 }
 
 

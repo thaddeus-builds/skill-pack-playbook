@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Black-box conformance of a harness against INVARIANTS.md.
+"""Black-box conformance of a skill pack against INVARIANTS.md.
 
-    python3 conformance/check.py conformance/adapters/seoh.toml --root /path/to/harness
+    python3 conformance/check.py conformance/adapters/seoh.toml --root /path/to/skill_pack
 
-A harness passes whether it vendors the kit or wrote its own tables: the checks
+A skill pack passes whether it vendors the kit or wrote its own tables: the checks
 drive its CLI, from an adapter file that says which verbs to run. The adapter
-lives here, never in the harness. Stdlib only, Python 3.11+.
+lives here, never in the skill pack. Stdlib only, Python 3.11+.
 
 Adapter (TOML):
 
-    [harness]
+    [skill_pack]
     name = "seoh"
     cwd  = "{root}"                       # where the commands run
     [env]                                 # optional; values may use {tmp}, {root}
@@ -27,8 +27,8 @@ Adapter (TOML):
 
 A step is an argv list, or a table {argv, stdin} or {argv, tty}. {tmp}, {root}, {value} are filled in.
 `tty` runs argv on a terminal and types its answer once argv has prompted and gone quiet: a
-human at the keyboard, for a harness whose confirm reads /dev/tty (POSIX only). `values`
-replaces the default strings for a harness whose fact is typed (a number, say).
+human at the keyboard, for a skill pack whose confirm reads /dev/tty (POSIX only). `values`
+replaces the default strings for a skill pack whose fact is typed (a number, say).
 Exit 0 when every check the adapter has passed; a missing section is a skip, said out loud.
 """
 
@@ -94,7 +94,7 @@ def run_step(step, env: dict, cwd: str, **kw: str) -> subprocess.CompletedProces
 def scene(cfg: dict, root: str, tmp: str) -> tuple[dict, str]:
     import os
     env = {**os.environ, **{k: fill(v, tmp=tmp, root=root) for k, v in cfg.get("env", {}).items()}}
-    return env, fill(cfg["harness"].get("cwd", "{root}"), root=root, tmp=tmp)
+    return env, fill(cfg["skill_pack"].get("cwd", "{root}"), root=root, tmp=tmp)
 
 
 def c1_confirmed_is_not_overwritten(cfg: dict, root: str) -> str | None:

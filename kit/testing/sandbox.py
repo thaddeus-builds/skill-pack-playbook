@@ -1,4 +1,4 @@
-"""The environment a harness CLI runs under in a test.
+"""The environment a skill pack CLI runs under in a test.
 
 `sandbox_env(data_dir)` is os.environ minus every inherited `<P>_*` var
 (an operator's own exports, e.g. `<P>_AUTH_ENV_PATHS` or a live
@@ -8,7 +8,7 @@ _KEY, _KEY_ID, PASSWORD or _API, or holding SECRET: a provider token in
 the operator's shell must never reach a test's child), plus
 `<P>_DATA_DIR=<data_dir>`, `<P>_AUTH_ENV_PATHS=none` (no HOME or data-dir
 .env file: process env only), `PYTHONUTF8=1`, `KIT_TEST_RUN=1` (the
-child is a test: kit.human), and `KIT_HARNESS_ROOT` = the bound harness,
+child is a test: kit.human), and `KIT_SKILL_PACK_ROOT` = the bound skill pack,
 so a child that imports the kit binds the same one. `extra` goes on top
 (a value of None removes that var; a credential a test needs is passed
 here, e.g. the gate's `<P>_CONFIRM_CODE_SECRET`).

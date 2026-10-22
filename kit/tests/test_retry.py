@@ -17,7 +17,7 @@ is recorded).
   * the is_throttled / wait_hint hooks replace the defaults (an API that
     throttles with a 400 and an error code);
   * default throttled = 429 or 5xx; max_retries 0 = one call, < 0 refused;
-  * the module binds no harness (stdlib only, no kit import);
+  * the module binds no skill pack (stdlib only, no kit import);
   * call(fn, RetryPolicy, endpoint=...): Retry-After as the server says;
     a wait never shorter than the quota's refill (refill_s, or read from
     the reply's headers), whatever cap_s says; the exponential guess
@@ -218,7 +218,7 @@ def main() -> int:
     check("not throttled: 200, 400, 404, 600, no status",
           not any(t(Resp(s)) for s in (200, 400, 404, 600, None, True)))
 
-    print("\n[9] the default sleep is time.sleep; no harness bound")
+    print("\n[9] the default sleep is time.sleep; no skill pack bound")
     slept = []
     with mock.patch.object(retry_mod.time, "sleep", slept.append):
         retry(seq(Resp(429, {"Retry-After": "2"}), Resp(200)), max_retries=1)

@@ -5,7 +5,7 @@
     the core dirs matches `pattern` (case-insensitive when a str). The
     owner files of the ssot index (business prose, not code) and the
     vendored kit (<scripts_dir>/kit, checked by its own tests) are not
-    scanned. Delete the adapter and the harness still runs.
+    scanned. Delete the adapter and the skill pack still runs.
   * `check_consumer(root, consumer_dir)`: in its code and config (prose
     files .md/.tsv/.txt and its own tests/ are not scanned: they run
     nothing), the consumer invokes no verb of
@@ -16,7 +16,7 @@
     human's click, recorded in history as relayed); never `--apply`;
     never opens the database (the DB file name, `<P>_DB`, sqlite);
     optionally reads only the ssot registries `allowed_reads` names.
-    The verb kinds come from the harness's verb table (kit.verbs), so a
+    The verb kinds come from the skill pack's verb table (kit.verbs), so a
     new write verb is covered the day it is listed.
   * `check_boundaries(root)`: both, from `[guards.boundary]`:
     core_dirs (default the scripts and ssot dirs), adapters (dir names the
@@ -37,7 +37,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from kit.guards import (SKIP_DIRS, harness, read, report, section, strs,
+from kit.guards import (SKIP_DIRS, skill_pack, read, report, section, strs,
                         text_files, verb_table)
 from kit.guards import ssot as _ssot
 
@@ -117,7 +117,7 @@ def check_not_mentioned(root: Path | str | None, core_dirs: list[str],
                         exclude: tuple[str, ...] = ()) -> list[str]:
     """Core text files that match `pattern` (owner files and the vendored
     kit left out, plus `exclude` paths or dirs)."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     rx = re.compile(pattern, re.I) if isinstance(pattern, str) else pattern
     owners = _ssot.owner_files(_ssot.rules(cfg=cfg))
     skip = (f"{cfg.scripts_dir}/kit", *exclude)
@@ -144,7 +144,7 @@ def check_consumer(root: Path | str | None, consumer_dir: str, *,
     """Every file of `consumer_dir` that breaks the consumer rule (module
     docstring). `allowed_reads` = {file relative to the consumer dir: the
     ssot file names it may read}; None = not checked."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     base = cfg.root / consumer_dir
     if not base.is_dir():
         return []
@@ -196,7 +196,7 @@ def check_boundaries(root: Path | str | None = None, *, verbs: Any = None
                      ) -> list[str]:
     """check_not_mentioned() for every adapter and check_consumer() for
     every consumer named in [guards.boundary] (defaults: console/)."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     b = section(cfg, "guards", "boundary")
     present = [d for d in ("console",) if (cfg.root / d).is_dir()]
     core = list(strs(b.get("core_dirs"),

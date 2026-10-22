@@ -1,7 +1,7 @@
-"""Path weights: which of a harness's variants do better than its own account, what to make next, and which a person
-may close. Design and rules for any harness: docs/path-weights.md.
+"""Path weights: which of a skill pack's variants do better than its own account, what to make next, and which a person
+may close. Design and rules for any skill pack: docs/path-weights.md.
 
-A harness that makes variants (ads, posts, emails) and gets back, per variant, its spend and its conversions lays what
+A skill pack that makes variants (ads, posts, emails) and gets back, per variant, its spend and its conversions lays what
 it makes out as a partition: every unit (one variant) sits on exactly one leaf (a path), and every leaf under its
 ancestors (any depth: a direction, then a template, then one value per variable, say). What the kit guards:
 
@@ -23,9 +23,9 @@ ancestors (any depth: a direction, then a template, then one value per variable,
     dict carries answers only for the thresholds that built it). A down leaf is proposed for closing when its settled
     spend would buy close_min_expected_conv at the account rate, close_min_units of its units have settled spend and
     P(rate >= close_ratio x the account rate) is at most close_p. A close is never decided here: a person confirms it,
-    and the harness records it (and passes `closed=True` from then on);
-  * `pick()`: the next batch, over the moves the harness built (what a move makes is the harness's). With no warm
-    account, the harness's coverage order; once warm, batched top-two Thompson draws, at least explore_share of the
+    and the skill pack records it (and passes `closed=True` from then on);
+  * `pick()`: the next batch, over the moves the skill pack built (what a move makes is the skill pack's). With no warm
+    account, the skill pack's coverage order; once warm, batched top-two Thompson draws, at least explore_share of the
     batch from moves not known yet, at most half a batch per group (one move bigger than that stands alone), two moves
     that share an exclusive key never both (a key one move holds `shared` fits beside another's `shared`, never beside
     an `exclusive`; a move's keys are a list or a set, kept sorted), a move that fits the batch before one up to two
@@ -33,17 +33,17 @@ ancestors (any depth: a direction, then a template, then one value per variable,
     batch, in any process;
   * `twins()`: units of one group with the same tags whose settled rates differ by twin_ratio with probability twin_p,
     past two count thresholds; at most three, the largest gap first, with what is known to differ. A clue, never proof;
-  * `past_signal()`: units the harness did not make in this plan (a client's past ads, another period, bought by
+  * `past_signal()`: units the skill pack did not make in this plan (a client's past ads, another period, bought by
     another hand) read as a signal about the plan's design, never as numbers in it. A group of them is judged against
     the past units' own pooled rate: P(better than the pool), strong or weak once its spend speaks. A strong group the
     plan has no unit on is a gap; a weak group it has units on is a warning. Nothing from it is an input of
     `posteriors()`, `judge()` or `pick()`: no leaf, account, shift, state, close or batch moves;
-  * every threshold is in DEFAULTS (SETTINGS says what each is); `settings()` lays a harness's or a client's own values
+  * every threshold is in DEFAULTS (SETTINGS says what each is); `settings()` lays a skill pack's or a client's own values
     over them and refuses one that is not a value of that threshold (`setting()`, ValueError), and a downweight_p not
     below promising_p (one P(better) would then be both promising and down).
 
 The platform does not randomise delivery: "better than the account" is a statement about these numbers, never a cause.
-What a leaf is, what a move makes, where the numbers come from, who closes and how a person sees it are the harness's.
+What a leaf is, what a move makes, where the numbers come from, who closes and how a person sees it are the skill pack's.
 Pure: no file, no database, no clock; the same input gives the same output. Stdlib only.
 Test: kit/tests/test_pathweights.py.
 """
@@ -58,7 +58,7 @@ from typing import Iterable, Mapping, Sequence
 
 Post = tuple[float, float]                      # a Gamma posterior on a rate: (shape alpha, rate beta), mean a / b
 
-# (key, default, type, what it is): a harness lays its own (or a client's) over these with settings()
+# (key, default, type, what it is): a skill pack lays its own (or a client's) over these with settings()
 SETTINGS = (
     ("prior_conv", 2.0, float, "a prior is worth this many conversions at its parent's rate"),
     ("account_min_conv", 10.0, float, "settled conversions the account needs before anything is judged"),
@@ -80,7 +80,7 @@ SETTINGS = (
     ("prior_shift_max", 1.5, float, "the most a leaf's factor moves its prior mean (and 1 / it, the least)"),
     ("past_min_expected_conv", 3.0, float,
      "settled spend of a group of past units, in conversions at the past pool's own rate, before the group speaks"),
-    ("past_warn_units", 3, int, "units of the harness's own on a group the past reads weak before it is warned about"),
+    ("past_warn_units", 3, int, "units of the skill pack's own on a group the past reads weak before it is warned about"),
 )
 DEFAULTS: dict[str, float | int] = {k: d for k, d, _, _ in SETTINGS}
 TYPES = {k: t for k, _, t, _ in SETTINGS}
@@ -369,7 +369,7 @@ def _warm(acct: Mapping, cfg: Mapping) -> bool:
 def judge(post: Post | None, acct: Mapping, *, made: int, spend: float, settled: int, closed: bool = False,
           cfg: Mapping | None = None) -> dict:
     """{state, why, propose_close} of a leaf (a node is judged by the same rule; whether a node's proposal is shown is
-    the harness's): `post` its posterior (posteriors()), `acct` the account (account() or posteriors()["account"]:
+    the skill pack's): `post` its posterior (posteriors()), `acct` the account (account() or posteriors()["account"]:
     whether it is warm is decided here, from its rate and conversions under `cfg`, never from its own `warm`),
     `made` its units made, `spend` its settled spend, `settled` its units with settled spend, `closed` a person's close
     standing on it. Once judged it also carries `rate` (the posterior mean), `lo` and `hi` (INTERVAL), `expected` (the
@@ -436,14 +436,14 @@ def _move(m: object) -> dict:
 
 
 def pick(moves: Sequence[Mapping], acct: Mapping, cfg: Mapping | None = None, seed: int | None = None) -> dict:
-    """{mode, batch, n, moves, left}: the next batch of about batch_size units, drawn from `moves` the harness built. A
+    """{mode, batch, n, moves, left}: the next batch of about batch_size units, drawn from `moves` the skill pack built. A
     move is {id, group, n, kind, post, exclusive?, shared?, ...}: `n` the units it makes, `kind` known or unknown,
     `post` the posterior it is drawn on (None: the account's own rate, worth prior_conv), `exclusive` and `shared` keys
     (a list or a set, their order meaning nothing; two moves never both hold one key when either holds it exclusive);
     any other key rides along into the batch.
 
     Cold (the account not warm under `cfg`, as judge() decides it): mode `coverage`, the moves in the order given (the
-    harness's coverage order), each taken whole while the batch is short, so it may run up to two over. Warm: mode
+    skill pack's coverage order), each taken whole while the batch is short, so it may run up to two over. Warm: mode
     `weights`, first at least explore_share of the batch from unknown moves (plain Thompson draws), then batched
     top-two Thompson over all (each draw takes the leader, or, TOP_TWO of the time, the best of a fresh draw over the
     others); in both, the draw is among the moves that fit within the batch, and a move up to two over is taken only
@@ -538,8 +538,8 @@ def pick(moves: Sequence[Mapping], acct: Mapping, cfg: Mapping | None = None, se
 
 def twins(units: Iterable[Mapping], acct: Mapping, cfg: Mapping | None = None) -> list[dict]:
     """Units of one group with the same tags whose settled rates differ a lot: at most TWINS_MAX, the largest gap first.
-    A unit is {id, group, tags, conv, spend, known?}: `group` the leaf (or any key the harness compares within), `tags`
-    {name: value} on every dimension the harness records, `conv` and `spend` its settled numbers, `known` {name: value}
+    A unit is {id, group, tags, conv, spend, known?}: `group` the leaf (or any key the skill pack compares within), `tags`
+    {name: value} on every dimension the skill pack records, `conv` and `spend` its settled numbers, `known` {name: value}
     of what else is known about it (when and how it was made). A group of same-tag units is compared when its settled
     conversions reach twin_min_conv, among its units whose settled spend buys at least twin_min_expected_conv at the
     account rate (two of them at least); it is flagged when P(best rate / worst rate >= twin_ratio) under a weak prior
@@ -605,8 +605,8 @@ def past_signal(units: Iterable[Mapping], groups: Mapping[str, Mapping], cfg: Ma
     """What units the plan did not make say about its design: {pool, groups, gaps, warnings}. A unit is {id, spend,
     conv}: its settled numbers in another period, bought by another hand (a client's past ads, say); one with no spend
     has no rate and counts nowhere. `groups` maps a non-empty key to {units: [ids of the units above], ours?: how
-    many units of the harness's own sit in it, default 0}; a unit may sit in several groups (one cut of the pool by
-    audience, another by angle). The harness decides what a group is and what `ours` counts (units made or in the
+    many units of the skill pack's own sit in it, default 0}; a unit may sit in several groups (one cut of the pool by
+    audience, another by angle). The skill pack decides what a group is and what `ours` counts (units made or in the
     making).
 
     A group is judged against the past units' own pooled rate R, never the account's: P(its rate > R) under

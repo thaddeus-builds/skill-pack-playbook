@@ -4,9 +4,9 @@ where did each setting come from.
 The built-in checks, in order (every line is a coded message; each warning
 names its fix in `next`):
 
-  harness        name, version, kit version, root
+  skill pack        name, version, kit version, root
   env_chain      the env files read (later wins) or "process env only", and
-                 every harness variable with its source; a secret's value is
+                 every skill pack variable with its source; a secret's value is
                  never shown, only set/unset
   token_source   `<P>_TOKEN_SOURCE` is env or command
   home_secrets   a secret or the data dir that came from the HOME-level file
@@ -18,40 +18,47 @@ names its fix in `next`):
                  test marker, binding or loader variable
                  (doctor_env_file_unsafe_name)
   console_secret CONSOLE_SECRET (the owner console's own secret, which the
-                 console withholds from every harness call) set in the
-                 process env this harness runs in warns. The confirm-code
-                 secret there does not: the harness process issues and
+                 console withholds from every skill pack call) set in the
+                 process env this skill pack runs in warns. The confirm-code
+                 secret there does not: the skill pack process issues and
                  checks the relayed code, so whoever runs the gate (the
                  console, or an agent relaying through chat) holds it
-  data_dir       `<P>_DATA_DIR` set, absolute, outside the harness checkout;
+  data_dir       `<P>_DATA_DIR` set, absolute, outside the skill pack checkout;
                  the DB path too
-  db             no DB yet (info); a DB stamped by a newer harness, human
+  db             no DB yet (info); a DB stamped by a newer skill pack, human
                  table drift, an unreadable file, stale or unknown tables warn
   markets        a declared market (confirmed); pending-only or none warns;
                  `markets = []` needs none
+  hub            with a client hub named (`<P>_HUB_DIR`, set by the hub's
+                 bin/hub): a hub fact this skill pack declares that its
+                 hub_copies has not seen at the hub's current version warns
+                 (fact_hub_copy_stale: the key and both versions; the fix is
+                 `facts sync-hub`), so do a hub fact that did not come from
+                 the hub's gate and a key defined otherwise at the hub; all
+                 current is ok. No hub named: no line (kit.facts.doctor_hub)
   writes         "writes: off" is the healthy default (ok); the kill switch or
                  STOP file is ok too; writes ON is info; a
                  `<P>_ALLOW_WRITES` value that is not 1 warns (it enables
                  nothing, and was probably meant to)
-  platform_lock  a harness hook (prior art #11: a rule set in the platform
+  platform_lock  a skill pack hook (prior art #11: a rule set in the platform
                  itself, below the gate): "set" ok, "unknown" warns; no hook,
                  no line
   verbs          every script of the verb table exists; the non-dev verbs
                  without `examples` (their --help teaches the agent nothing
                  by example) are one info line, never a warning, so
-                 `--strict` stays green on a harness that has not written
+                 `--strict` stays green on a skill pack that has not written
                  them yet
   kit_tty        KIT_TTY (the gate's test seam) set outside a test warns
-  checkout       the cwd is in another checkout of this same harness (a
-                 harness.toml of the same name at or above it) than the one
+  checkout       the cwd is in another checkout of this same skill pack (a
+                 skill-pack.toml of the same name at or above it) than the one
                  whose code runs (the bound root), and the two differ: other
                  HEADs, or docs or code (*.md, *.py, *.toml, *.tsv, *.js,
                  *.sh) changed and not committed in either: the docs the agent reads there may not
                  describe the code that runs (several sessions work in
                  worktrees). Silent outside git, without git, in the bound
-                 checkout itself, or in a checkout of another harness
+                 checkout itself, or in a checkout of another skill pack
 
-then the harness's own checks: `check(ctx)` callables that call
+then the skill pack's own checks: `check(ctx)` callables that call
 `ctx.ok/info/warn/fail(check, message, next)` with coded messages. `--live`
 is theirs to use (`ctx.live`): the kit makes no network call. A check that
 raises is reported as a warning (doctor_check_crashed), never a traceback.
@@ -59,7 +66,7 @@ raises is reported as a warning (doctor_check_crashed), never a traceback.
 Exit: 1 when any check failed (a `--live` probe that was rejected); with
 `--strict` any warning is fatal too (so `<cli> doctor --strict && <cli>
 ingest …` is a safe gate); else 0. Under --json: one document
-{harness, checks: [{check, level, message, message_code, next}], summary,
+{skill pack, checks: [{check, level, message, message_code, next}], summary,
 healthy, live, strict, message, message_code}.
 
 Reads only: the DB is opened read-only and never created.
@@ -80,7 +87,7 @@ from typing import Any, Callable, Iterable
 
 from kit import config as _config
 from kit import contract
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, coded, msg
 
 LEVELS = ("ok", "info", "warn", "fail")
@@ -109,7 +116,7 @@ class Context:
     """What a doctor check sees, and where it reports."""
     live: bool = False
     strict: bool = False
-    spec: Any = None                   # the harness's kit.db.SchemaSpec
+    spec: Any = None                   # the skill pack's kit.db.SchemaSpec
     verbs: list = field(default_factory=list)
     scripts_dir: Path | None = None
     findings: list[Finding] = field(default_factory=list)
@@ -117,7 +124,7 @@ class Context:
     _con_tried: bool = False
 
     @property
-    def cfg(self) -> _config.HarnessConfig:
+    def cfg(self) -> _config.SkillPackConfig:
         return _config.config()
 
     def add(self, level: str, check: str, message: Msg,
@@ -142,7 +149,7 @@ class Context:
         self.add("fail", check, message, next)
 
     def con(self):
-        """A read-only connection to the harness DB, or None (no spec, no
+        """A read-only connection to the skill pack DB, or None (no spec, no
         file, or a file the db check already reported). Closed by run()."""
         if not self._con_tried:
             self._con_tried = True
@@ -163,7 +170,7 @@ def _open_db(spec: Any):
     from kit import db, paths
     try:
         path = paths.db_path()
-    except HarnessError:
+    except SkillPackError:
         return None
     if not path.exists():
         return None
@@ -183,11 +190,11 @@ def _secretish(name: str) -> bool:
 
 # ---- built-in checks --------------------------------------------------------
 
-def check_harness(ctx: Context) -> None:
+def check_skill_pack(ctx: Context) -> None:
     cfg = ctx.cfg
-    ver = contract.harness_version() or "unversioned"
+    ver = contract.skill_pack_version() or "unversioned"
     from kit import __version__ as kit_version
-    ctx.ok("harness", msg("doctor_harness", f"{cfg.name} {ver} (kit "
+    ctx.ok("skill_pack", msg("doctor_skill_pack", f"{cfg.name} {ver} (kit "
                           f"{kit_version}) at {cfg.root}", name=cfg.name,
                           version=ver, kit_version=kit_version,
                           root=str(cfg.root)))
@@ -225,7 +232,7 @@ def check_token_source(ctx: Context) -> None:
     from kit import auth
     try:
         mode = auth.source().mode()
-    except HarnessError as e:
+    except SkillPackError as e:
         ctx.warn("token_source", e.message, e.next)
         return
     ctx.ok("token_source", msg("doctor_token_source", f"token source (every "
@@ -268,15 +275,15 @@ def check_env_files(ctx: Context) -> None:
                 fix += _console_secret_fix(name)
             ctx.warn("env_files", msg(
                 "doctor_env_gate_secret_in_file", f"{name} is written in {p}: "
-                f"the harness never loads a gate secret from a file (an agent "
+                f"the skill pack never loads a gate secret from a file (an agent "
                 f"that can read or write the file could make its own approval "
                 f"codes). Remove the line; set it only in the process env of "
                 f"what runs the gate", file=p, name=name), fix)
         else:
             ctx.warn("env_files", msg(
                 "doctor_env_file_unsafe_name", f"{name} is written in {p}: the "
-                f"harness never loads it from a file (it would change who the "
-                f"gate thinks is at the terminal, which harness is bound, or "
+                f"skill pack never loads it from a file (it would change who the "
+                f"gate thinks is at the terminal, which skill pack is bound, or "
                 f"the code that runs). Remove the line", file=p, name=name),
                 fix)
 
@@ -284,7 +291,7 @@ def check_env_files(ctx: Context) -> None:
 def _console_secret_fix(name: str) -> list[str]:
     """The deployment step for a client console made before kit 0.15.0
     (scaffold/new_client.py's bin/console), which appends the confirm-code
-    secret to workspace/.env at each start; no harness code changes."""
+    secret to workspace/.env at each start; no skill pack code changes."""
     return [f"if a client's bin/console wrote it: in bin/console, replace the "
             f"4 lines from `envf=\"$root/workspace/.env\"` through `fi` with "
             f"these 2, then restart the console:",
@@ -297,8 +304,8 @@ def check_console_secret(ctx: Context) -> None:
     if os.environ.get(env.CONSOLE_SECRET):
         ctx.warn("console_secret", msg(
             "doctor_console_secret_in_env", f"{env.CONSOLE_SECRET} is set in "
-            f"the environment this harness runs in: it is the owner console's "
-            f"own secret, which the console withholds from every harness "
+            f"the environment this skill pack runs in: it is the owner console's "
+            f"own secret, which the console withholds from every skill pack "
             f"call; an agent here could sign the console's answers. Unset it; "
             f"it belongs only to the console process", var=env.CONSOLE_SECRET),
             [f"unset {env.CONSOLE_SECRET}"])
@@ -310,7 +317,7 @@ def check_data_dir(ctx: Context) -> None:
     var = cfg.env("DATA_DIR")
     try:
         d = paths.data_dir()
-    except HarnessError as e:
+    except SkillPackError as e:
         ctx.warn("data_dir", e.message, e.next)
         return
     ctx.ok("data_dir", msg("doctor_path", f"{var} -> {d}", var=var,
@@ -329,7 +336,7 @@ def check_data_dir(ctx: Context) -> None:
                                    path=str(p)))
         if paths.inside_repo(p):
             ctx.warn("data_dir", msg(
-                "doctor_inside_repo", f"{v} -> {p} is inside the harness "
+                "doctor_inside_repo", f"{v} -> {p} is inside the skill pack "
                 f"checkout: client data would ship in a release or leak into "
                 f"a commit", var=v, path=str(p)),
                 [f"export {var}=/absolute/path/outside/the/checkout"])
@@ -339,7 +346,7 @@ def check_db(ctx: Context) -> None:
     from kit import db, paths
     try:
         path = paths.db_path()
-    except HarnessError:
+    except SkillPackError:
         return                                   # data_dir said why
     if not path.exists():
         ctx.info("db", msg("doctor_no_db", f"no database yet at {path} (a "
@@ -353,7 +360,7 @@ def check_db(ctx: Context) -> None:
         return
     try:
         con = db.connect(ctx.spec, path, read_only=True)
-    except HarnessError as e:
+    except SkillPackError as e:
         dump = [f"sqlite3 {path} .dump > {path}.dump.sql"]
         unreadable = getattr(e.message, "code", None) == "db_unreadable"
         ctx.warn("db", e.message, dump if unreadable else e.next)
@@ -375,7 +382,7 @@ def check_db(ctx: Context) -> None:
                            f"rebuilds them", tables=stale))
     if unknown:
         ctx.warn("db", msg("doctor_db_unknown", f"table(s) no longer in the "
-                           f"schema (left by an older harness; do not read "
+                           f"schema (left by an older skill pack; do not read "
                            f"them): {', '.join(unknown)}", tables=unknown))
     if not stale and not unknown:
         ctx.ok("db", msg("doctor_db_ok", f"database at {path}: schema "
@@ -406,7 +413,7 @@ def check_markets(ctx: Context) -> None:
              f"--reason <why>" for m in pending])
     if not confirmed and not pending:
         ctx.warn("markets", msg("doctor_not_onboarded", "no market declared "
-                                "— this harness is not onboarded yet"),
+                                "— this skill pack is not onboarded yet"),
                  [f"{_cli()} facts init"])
 
 
@@ -418,7 +425,7 @@ def check_writes(ctx: Context) -> None:
     val = os.environ.get(opt)
     if why is None:
         ctx.info("writes", msg("doctor_writes_on", f"writes: ON ({opt}=1) — "
-                               f"only the harness allowlist's calls can go "
+                               f"only the skill pack allowlist's calls can go "
                                f"out", var=opt),
                  [f"unset {opt}"])
         return
@@ -514,7 +521,7 @@ def check_checkout(ctx: Context) -> None:
     if docs is None or docs == cfg.root.resolve():
         return
     try:
-        if _config.load(docs).name != cfg.name:  # another harness's checkout
+        if _config.load(docs).name != cfg.name:  # another skill pack's checkout
             return
     except _config.ConfigError:
         return
@@ -533,11 +540,18 @@ def check_checkout(ctx: Context) -> None:
         runs_head=runs_head, runs_dirty=runs_dirty))
 
 
-BUILTIN: tuple[Check, ...] = (check_harness, check_env_chain,
+def check_hub(ctx: Context) -> None:
+    """The client hub's facts this skill pack copies (kit.facts.doctor_hub):
+    nothing unless `<P>_HUB_DIR` names a hub."""
+    from kit import facts
+    facts.doctor_hub(ctx)
+
+
+BUILTIN: tuple[Check, ...] = (check_skill_pack, check_env_chain,
                               check_token_source, check_home_secrets,
                               check_env_files, check_console_secret,
                               check_data_dir, check_db,
-                              check_markets, check_writes)
+                              check_markets, check_hub, check_writes)
 
 
 # ---- run --------------------------------------------------------------------
@@ -553,7 +567,7 @@ def collect(ctx_checks: Iterable[Check] = (), *, live: bool = False,
             strict: bool = False, spec: Any = None, verbs: Iterable = (),
             scripts_dir: Path | str | None = None,
             platform_lock: PlatformLock | None = None) -> Context:
-    """Run every built-in check, then the harness's; the Context holds the
+    """Run every built-in check, then the skill pack's; the Context holds the
     findings."""
     ctx = Context(live=live, strict=strict, spec=spec, verbs=list(verbs),
                   scripts_dir=Path(scripts_dir) if scripts_dir else None)
@@ -595,8 +609,8 @@ def document(ctx: Context) -> dict:
     cfg = _config.config()
     from kit import __version__ as kit_version
     s = summary(ctx)
-    return {"harness": {"name": cfg.name, "cli": cfg.cli,
-                        "version": contract.harness_version(),
+    return {"skill_pack": {"name": cfg.name, "cli": cfg.cli,
+                        "version": contract.skill_pack_version(),
                         "kit_version": kit_version, "root": str(cfg.root)},
             "live": ctx.live, "strict": ctx.strict,
             "checks": [f.as_dict() for f in ctx.findings],
@@ -642,7 +656,7 @@ def parser(cli: str) -> argparse.ArgumentParser:
                     "from, the data dir, the database, the markets, the write "
                     "switches.")
     p.add_argument("--live", action="store_true",
-                   help="also run the harness's live probes (network); exit 1 "
+                   help="also run the skill pack's live probes (network); exit 1 "
                         "if one is rejected")
     p.add_argument("--strict", action="store_true",
                    help="exit 1 on ANY warning, so `doctor --strict && …` is "

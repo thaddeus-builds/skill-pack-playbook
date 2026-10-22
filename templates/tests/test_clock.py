@@ -21,7 +21,7 @@ CODE except CLOCK:
 
 ALLOWED holds reads not yet moved, as (file, enclosing function) -> count, and
 must match exactly: a read that moved fails here until its row goes too, so
-the list only shrinks. Start a new harness with it empty.
+the list only shrinks. Start a new skill pack with it empty.
 """
 
 import ast

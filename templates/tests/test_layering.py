@@ -24,7 +24,7 @@ import archtest
 from _check import check, finish
 
 ROOT = Path(__file__).resolve().parent.parent
-TOOL = "harness"                                      # the CLI a consumer runs
+TOOL = "skill_pack"                                      # the CLI a consumer runs
 WRITE_VERBS = ("facts", "decisions", "queue_actions", "execute")
 VERBS = ("pull_*", "ingest_*", "compute_*", *WRITE_VERBS)
 API = ("api", "api.*")
@@ -45,8 +45,8 @@ RULES = [
       layer=WRITE_VERBS, bad=("compute_*",)),
     R("g", "lib imports no verb script and not the writer",
       layer=("lib", "lib.*"), bad=(*VERBS, "api.writer")),
-    R("h", "common imports nothing of the harness: it names no channel",
-      layer=("common", "common.*"), bad=(*VERBS, "lib", "lib.*", *API, "harness")),
+    R("h", "common imports nothing of the skill pack: it names no channel",
+      layer=("common", "common.*"), bad=(*VERBS, "lib", "lib.*", *API, "skill_pack")),
 ]
 
 S = archtest.Scan
@@ -58,14 +58,14 @@ SCANS = [
       hits=("open('webconsole/pages.py')", "see adapter/hooks.py"),
       misses=("print to the console", "an adapter pattern")),
     S("j", "the console runs no write verb, as shell text or as argv", ("webconsole",), WRITE_VERB,
-      hits=("harness facts set margin 0.3", "uv run src/harness.py pull ads",
+      hits=("skill_pack facts set margin 0.3", "uv run src/skill_pack.py pull ads",
             "run([TOOL, 'queue', 'reject', qid])", '("execute", "--apply")', '[TOOL, "pull"]'),
-      misses=("harness facts list --json", "run([TOOL, 'compute', 'kpi', '--json'])",
-              "harness queue list", '("facts", "confirm", key, "--code", code)'),
+      misses=("skill_pack facts list --json", "run([TOOL, 'compute', 'kpi', '--json'])",
+              "skill_pack queue list", '("facts", "confirm", key, "--code", code)'),
       optional=True),
     S("k", "the console never opens the database file", ("webconsole",),
       re.compile(r"\bsqlite3?\b|\.db\b"),
-      hits=("import sqlite3", "open('data/harness.db')"), misses=("harness db -- coverage",),
+      hits=("import sqlite3", "open('data/skill_pack.db')"), misses=("skill pack db -- coverage",),
       optional=True),
 ]
 

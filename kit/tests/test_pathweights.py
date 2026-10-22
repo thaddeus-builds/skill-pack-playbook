@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""kit.pathweights: path weights for a harness's variants, on SYNTHETIC numbers only (DEMO ids, neutral tags).
+"""kit.pathweights: path weights for a skill pack's variants, on SYNTHETIC numbers only (DEMO ids, neutral tags).
 
-  [1] the settings: the defaults, a harness's own laid over them, every kind of value refused, the message naming the
+  [1] the settings: the defaults, a skill pack's own laid over them, every kind of value refused, the message naming the
       key (an unknown key, not a number, not finite, a bool, a count not whole, a probability or share outside (0, 1),
       close_ratio outside (0, 1], prior_shift_max below 1, twin_ratio not above 1, anything else not above 0), and
       downweight_p not below promising_p
@@ -15,7 +15,7 @@
   [4] judge(): every state with its reason, and the close proposal's conditions one at a time (enough spend, enough
       units with settled spend, unlikely to reach close_ratio, down at all), each threshold moved by the settings; warm
       decided by the settings in hand, not the account's own `warm`; a person's close stands over everything
-  [5] pick(): cold = the harness's coverage order, whole moves, up to two over; warm = the explore share kept, at most
+  [5] pick(): cold = the skill pack's coverage order, whole moves, up to two over; warm = the explore share kept, at most
       half a batch per group (a bigger move alone), exclusive keys never both, shared keys together, a fill up to two
       over rather than short (the explore share too, only when nothing within fits), the same data the same batch (keys
       in any order or as a set, in two processes with different PYTHONHASHSEED; another number, another batch); warm
@@ -78,7 +78,7 @@ def test_settings() -> None:
         "prior_shift_max": 1.5, "past_min_expected_conv": 3.0, "past_warn_units": 3}, W.DEFAULTS)
     check("every setting says what it is", all(isinstance(t, str) and t for _, _, _, t in W.SETTINGS))
     got = W.settings({"batch_size": "4", "close_p": 0.25, "close_min_units": 3.0})
-    check("a harness's own values are laid over the defaults, typed",
+    check("a skill pack's own values are laid over the defaults, typed",
           got["batch_size"] == 4 and isinstance(got["batch_size"], int) and got["close_p"] == 0.25
           and got["close_min_units"] == 3 and isinstance(got["close_min_units"], int)
           and got["twin_p"] == W.DEFAULTS["twin_p"], got)
@@ -369,7 +369,7 @@ def test_judge() -> None:
     p = state([(600, 1.5), (600, 1.5)])
     check("…not while reaching close_ratio of the account is still plausible (close_p)",
           p["state"] == "down" and p["expected"] >= 5 and p["p_reaches"] > 0.1 and p["propose_close"] is False, p)
-    check("…and a harness's own close_p moves it", state([(600, 1.5), (600, 1.5)], {"close_p": 0.5})["propose_close"])
+    check("…and a skill pack's own close_p moves it", state([(600, 1.5), (600, 1.5)], {"close_p": 0.5})["propose_close"])
     p = state([(3000, 15), (3000, 15)])
     check("…never when not down, however much was spent", p["state"] == "testing" and p["propose_close"] is False, p)
     moved = [({"close_min_units": 3}, "units"), ({"close_min_expected_conv": 50.0}, "spend"),
@@ -594,7 +594,7 @@ def test_twins() -> None:
           and t[0]["differences"] == [{"what": "batch", "high": "g1", "low": "g2"},
                                       {"what": "length", "high": 30, "low": 45}], t)
     low = ("DEMO-g1", [(1000, 5, {}), (1000, 0.5, {})])
-    check("a group under twin_min_conv is not compared; a harness's own thresholds move it",
+    check("a group under twin_min_conv is not compared; a skill pack's own thresholds move it",
           W.twins(*twin_units([low])) == []
           and len(W.twins(*twin_units([low]), {"twin_min_conv": 5.0, "twin_p": 0.5})) == 1)
     third = ("DEMO-g1", [(1000, 20, {}), (1000, 15, {}), (100, 0, {})])

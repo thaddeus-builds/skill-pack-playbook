@@ -1,15 +1,15 @@
 """Third-party rights: a person's (or a creator's) consent to be used in the
-harness's output, confirmed by a person through the human gate.
+skill pack's output, confirmed by a person through the human gate.
 
-A consent record is a JSON file whose path the harness chooses (one per
+A consent record is a JSON file whose path the skill pack chooses (one per
 person or per creator). It says who (`person`), how they stand to the
-advertiser (`relation`, one of the harness's closed set), what of them may
-be used (`uses`, a non-empty subset of the harness's closed set, e.g.
+advertiser (`relation`, one of the skill pack's closed set), what of them may
+be used (`uses`, a non-empty subset of the skill pack's closed set, e.g.
 face, voice, name, words), where (`scope`, a dict of lists, e.g. brands,
 channels, purposes; "*" = any), when (`valid_from`, `valid_until`, ISO
 dates), and the signed document it was filled from (`document`, a path
-relative to the harness root, and its `document_sha256`). `revoked` ends
-it. The harness declares its closed sets once, as a `Terms`.
+relative to the skill pack root, and its `document_sha256`). `revoked` ends
+it. The skill pack declares its closed sets once, as a `Terms`.
 
 What this module guards:
 
@@ -37,7 +37,7 @@ What this module guards:
     logs a `revoke` row. A revoke voids every confirmation before it, so
     setting `revoked` back to false by hand (which restores the old
     content sha) does not bring the old confirmation back.
-  * problems() is the one check a harness runs before it uses a person:
+  * problems() is the one check a skill pack runs before it uses a person:
     [] only when a confirm row after the last revoke matches the current
     content sha, the record is not revoked, today (kit.dates.host_today)
     is inside valid_from..valid_until, `uses` covers what this use needs,
@@ -51,7 +51,7 @@ What this module guards:
 Public API: Terms, draft(), content_sha(), log_path(), log_rows(),
 confirmed_shas(), problems(), summary(), confirm(), revoke().
 
-Paid for: in the source harness an agent set `status: confirmed` by
+Paid for: in the source skill pack an agent set `status: confirmed` by
 editing the consent JSON on the owner's word in chat, and the old check
 read that field, so the person's face and voice were cleared for ads
 without anyone passing the gate. Confirmation became a gate row bound to
@@ -70,7 +70,7 @@ from pathlib import Path
 
 from kit import dates, human
 from kit.atomic import open_atomic, write_json_atomic
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, joined, msg
 
 SCHEMA = "kit.consent/1"
@@ -82,7 +82,7 @@ VERB = "consent confirm"
 
 @dataclass(frozen=True)
 class Terms:
-    """The harness's closed sets: who a person may be to the advertiser
+    """The skill pack's closed sets: who a person may be to the advertiser
     (`relations`), what of them a record may cover (`uses`), and the scope
     dimensions every record must name (`scope_keys`; () = any keys)."""
 
@@ -104,7 +104,7 @@ class Terms:
 # ---- the record ------------------------------------------------------------
 
 def draft(record_id: str, *, terms: Terms, document: str = "") -> dict:
-    """A blank record for the harness to fill from the signed document: no
+    """A blank record for the skill pack to fill from the signed document: no
     person, relation or uses yet, every declared scope dimension empty,
     valid for a year from today. It passes nothing until it is filled and
     a person confirms it."""
@@ -150,7 +150,7 @@ def _path(root: Path | str, record_path: Path | str) -> Path:
 
 def _read(f: Path) -> dict:
     if not f.is_file():
-        raise HarnessError(msg("consent_missing",
+        raise SkillPackError(msg("consent_missing",
                                f"no consent record at {f}", path=str(f)))
     try:
         rec = json.loads(f.read_text(encoding="utf-8"))
@@ -159,7 +159,7 @@ def _read(f: Path) -> dict:
     else:
         detail = "not a JSON object"
     if not isinstance(rec, dict):
-        raise HarnessError(msg("consent_unreadable",
+        raise SkillPackError(msg("consent_unreadable",
                                f"{f} is not a consent record: {detail}",
                                path=str(f), detail=detail))
     return rec
@@ -189,7 +189,7 @@ def log_rows(record_path: Path | str) -> list[dict]:
         except json.JSONDecodeError:
             row = None
         if not isinstance(row, dict):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "consent_log_unreadable",
                 f"{f}:{n} is not a log row; the confirmations cannot be "
                 f"proven, so none counts", path=str(f), line=n))
@@ -243,7 +243,7 @@ def _document(root: Path, rec: dict) -> Msg | None:
     if f is None or not f.is_relative_to(base) or not f.is_file():
         return msg("consent_document_missing",
                    f"the signed document {doc!r} is not a file under the "
-                   f"harness root", document=str(doc))
+                   f"skill pack root", document=str(doc))
     want = str(rec.get("document_sha256") or "").strip().lower()
     if _file_sha(f) != want:
         return msg("consent_document_changed",
@@ -326,7 +326,7 @@ def problems(root: Path | str, record_path: Path | str, *, terms: Terms,
     try:
         rec = _read(f)
         shas = confirmed_shas(f)
-    except HarnessError as e:
+    except SkillPackError as e:
         return [e.message]
     out = []
     if content_sha(rec) not in shas:
@@ -377,7 +377,7 @@ def confirm(root: Path | str, record_path: Path | str, *, terms: Terms,
     """A person confirms the record: they retype `record_id` at the
     terminal, or relay back a code bound to {record_id: content sha} and
     the log's length (`verb` and `market` go in that subject as well).
-    Raises HarnessError (consent_incomplete, nothing written, no gate
+    Raises SkillPackError (consent_incomplete, nothing written, no gate
     asked) or kit.human.Refused / CodeRequired (the gate)."""
     if not isinstance(record_id, str) or not record_id.strip():
         raise ValueError("confirm() needs the record id the person retypes")
@@ -390,7 +390,7 @@ def confirm(root: Path | str, record_path: Path | str, *, terms: Terms,
         probs.append(late)
     if probs:
         detail = joined(probs)
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "consent_incomplete",
             f"{record_id}: fix the record before a person confirms it: "
             f"{detail}. Nothing was written.",
@@ -405,7 +405,7 @@ def confirm(root: Path | str, record_path: Path | str, *, terms: Terms,
     why += human.relay_audit(channel, relay_user, relay_at)
     now_rec, now_rows = _read(f), log_rows(f)
     if content_sha(now_rec) != sha or len(now_rows) != len(rows):
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "consent_changed_meanwhile",
             f"{record_id} changed while the person was being asked, so the "
             f"confirmation no longer matches it. Nothing was written.",

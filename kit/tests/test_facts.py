@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """The client facts verb (kit/facts.py) holds each of its guards, on the
-fake "shop" harness (markets US/CA; the fact keys and thresholds are
-fixture TSVs written here). Ported from the reference harness's
+fake "shop" skill pack (markets US/CA; the fact keys and thresholds are
+fixture TSVs written here). Ported from the reference skill pack's
 tests/test_facts.py, test_gate_refusal_codes.py (the facts part) and
 test_facts_numeric_contract.py (the write-time contract; its compute
-banner is harness code and stays there).
+banner is skill pack code and stays there).
 
   1. Read verbs never create the DB (no_db); every usage error is coded.
   2. init, piped: declares the market PENDING, answers pending (canonical
@@ -39,7 +39,7 @@ banner is harness code and stays there).
      nothing; unusable, missing and hostile backups are refused.
  12. A fact that moved while the human was asked is not overwritten;
      human-table triggers; readers confirmed / effective / pending.
- 13. A harness with markets = [] keeps every fact under "_".
+ 13. A skill pack with markets = [] keeps every fact under "_".
  14. facts.py's msg() calls are closed over its fragment.
  15. A client file's values (plan_file / apply_file): checked like `set`
      before any gate (unknown key, bounds, the declaration itself, a
@@ -161,7 +161,7 @@ def rows(data=None) -> dict:
 
 
 def ecode(e) -> str | None:
-    """The code of a raised HarnessError (None for anything else)."""
+    """The code of a raised SkillPackError (None for anything else)."""
     return getattr(getattr(e, "message", None), "code", None)
 
 
@@ -203,7 +203,7 @@ def test_reads_create_nothing() -> None:
           rc == 0 and all(v in out for v in (
               "init", "list", "get", "set", "confirm", "unconfirm",
               "history", "rollback", "restore")), out)
-    check("a malformed init question list is a harness bug (ValueError)",
+    check("a malformed init question list is a skill pack bug (ValueError)",
           all(isinstance(raises(lambda q=q: facts.main(
               ["list"], spec=SPEC, keys=KEYS, thresholds=TH,
               init_questions=q), ValueError), ValueError)
@@ -1120,10 +1120,10 @@ def test_file_values() -> None:
 # ---- 13 --------------------------------------------------------------------
 
 def test_unpartitioned() -> None:
-    print("[13] a harness with markets = [] keeps every fact under '_'")
+    print("[13] a skill pack with markets = [] keeps every fact under '_'")
     root = Path(tmp_dir("facts-flat-"))
     shutil.copytree(_shop.SHOP, root, dirs_exist_ok=True)
-    toml = root / "harness.toml"
+    toml = root / "skill-pack.toml"
     toml.write_text(toml.read_text(encoding="utf-8").replace(
         'markets = ["US", "CA"]', "markets = []"), encoding="utf-8")
     try:

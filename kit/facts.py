@@ -1,7 +1,8 @@
 """The client facts verb, `<cli> facts init|list|get|set|confirm|unconfirm|
-history|rollback|restore`: the one sanctioned writer of client_facts.
+history|rollback|restore|sync-hub`: the one sanctioned writer of
+client_facts.
 
-Ported from the reference harness's scripts/facts.py. What it guards:
+Ported from the reference skill pack's scripts/facts.py. What it guards:
 
   * Trust lives in the data. `init`, `set` and `rollback` write PENDING
     values (is_assumption = 1). Only `confirm` raises trust, through the
@@ -48,7 +49,7 @@ Ported from the reference harness's scripts/facts.py. What it guards:
     --json every verb prints exactly one document, refusals and usage
     errors included.
 
-Readers for harness code: confirmed(), effective(), pending().
+Readers for skill pack code: confirmed(), effective(), pending().
 
 A client file's values, one gate with the file (plan_file, apply_file):
 the values the agent read from a client's file (kit.workbook_map's
@@ -56,13 +57,41 @@ values.tsv) are confirmed by the same human gate as the rest of that file,
 not one by one. plan_file() checks each (market, key, value) exactly as
 `set` would (a registered key, its bounds and canonical form, a confirmed
 market declaration; never the declaration itself) BEFORE any gate runs,
-and returns the items the harness puts in that gate's subject and the
+and returns the items the skill pack puts in that gate's subject and the
 version every write to those facts moves. apply_file() writes them
 confirmed, with the gate's channel as changed_by and history action
 `confirm`, after checking again that none of them moved meanwhile. It is
-a write that raises trust: only a harness verb that has just passed
+a write that raises trust: only a skill pack verb that has just passed
 kit.human.confirm() for a subject holding plan["items"] and
 plan["version"] calls it, as `confirm` calls its own write.
+
+A client hub's facts, confirmed once there (`facts sync-hub [--hub DIR]`,
+apply_hub_copy, doctor_hub, hub_conflicts): when several skill packs serve
+one client, the facts they share (the markets, the currency, break-even
+ROAS, …) are confirmed at the client's hub (scaffold/new_hub.py), whose
+store `<hub>/hub/hub.db` is the kit's own client_facts with its gate and
+history. sync-hub reads it as one in-memory snapshot (hub_snapshot: the
+backup API over a `mode=ro` connection, never `immutable=1` on a live WAL
+file, never a write), takes the confirmed rows of the keys this skill
+pack's fact_keys.tsv declares (and the market declarations of its own
+markets) and, for each whose last hub history row is a `confirm` a person
+signed: `same` (confirmed alike here), `conflict` (confirmed otherwise
+here: never overwritten; `pending` makes it one ask), `copied` (absent or
+pending here: written confirmed, source `hub:<hub>@<history id>#<digest16>`,
+changed_by `<user>@hub`, history action `hub_copy`) or `kept` (that hub
+version was applied before: a person's later step here stands). Each but
+`kept` appends a row to the append-only `hub_copies`. A hub row that did not
+come from the gate is refused; a key defined otherwise at the hub
+(kit.registry.definition_diffs), a market this skill pack does not keep and
+a value it refuses are skipped. The hub is never written. doctor's `hub`
+check (with `<P>_HUB_DIR` set, as the hub's bin/hub sets it) names every
+copy that lags the hub's current version (`fact_hub_copy_stale`) and every
+declared, confirmed hub fact never copied (`fact_hub_copy_missing`). A
+skill pack without markets serves one hub market per workspace
+(`<P>_HUB_MARKET`, exported by the hub's bin/hub): that market's facts land
+in its "_" (declarations never: it has no market door); hub_copies keeps
+the pack's "_", and the hub row is named by hub_history_id and a digest
+over the hub's own market. Nothing refreshes on its own: a person decides.
 
 Deviations from the reference and from the SPEC, each deliberate:
   * No klass, no value_type: the kit's client_facts has neither (a key's
@@ -83,7 +112,7 @@ Deviations from the reference and from the SPEC, each deliberate:
     its one document.
   * Refusals exit 2 (kit.contract), not 1. The wizard's prompts go to
     stderr and are read from stdin without builtins.input. The wizard's
-    questions are the harness's `init_questions` ([{"key", "prompt"?}],
+    questions are the skill pack's `init_questions` ([{"key", "prompt"?}],
     checked against the registry when main() starts), not keys a
     source project hard-coded.
   * An answer that `init` finds on disk is compared in canonical form, so
@@ -94,12 +123,15 @@ Deviations from the reference and from the SPEC, each deliberate:
   * A SQL dump is loaded with ATTACH disabled (setlimit), so a hostile
     dump cannot write files through ATTACH DATABASE.
 
-Test: kit/tests/test_facts.py.
+Test: kit/tests/test_facts.py; the hub copy: kit/tests/test_hub_facts.py.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import os
 import shlex
 import sqlite3
 import sys
@@ -108,16 +140,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from kit import contract, dates, db, human, market, schema_base
-from kit.config import config
-from kit.contract import HarnessError
+from kit import contract, dates, db, human, market, registry, schema_base
+from kit.config import ConfigError, config
+from kit.config import load as load_config
+from kit.contract import SkillPackError
 from kit.market import MARKET_KEY
 from kit.messages import Msg, coded, msg
 from kit.registry import FACT_PREFIX, KEY_RE, FactKeys, Thresholds
 
 FACTS, HISTORY = "client_facts", "client_facts_history"
 READS = frozenset({"list", "get", "history"})
-ACTIONS = ("init", "set", "confirm", "unconfirm", "rollback", "restore")
+ACTIONS = ("init", "set", "confirm", "unconfirm", "rollback", "restore",
+           "hub_copy")
+COPIES = "hub_copies"
+# A client hub's layout (scaffold/new_hub.py): <hub>/hub/hub.db is the hub's
+# own facts store, <hub>/hub/defs/ its definitions (a skill-pack.toml whose
+# [ssot].fact_keys names its key file). The hub's name is its folder's: the
+# client id.
+HUB_DATA, HUB_DEFS, HUB_DB = "hub", "defs", "hub.db"
+GATE_CHANNELS = ("tty", "relay")    # what kit.human.confirm returns
 # (current table, its history, required in a backup). A backup taken
 # before the decisions store held rows simply has none to replay.
 RESTORED = ((FACTS, HISTORY, True), ("decisions", "decisions_history", False))
@@ -211,8 +252,8 @@ def _done(run: _Run, note: Msg, doc: dict, nxt: list[str] = ()) -> dict | None:
     return None
 
 
-def _not_found(key: str, m: str) -> HarnessError:
-    return HarnessError(msg("fact_not_found",
+def _not_found(key: str, m: str) -> SkillPackError:
+    return SkillPackError(msg("fact_not_found",
                             f"no fact {key!r} for market {m!r}",
                             key=key, market=m))
 
@@ -230,7 +271,7 @@ def _market(run: _Run, explicit: str | None, *, door: bool) -> str:
         if not ms:
             return market.resolve(con, None, cmd=run.cmd)  # market_none_declared
         if len(ms) > 1:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_market_ambiguous",
                 f"{len(ms)} markets are declared or waiting for "
                 f"confirmation ({', '.join(ms)}) — pass --market to say "
@@ -244,7 +285,7 @@ def _market(run: _Run, explicit: str | None, *, door: bool) -> str:
 
 def _key_shape(key: str) -> None:
     if not KEY_RE.match(key):
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "fact_key_malformed",
             f"key {key!r} must be snake_case ^[a-z][a-z0-9_]*$ and carry no "
             f"units (e.g. unit_cost, not cost_4_2)", key=key))
@@ -298,7 +339,7 @@ def _apply_set(con: sqlite3.Connection, m: str, key: str, stored: str,
         # the confirmed number would vanish from the table every rule reads.
         # Lowering trust is its own recorded step; a new value is a person's.
         cli = _cli()
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "fact_set_confirmed", f"{key} [{m}] = {existing['value']} was "
             f"confirmed by a person; {action} does not replace it with "
             f"{stored}. Nothing was written", key=key, market=m,
@@ -430,7 +471,7 @@ def cmd_set(run: _Run) -> dict | None:
     reason = human.why(a.reason)
     source = (a.source or "").strip()
     if not source:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "fact_source_required",
             "--source is required: where the value came from (e.g. "
             "owner_interview_<YYYY-MM-DD>), not who typed it; history's "
@@ -492,7 +533,7 @@ def cmd_confirm(run: _Run) -> dict | None:
     with db.keep_human_rows(run.spec, con):
         if (_last_id(con, m, a.key) != last
                 or _state(_fetch(con, m, a.key)) != _state(existing)):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_changed_meanwhile",
                 f"{a.key} [{m}] changed while the human was being asked; "
                 f"the confirmation no longer matches it. Nothing was "
@@ -541,7 +582,7 @@ def plan_file(con: sqlite3.Connection,
     for m, key, raw in values:
         m = market.validate(m)
         if key == MARKET_KEY:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_file_declaration",
                 f"a client file cannot declare a market ({MARKET_KEY} "
                 f"[{m}]); `facts init` does", market=m))
@@ -551,7 +592,7 @@ def plan_file(con: sqlite3.Connection,
         value = keys.validate(key, raw, thresholds=thresholds)
         market.require_declared(con, m)
         if key in items.get(m, {}):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_file_twice", f"{key} [{m}] is stated twice",
                 key=key, market=m))
         existing = _fetch(con, m, key)
@@ -570,7 +611,7 @@ def plan_file(con: sqlite3.Connection,
 def apply_file(spec: db.SchemaSpec, con: sqlite3.Connection, plan: dict, *,
                channel: str, reason: str, source: str,
                client: str | None = None) -> list[dict]:
-    """Write plan_file()'s values confirmed, after the harness's gate
+    """Write plan_file()'s values confirmed, after the skill pack's gate
     passed for a subject holding plan["items"] and plan["version"]
     (`channel` is what kit.human.confirm returned). A value already
     confirmed as it is writes nothing. -> the rows written. Refused,
@@ -587,7 +628,7 @@ def apply_file(spec: db.SchemaSpec, con: sqlite3.Connection, plan: dict, *,
             m, key = r["market"], r["key"]
             if (_last_id(con, m, key) != r["last"]
                     or _state(_fetch(con, m, key)) != r["state"]):
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "fact_changed_meanwhile",
                     f"{key} [{m}] changed while the human was being asked; "
                     f"the confirmation no longer matches it. Nothing was "
@@ -656,20 +697,20 @@ def cmd_rollback(run: _Run) -> dict | None:
         rows = _dicts(con.execute(f"SELECT {', '.join(HIST_COLS)} FROM "
                                   f"{HISTORY} WHERE id=?", (a.to,)))
         if not rows:
-            raise HarnessError(
+            raise SkillPackError(
                 msg("fact_history_not_found", f"no history row #{a.to}",
                     id=a.to),
                 [shlex.join([_cli(), "facts", "history", a.key,
                              "--market", m])])
         h = rows[0]
         if (h["key"], h["market"]) != (a.key, m):
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_history_other",
                 f"history row #{a.to} is {h['key']} [{h['market']}], not "
                 f"{a.key} [{m}]. Nothing was written.", id=a.to, key=a.key,
                 market=m, row_key=h["key"], row_market=h["market"]))
         if h["new_value"] is None:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "fact_history_no_value", f"history row #{a.to} wrote no "
                 f"value. Nothing was written.", id=a.to))
         stored = _stored(run, a.key, h["new_value"])
@@ -704,11 +745,11 @@ def _ask(prompt: str) -> str:
     try:
         line = sys.stdin.readline() if sys.stdin is not None else ""
     except KeyboardInterrupt:
-        raise HarnessError(msg("fact_init_interrupted",
+        raise SkillPackError(msg("fact_init_interrupted",
                                "init aborted at the keyboard. Nothing was "
                                "written.")) from None
     if not line:
-        raise HarnessError(msg("fact_init_eof",
+        raise SkillPackError(msg("fact_init_eof",
                                "init aborted: no answer for the last question "
                                "(end of input). Nothing was written."))
     answer = line.rstrip("\r\n")
@@ -730,22 +771,22 @@ def _ask_market(con: sqlite3.Connection) -> str:
     for _ in range(MAX_ATTEMPTS):
         raw = _ask(f"market (one of {', '.join(markets)}): ")
         if not raw.strip():
-            raise HarnessError(msg("fact_init_no_market",
+            raise SkillPackError(msg("fact_init_no_market",
                                    "init aborted: no market given. Nothing "
                                    "was written."))
         try:
             return market.validate(raw)
-        except HarnessError as e:
+        except SkillPackError as e:
             _say(f"  {e} — try again.")
-    raise HarnessError(msg(
+    raise SkillPackError(msg(
         "fact_init_bad_market", f"init aborted: no valid market after "
         f"{MAX_ATTEMPTS} attempts. Nothing was written.",
         attempts=MAX_ATTEMPTS, markets=list(markets)))
 
 
 def _would_overwrite(key: str, m: str, current: str, typed: str
-                     ) -> HarnessError:
-    return HarnessError(msg(
+                     ) -> SkillPackError:
+    return SkillPackError(msg(
         "fact_init_would_overwrite",
         f"{key} is already {current!r} for market {m}; refusing to overwrite "
         f"it with {typed!r}. Nothing was written. To change it deliberately, "
@@ -770,7 +811,7 @@ def _ask_value(run: _Run, m: str, key: str, prompt: str,
             return None
         try:
             stored = run.keys.validate(key, raw, thresholds=run.thresholds)
-        except HarnessError as e:
+        except SkillPackError as e:
             _say(f"  {e} — try again.")
             continue
         if current is None:
@@ -778,7 +819,7 @@ def _ask_value(run: _Run, m: str, key: str, prompt: str,
         if stored == shown:
             return None
         raise _would_overwrite(key, m, shown, stored)
-    raise HarnessError(msg(
+    raise SkillPackError(msg(
         "fact_init_bad_answer", f"init aborted: no valid answer for {key} "
         f"after {MAX_ATTEMPTS} attempts. Nothing was written.", key=key,
         attempts=MAX_ATTEMPTS))
@@ -787,7 +828,7 @@ def _ask_value(run: _Run, m: str, key: str, prompt: str,
 def cmd_init(run: _Run) -> dict | None:
     """The one door through which a market enters the DB: its declaration
     (`market_declared`, pending unless a human retypes the market at a
-    terminal), then the harness's init questions, as pending facts.
+    terminal), then the skill pack's init questions, as pending facts.
     Collect-all-then-write: every answer is read and validated before the
     first row is written, in one transaction."""
     cfg, con = config(), run.con
@@ -882,7 +923,7 @@ def _load_backup(path: str) -> sqlite3.Connection:
     kit's columns; the decisions pair is optional."""
     p = Path(path)
     if not p.is_file():
-        raise HarnessError(msg("fact_backup_missing", f"no such file: {path}",
+        raise SkillPackError(msg("fact_backup_missing", f"no such file: {path}",
                                path=str(path)))
     con = None
     try:
@@ -903,7 +944,7 @@ def _load_backup(path: str) -> sqlite3.Connection:
     except (sqlite3.Error, UnicodeDecodeError, OSError) as e:
         if con is not None:
             con.close()
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "fact_backup_unusable", f"{path} is not a usable backup (a SQLite "
             f"file or a SQL dump holding the human tables): {e}",
             path=str(path), detail=str(e))) from None
@@ -998,7 +1039,7 @@ def cmd_restore(run: _Run) -> dict | None:
         by, now = human.changed_by("tty"), human.now()
         with db.keep_human_rows(run.spec, con):
             if _plans(run, src) != plans:
-                raise HarnessError(msg(
+                raise SkillPackError(msg(
                     "fact_restore_moved", f"the database changed while the "
                     f"restore from {a.src} was being confirmed. Nothing was "
                     f"written.", path=a.src))
@@ -1040,6 +1081,458 @@ def cmd_restore(run: _Run) -> dict | None:
         {"restored": tables})
 
 
+# ---- a client hub's confirmed facts, copied --------------------------------
+
+def hub_db_path(hub: Path | str) -> Path:
+    return Path(hub) / HUB_DATA / HUB_DB
+
+
+def hub_keys_path(hub: Path | str) -> Path:
+    """The hub's fact key file, as its own skill-pack.toml declares it
+    (read, never bound). Refused (fact_hub_unreadable) without one."""
+    defs = Path(hub) / HUB_DATA / HUB_DEFS
+    try:
+        p = load_config(defs).ssot_path("fact_keys")
+    except ConfigError as e:
+        p, detail = None, str(e)
+    else:
+        detail = "it declares no [ssot].fact_keys"
+    if p is None:
+        raise SkillPackError(msg(
+            "fact_hub_defs_unreadable", f"the hub's definitions {defs} "
+            f"cannot be read: {detail}", path=str(defs), detail=detail))
+    return p
+
+
+def hub_dir(explicit: str | None = None) -> Path | None:
+    """The client hub: `explicit` (--hub, resolved), else `<P>_HUB_DIR`
+    (absolute; the hub's bin/hub exports it), else None."""
+    if explicit is not None and explicit.strip():
+        return Path(explicit).expanduser().resolve()
+    var = config().env("HUB_DIR")
+    raw = os.environ.get(var, "").strip()
+    if not raw:
+        return None
+    p = Path(raw).expanduser()
+    if not p.is_absolute():
+        raise SkillPackError(msg(
+            "fact_hub_not_absolute", f"{var}={raw} is a relative path; the "
+            f"hub is named by an absolute one, never the current directory",
+            var=var, value=raw))
+    return p
+
+
+def hub_snapshot(hub: Path | str) -> sqlite3.Connection:
+    """The hub's facts store as one in-memory copy, read through SQLite's
+    backup API from a `mode=ro` connection. The hub is a live WAL
+    database: `immutable=1` would read it as if no writer existed (a
+    half-applied WAL, a stale page), so a plain read-only connection is
+    used and SQLite may touch its -shm; the database file itself is never
+    written. The copy is one consistent snapshot (a current row and its
+    history from the same moment), the hub's read lock is held only for
+    the copy, and every later step reads the copy, so no code path here
+    can write the hub. Refused (coded): no hub database, or one without
+    the kit's client_facts tables."""
+    path = hub_db_path(hub)
+    if not path.is_file():
+        raise SkillPackError(msg(
+            "fact_hub_missing", f"no hub facts store at {path}: the hub has "
+            f"confirmed nothing yet, or {hub} is not a client hub",
+            hub=str(hub), path=str(path)),
+            [f"{Path(hub) / 'bin' / 'hub'} hub facts list"])
+    mem = sqlite3.connect(":memory:")
+    try:
+        src = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
+        try:
+            src.backup(mem)
+        finally:
+            src.close()
+        for t in (FACTS, HISTORY):
+            mem.execute(f"SELECT {', '.join(_cols(t))} FROM {t} LIMIT 0")
+    except sqlite3.Error as e:
+        mem.close()
+        raise SkillPackError(msg(
+            "fact_hub_unreadable", f"the hub facts store {path} cannot be "
+            f"read as the kit's client facts: {e}", path=str(path),
+            detail=str(e))) from None
+    return mem
+
+
+def _signed(by: str | None) -> bool:
+    """A history row a person signed through the gate: `<user>@tty|relay`
+    (kit.human.changed_by), or a client's own confirmation (`client:…`)."""
+    by = str(by or "")
+    return by.startswith(human.CLIENT) or (
+        "@" in by and by.rsplit("@", 1)[1] in GATE_CHANNELS)
+
+
+def hub_rows(snap: sqlite3.Connection, keys: set[str] | frozenset[str]
+             ) -> list[dict]:
+    """The hub's confirmed facts of `keys`, declarations first: {market,
+    key, value, history_id (the fact's last history id: its version),
+    action, changed_by, gated}. `gated`: that last history row is a
+    `confirm` of this very value that a person signed (tty, relay or a
+    client's own); anything else (a hand edit, a restore, an ungated
+    write) is not the hub's confirmation."""
+    out = []
+    for m, key, value in snap.execute(
+            f"SELECT market, key, value FROM {FACTS} WHERE is_assumption=0 "
+            f"ORDER BY key != ?, market, key", (MARKET_KEY,)).fetchall():
+        if key not in keys:
+            continue
+        h = snap.execute(
+            f"SELECT id, action, new_value, is_assumption, changed_by FROM "
+            f"{HISTORY} WHERE market=? AND key=? ORDER BY id DESC LIMIT 1",
+            (m, key)).fetchone()
+        gated = (h is not None and h[1] == "confirm" and h[2] == value
+                 and h[3] == 0 and _signed(h[4]))
+        out.append({"market": m, "key": key, "value": value,
+                    "history_id": h[0] if h else 0,
+                    "action": h[1] if h else None,
+                    "changed_by": h[4] if h else None, "gated": gated})
+    return out
+
+
+def hub_digest(hub: str, m: str, key: str, value: str, history_id: int
+               ) -> str:
+    """sha256 of the hub fact a copy came from (hub, market, key, value,
+    history id), so a copy names the exact confirmation it rests on."""
+    doc = {"hub": hub, "market": m, "key": key, "value": value,
+           "history_id": history_id}
+    return hashlib.sha256(json.dumps(
+        doc, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def hub_market() -> str | None:
+    """The one hub market a skill pack without a market partition serves:
+    `<P>_HUB_MARKET` (the hub's bin/hub exports it for that pack folder,
+    `new_hub.py add-pack --market`), None when unset. A skill pack with
+    markets copies each hub market into its own and is refused one
+    (fact_hub_market_partitioned)."""
+    var = config().env("HUB_MARKET")
+    raw = os.environ.get(var, "").strip()
+    if not raw:
+        return None
+    if config().markets:
+        raise SkillPackError(msg(
+            "fact_hub_market_partitioned", f"{var}={raw}: this skill pack "
+            f"keeps its own markets and copies each hub market into its "
+            f"own; unset {var}", var=var, value=raw))
+    return raw
+
+
+def _to_pack(m: str, key: str, served: str | None) -> str | None:
+    """The market of this skill pack a hub row of market `m` lands in, None
+    when it is not this skill pack's: with a served hub market (a skill
+    pack without partition), that market's rows land in "_" and its
+    declaration does not (no market door there); else the same market,
+    as spelled, when this skill pack keeps it."""
+    if served is not None:
+        return market.PSEUDO if m == served and key != MARKET_KEY else None
+    try:
+        return m if market.validate(m) == m else None
+    except SkillPackError:
+        return None
+
+
+def _unserved(m: str, key: str, served: str | None) -> bool:
+    """A hub row this skill pack should hold and cannot: it keeps no market,
+    serves none, and the hub's row is of a real market (not a
+    declaration)."""
+    return (not config().markets and served is None and m != market.PSEUDO
+            and key != MARKET_KEY)
+
+
+def _applied(con: sqlite3.Connection, m: str, key: str, hub: str,
+             history_id: int) -> bool:
+    """Has this hub version been copied or found the same here before?"""
+    return con.execute(
+        f"SELECT 1 FROM {COPIES} WHERE market=? AND key=? AND hub=? AND "
+        f"hub_history_id=? AND outcome IN ('copied', 'same') LIMIT 1",
+        (m, key, hub, history_id)).fetchone() is not None
+
+
+def apply_hub_copy(spec: db.SchemaSpec, con: sqlite3.Connection, *,
+                   keys: FactKeys, hub: str, m: str, key: str, value: str,
+                   history_id: int, digest: str) -> str:
+    """One confirmed, gated hub fact into this skill pack -> its outcome:
+
+      * `same`      the skill pack's confirmed value is the hub's;
+      * `conflict`  the skill pack has its own confirmed, different value:
+                    never overwritten (`pending` makes it one ask);
+      * `copied`    absent or pending here: written confirmed (source
+                    `hub:<hub>@<history_id>#<digest16>`, changed_by
+                    `<user>@hub`, history action `hub_copy`);
+      * `kept`      absent or pending here, but this hub version was
+                    copied (or the same) before: a person's later step here
+                    stands, the same version is never copied twice.
+
+    Each outcome but `kept` appends a hub_copies row (one per hub version
+    and pack version). No gate: the human act is the hub's own gated
+    confirm, which the caller has checked (hub_rows' `gated`) and which
+    `history_id` and `digest` name. The value is checked as `set` checks
+    it, and every key but the declaration needs the market's door."""
+    stored = m if key == MARKET_KEY else _stored_hub(keys, key, value)
+    by = human.changed_by("hub")
+    with db.keep_human_rows(spec, con):
+        if key == MARKET_KEY:
+            market.validate(m)
+        else:
+            market.require_declared(con, m)
+        row = _fetch(con, m, key)
+        if row is not None and row["is_assumption"] == 0:
+            outcome = "same" if row["value"] == stored else "conflict"
+        elif _applied(con, m, key, hub, history_id):
+            outcome = "kept"
+        else:
+            outcome, at = "copied", human.now()
+            src = f"hub:{hub}@{history_id}#{digest[:16]}"
+            if row is None:
+                con.execute(f"INSERT INTO {FACTS} (market, key, value, "
+                            f"is_assumption, source, updated_at, changed_by) "
+                            f"VALUES (?,?,?,0,?,?,?)",
+                            (m, key, stored, src, at, by))
+            else:
+                con.execute(f"UPDATE {FACTS} SET value=?, is_assumption=0, "
+                            f"source=?, updated_at=?, changed_by=? "
+                            f"WHERE market=? AND key=?",
+                            (stored, src, at, by, m, key))
+            _log(con, m, key, "hub_copy", row and row["value"], stored, 0,
+                 src, f"copied from hub {hub}, its confirm #{history_id}",
+                 by, at)
+        if outcome != "kept":
+            con.execute(
+                f"INSERT OR IGNORE INTO {COPIES} (market, key, value, hub, "
+                f"hub_history_id, hub_digest, outcome, pack_history_id, "
+                f"copied_at, copied_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (m, key, value, hub, history_id, digest, outcome,
+                 _last_id(con, m, key), human.now(), by))
+    return outcome
+
+
+def _stored_hub(keys: FactKeys, key: str, value: str) -> str:
+    stored = keys.validate(key, value)
+    if stored != value:
+        raise SkillPackError(msg(
+            "fact_hub_value_form", f"the hub's {key} = {value!r} reads as "
+            f"{stored!r} here: the two definitions differ", key=key,
+            value=value, stored=stored))
+    return stored
+
+
+def _hub_scope(keys: FactKeys, hub: Path) -> tuple[set[str], dict]:
+    """(the keys this skill pack declares, {key: definition differences
+    with the hub's})."""
+    return (set(keys.keys()) | {MARKET_KEY},
+            registry.definition_diffs(keys.path, hub_keys_path(hub)))
+
+
+def cmd_sync_hub(run: _Run) -> dict | None:
+    """Copy the hub's confirmed facts of the keys this skill pack declares
+    (apply_hub_copy, one outcome each), declarations first. Reported and
+    not written: a hub fact whose last history row is no gated confirm
+    (`refused`), and one of a market this skill pack does not keep, a key
+    the two define differently, or a value this skill pack refuses
+    (`skipped`). Never writes the hub."""
+    hub = hub_dir(run.args.hub)
+    if hub is None:
+        raise SkillPackError(msg(
+            "fact_hub_none", f"no hub named: pass --hub DIR or set "
+            f"{config().env('HUB_DIR')} (the hub's bin/hub sets it)",
+            var=config().env("HUB_DIR")))
+    name = hub.name
+    served = hub_market()
+    snap = hub_snapshot(hub)
+    try:
+        keys, diffs = _hub_scope(run.keys, hub)
+        rows = hub_rows(snap, keys)
+    finally:
+        snap.close()
+    results: list[dict] = []
+    for r in rows:
+        m, key, value, hid = r["market"], r["key"], r["value"], r["history_id"]
+        pm = _to_pack(m, key, served)
+        item = {"market": m, "key": key, "value": value,
+                "hub_history_id": hid}
+        if pm is not None and pm != m:
+            item["pack_market"] = pm
+        note = None
+        if pm is None and _unserved(m, key, served):
+            item["outcome"] = "skipped"
+            note = msg("fact_hub_skipped", f"{key} [{m}]: not copied (this "
+                       f"skill pack keeps no market and serves no hub market: "
+                       f"set {config().env('HUB_MARKET')}, as the hub's "
+                       f"bin/hub does for a folder added with --market)",
+                       key=key, market=m, reason="no_hub_market")
+        elif pm is None:
+            item["outcome"] = "skipped"
+            note = msg("fact_hub_skipped", f"{key} [{m}]: not copied "
+                       f"(market {m} is not one this skill pack serves)",
+                       key=key, market=m, reason="market")
+        elif key in diffs:
+            item["outcome"] = "skipped"
+            note = msg("fact_hub_skipped", f"{key} [{m}]: not copied (its "
+                       f"definition here differs from the hub's: "
+                       f"{'; '.join(diffs[key])})", key=key, market=m,
+                       reason="definition")
+        elif not r["gated"]:
+            item["outcome"] = "refused"
+            note = msg("fact_hub_ungated", f"{key} [{m}]: the hub's value "
+                       f"{value} did not come from its gate (last history "
+                       f"#{hid}: {r['action']} by {r['changed_by']}); not "
+                       f"copied", key=key, market=m, history_id=hid,
+                       action=r["action"], by=r["changed_by"])
+        else:
+            try:
+                item["outcome"] = apply_hub_copy(
+                    run.spec, run.con, keys=run.keys, hub=name, m=pm,
+                    key=key, value=value, history_id=hid,
+                    digest=hub_digest(name, m, key, value, hid))
+            except SkillPackError as e:
+                item["outcome"] = "skipped"
+                note = msg("fact_hub_skipped", f"{key} [{m}]: not copied "
+                           f"({e.message})", key=key, market=m,
+                           reason=getattr(e.message, "code", None) or "")
+            if item["outcome"] == "conflict":
+                mine = _fetch(run.con, pm, key)["value"]
+                item["pack_value"] = mine
+                note = msg("fact_hub_conflict", f"{key} [{m}]: the hub "
+                           f"confirmed {value}, this skill pack confirmed "
+                           f"{mine}; kept, a person chooses (`{_cli()} "
+                           f"pending`)", key=key, market=m, value=value,
+                           pack_value=mine)
+        if note is not None:
+            item.update(coded("message", note))
+        results.append(item)
+    counts = Counter(i["outcome"] for i in results)
+    n = {k: counts.get(k, 0) for k in
+         ("copied", "same", "conflict", "kept", "refused", "skipped")}
+    summary = msg("fact_hub_synced",
+                  f"hub {name}: {n['copied']} copied, {n['same']} the same, "
+                  f"{n['conflict']} conflict(s), {n['kept']} kept, "
+                  f"{n['refused']} refused, {n['skipped']} skipped",
+                  hub=name, copied=n["copied"], same=n["same"],
+                  conflict=n["conflict"], kept=n["kept"],
+                  refused=n["refused"], skipped=n["skipped"])
+    if not run.args.json:
+        for i in results:
+            print(f"  {i['outcome']:<8} {i['key']} [{i['market']}] = "
+                  f"{i['value']} (hub #{i['hub_history_id']})"
+                  + (f": {i['message']}" if "message" in i else ""))
+    nxt = [f"{_cli()} pending"] if n["conflict"] else []
+    return _done(run, summary, {"hub": name, "path": str(hub),
+                                "results": results, "counts": n}, nxt)
+
+
+def hub_copied(con: sqlite3.Connection | None, m: str, key: str, hub: str
+               ) -> int | None:
+    """The newest hub version this skill pack has seen for the fact (any
+    outcome), None when none (or no hub_copies table yet)."""
+    if not _has(con, COPIES):
+        return None
+    return con.execute(f"SELECT MAX(hub_history_id) FROM {COPIES} WHERE "
+                       f"market=? AND key=? AND hub=?",
+                       (m, key, hub)).fetchone()[0]
+
+
+def hub_conflicts(con: sqlite3.Connection | None, m: str | None = None
+                  ) -> list[dict]:
+    """The open conflicts with a hub: per (market, key, hub), its newest
+    hub_copies row is a `conflict` and this skill pack still holds its own
+    confirmed, different value. {market, key, value (this skill pack's),
+    hub, hub_value, hub_history_id, source, changed_by, updated_at}."""
+    if not _has(con, COPIES) or not _has(con, FACTS):
+        return []
+    sql = (f"SELECT c.market, c.key, c.hub, c.value, c.hub_history_id FROM "
+           f"{COPIES} c WHERE c.copy_id = (SELECT MAX(copy_id) FROM {COPIES} "
+           f"d WHERE d.market=c.market AND d.key=c.key AND d.hub=c.hub) AND "
+           f"c.outcome='conflict'")
+    params: tuple = ()
+    if m is not None:
+        sql += " AND c.market=?"
+        params = (m,)
+    out = []
+    for cm, key, hub, hv, hid in con.execute(
+            sql + " ORDER BY c.market, c.key, c.hub", params).fetchall():
+        row = _fetch(con, cm, key)
+        if row is None or row["is_assumption"] or row["value"] == hv:
+            continue
+        out.append({"market": cm, "key": key, "value": row["value"],
+                    "hub": hub, "hub_value": hv, "hub_history_id": hid,
+                    "source": row["source"], "changed_by": row["changed_by"],
+                    "updated_at": row["updated_at"]})
+    return out
+
+
+def doctor_hub(ctx: Any) -> None:
+    """kit.doctor's `hub` check: with a hub named (`<P>_HUB_DIR`), each
+    gated hub fact of a key this skill pack declares, of a market it
+    serves (_to_pack), is checked against hub_copies: never seen is
+    `fact_hub_copy_missing` (the key and market), seen at an older version
+    `fact_hub_copy_stale` (the key, both versions); the fix is sync-hub.
+    A skill pack without markets that serves no hub market has every hub
+    row of a market missing. A hub fact that did not come from the hub's
+    gate and a key defined otherwise at the hub warn too; ok only when
+    every checked fact is copied at its current version. No hub named:
+    nothing."""
+    hub = hub_dir()
+    if hub is None:
+        return
+    try:
+        served = hub_market()
+        snap = hub_snapshot(hub)
+        try:
+            scope, diffs = _hub_scope(FactKeys(), hub)
+            rows = hub_rows(snap, scope)
+        finally:
+            snap.close()
+    except SkillPackError as e:
+        ctx.warn("hub", e.message, e.next)
+        return
+    con, name, sync = ctx.con(), hub.name, f"{_cli()} facts sync-hub"
+    stale = checked = 0
+    for key, diff in sorted(diffs.items()):
+        ctx.warn("hub", msg(
+            "fact_hub_definition_differs", f"{key} is defined differently "
+            f"here and at hub {name}: {'; '.join(diff)}; it is not copied "
+            f"until the two agree", key=key, hub=name, diff=diff))
+    for r in rows:
+        m, key, hid = r["market"], r["key"], r["history_id"]
+        pm = _to_pack(m, key, served)
+        if key in diffs or (pm is None and not _unserved(m, key, served)):
+            continue
+        checked += 1
+        if not r["gated"]:
+            ctx.warn("hub", msg(
+                "fact_hub_ungated", f"{key} [{m}]: the hub's value "
+                f"{r['value']} did not come from its gate (last history "
+                f"#{hid}: {r['action']} by {r['changed_by']}); not copied",
+                key=key, market=m, history_id=hid, action=r["action"],
+                by=r["changed_by"]))
+            continue
+        seen = None if pm is None else hub_copied(con, pm, key, name)
+        if seen is None:
+            stale += 1
+            fix = [sync] if pm is not None else [
+                f"export {config().env('HUB_MARKET')}=<the hub market this "
+                f"folder serves>  # new_hub.py add-pack --market", sync]
+            ctx.warn("hub", msg(
+                "fact_hub_copy_missing", f"{key} [{m}]: confirmed at the hub, "
+                f"never copied here", key=key, market=m), fix)
+        elif seen < hid:
+            stale += 1
+            ctx.warn("hub", msg(
+                "fact_hub_copy_stale", f"{key} [{m}]: hub {name} is at "
+                f"#{hid}, this skill pack copied #{seen}", key=key,
+                market=m, hub=name, hub_version=hid, copied_version=seen),
+                [sync])
+    if not stale and not diffs:
+        ctx.ok("hub", msg("fact_hub_current", f"hub {name}: every confirmed "
+                          f"fact this skill pack declares is copied at its "
+                          f"current version ({checked} checked)",
+                          hub=name, checked=checked))
+
+
 # ---- the verb --------------------------------------------------------------
 
 class _Parser(argparse.ArgumentParser):
@@ -1047,7 +1540,7 @@ class _Parser(argparse.ArgumentParser):
     so --json keeps its one document."""
 
     def error(self, message: str):
-        raise HarnessError(msg("fact_usage", f"{self.prog}: {message}",
+        raise SkillPackError(msg("fact_usage", f"{self.prog}: {message}",
                                detail=message), [f"{self.prog} --help"])
 
 
@@ -1112,15 +1605,21 @@ def _parser(cli: str) -> argparse.ArgumentParser:
                     help="a SQLite file (a copy or a kit backup) or a SQL "
                          "dump")
     sp.add_argument("--reason", help="why restore (required)")
+    sp = add("sync-hub", cmd_sync_hub, "copy the client hub's confirmed "
+             "facts of the keys this skill pack declares (never over a "
+             "value confirmed here; never writes the hub)", key=None,
+             with_market=False)
+    sp.add_argument("--hub", help="the client hub's folder (default: "
+                    "$<PREFIX>_HUB_DIR, which the hub's bin/hub sets)")
     return p
 
 
 def _questions(init_questions: list[dict] | None, keys: FactKeys,
                thresholds: Thresholds | None) -> list[tuple[str, str]]:
-    """[(key, prompt)] from the harness's init questions, checked once:
+    """[(key, prompt)] from the skill pack's init questions, checked once:
     a known dict shape, a settable key, no key twice. The prompt defaults
-    to the key's label in the harness's first language. A bad list is a
-    ValueError: a bug in the harness, not a runtime condition."""
+    to the key's label in the skill pack's first language. A bad list is a
+    ValueError: a bug in the skill pack, not a runtime condition."""
     out: list[tuple[str, str]] = []
     settable = keys.settable(thresholds)
     for q in init_questions or []:
@@ -1182,7 +1681,7 @@ def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
     return contract.run_main(run, argv, cmd=cmd)
 
 
-# ---- readers for harness code ----------------------------------------------
+# ---- readers for skill pack code ----------------------------------------------
 
 def effective(con: sqlite3.Connection | None, market: str, key: str
               ) -> tuple[str, bool] | None:

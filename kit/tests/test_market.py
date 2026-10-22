@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The market door (kit/market.py) holds each of its guards.
 
-  1. validate(): the closed set of [harness].markets, matched
+  1. validate(): the closed set of [skill_pack].markets, matched
      case-insensitively and returned in its declared spelling; anything
      else is market_not_a_market with the valid set.
   2. declared(): only CONFIRMED market_declared facts count (a pending one
@@ -12,7 +12,7 @@
      market_none_declared, several = market_ambiguous, each with `next`
      (the same command rerun with each --market when `cmd` is given).
   4. require_declared(): a write to an undeclared market is refused.
-  5. A harness with markets = [] keeps one pseudo-market "_": every
+  5. A skill pack with markets = [] keeps one pseudo-market "_": every
      function returns or accepts it, and refuses any other.
   6. market.py's msg() calls are closed over its fragment; failures go
      through kit.contract as one coded document.
@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import config, contract, market, messages  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 FACTS = ("CREATE TABLE client_facts (market TEXT NOT NULL, key TEXT NOT NULL, "
@@ -47,7 +47,7 @@ def db(*rows: tuple[str, str, int]) -> sqlite3.Connection:
 
 
 def refusal(fn) -> dict | None:
-    e = raises(fn, HarnessError)
+    e = raises(fn, SkillPackError)
     if e is None:
         return None
     return {**messages.code(e.message), "next": e.next}
@@ -115,13 +115,13 @@ def test_resolve() -> None:
                               "shop compute margin --json --market US"], r)
 
     check("require_declared: a declared market passes",
-          raises(lambda: market.require_declared(one, "US"), HarnessError)
+          raises(lambda: market.require_declared(one, "US"), SkillPackError)
           is None)
     r = refusal(lambda: market.require_declared(one, "CA"))
     check("require_declared: a pending declaration is not onboarded",
           r and r["code"] == "market_not_onboarded", r)
     doc = contract.failure_doc(raises(lambda: market.resolve(none, None),
-                                      HarnessError), ["shop", "x"])
+                                      SkillPackError), ["shop", "x"])
     check("a market refusal renders as one coded failure document",
           doc == {"error": doc["error"], "next": ["shop facts init"],
                   "code": "market_none_declared", "params": {}}, doc)
@@ -130,8 +130,8 @@ def test_resolve() -> None:
 def test_no_partition() -> None:
     print("[5] markets = []: the one pseudo-market")
     d = Path(tmp_dir("flat-"))
-    (d / "harness.toml").write_text(
-        '[harness]\nname = "flat"\ncli = "flat"\nenv_prefix = "FLAT"\n'
+    (d / "skill-pack.toml").write_text(
+        '[skill_pack]\nname = "flat"\ncli = "flat"\nenv_prefix = "FLAT"\n'
         'markets = []\n', encoding="utf-8")
     config.use(d)
     try:
@@ -143,7 +143,7 @@ def test_no_partition() -> None:
               == "_" and market.validate("_") == "_")
         check("require_declared('_') passes",
               raises(lambda: market.require_declared(None, "_"),
-                     HarnessError) is None)
+                     SkillPackError) is None)
         for bad in ("US", None, ""):
             r = refusal(lambda: market.validate(bad))
             check(f"validate({bad!r}): market_unpartitioned",

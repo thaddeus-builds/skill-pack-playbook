@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Autonomy levels (kit/autonomy.py) on a SYNTHETIC tier registry shaped
-like the SEO harness's (its own column names and auto words), with
+like the SEO skill pack's (its own column names and auto words), with
 manifests and switch-history rows built here. Each rule is shown both
 ways: the bad case refused AND the good one accepted.
 
-  1. the registry: canon() reads the harness's columns and words;
+  1. the registry: canon() reads the skill pack's columns and words;
      check_tiers() passes the whole registry and names each broken copy
      (a yes row with no undo, an undo that is not code-free, an orphan
      undo row, a B row with no undo, two rows for one pair, a bad tier);
@@ -40,7 +40,7 @@ from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 COLS = {"动作": "verb", "改动": "change", "级别": "tier", "撤回": "undo", "自动": "auto"}
 WORDS = {"是": "yes", "撤回": "undo", "否": "no"}
 HEAD = ("id", "动作", "改动", "级别", "撤回", "自动")
-RAW = [  # SYNTHETIC, the SEO harness's shape
+RAW = [  # SYNTHETIC, the SEO skill pack's shape
     ("T01", "draft", "-", "A", "—", "否"),
     ("T02", "publish", "-", "A", "unpublish", "否"),
     ("T03", "unpublish", "-", "A", "publish", "撤回"),
@@ -66,7 +66,7 @@ def swap(i: str, **kw) -> list[dict]:
 def test_registry() -> None:
     print("\n[1] the tier registry")
     rows = registry()
-    check("canon reads the harness's columns and words",
+    check("canon reads the skill pack's columns and words",
           rows[7] == {"id": "T14", "verb": "publish", "change": "new", "tier": "A", "undo": "unpublish",
                       "auto": "yes"}, rows[7])
     check("the whole registry has no problem", A.check_tiers(rows) == [], A.check_tiers(rows))

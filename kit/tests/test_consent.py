@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Third-party consent (kit/consent.py) holds each of its guards, on the fake
-"shop" harness.
+"shop" skill pack.
 
   1. A draft passes nothing; a filled record with a hand-set status is
      still unconfirmed (the incident this module paid for).
@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import consent, dates, human, messages  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, clean_env, finish, tmp_dir  # noqa: E402
 
 CFG = _shop.use()
@@ -97,7 +97,7 @@ def codes(probs) -> list[str]:
 
 
 def root(**over) -> Path:
-    """A harness root with a signed document and a filled, unconfirmed
+    """A skill pack root with a signed document and a filled, unconfirmed
     record (`over` on top)."""
     r = Path(tmp_dir("consent-"))
     (r / "people").mkdir()

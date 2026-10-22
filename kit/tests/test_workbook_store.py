@@ -431,7 +431,7 @@ def test_personal() -> None:
               if c["text"] and "@example.invalid" in c["text"])
           and any(c["personal"] and c["text"] == "Creator One"
                   for c in rows["wb_cell"]))
-    check("personal_columns() names them for a harness's own guard",
+    check("personal_columns() names them for a skill pack's own guard",
           {"Basic Info > Email", "E-mail", "Creator"}
           <= set(WS.personal_columns(rows)), WS.personal_columns(rows))
     check("mask() leaves a non-text as it is",

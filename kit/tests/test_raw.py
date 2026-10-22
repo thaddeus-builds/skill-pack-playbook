@@ -21,12 +21,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import raw  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 
 def refusal(fn) -> str | None:
-    e = raises(fn, HarnessError)
+    e = raises(fn, SkillPackError)
     return getattr(e.message, "code", None) if e else None
 
 
@@ -46,7 +46,7 @@ def main() -> int:
           again == p and (st.st_ino, st.st_mtime_ns) == (st2.st_ino,
                                                          st2.st_mtime_ns))
     e = raises(lambda: raw.save("orders", "2026-09-01.json", b'{"n":2}'),
-               HarnessError)
+               SkillPackError)
     check("different bytes, same name: raw_would_overwrite",
           e is not None and e.message.code == "raw_would_overwrite"
           and e.message.params == {"source": "orders",

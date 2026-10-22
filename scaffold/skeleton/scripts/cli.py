@@ -21,7 +21,7 @@ from verbs import VERBS
 
 HERE = Path(__file__).resolve().parent
 
-# The harness's own doctor checks, each `check(ctx) -> None` reporting with
+# The skill pack's own doctor checks, each `check(ctx) -> None` reporting with
 # ctx.ok/info/warn/fail(check_id, coded message, next) (kit.doctor).
 DOCTOR_CHECKS: list = []
 

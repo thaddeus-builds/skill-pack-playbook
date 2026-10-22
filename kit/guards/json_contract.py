@@ -1,4 +1,4 @@
-"""The `--json` contract, machine-checked on a harness's own read verbs.
+"""The `--json` contract, machine-checked on a skill pack's own read verbs.
 
   * one document: a verb's `--json` stdout is exactly one JSON document,
     and never a traceback on stderr;
@@ -9,7 +9,7 @@
     `YYYY-MM-DDTHH:MM:SSZ`), stale [{table, last_date, lag_days,
     max_lag_days}] past their lag, coverage {missing_days in the window,
     next commands}, assumed_thresholds {} unless the run assumed some, the
-    harness {name, version, kit_version};
+    skill pack {name, version, kit_version};
   * every English message coded: a message key `k` (the prose keys
     `[contract].prose`, and any key the document itself codes somewhere)
     carries its `k_code` sibling; a message list `ks` (`[contract].
@@ -34,8 +34,8 @@ there is refused (the reference, running scripts directly, required an
 empty stderr).
 
 `check_read_verbs(data_dir)` runs every read verb of the verb table with
-`--json` on a fixture data dir through the harness CLI, with the sample
-arguments harness.toml gives a verb that needs some
+`--json` on a fixture data dir through the skill pack CLI, with the sample
+arguments skill-pack.toml gives a verb that needs some
 (`[guards.json_contract] args = {"facts get" = ["unit_cost"]}`)
 (`<scripts_dir>/<cli>.py <words> -- --json [--market M]`, under
 kit.testing.sandbox's env) and applies the rules above.
@@ -55,8 +55,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from kit import contract, messages
-from kit.config import HarnessConfig
-from kit.guards import harness, report, section, strs, verb_table
+from kit.config import SkillPackConfig
+from kit.guards import skill_pack, report, section, strs, verb_table
 
 PROSE = ("reason", "note", "explanation", "message")
 PROSE_LISTS = ("warnings", "reasons", "notes")
@@ -108,11 +108,11 @@ def uncoded(doc: Any, *, prose: tuple[str, ...] | None = None,
             prose_lists: tuple[str, ...] | None = None,
             data_labels: tuple[str, ...] | None = None,
             registry: dict | None = None,
-            cfg: HarnessConfig | None = None) -> list[str]:
+            cfg: SkillPackConfig | None = None) -> list[str]:
     """The path of every message in a --json document without a valid code
     beside it (empty = the document keeps the contract). Defaults: the
-    bound harness's [contract] prose / prose_lists / data_labels."""
-    c = section(cfg or harness(), "contract")
+    bound skill pack's [contract] prose / prose_lists / data_labels."""
+    c = section(cfg or skill_pack(), "contract")
     prose = tuple(prose if prose is not None else strs(c.get("prose"), PROSE))
     prose_lists = tuple(prose_lists if prose_lists is not None
                         else strs(c.get("prose_lists"), PROSE_LISTS))
@@ -171,11 +171,11 @@ def _iso(x: Any) -> bool:
 
 
 def check_meta(doc: Any, *, assumed: bool = False,
-               cfg: HarnessConfig | None = None) -> list[str]:
+               cfg: SkillPackConfig | None = None) -> list[str]:
     """Problems of a compute document's top-level `meta` (the shape
     kit.contract.meta() builds). `assumed`: the run passed --assume, so
     assumed_thresholds must be non-empty (else it must be {})."""
-    cfg = cfg or harness()
+    cfg = cfg or skill_pack()
     m = doc.get("meta") if isinstance(doc, dict) else None
     if not isinstance(m, dict):
         return ["no top-level meta object"]
@@ -247,11 +247,11 @@ def check_meta(doc: Any, *, assumed: bool = False,
             m.get("evidence_level"), str):
         out.append(f"meta.evidence_level is not a string or null: "
                    f"{m.get('evidence_level')!r}")
-    h = m.get("harness")
+    h = m.get("skill_pack")
     if not (isinstance(h, dict)
             and {"name", "version", "kit_version"} <= set(h)
             and h["name"] == cfg.name):
-        out.append(f"meta.harness is not {{name: {cfg.name!r}, version, "
+        out.append(f"meta.skill_pack is not {{name: {cfg.name!r}, version, "
                    f"kit_version}}: {h!r}")
     return out
 
@@ -299,7 +299,7 @@ def check_failure(rc: int, out: str, err: str, *,
     return probs
 
 
-def is_compute(cfg: HarnessConfig, verb: Any) -> bool:
+def is_compute(cfg: SkillPackConfig, verb: Any) -> bool:
     """The verb's script is a compute ([layers].compute, default compute_*)."""
     stem = Path(str(verb.script)).stem
     return any(fnmatch(stem, p)
@@ -314,12 +314,12 @@ def verb_argv(words: list[str], rest: list[str], flags: list[str]
     return [*words, *([] if "--" in rest else ["--"]), *rest, *flags]
 
 
-def cli_runner(data_dir: Path | str, cfg: HarnessConfig | None = None,
+def cli_runner(data_dir: Path | str, cfg: SkillPackConfig | None = None,
                **env: str | None) -> Run:
     """run(argv) -> (rc, out, err) of `<scripts_dir>/<cli>.py argv` under
     kit.testing.sandbox's env for `data_dir` (+ `env`)."""
     from kit.testing import sandbox
-    cfg = cfg or harness()
+    cfg = cfg or skill_pack()
     cli = cfg.root / cfg.scripts_dir / f"{cfg.cli}.py"
     base = sandbox.sandbox_env(data_dir, **env)
 
@@ -328,21 +328,21 @@ def cli_runner(data_dir: Path | str, cfg: HarnessConfig | None = None,
     return run
 
 
-def _reads(cfg: HarnessConfig, verbs: Any) -> list:
+def _reads(cfg: SkillPackConfig, verbs: Any) -> list:
     return [v for v in verb_table(cfg, verbs) if v.kind == "read"]
 
 
-def _flags(cfg: HarnessConfig, v: Any, market: str | None) -> list[str]:
+def _flags(cfg: SkillPackConfig, v: Any, market: str | None) -> list[str]:
     flags = ["--json"]
     if market and getattr(v, "takes_market", True) and cfg.markets:
         flags += ["--market", market]
     return flags
 
 
-def sample_args(cfg: HarnessConfig, given: dict | None = None
+def sample_args(cfg: SkillPackConfig, given: dict | None = None
                 ) -> dict[str, list[str]]:
     """{verb as typed: [its arguments]} for the read verbs that need some
-    (`facts get` needs a KEY): `given`, else harness.toml
+    (`facts get` needs a KEY): `given`, else skill-pack.toml
     `[guards.json_contract] args = {"facts get" = ["unit_cost"], …}`.
     A verb not named runs with none."""
     raw = given if given is not None else section(
@@ -366,7 +366,7 @@ def check_read_verbs(data_dir: Path | str, *, verbs: Any = None,
     document; a success has every message coded (and a compute its meta);
     a failure is the one coded failure document. `skip` = verbs (as typed)
     not to run; `args` = sample arguments per verb (sample_args())."""
-    cfg = harness()
+    cfg = skill_pack()
     run = run or cli_runner(data_dir, cfg)
     samples = sample_args(cfg, args)
     out = []
@@ -409,7 +409,7 @@ def check_read_verbs_no_db(data_dir: Path | str, *, verbs: Any = None,
     = the failure codes accepted (add `usage` for a verb that needs an
     argument this check does not give); `args` = sample arguments per
     verb (sample_args())."""
-    cfg = harness()
+    cfg = skill_pack()
     d = Path(data_dir)
     run = run or cli_runner(d, cfg)
     samples = sample_args(cfg, args)
@@ -449,13 +449,13 @@ def check_verbs(cases: dict[str, list[list[str]]], *, verbs: Any = None,
     least one case, so a new verb fails here until it has one; a case for a
     verb the table does not have fails too. `cases` = {verb as typed:
     [the arguments of each case, run in order]}; `--json` is added unless a
-    case has it; `run(argv)` -> (rc, stdout, stderr), default the harness
+    case has it; `run(argv)` -> (rc, stdout, stderr), default the skill pack
     CLI on the fixture `data_dir` (cli_runner). Each case prints exactly one
     JSON document with every message coded; a non-zero exit is the one
     coded failure document, never unclassified_error (a gate or write
     verb's refusal that reaches the owner as "unclassified" is found here).
     `skip` = verbs (as typed) that need no case (a dev tool)."""
-    cfg = harness()
+    cfg = skill_pack()
     if run is None:
         if data_dir is None:
             raise ValueError("check_verbs needs `run` or a fixture `data_dir`")

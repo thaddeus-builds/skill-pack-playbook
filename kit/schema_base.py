@@ -1,20 +1,27 @@
 """The kit's human tables, as data: what a human (or the gate) decided,
 which no pull can ever rebuild.
 
-`HUMAN` holds the six tables every harness gets (kit.db.with_human merges
-them with the harness's own cache tables):
+`HUMAN` holds the seven tables every skill pack gets (kit.db.with_human merges
+them with the skill pack's own cache tables):
 
   * client_facts / client_facts_history   facts about the client, per market
   * decisions / decisions_history         decisions about one entity
   * action_queue                          proposed external writes and
                                           the human's yes/no on each
   * action_effects                        what each executed write did
+  * hub_copies                            what `facts sync-hub` read from the
+                                          client hub's confirmed facts, and
+                                          what it did with each version
 
-Every table has a `market` column (a harness without markets writes the
+`ADDED_LATER` names the human tables that a file written earlier can lack:
+a read-only open proceeds without one, the next write-mode open creates
+it (kit.db human_added_later; with_human always passes these).
+
+Every table has a `market` column (a skill pack without markets writes the
 pseudo-market "_"); every history table has `action`. Column order is the
 physical order: kit.db's drift guard compares it, so a change here is a
 schema change (kit/tests/test_db.py pins schema_hash of these tables:
-changing them means every harness bumps its schema version).
+changing them means every skill pack bumps its schema version).
 
 `APPEND_ONLY` and `FROZEN_COLUMNS` become triggers in the file itself
 (kit.db): history is never rewritten or deleted, a fact or a decision is
@@ -123,7 +130,30 @@ HUMAN: dict[str, dict] = {
                "response as JSON. Never updated or deleted (triggers).",
         "grain": "append-only row",
     },
+    "hub_copies": {
+        "columns": {"copy_id": _I, "market": _T, "key": _T, "value": _T,
+                    "hub": _T, "hub_history_id": _I, "hub_digest": _T,
+                    "outcome": _T, "pack_history_id": _I, "copied_at": _T,
+                    "copied_by": _T},
+        "pk": ("copy_id",),
+        "not_null": ("market", "key", "value", "hub", "hub_history_id",
+                     "hub_digest", "outcome", "pack_history_id", "copied_at",
+                     "copied_by"),
+        "unique": (("market", "key", "hub", "hub_history_id",
+                    "pack_history_id"),),
+        "doc": "Append-only log of `facts sync-hub`: one row per (hub "
+               "version, pack version) of a fact. value = the hub's "
+               "confirmed value; hub_history_id and hub_digest = the hub's "
+               "gated confirm it came from; outcome copied | same | "
+               "conflict; pack_history_id = the pack's last history id of "
+               "the fact after the step. Never updated or deleted "
+               "(triggers).",
+        "grain": "append-only row",
+    },
 }
+
+HUB_OUTCOMES = ("copied", "same", "conflict")
+ADDED_LATER: tuple[str, ...] = ("hub_copies",)
 
 # table -> the operations a trigger refuses on it.
 APPEND_ONLY: dict[str, tuple[str, ...]] = {
@@ -133,6 +163,7 @@ APPEND_ONLY: dict[str, tuple[str, ...]] = {
     "decisions_history": ("UPDATE", "DELETE"),
     "action_queue": ("DELETE",),
     "action_effects": ("UPDATE", "DELETE"),
+    "hub_copies": ("UPDATE", "DELETE"),
 }
 
 # table -> the ONLY columns an UPDATE may change (a trigger refuses the rest).

@@ -4,8 +4,8 @@
 Driven by a FAKE token command (kit/tests/fixtures/fake_token_command.py)
 and fake env-mode fetchers: no credentials, no network.
 
-  * the source var follows the bound harness; an unknown value is refused;
-  * env mode: the harness's fetcher (static_env_token reads the env chain,
+  * the source var follows the bound skill pack; an unknown value is refused;
+  * env mode: the skill pack's fetcher (static_env_token reads the env chain,
     parsed, never sourced); the token command is never run; env mode with
     no fetcher is refused;
   * command mode: the command's one JSON object is parsed; the token is
@@ -24,7 +24,7 @@ and fake env-mode fetchers: no credentials, no network.
   * command_fields win over `<prefix>_<FIELD>`, which is the fallback;
     other keys are ignored; setting_source names where each came from;
   * one fetch under concurrent callers; repr never shows a token;
-  * auth.source() is configured from harness.toml [auth] and reset by
+  * auth.source() is configured from skill-pack.toml [auth] and reset by
     config.use.
 """
 
@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import auth, config, dates  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.env import EnvError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
@@ -85,7 +85,7 @@ def env(**kv: str):
     """A hermetic process env (no env files unless asked) + fresh cache."""
     base = {"PATH": os.environ.get("PATH", ""), "HOME": str(TMP),
             "PYTHONDONTWRITEBYTECODE": "1",
-            "KIT_HARNESS_ROOT": os.environ.get("KIT_HARNESS_ROOT", ""),
+            "KIT_SKILL_PACK_ROOT": os.environ.get("KIT_SKILL_PACK_ROOT", ""),
             "SHOP_DATA_DIR": str(DATA), "SHOP_AUTH_ENV_PATHS": "none"}
     base.update(kv)                   # a None value drops that var
     with mock.patch.dict(os.environ, {k: v for k, v in base.items()
@@ -94,9 +94,9 @@ def env(**kv: str):
 
 
 def failed(fn) -> tuple[str | None, str, list[str]]:
-    """(code, text, next) of the HarnessError fn() raised; (None, '', [])
+    """(code, text, next) of the SkillPackError fn() raised; (None, '', [])
     when it returned."""
-    e = raises(fn, HarnessError)
+    e = raises(fn, SkillPackError)
     if e is None:
         return None, "", []
     return getattr(e.message, "code", None), str(e), e.next
@@ -127,7 +127,7 @@ def never(prefix, now):
 
 
 def test_mode(ts):
-    print("[1] the source var follows the bound harness")
+    print("[1] the source var follows the bound skill pack")
     check("source var = <P>_TOKEN_SOURCE", ts.source_var == "SHOP_TOKEN_SOURCE",
           ts.source_var)
     check("command var = <prefix>_TOKEN_COMMAND", ts.command_var(P) == CVAR)
@@ -143,7 +143,7 @@ def test_mode(ts):
 
 
 def test_env_mode(ts):
-    print("\n[2] env mode: the harness's fetcher; the command never runs")
+    print("\n[2] env mode: the skill pack's fetcher; the command never runs")
     cmd, counter = fake()
     exp = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
     fetch, calls = counting(auth.static_env_token())
@@ -167,7 +167,7 @@ def test_env_mode(ts):
     ts.clear_cache()
     with env():
         e = raises(lambda: ts.token(P, fetch=auth.static_env_token(),
-                                    require_expiry=False), HarnessError)
+                                    require_expiry=False), SkillPackError)
     check("no token var: EnvError env_required naming it",
           isinstance(e, EnvError) and e.message.code == "env_required"
           and f"{P}_ACCESS_TOKEN" in str(e), e)
@@ -444,13 +444,13 @@ def test_threads_and_repr(ts):
 
 
 def test_singleton():
-    print("\n[10] auth.source(): configured from harness.toml, reset by use()")
+    print("\n[10] auth.source(): configured from skill-pack.toml, reset by use()")
     s1 = auth.source()
     check("default: no command_fields, 30 s", s1.command_fields == ()
           and s1.command_timeout == 30.0 and auth.source() is s1)
-    other = TMP / "harness-auth"
+    other = TMP / "skill-pack-auth"
     shutil.copytree(_shop.SHOP, other)
-    with open(other / "harness.toml", "a", encoding="utf-8") as f:
+    with open(other / "skill-pack.toml", "a", encoding="utf-8") as f:
         f.write('\n[auth]\ncommand_fields = ["account_id", "endpoint"]\n'
                 'command_timeout = 5\n')
     config.use(other)
@@ -461,7 +461,7 @@ def test_singleton():
               and s2.command_timeout == 5.0, repr(s2))
     finally:
         _shop.use()
-    check("back on the shop harness: a fresh default source",
+    check("back on the shop skill pack: a fresh default source",
           auth.source() is not s2 and auth.source().command_fields == ())
 
 
