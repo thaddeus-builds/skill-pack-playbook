@@ -32,3 +32,18 @@ fact_restored	tables	Restored from the backup: {tables} (rows added or changed, 
 fact_set_confirmed	key,market,value,new,action	{key} [{market}] = {value} was confirmed by a person; {action} does not replace it with {new}. Nothing was written. To change it: unconfirm it first (recorded), or have a person confirm the new value	{key}（{market}）= {value} 已由本人确认，{action} 不会把它改成 {new}。未写入任何内容。如需修改：先改回待确认（会留记录），或由本人确认新值
 fact_file_declaration	market	a client file cannot declare a market (market_declared [{market}]); `facts init` does	客户文件不能登记市场（market_declared [{market}]），请用 `facts init`
 fact_file_twice	key,market	{key} [{market}] is stated twice	{key} [{market}] 写了两次
+fact_hub_none	var	No hub named: pass --hub DIR or set {var} (the hub's bin/hub sets it)	没有指定客户中心：请用 --hub DIR 指定，或设置 {var}（客户中心的 bin/hub 会自动设置）
+fact_hub_not_absolute	var,value	{var}={value} is a relative path; the hub is named by an absolute one, never the current directory	{var}={value} 是相对路径；客户中心必须用绝对路径指定，从不使用当前目录
+fact_hub_missing	hub,path	No hub facts store at {path}: the hub has confirmed nothing yet, or {hub} is not a client hub	{path} 没有客户中心的事实库：客户中心还没有确认任何事实，或 {hub} 不是客户中心
+fact_hub_unreadable	path,detail	The hub facts store {path} cannot be read as the kit's client facts: {detail}	客户中心的事实库 {path} 无法按 kit 的客户事实读取：{detail}
+fact_hub_value_form	key,value,stored	The hub's {key} = {value} reads as {stored} here: the two definitions differ	客户中心的 {key} = {value} 在这里读成 {stored}：两边的定义不一致
+fact_hub_skipped	key,market,reason	{key} [{market}]: not copied from the hub ({reason})	{key}（{market}）：没有从客户中心复制（{reason}）
+fact_hub_ungated	key,market,history_id,action,by	{key} [{market}]: the hub's value did not come from its gate (last history #{history_id}: {action} by {by}); not copied	{key}（{market}）：客户中心的这个值不是经过人工确认关口得来的（最后一条记录 #{history_id}：{by} 的 {action}）；没有复制
+fact_hub_conflict	key,market,value,pack_value	{key} [{market}]: the hub confirmed {value}, this skill pack confirmed {pack_value}; kept, a person chooses	{key}（{market}）：客户中心确认的是 {value}，本技能包确认的是 {pack_value}；保持不变，由人来选择
+fact_hub_synced	hub,copied,same,conflict,kept,refused,skipped	Hub {hub}: {copied} copied, {same} the same, {conflict} conflict(s), {kept} kept, {refused} refused, {skipped} skipped	客户中心 {hub}：复制 {copied} 项，相同 {same} 项，冲突 {conflict} 项，保留 {kept} 项，拒绝 {refused} 项，跳过 {skipped} 项
+fact_hub_definition_differs	key,hub,diff	{key} is defined differently here and at hub {hub}: {diff}; it is not copied until the two agree	{key} 在这里和客户中心 {hub} 的定义不同：{diff}；两边一致之前不会复制
+fact_hub_copy_stale	key,market,hub,hub_version,copied_version	{key} [{market}]: hub {hub} is at #{hub_version}, this skill pack copied #{copied_version}	{key}（{market}）：客户中心 {hub} 已到 #{hub_version}，本技能包复制的是 #{copied_version}
+fact_hub_current	hub,checked	Hub {hub}: every confirmed fact this skill pack declares is copied at its current version ({checked} checked)	客户中心 {hub}：本技能包声明的每项已确认事实都已按当前版本复制（检查了 {checked} 项）
+fact_hub_defs_unreadable	path,detail	The hub's definitions {path} cannot be read: {detail}	客户中心的定义 {path} 无法读取：{detail}
+fact_hub_market_partitioned	var,value	{var}={value}: this skill pack keeps its own markets and copies each hub market into its own; unset {var}	{var}={value}：本技能包有自己的市场，会把客户中心的每个市场复制到同名市场；请取消 {var}
+fact_hub_copy_missing	key,market	{key} [{market}]: confirmed at the hub, never copied here	{key}（{market}）：已在客户中心确认，但从未复制到这里

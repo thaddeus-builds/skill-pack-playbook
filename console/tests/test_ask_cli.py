@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import codecs
 import json
+from datetime import datetime, timedelta, timezone
 import os
 import re
 import subprocess
@@ -122,7 +123,7 @@ def rewrite(d, fn):
         f.writelines(json.dumps(e, ensure_ascii=False) + "\n" for e in events)
 
 
-REPORT = {"ok", "seq", "open", "answers", "reopened", "notes", "notes_truncated", "dir"}   # what `answers` says
+REPORT = {"ok", "seq", "open", "answers", "expired", "reopened", "notes", "notes_truncated", "dir"}   # what `answers` says
 
 
 def ids(rows):
@@ -732,7 +733,7 @@ def test_digest_renders_the_decision_record_as_markdown_and_as_json():
         assert ok("digest", "--format", "md", d=d)["text"].split("As of")[0] == md["text"].split("As of")[0]   # md is the default
         text = md["text"]
         assert text.startswith("# Decision record\n") and text.endswith("\n") and "\n\n\n" not in text
-        assert "4 asks: 1 applied, 1 answered and waiting to be applied, 1 open, 1 withdrawn." in text
+        assert "4 asks: 1 applied, 1 answered and waiting to be applied, 1 open, 1 withdrawn, 0 expired." in text
         assert "Signatures checked with this console's secret." in text
         heads = re.findall(r"^## (\d)\. (.*)$", text, re.M)
         assert heads == [("1", "Which tea \\| first?"), ("2", "Is spend right?"), ("3", "Is gone right?"), ("4", "Is open right?")]
@@ -1181,6 +1182,84 @@ def test_it_is_a_stdlib_only_pep_723_script():
         elif isinstance(node, ast.ImportFrom) and node.level == 0:
             imported.add(node.module.split(".")[0])
     assert imported - {"core", "manifest"} <= set(sys.stdlib_module_names), imported
+
+
+# ------------------------------------------------ one console for several packs --
+
+def test_asks_from_several_agents_share_one_budget_of_open_asks():
+    """A client's packs post to one console log, each `--as` its own agent: the
+    cap of open asks is the owner's, counted across all of them."""
+    with _t.tmpdir() as d:
+        ok("add", d=d, name="gads", stdin=json.dumps([mk_ask(f"gads-a{i}") for i in range(6)]))
+        ok("add", d=d, name="kos", stdin=json.dumps([mk_ask(f"kos-a{i}") for i in range(4)]))
+        doc = refused("over_budget", "add", d=d, name="crp", stdin=json.dumps(mk_ask("crp-a0")))
+        assert doc["params"]["max"] == core.MAX_OPEN and len(doc["params"]["open"]) == core.MAX_OPEN
+        ok("withdraw", "kos-a0", "--reason", "stale", d=d, name="kos")
+        assert ok("add", d=d, name="crp", stdin=json.dumps(mk_ask("crp-a0")))["open"] == core.MAX_OPEN
+        by = {e["by"] for e in core.Store(d).events() if e["type"] == "ask"}
+        assert by == {"agent:gads", "agent:kos", "agent:crp"}
+
+
+# ------------------------------------------------------------------ expiry --
+
+def test_add_gives_a_new_ask_seven_days_and_an_expired_one_is_listed_until_it_is_recorded():
+    with _t.tmpdir() as d:
+        ok("add", d=d, stdin=json.dumps([mk_ask("a"), mk_ask("b", expires="2099-01-01")]))
+        asks = {x["id"]: x for x in ok("list", d=d)["asks"]}
+        due = asks["a"]["expires"]
+        assert core.deadline(due) == due and due[:10] == core.days_ahead(core.EXPIRES_DAYS)[:10], due
+        assert asks["b"]["expires"] == "2099-01-01"
+        rewrite(d, lambda e: e.get("ask", {}).update(expires="2000-01-01") if e.get("ask", {}).get("id") == "a" else None)
+        rep = ok("answers", d=d)
+        assert rep["answers"] == [] and rep["open"] == 1
+        assert [(x["id"], x["apply"], x["outcome"], x["expires"]) for x in rep["expired"]] == \
+            [("a", "a", "nothing changes", "2000-01-01")]
+        assert [x["id"] for x in ok("list", "--status", "expired", d=d)["asks"]] == ["a"]
+        refused("not_open", "withdraw", "a", "--reason", "r", d=d)
+        refused("id_used", "add", d=d, stdin=json.dumps(mk_ask("a")))
+        refused("changed", "applied", "a@1", "--where", "x", d=d)
+        ok("applied", "a", "--where", "expired, nothing changed", d=d)
+        assert ok("answers", d=d)["expired"] == []
+        assert [x["id"] for x in ok("answers", "--all", d=d)["expired"]] == ["a"]
+        md = ok("digest", d=d)["text"]
+        assert "2 asks: 0 applied, 0 answered and waiting to be applied, 1 open, 0 withdrawn, 1 expired." in md
+        assert "**Expired unanswered: nothing changes**" in md and "**Expired:** no answer by 2000-01-02 00:00 UTC" in md
+        assert ok("digest", "--format", "json", d=d)["asks"][0]["state"] == "expired"
+
+
+def test_wait_returns_when_an_ask_expires():
+    with _t.tmpdir() as d:
+        soon = (datetime.now(timezone.utc) + timedelta(seconds=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        seq = ok("add", d=d, stdin=json.dumps(mk_ask("a", expires=soon)))["seq"]
+        t0 = time.monotonic()
+        doc = ok("wait", "--since", str(seq), "--timeout", "20", d=d)
+        assert not doc["timed_out"] and [x["id"] for x in doc["expired"]] == ["a"], doc
+        assert time.monotonic() - t0 < 15
+
+
+# --------------------------------------------------------------------- chat --
+
+def test_chat_records_the_owners_words_and_answers_says_it_came_from_chat():
+    with _t.tmpdir() as d:
+        s = core.Store(d)
+        s.ensure_secret()
+        ok("add", d=d, stdin=json.dumps([mk_ask("w", "choose"), mk_ask("cost", "provide"), mk_ask("go", "approve"),
+                                          mk_ask("g", "confirm", gate={"verb": ["gads", "facts", "confirm", "k"],
+                                                                     "expect": {"items": {"k": "1"}}})]))
+        doc = ok("chat", "w", "--value", "b", "--quote", "B is what we call it", "--source", "chat 2026-10-22 14:03",
+                 d=d, name="gads")
+        assert (doc["via"], doc["by"], doc["value"], doc["apply"]) == ("chat", "agent:gads", "b", f"w@{doc['seq']}")
+        row = ok("answers", d=d)["answers"][0]
+        assert (row["via"], row["by"], row["quote"], row["source"], row["verified"], row["suggested"]) == \
+            ("chat", "agent:gads", "B is what we call it", "chat 2026-10-22 14:03", None, False)
+        for id, value in (("g", "yes"), ("go", "yes"), ("cost", "12")):
+            assert refused("gate_needs_click", "chat", id, "--value", value, "--quote", "yes", d=d)["params"]["id"] == id
+        refused("not_open", "chat", "w", "--value", "a", "--quote", "z", d=d)         # it is open no more
+        refused("bad_request", "chat", "w", "--value", "a", d=d)                        # the quote is required
+        ok("applied", row["apply"], "--where", "naming sheet", d=d, name="gads")
+        md = ok("digest", d=d)["text"]
+        assert "answered in chat, recorded by gads: \u201cB is what we call it\u201d (chat 2026-10-22 14:03)" in md
+        assert ok("verify", d=d)["checked"] == 0                       # nothing to check: chat is not a human event
 
 
 if __name__ == "__main__":

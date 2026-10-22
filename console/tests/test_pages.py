@@ -1396,5 +1396,24 @@ def test_pages_render_what_a_real_store_wrote():
         assert [m.find("p", "txt").text() for m in d.find_all("li", "msg")] == ["thanks"]   # …not repeated below
 
 
+def test_history_says_an_answer_came_from_chat_and_an_expired_ask_changed_nothing():
+    L = Log()
+    a = L.ask(ask_raw("choose", "w"))
+    L.add("chat", "agent:gads", id="w", value="a", via="chat", quote="<b>Option A</b> it is",
+          source="chat 2026-10-22 14:03", subject=core.subject_hash(a), suggested=True)
+    L.ask(ask_raw("confirm", "x", expires="2000-01-01"))
+    L.ask(ask_raw("confirm", "y", expires="2099-01-01"))
+    st = core.fold(L.events, T0)
+    h = pages.render_history(st, ctx("en", secret=SECRET))
+    assert "Answered in chat" in h and "&lt;b&gt;Option A&lt;/b&gt; it is" in h and "chat 2026-10-22 14:03" in h
+    assert "Written down by gads, not clicked here" in h
+    assert i18n.t("sig.bad", "en") not in h                     # it has no signature, and claims none
+    assert "No answer by 2000-01-01, so nothing changes" in h and 'class="ask done expired"' in h
+    zh = pages.render_history(st, ctx("zh"))
+    assert "在聊天中回答" in zh and "2000-01-01 前没有回答" in zh
+    inbox = pages.render_inbox(st, ctx("en"))
+    assert "Title of y" in inbox and "Open until 2099-01-01" in inbox and "Title of x" not in inbox
+
+
 if __name__ == "__main__":
     _t.main(globals())
