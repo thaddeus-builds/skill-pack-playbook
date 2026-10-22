@@ -1,5 +1,5 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-21
+Updated: 2026-10-22
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
 - [N1] 2026-10-21 inventory the skill packs, read-only, with the GitLab token the environment now holds (`GITLAB_TOKEN`, git.coco.xyz allowed): list the skill pack repositories, run `python3 tools/consumers.py` and `python3 tools/fleet.py status` on each one's main branch, and report who imports which kit module, which kit version each holds, and whether `kit.autonomy` has an importer (X9)
@@ -7,6 +7,7 @@ Updated: 2026-10-21
 - [W1] 2026-10-05 Anthropic source links in the README (#23): allow-list `www.anthropic.com` in the console leak scan and restore the three links (recommended); "no" leaves sources named by title only. unblocks: X4
 - [W2] 2026-10-05 does the SEO skill pack migrate onto the kit; does the outreach scraper take only the guide (#26)? Recommended: migrate SEO after selective vendoring; outreach takes the guide only. unblocks: X6
 - [W3] 2026-10-05 the skill pack checkouts for turn 2, and each skill pack owner's review. unblocks: X1
+- [W4] 2026-10-22 the client hub (one client facts store, one intake tagged by pack, one inbox per owner across a client's skill packs): a design-first page with a synthetic demo, shared privately with the owner 2026-10-22, asks five questions (confirm a client fact once at the hub; which facts start there; one cap of 10 per owner; answers in chat for words and choices; start with one client, new facts only). Recommended: agree to all five. unblocks: X10
 ## Next
 - [X1] 2026-10-05 turn 2 (#20): bring the three skill packs to one kit version: start with `python3 tools/fleet.py status` on the three checkouts; the stale digest.py mention, CI jobs with no rules, the KOL skill pack's forked copy upstreamed. Needs the skill pack checkouts and each skill pack owner's review (W3)
 - [X2] 2026-10-05 turn 3 (#19): selective vendoring, a skill pack takes only the packs it needs (breaking). Needs turn 2 done, the owner's go-ahead (R2) and a quiet week for the short-video skill pack. Packs and the vendor side are built (D3); what is left is moving each skill pack onto them
@@ -17,6 +18,7 @@ Updated: 2026-10-21
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
 - [X9] 2026-10-13 a first skill pack imports `kit.autonomy` (0.27.0): the SEO skill pack when it moves onto the kit (W2); the Amazon PPC skill pack does not (it does not vendor the kit, read 2026-10-21). Two minor versions have passed with no known importer (the rule of kit/packs.tsv): delete it unless N1 finds one
+- [X10] 2026-10-22 build the client hub after the owner's yes (W4), one pull request each, in order: intake `packs` field and quote check (build/); new-hub and add-pack scaffolds; one inbox across packs (console, kit/pending.py); hub facts and the copy table (kit version bump); then the first real client
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)
