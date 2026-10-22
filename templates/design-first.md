@@ -1,12 +1,12 @@
 # Design first: one page and a synthetic demo before the code
 
-Before building a feature an owner has to understand and steer, the agent researches it, writes one page the owner can decide on, shows a clickable demo of the real page drawn from a made-up world, and waits for a yes. Only then is the code written; from then on the harness draws the demo itself, so the picture people agreed to never drifts from the code. Why, and what it paid for: [docs/lessons.md](../docs/lessons.md#design-and-a-synthetic-demo-before-code-from-adcut-harness-x45-2026-10-13).
+Before building a feature an owner has to understand and steer, the agent researches it, writes one page the owner can decide on, shows a clickable demo of the real page drawn from a made-up world, and waits for a yes. Only then is the code written; from then on the skill pack draws the demo itself, so the picture people agreed to never drifts from the code. Why, and what it paid for: [docs/lessons.md](../docs/lessons.md#design-and-a-synthetic-demo-before-code-from-adcut-harness-x45-2026-10-13).
 
-*Seen once:* the video-ads harness (its ROADMAP X45, 2026-10-12 and 13), before it built a map of its creative plan with a weight on each path. The owner confirmed four decisions in one reply.
+*Seen once:* the video-ads skill pack (its ROADMAP X45, 2026-10-12 and 13), before it built a map of its creative plan with a weight on each path. The owner confirmed four decisions in one reply.
 
 ## When
 
-A feature an owner has to understand and steer: a page they decide on, a plan they pick from, a model whose output they act on, or a table the harness keeps for good. A fix, a refactor or a change only the builder sees goes straight to code with its test.
+A feature an owner has to understand and steer: a page they decide on, a plan they pick from, a model whose output they act on, or a table the skill pack keeps for good. A fix, a refactor or a change only the builder sees goes straight to code with its test.
 
 ## The steps
 
@@ -14,7 +14,7 @@ A feature an owner has to understand and steer: a page they decide on, a plan th
 2. **One design page, in the owner's language.** One page, not a thread, holding what the next section lists. The owner reads it in a few minutes and answers in one reply.
 3. **A clickable demo from a synthetic world.** The real page the feature will write, drawn by the renderer the code will use, from a made-up product with `DEMO` ids, scanned for client terms and shared privately ([The demo](#the-demo)).
 4. **Wait for the owner's yes.** No code before it. A change the owner asks for goes back into the page and the demo, and the owner sees the new version.
-5. **Then the code, and the harness draws the demo.** Build to the confirmed page. The demo becomes a harness tool fed by a synthetic fixture and published to the same link ([After the owner confirms](#after-the-owner-confirms)).
+5. **Then the code, and the skill pack draws the demo.** Build to the confirmed page. The demo becomes a skill pack tool fed by a synthetic fixture and published to the same link ([After the owner confirms](#after-the-owner-confirms)).
 
 ## The design page
 
@@ -32,12 +32,12 @@ The page the feature will write, clickable, from a world nobody owns. Its guards
 
 - **A synthetic marker.** The world is marked synthetic (`"synthetic": true`, that value and no other), and the page says so where it is seen first: `kit.pagestyle`'s badge, `<span class="syn">` with its words, in the page's first `<header>`, before the decision. The guard reads where it sits in the markup: a badge in a comment, a fold (`<details>`), a script or style, or under an element with a `hidden` or `style` attribute does not count.
 - **DEMO ids.** The product, the project and every code and id on the page start with `DEMO`, so nothing on it can be taken for, or matched to, a real one.
-- **No client term.** Before it is written, the page is scanned with the harness's client-term lists (`load_terms` and `scan` of [kit/tools/leak_guard.py](../kit/tools/leak_guard.py)), in each form it reaches a reader: as written, unescaped, as shown (its tags gone, then unescaped, so a term split by `<b>` or `<br>` is whole again), and with its page data's JSON escapes read back (`\u0026` is `&`, `\"` is `"`, `\n` a new line). It fails closed: a hit, no list, a named list missing or unreadable, or lists with no term, and nothing is written.
-- **The harness's own renderer.** It is drawn by the code that will draw the real page (for a page that guides making, [`kit.pagestyle`](../docs/page-style.md)) and passes that renderer's check (`problems()`) with the harness's own style and command patterns, as every page the harness writes does. Never a hand-made mock-up: it shows a page the code will not write.
+- **No client term.** Before it is written, the page is scanned with the skill pack's client-term lists (`load_terms` and `scan` of [kit/tools/leak_guard.py](../kit/tools/leak_guard.py)), in each form it reaches a reader: as written, unescaped, as shown (its tags gone, then unescaped, so a term split by `<b>` or `<br>` is whole again), and with its page data's JSON escapes read back (`\u0026` is `&`, `\"` is `"`, `\n` a new line). It fails closed: a hit, no list, a named list missing or unreadable, or lists with no term, and nothing is written.
+- **The skill pack's own renderer.** It is drawn by the code that will draw the real page (for a page that guides making, [`kit.pagestyle`](../docs/page-style.md)) and passes that renderer's check (`problems()`) with the skill pack's own style and command patterns, as every page the skill pack writes does. Never a hand-made mock-up: it shows a page the code will not write.
 - **Never in a client's data.** The demo is written outside every client's data folder (each `$DATA_DIR`, its review folder included), and a client's real page is never shared.
 - **Shared privately.** One private link, given to the owner, who decides who else sees it. Every new version goes to the same link.
 
-The guard, for a harness to copy into the tool that writes its demo. `ids` is the product, the project and every code and id the page shows; `client_data` is every client's data folder; `style` and `commands` are the harness's own style and command patterns (its CLI's name), as in [Checking a page](../docs/page-style.md#checking-a-page). A page drawn with another renderer runs that renderer's check in place of `style.problems`.
+The guard, for a skill pack to copy into the tool that writes its demo. `ids` is the product, the project and every code and id the page shows; `client_data` is every client's data folder; `style` and `commands` are the skill pack's own style and command patterns (its CLI's name), as in [Checking a page](../docs/page-style.md#checking-a-page). A page drawn with another renderer runs that renderer's check in place of `style.problems`.
 
 ```python
 import html
@@ -124,15 +124,15 @@ The tool writes the page only when the list is empty, and prints the reasons oth
 
 - Build to the confirmed page. A difference the code runs into goes back to the owner; it is not decided quietly.
 - The append-only tables land with the columns proven on the scratch copy.
-- The demo becomes the harness's: a tool draws it from a synthetic fixture in the repository (marked synthetic, every id `DEMO`) with the renderer of the real page, runs the guard before writing, and names the private link it is published to, the same one each time. Its test runs the tool on the fixture and tries each refusal.
-- The owner's answers are recorded where the harness keeps the owner's decisions, in their words.
+- The demo becomes the skill pack's: a tool draws it from a synthetic fixture in the repository (marked synthetic, every id `DEMO`) with the renderer of the real page, runs the guard before writing, and names the private link it is published to, the same one each time. Its test runs the tool on the fixture and tries each refusal.
+- The owner's answers are recorded where the skill pack keeps the owner's decisions, in their words.
 
 ## Checklist
 
 - [ ] The prior-art scan is dated, and each trap it found is on the design page with its answer
 - [ ] The design page says what it is, how it decides, the asks (each with a recommended answer, and one reply that agrees to all) and what it stores
 - [ ] Every append-only column is proven on a scratch copy of real data
-- [ ] The demo is drawn by the harness's own renderer from a synthetic world and passes the renderer's check
-- [ ] The demo guard finds nothing: the synthetic world and its badge in the header, `DEMO` ids, the renderer's check with the harness's style and commands, no client term in any form of the page, outside every client's data folder
+- [ ] The demo is drawn by the skill pack's own renderer from a synthetic world and passes the renderer's check
+- [ ] The demo guard finds nothing: the synthetic world and its badge in the header, `DEMO` ids, the renderer's check with the skill pack's style and commands, no client term in any form of the page, outside every client's data folder
 - [ ] The demo is shared privately, and the owner confirmed before any code
-- [ ] After the code, the harness redraws the demo from a synthetic fixture to the same link
+- [ ] After the code, the skill pack redraws the demo from a synthetic fixture to the same link

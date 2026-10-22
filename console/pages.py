@@ -7,21 +7,25 @@ page works with the script off. Every URL is relative, so a proxy that strips
 a prefix needs no configuration.
 
     render_inbox(st, ctx)       the waiting page: one column, top down
-    render_history(st, ctx)     what was answered or withdrawn, newest first
+    render_history(st, ctx)     what was answered, withdrawn or expired, newest first
     render_result(ctx, lines)   the page after a POST
     render_error(ctx, code, message="")
     answer_label(lang, ask, value)   an answer as the human saw it, for a result line
     flash_text(lang, key)            the banner words for a finished redirect, or None
 
 ctx: lang, title, user (None = read-only), token (the POST token), relay
-(None or [] = no harness; else the verb prefixes the operator allows, each a
+(None or [] = no skill pack; else the verb prefixes the operator allows, each a
 list of words), now (ISO Z), secret (bytes | None, to verify signatures),
-flash ({kind: ok|error, text}, optional: a banner at the top of a page).
+flash ({kind: ok|error, text}, optional: a banner at the top of a page),
+nav (optional: the tabs, [{name, href, title?, count?}]; a built-in tab has no
+title and the dictionary names it; default Waiting and History), blocking (a
+number added to the Waiting tab), max_open (the open-ask budget; default
+core.MAX_OPEN).
 `lines` for a result: {ok, id, title, value, code, message}, plus an optional
 `reason` (the `Refused.params["reason"]` of a bad_value) that picks the exact
 sentence and an optional `comment` (what the person typed), given back on a
-refusal so nothing typed is lost. For a refusal from the harness
-(`HARNESS_SAYS`) `message` is the harness's own English, shown escaped under
+refusal so nothing typed is lost. For a refusal from the skill pack
+(`SKILL_PACK_SAYS`) `message` is the skill pack's own English, shown escaped under
 the console's sentence.
 
 The forms drawn here are what serve.py reads (all `method=post`):
@@ -48,6 +52,7 @@ CSS classes (console.css styles exactly these):
   group list ask done              a group, its rows, one row (`done` in History)
   approve                          a row that approves something: it reads heavier than a confirmation
   waiting applied withdrawn        a History row's loop state: the agent still owes it, did it, or it was withdrawn
+  expired                          a History row that lapsed unanswered: nothing changes
   ttl meta chip age inner          a row's title, chip line, chip, age, opened body
   why txt                          the agent's reason; `txt` keeps its line breaks
   ev facts fact k v src            evidence: the block, fact chips, label, value, source
@@ -74,12 +79,14 @@ import core
 import i18n
 
 SHOW_MESSAGES = 20
+# the tabs of a console with no pages of a skill pack's own; ctx["nav"] replaces them
+NAV = ({"name": "waiting", "href": "./"}, {"name": "history", "href": "history"})
 SHOW_HISTORY = 100
 # a payload's true, false and null, as they are written in it
 JSON_WORDS = {"True": "true", "False": "false", "None": "null"}
-# refusals whose message is the harness's own words, shown as it wrote them
-HARNESS_SAYS = ("gate_refused", "gate_changed", "gate_timeout", "gate_unsure")
-UNSURE = ("gate_timeout", "gate_unsure", "not_recorded")        # the harness may have been written
+# refusals whose message is the skill pack's own words, shown as it wrote them
+SKILL_PACK_SAYS = ("gate_refused", "gate_changed", "gate_timeout", "gate_unsure")
+UNSURE = ("gate_timeout", "gate_unsure", "not_recorded")        # the skill pack may have been written
 # what a finished redirect (`?done=<key>`) says: a page cannot be made to say anything else
 FLASH = {"reopened": "flash.reopened", "noted": "flash.noted"}
 # what a yes/no answer is called, per step
@@ -221,15 +228,16 @@ def flash_text(lang: str, key) -> str | None:
 def _bar(t: _T, ctx: dict, tab, n_open: int, href: str) -> str:
     other = "zh" if t.lang == "en" else "en"
 
-    def tab_link(name, url, key, count=0):
+    def tab_link(name, url, label, count=0):
         cur = ' aria-current="page"' if tab == name else ""
         num = f' <span class="count">{count}</span>' if count else ""
-        return f'<a href="{url}"{cur}>{t(key)}{num}</a>'
+        return f'<a href="{url}"{cur}>{label}{num}</a>'
+    links = "".join(tab_link(x["name"], x["href"], _e(x["title"]) if x.get("title") else t("nav." + x["name"]),
+                             n_open + int(ctx.get("blocking") or 0) if x["name"] == "waiting" else x.get("count") or 0)
+                    for x in ctx.get("nav") or NAV)
     return (f'<header class="bar"><div class="bar-in">'
             f'<a class="brand" href="./">{_e(ctx.get("title"))}</a>'
-            f'<nav class="tabs" aria-label="{t("nav.label")}">'
-            f'{tab_link("waiting", "./", "nav.waiting", n_open)}'
-            f'{tab_link("history", "history", "nav.history")}</nav>'
+            f'<nav class="tabs" aria-label="{t("nav.label")}">{links}</nav>'
             f'<a class="lang" href="{href}{other}" lang="{other}" hreflang="{other}">{t("lang.other")}</a>'
             f'</div></header>')
 
@@ -351,7 +359,7 @@ def _flat(x, path=""):
 
 
 def _tech(t: _T, k: dict) -> str:
-    """What the harness will be told, before the button. Technical, so folded.
+    """What the skill pack will be told, before the button. Technical, so folded.
     What the person typed is "your answer"; for a choice each option gets its
     own row with the value it would write, so the value sent is never hidden
     behind a label."""
@@ -379,7 +387,7 @@ def _ifno(t: _T, k: dict) -> str:
 
 def _radios(t: _T, k: dict, rec, only: str | None = None) -> str:
     """The choices. `only` narrows a yes/no to one answer (a refusal never needs
-    the harness), which is then the checked one, and marked as suggested only
+    the skill pack), which is then the checked one, and marked as suggested only
     if the agent did suggest it."""
     if k["step"] == "choose":
         opts = [(o["value"], o["label"], o.get("note")) for o in k["options"]]
@@ -463,6 +471,8 @@ def _ask(t: _T, ctx: dict, a: dict, is_open: bool) -> str:
     chips = f'<span class="chip{" warn" if step == "approve" else ""}">{t("step." + step)}</span>'
     if rec:
         chips += f'<span class="chip ok">{t("suggested.chip", answer=_answer(t, k, rec["value"]))}</span>'
+    if k.get("expires"):
+        chips += f'<span class="chip mute">{t("expires.chip", date=_day(k["expires"]))}</span>'
     chips += f'<span class="age">{_e(_age(t, a.get("opened_at"), ctx["now"]))}</span>'
     parts = [f'<p class="why txt">{_e(k.get("why"))}</p>', _evidence(t, k.get("evidence"))]
     if rec:
@@ -535,10 +545,11 @@ def render_inbox(st: dict, ctx: dict) -> str:
     t = _T(_lang(ctx))
     groups = core.groups(st)
     n = sum(len(items) for _, items in groups)
-    over = n > core.MAX_OPEN
-    line = (t("budget.over", open=n, over=n - core.MAX_OPEN, max=core.MAX_OPEN) if over
-            else t("budget.line", open=n, max=core.MAX_OPEN))
-    segs = "".join("<b></b>" if i < n else "<i></i>" for i in range(core.MAX_OPEN))
+    cap = ctx.get("max_open") or core.MAX_OPEN
+    over = n > cap
+    line = (t("budget.over", open=n, over=n - cap, max=cap) if over
+            else t("budget.line", open=n, max=cap))
+    segs = "".join("<b></b>" if i < n else "<i></i>" for i in range(cap))
     parts = [f'<div class="head"><h1>{t("page.waiting")}</h1>'
              f'<span class="meter{" over" if over else ""}" aria-hidden="true">{segs}</span>'
              f'<p class="sub">{line}</p></div>']
@@ -571,22 +582,46 @@ def _reopen_form(t: _T, ctx: dict, a: dict) -> str:
             f'<p class="hint">{t("reopen.hint")}</p></form>')
 
 
+def _day(when) -> str:
+    """`2026-10-29` of a date or a UTC time, as the page shows a deadline."""
+    return str(when or "")[:10]
+
+
+def _expired(t: _T, a: dict) -> tuple[list[str], str]:
+    """The chips and the status line of an ask that lapsed unanswered."""
+    chips = [f'<span class="chip mute">{t("state.expired")}</span>']
+    status = t("state.expired_on", date=_day(a["ask"].get("expires")))
+    if a["applied"]:
+        status += f'<p class="hint">{t("state.applied_where", where=a["applied"].get("where"))}</p>'
+    return chips, status
+
+
 def _done(t: _T, ctx: dict, a: dict) -> str:
     answered = a["status"] == "answered"
-    ev = a["answer"] if answered else a["withdrawn"]
+    expired = a["status"] == "expired"
+    ev = a["answer"] if answered else a["withdrawn"] if not expired else None
     shown = a["revs"].get(ev.get("subject"), a["ask"]) if answered else a["ask"]
     chips, rec = [], []
     gate = ev.get("gate") if answered else None
-    if answered:
+    chat = answered and ev.get("type") == "chat"
+    if expired:
+        chips, status = _expired(t, a)
+    elif answered:
         chips.append(f'<span class="chip">{_e(_answer(t, shown, ev.get("value")))}</span>')
+        if chat:
+            chips.append(f'<span class="chip">{t("chip.chat")}</span>')
         chips.append(f'<span class="chip ok">{t("state.applied")}</span>' if a["applied"]
                      else f'<span class="chip warn">{t("state.waiting")}</span>')
-        if core.verify(ctx.get("secret"), ev) is False:
+        if not chat and core.verify(ctx.get("secret"), ev) is False:
             chips.append(f'<span class="chip warn">{t("sig.bad")}</span>')
         revised = f' <span class="chip warn">{t("history.revised")}</span>' if ev.get("revised") else ""
         rec.append((t("form.answer"), _e(_answer(t, shown, ev.get("value"))) + revised))
         if ev.get("comment"):
             rec.append((t("history.comment"), f'<span class="txt">{_e(ev["comment"])}</span>'))
+        if chat:               # the agent's record of the owner's words, never a click
+            src = f'<footer>{_source(ev.get("source"), None)}</footer>' if ev.get("source") else ""
+            rec.append((t("history.chat"), f'<blockquote class="quote"><p class="txt">{_e(ev.get("quote"))}</p>{src}'
+                                           f'</blockquote><p class="hint">{t("history.chat_by", agent=_who(ev.get("by")))}</p>'))
         if shown.get("recommend"):
             rec.append((t("history.compare"),
                         f'<span class="chip ok">{t("chip.suggested")}</span>' if ev.get("suggested")
@@ -605,8 +640,10 @@ def _done(t: _T, ctx: dict, a: dict) -> str:
         status = t("state.withdrawn_reason", reason=ev.get("reason"))
     rec.append((t("history.status"), status))
     dl = "".join(f"<dt>{dt}</dt><dd>{dd}</dd>" for dt, dd in rec)
-    byline = f'{_e(_who(ev.get("by")))} · {_e(_age(t, ev.get("at"), ctx["now"]))}'
-    state = "waiting" if answered and not a["applied"] else "applied" if answered else "withdrawn"
+    byline = (_e(_age(t, a["expired"]["at"], ctx["now"])) if expired
+              else f'{_e(_who(ev.get("by")))} · {_e(_age(t, ev.get("at"), ctx["now"]))}')
+    state = ("expired" if expired else "waiting" if answered and not a["applied"]
+             else "applied" if answered else "withdrawn")
     return (f'<details class="ask done {state}"><summary><span class="ttl">{_e(shown.get("title"))}</span>'
             f'<span class="meta">{"".join(chips)}<span class="age">{byline}</span></span></summary>'
             f'<div class="inner"><h3>{t("history.shown")}</h3>'
@@ -617,8 +654,9 @@ def _done(t: _T, ctx: dict, a: dict) -> str:
 
 def render_history(st: dict, ctx: dict) -> str:
     t = _T(_lang(ctx))
-    rows = [st["asks"][i] for i in st["order"] if st["asks"][i]["status"] in ("answered", "withdrawn")]
-    rows.sort(key=lambda a: (a["answer"] or a["withdrawn"])["seq"], reverse=True)
+    rows = [st["asks"][i] for i in st["order"] if st["asks"][i]["status"] in ("answered", "withdrawn", "expired")]
+    # newest first; an expiry has no event of its own, so it sits where the last event before it did
+    rows.sort(key=lambda a: (a["answer"] or a["withdrawn"] or {"seq": a["opened_seq"]})["seq"], reverse=True)
     waiting = sum(1 for a in rows if a["status"] == "answered" and not a["applied"])
     parts = [f'<div class="head"><h1>{t("page.history")}</h1>'
              f'<p class="sub">{t("history.sub", n=len(rows), m=waiting)}</p></div>']
@@ -650,7 +688,7 @@ def _res(t: _T, line: dict) -> str:
             body += f'<p class="txt">{t("result.wrote", message=msg)}</p>'
     else:
         body = f'<p>{_err(t, line.get("code"), line.get("reason"))}</p>'
-        if msg and line.get("code") in HARNESS_SAYS:     # the harness's own words
+        if msg and line.get("code") in SKILL_PACK_SAYS:     # the skill pack's own words
             body += f'<p class="txt">{t("result.refused", message=msg)}</p>'
         if line.get("comment"):                           # nothing typed is lost with a refusal
             body += f'<p class="txt">{t("result.comment", comment=line["comment"])}</p>'
@@ -674,10 +712,10 @@ def render_result(ctx: dict, lines: list[dict]) -> str:
 
 def render_error(ctx: dict, code: str, message: str = "") -> str:
     t = _T(_lang(ctx))
-    said = code in HARNESS_SAYS and message
+    said = code in SKILL_PACK_SAYS and message
     tech = (f'<details class="tech"><summary>{t("err.details")}</summary><p>{_e(message)}</p></details>'
             if message and not said else "")
-    harness = f'<p class="txt">{t("result.refused", message=message)}</p>' if said else ""
+    skill_pack = f'<p class="txt">{t("result.refused", message=message)}</p>' if said else ""
     body = (f'<div class="head"><h1>{t("err.head")}</h1></div>'
-            f'<div class="res bad"><p>{_err(t, code)}</p>{harness}</div>{tech}{_back(t)}')
+            f'<div class="res bad"><p>{_err(t, code)}</p>{skill_pack}</div>{tech}{_back(t)}')
     return _shell(ctx, t, title=t("err.head"), body=body, href="./?lang=", identity=False)

@@ -1,10 +1,10 @@
-"""The golden diff's hook: what one harness runs, and how. Fill it once.
+"""The golden diff's hook: what one skill pack runs, and how. Fill it once.
 
 engine.py, beside this file, reads only the names below. Every value here is
-an example: it fits the fake harness the tests build (tests/fake_harness.py),
-shaped the way the playbook recommends. Replace each with your harness's.
+an example: it fits the fake skill pack the tests build (tests/fake_skill_pack.py),
+shaped the way the playbook recommends. Replace each with your skill pack's.
 
-What the engine needs from a harness:
+What the engine needs from a skill pack:
   * One dispatcher (ENTRY) and a verb table (VERB_TABLE) in a file (VERB_FILE,
     the dispatcher itself unless you name another): a dict whose keys are
     tuples of words, e.g. {("report", "summary"): ...}, or a list of
@@ -20,9 +20,9 @@ What the engine needs from a harness:
   * The data folder comes from one env variable (DATA_ENV), never the cwd.
 
 Every case runs in the engine's own interpreter (that is how the seams get
-patched), so list your harness's dependencies in engine.py's PEP 723 header.
+patched), so list your skill pack's dependencies in engine.py's PEP 723 header.
 
-A harness that scaffold/new_harness.py wrote (the playbook's kit vendored at
+A skill pack that scaffold/new_skill_pack.py wrote (the playbook's kit vendored at
 scripts/kit/) already has all four. Its verbs are the list in scripts/verbs.py,
 not a dict in the dispatcher, so name both files. kit.dates.now is its one
 clock (patching it pins today, host_today and market_day too),
@@ -41,7 +41,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-# ------------------------------------------------------------ the harness
+# ------------------------------------------------------------ the skill pack
 ENTRY = "tool.py"                   # tree-relative; every case runs it
 VERB_FILE = ENTRY                   # tree-relative; the file holding VERB_TABLE
 VERB_TABLE = "VERBS"                # its dict or list of verbs, read with ast

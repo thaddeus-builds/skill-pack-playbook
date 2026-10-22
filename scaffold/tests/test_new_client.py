@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""scaffold/new_client.py: one client's workspace for an existing harness.
+"""scaffold/new_client.py: one client's workspace for an existing skill pack.
 
   [1] --dry-run lists the files and writes nothing
   [2] the folder: bin/<cli>, bin/console, bin/ask executable; no `{{`
       left; one `<<fill: …>>` in CLAUDE.md; workspace/ and its intake/
       0700 and git-ignored; a clients/README.md index when there is none
-  [3] the gate verbs come from the harness's own `verbs --json`: every
+  [3] the gate verbs come from the skill pack's own `verbs --json`: every
       `gated` verb is denied through the wrapper in .claude/settings.json,
       hand edits under workspace/ are denied, and the console relays the
       gated verbs ending in confirm / approve / answer (not restore); the
@@ -15,7 +15,7 @@
       3.11 (or none), set or found as python3, in one line naming
       <PREFIX>_PYTHON, before it touches anything; the scripts parse
   [5] refusals, exit 2 with one line: a folder that is not empty, a
-      clients folder inside the harness, a path with no harness.toml, a
+      clients folder inside the skill pack, a path with no skill-pack.toml, a
       bad client id; a second client prints the index row instead
 """
 
@@ -34,7 +34,7 @@ os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 
 SCAFFOLD = PLAYBOOK / "scaffold" / "new_client.py"
-VERBS = {"harness": "acme-harness", "cli": "acme", "verbs": [
+VERBS = {"skill_pack": "acme-skill-pack", "cli": "acme", "verbs": [
     {"words": ["status"], "kind": "read"},
     {"words": ["facts", "set"], "kind": "human"},
     {"words": ["facts", "confirm"], "kind": "gated"},
@@ -50,11 +50,11 @@ else:
 """
 
 
-def fake_harness() -> Path:
-    h = Path(tmp_dir("fake-harness-")) / "acme-harness"
+def fake_skill_pack() -> Path:
+    h = Path(tmp_dir("fake-skill-pack-")) / "acme-skill-pack"
     (h / "scripts").mkdir(parents=True)
-    (h / "harness.toml").write_text(
-        '[harness]\nname = "acme-harness"\ncli = "acme"\n'
+    (h / "skill-pack.toml").write_text(
+        '[skill_pack]\nname = "acme-skill-pack"\ncli = "acme"\n'
         'env_prefix = "ACME"\nscripts_dir = "scripts"\n', encoding="utf-8")
     (h / "scripts" / "acme.py").write_text(ENTRY, encoding="utf-8")
     return h
@@ -68,9 +68,9 @@ def run(*argv: str) -> tuple[int, str, str]:
 
 
 def main() -> int:
-    h = fake_harness()
+    h = fake_skill_pack()
     clients = Path(tmp_dir("clients-")) / "acme-clients"
-    base = ["--harness", str(h), "--clients", str(clients)]
+    base = ["--skill-pack", str(h), "--clients", str(clients)]
 
     print("[1] --dry-run")
     rc, out, err = run(*base, "--client", "northwind", "--title", "Northwind",
@@ -102,7 +102,7 @@ def main() -> int:
           "[northwind](northwind/)" in (clients / "README.md").read_text(
               encoding="utf-8"))
 
-    print("[3] the gate verbs come from the harness")
+    print("[3] the gate verbs come from the skill pack")
     deny = json.loads(texts[f / ".claude" / "settings.json"])[
         "permissions"]["deny"]
     gated = ["facts confirm", "facts restore", "plan answer", "queue approve"]
@@ -165,11 +165,11 @@ def main() -> int:
     print("[5] refusals")
     for argv, what in (
             (base + ["--client", "northwind", "--title", "x"], "not empty"),
-            (["--harness", str(h), "--clients", str(h / "clients"),
-              "--client", "a", "--title", "x"], "inside the harness"),
-            (["--harness", str(clients), "--clients", str(clients.parent
+            (["--skill-pack", str(h), "--clients", str(h / "clients"),
+              "--client", "a", "--title", "x"], "inside the skill pack"),
+            (["--skill-pack", str(clients), "--clients", str(clients.parent
                                                           / "o"),
-              "--client", "a", "--title", "x"], "no harness.toml"),
+              "--client", "a", "--title", "x"], "no skill-pack.toml"),
             (base + ["--client", "Bad Id", "--title", "x"], "lower-case")):
         rc, out, err = run(*argv)
         check(f"refused, exit 2: {what}", rc == 2 and what in err

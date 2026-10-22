@@ -8,7 +8,7 @@ from _lib.schema import SPEC
 
 
 def snapshot(market):
-    """A fresh `compute steer`, through the harness CLI."""
+    """A fresh `compute steer`, through the skill pack CLI."""
     cfg = config.config()
     args = ["compute", "steer", "--", "--json"]
     args += ["--market", market] if market else []

@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import paths  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 
@@ -31,7 +31,7 @@ def main() -> int:
             os.environ.pop("SHOP_DATA_DIR", None)
         else:
             os.environ["SHOP_DATA_DIR"] = val
-        e = raises(paths.data_dir, HarnessError)
+        e = raises(paths.data_dir, SkillPackError)
         check(f"SHOP_DATA_DIR={val!r}: data_dir_unset naming the var",
               e is not None and e.message.code == "data_dir_unset"
               and e.message.params == {"var": "SHOP_DATA_DIR"}
@@ -41,7 +41,7 @@ def main() -> int:
     os.chdir(tmp_dir("cwd-"))
     try:
         os.environ["SHOP_DATA_DIR"] = "client-data"
-        e = raises(paths.data_dir, HarnessError)
+        e = raises(paths.data_dir, SkillPackError)
         check("a relative data dir is refused, not resolved against the cwd",
               e is not None and e.message.code == "data_dir_not_absolute"
               and e.message.params == {"var": "SHOP_DATA_DIR",

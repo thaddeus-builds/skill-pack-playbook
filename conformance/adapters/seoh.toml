@@ -1,5 +1,5 @@
-# SEO-tools-harness (seoh). Needs Python 3.11+ for the harness itself: `uv` supplies it.
-[harness]
+# SEO-tools-harness (seoh). Needs Python 3.11+ for the skill pack itself: `uv` supplies it.
+[skill_pack]
 name = "seoh"
 cwd = "{root}"
 

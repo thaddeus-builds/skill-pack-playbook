@@ -12,7 +12,8 @@ proposals: the one sanctioned writer of an owner's answer into ssot/.
 FILE is the JSON `ask.py answers` printed (`-` reads stdin). Two kinds of
 ask are read; every other answer is skipped:
 
-  * an intake ask, id "intake-<iid>": the iid is looked up in the intake files;
+  * an intake ask, id "intake-<iid>" (or, a client hub's own, "hub-intake-<iid>"):
+    the iid is looked up in the intake files;
   * a proposal ask: an ask about a row already in user-stories.agent.tsv,
     policies.agent.tsv or glossary.agent.tsv, found by the row's `ask` cell
     (the trail: a row sent to the console has status asked and names its
@@ -26,6 +27,9 @@ ask are read; every other answer is skipped:
                     accepted and names its decided answer)
     number       -> a pending row in DATA_DIR/intake/numbers.tsv; never the repo
     question     -> the answer in DATA_DIR/intake/questions.tsv
+                    (both with a packs column: the packs the item is for; a
+                    file made before it gains the column only when an item
+                    names packs, and keeps working without it)
     a "no"       -> the .agent.tsv row says status=dropped, decided=...;
                     the owner file is not touched
     proposal, yes -> the owner row under the agent row's id, its cells read
@@ -75,10 +79,12 @@ import check_intake as ci  # noqa: E402
 
 ASK = os.path.join(HERE, "..", "console", "ask.py")
 PREFIX = "intake-"
+PREFIXES = ("hub-intake-", PREFIX)   # the hub's own intake asks, and a pack's
 AGENT_COLS = ["status", "source", "ask", "decided"]
 NUMBER_COLS = ["key", "value", "unit", "applies_to", "quote", "source", "status",
                "suggested", "comment", "ask", "decided"]
 QUESTION_COLS = ["question", "answer", "suggested", "comment", "source", "ask", "decided"]
+PACKS_COL = "packs"                  # optional: a file made before it lacks it
 CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩"
 KIND = {"words": "word", "stories": "story", "numbers": "number", "questions": "question"}
 # (owner file, agent sibling, id column, kind): the files a proposal ask can settle
@@ -112,6 +118,14 @@ def trail_source(source: str) -> str:
     README.md): 'meeting:<date> <hh:mm:ss>', or 'doc:<name>' as it is."""
     return "; ".join(r if r.startswith("doc:") else "meeting:" + r
                      for r in ci.source_refs(source))
+
+
+def intake_iid(ask: str) -> str | None:
+    """The iid an intake ask is about, or None for any other ask."""
+    for p in PREFIXES:
+        if ask.startswith(p):
+            return ask[len(p):]
+    return None
 
 
 def clean(v) -> str:
@@ -274,10 +288,10 @@ class Applier:
         apply = r.get("apply") or ""
         if not APPLY_RE.match(apply) or not apply.startswith(r["id"] + "@"):
             raise Problem("bad_request", f"apply {apply!r} is not {r['id']}@SEQ")
-        if not r["id"].startswith(PREFIX):
+        iid = intake_iid(r["id"])
+        if iid is None:
             return self.proposed(r["id"], f"console:{apply}", str(r.get("value", "")).strip(),
                                  {"apply": apply, "id": r["id"]})
-        iid = r["id"][len(PREFIX):]
         x = self.idx.get(iid)
         if x is None:
             raise Problem("unknown_item", f"no intake file given has iid {iid}")
@@ -293,9 +307,10 @@ class Applier:
             if not self.data_dir:
                 raise Problem("data_dir_required", "numbers and question answers go to the "
                               "client's data folder: name it with --data-dir")
+            packs = ",".join(ci.item_packs(it, x["meeting"]))
             if bucket == "numbers":
-                return {**base, **self.number(r, decided, it, value)}
-            return {**base, **self.question(r, decided, it, value)}
+                return {**base, **self.number(r, decided, it, value, packs)}
+            return {**base, **self.question(r, decided, it, value, packs)}
         raise Problem("unknown_item", f"{iid} is a goal; goals are not asked")
 
     def word(self, ask, decided, it, value) -> dict:
@@ -451,29 +466,36 @@ class Applier:
             return f"dropped {kind} {rid}, nothing adopted ({self.ssot_name}/{agent_name})"
         return f"{kind} {rid} ({self.ssot_name}/{owner_name})"
 
-    def number(self, r, decided, it, value) -> dict:
-        t = self.data_file("numbers.tsv", NUMBER_COLS)
+    @staticmethod
+    def packs_cell(t: Table, packs: str) -> dict:
+        """The packs cell: a file without the column gains it only for an item that names packs."""
+        if packs:
+            t.ensure([PACKS_COL])
+        return {PACKS_COL: packs} if t.has(PACKS_COL) else {}
+
+    def number(self, r, decided, it, value, packs="") -> dict:
+        t = self.data_file("numbers.tsv", NUMBER_COLS + [PACKS_COL])
         t.need(*NUMBER_COLS)
         where = f"pending number {it['key']} in the client's data folder (intake/numbers.tsv)"
         if self.settled(t, r["id"], decided):
             return {"action": "already", "where": where, "files": []}
         if not NUMBER_RE.match(value):
             raise Problem("bad_value", f"a number was asked, and {value!r} is not one")
-        t.append({"key": it["key"], "value": value, "unit": it["unit"],
+        t.append({**self.packs_cell(t, packs),"key": it["key"], "value": value, "unit": it["unit"],
                   "applies_to": it["applies_to"], "quote": it["quote"], "source": trail_source(it["source"]),
                   "status": "pending", "suggested": "yes" if r.get("suggested") else "no",
                   "comment": r.get("comment", ""), "ask": r["id"], "decided": decided})
         return {"action": "pending", "where": where, "files": ["$DATA_DIR/intake/numbers.tsv"]}
 
-    def question(self, r, decided, it, value) -> dict:
-        t = self.data_file("questions.tsv", QUESTION_COLS)
+    def question(self, r, decided, it, value, packs="") -> dict:
+        t = self.data_file("questions.tsv", QUESTION_COLS + [PACKS_COL])
         t.need(*QUESTION_COLS)
         where = "answer kept in the client's data folder (intake/questions.tsv)"
         if self.settled(t, r["id"], decided):
             return {"action": "already", "where": where, "files": []}
         if not value:
             raise Problem("bad_value", "the answer is empty")
-        t.append({"question": it["text"], "answer": value,
+        t.append({**self.packs_cell(t, packs),"question": it["text"], "answer": value,
                   "suggested": "yes" if r.get("suggested") else "no",
                   "comment": r.get("comment", ""), "source": trail_source(it["source"]),
                   "ask": r["id"], "decided": decided})
@@ -518,15 +540,15 @@ def run(answers: list[dict], intake: list[str], ssot: str, data_dir: str | None,
     todo = []
     ap = Applier(idx, ssot, data_dir)
     for r in sorted(answers, key=lambda a: a.get("seq") or 0):
-        if not r["id"].startswith(PREFIX) and not ap.proposal(r["id"]):
+        if intake_iid(r["id"]) is None and not ap.proposal(r["id"]):
             out["skipped"].append({"id": r["id"], "why": "not an intake ask, and no .agent.tsv row "
                                    "names it in its ask column"})
         elif r.get("applied"):
             out["skipped"].append({"id": r["id"], "why": "already recorded as applied in the console"})
         else:
             todo.append(r)
-    needs_data = [r["id"] for r in todo if r["id"].startswith(PREFIX)
-                  and idx.get(r["id"][len(PREFIX):], {}).get("bucket") in ("numbers", "questions")]
+    needs_data = [r["id"] for r in todo if intake_iid(r["id"]) is not None
+                  and idx.get(intake_iid(r["id"]), {}).get("bucket") in ("numbers", "questions")]
     if needs_data and not data_dir:
         raise Refusal("data_dir_required", "numbers and question answers go to the client's data "
                       "folder, never the repository: name it with --data-dir", asks=needs_data)
@@ -542,7 +564,7 @@ def run(answers: list[dict], intake: list[str], ssot: str, data_dir: str | None,
         try:
             res = ap.one(r)
         except Problem as e:
-            who = ({"iid": r["id"][len(PREFIX):]} if r["id"].startswith(PREFIX)
+            who = ({"iid": intake_iid(r["id"])} if intake_iid(r["id"]) is not None
                    else {"id": r["id"]})
             out["problems"].append({"apply": r.get("apply"), **who,
                                     "code": e.code, "message": str(e)})

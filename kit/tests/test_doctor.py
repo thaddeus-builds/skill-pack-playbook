@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""kit.doctor: the built-in checks, the harness's own, and the exit rules,
-on the fake "shop" harness.
+"""kit.doctor: the built-in checks, the skill pack's own, and the exit rules,
+on the fake "shop" skill pack.
 
   [1] a fresh install: every built-in line; no DB is info, no market warns;
       "writes: off" is ok; a secret's value is never shown; the non-dev
@@ -13,19 +13,19 @@ on the fake "shop" harness.
       secret or the data dir from the HOME-level file warns; a gate secret
       or KIT_TTY in the data-dir .env is not loaded and warns by name (an
       ordinary key still loads); CONSOLE_SECRET in the process env warns
-  [5] the DB: current (ok), stale, unknown tables, newer than the harness,
+  [5] the DB: current (ok), stale, unknown tables, newer than the skill pack,
       unreadable; opened read-only (nothing changes, nothing is created)
   [6] markets: pending only (warn + the confirm command), confirmed (ok),
       `markets = []` (ok)
   [7] hooks: the platform lock (set / unknown / none), a verb whose script
-      is missing, the harness's own checks (warn, fail, --live), a check
+      is missing, the skill pack's own checks (warn, fail, --live), a check
       that crashes or reports a plain str
   [8] exit: 0 with warnings, 1 with --strict, 1 on a failure; --json is one
       document whose every message is coded
-  [9] the checkout: the cwd in another git checkout of the same harness at
+  [9] the checkout: the cwd in another git checkout of the same skill pack at
       another HEAD, or with docs changed and not committed, warns; the same
       HEAD, the bound checkout itself, a copy outside git and a checkout of
-      another harness are silent
+      another skill pack are silent
 """
 
 import os
@@ -116,13 +116,13 @@ def test_fresh() -> None:
           rc == 0 and doc is not None and not err, (rc, out[:200], err))
     ids = [c["check"] for c in doc["checks"]]
     check("the built-in checks, in order",
-          [i for i in dict.fromkeys(ids)] == ["harness", "env_chain",
+          [i for i in dict.fromkeys(ids)] == ["skill_pack", "env_chain",
                                              "token_source", "data_dir", "db",
                                              "markets", "writes", "verbs"],
           ids)
-    check("the harness line", codes(doc, "harness") == ["doctor_harness"]
-          and doc["harness"]["name"] == "shop-harness")
-    check("process env only, each harness variable with its source",
+    check("the skill pack line", codes(doc, "skill_pack") == ["doctor_skill_pack"]
+          and doc["skill_pack"]["name"] == "shop-harness")
+    check("process env only, each skill pack variable with its source",
           codes(doc, "env_chain")[0] == "doctor_env_process_only"
           and "SHOP_DATA_DIR = " + str(data) + " [process env]"
           in [c["message"] for c in found(doc, "env_chain")])
@@ -234,11 +234,11 @@ def test_paths() -> None:
 
 # ------------------------------------------------------------------ [4]
 
-def home_harness(home: Path) -> Path:
-    root = Path(tmp_dir("doc-home-harness-")) / "shop"
+def home_skill_pack(home: Path) -> Path:
+    root = Path(tmp_dir("doc-home-skill-pack-")) / "shop"
     shutil.copytree(_shop.SHOP, root, ignore=shutil.ignore_patterns(
         "__pycache__", "*.pyc"))
-    toml = root / "harness.toml"
+    toml = root / "skill-pack.toml"
     toml.write_text(toml.read_text(encoding="utf-8").replace(
         'home_env_file = ""', f'home_env_file = "{home / ".shop.env"}"'),
         encoding="utf-8")
@@ -269,7 +269,7 @@ def test_env_files() -> None:
         f"SHOP_DATA_DIR={data}\nSHOP_API_TOKEN=t0ken\nSHOP_MODE=x\n",
         encoding="utf-8")
     (home / ".shop.env").chmod(0o600)
-    root = home_harness(home)
+    root = home_skill_pack(home)
     e = {k: v for k, v in env(None).items() if k != paths_var}
     config.use(root)
     try:
@@ -342,7 +342,7 @@ def test_env_files() -> None:
           and "c0nsole-only" not in out, cs)
     _, _, _, doc = run(planted, "--json", **{secret: "process-s3cret"})
     check("the confirm-code secret in the process env is not warned (the "
-          "harness process issues and checks the code)",
+          "skill pack process issues and checks the code)",
           found(doc, "console_secret") == [] and found(doc, "env_files") == [])
 
 
@@ -377,7 +377,7 @@ def test_db() -> None:
         c.execute("PRAGMA user_version = 9")
         c.commit()
     _, _, _, doc = run(data, "--json")
-    check("a DB stamped by a newer harness: schema_too_new, a warning",
+    check("a DB stamped by a newer skill pack: schema_too_new, a warning",
           codes(doc, "db") == ["schema_too_new"])
     check("…and the market check does not read it",
           codes(doc, "markets") == ["doctor_not_onboarded"])
@@ -416,7 +416,7 @@ def test_markets() -> None:
     flat = Path(tmp_dir("doc-flat-")) / "shop"
     shutil.copytree(_shop.SHOP, flat, ignore=shutil.ignore_patterns(
         "__pycache__", "*.pyc"))
-    toml = flat / "harness.toml"
+    toml = flat / "skill-pack.toml"
     toml.write_text(toml.read_text(encoding="utf-8").replace(
         'markets = ["US", "CA"]', "markets = []"), encoding="utf-8")
     _, _, _, doc = run(Path(tmp_dir("doc-flat-data-")), "--json", root=flat)
@@ -465,7 +465,7 @@ def test_hooks() -> None:
         ctx.warn("plain", "an uncoded sentence")
 
     rc, _, _, doc = run(data, "--json", checks=[mine, crashes, plain])
-    check("a harness check reports in its own words, after the built-ins",
+    check("a skill pack check reports in its own words, after the built-ins",
           doc["checks"][-3]["check"] == "shop_prices"
           and found(doc, "shop_prices")[0]["next"] == ["shop prices pull"]
           and seen["live"] is False)
@@ -475,7 +475,7 @@ def test_hooks() -> None:
           and "RuntimeError: boom" in doc["checks"][-2]["message"], rc)
     check("warnings alone: exit 0", rc == 0)
     rc, _, _, doc = run(data, "--json", "--live", checks=[mine])
-    check("--live reaches the harness's checks; a rejected probe fails: "
+    check("--live reaches the skill pack's checks; a rejected probe fails: "
           "exit 1", seen["live"] is True and rc == 1
           and found(doc, "shop_api", "fail") and doc["healthy"] is False)
 
@@ -592,14 +592,14 @@ def test_checkout() -> None:
     check("a copy outside git: silent", differs(plain) == [])
     other = base / "other"
     shutil.copytree(_shop.SHOP, other, ignore=ignore)
-    toml = other / "harness.toml"
+    toml = other / "skill-pack.toml"
     toml.write_text(toml.read_text(encoding="utf-8").replace(
-        'name = "shop-harness"', 'name = "other-harness"'), encoding="utf-8")
+        'name = "shop-harness"', 'name = "other-skill-pack"'), encoding="utf-8")
     git(other, "init", "-q")
     git(other, "add", "-A")
     git(other, "commit", "-q", "-m", "other")
-    check("a checkout of another harness: silent", differs(other) == [])
-    check("a cwd with no harness above it: silent", differs(base) == [])
+    check("a checkout of another skill pack: silent", differs(other) == [])
+    check("a cwd with no skill pack above it: silent", differs(base) == [])
     check("git_head: None outside git", doctor.git_head(plain) is None)
 
 

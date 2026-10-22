@@ -12,7 +12,7 @@ consent_revoked		The consent was revoked	这份授权已被撤回
 consent_not_in_force	today,valid_from,valid_until	Not in force today ({today}): valid {valid_from}..{valid_until}	今天（{today}）不在授权有效期内：{valid_from} 至 {valid_until}
 consent_uses_uncovered	missing	The consent does not cover {missing}	这份授权不包括 {missing}
 consent_scope_uncovered	key,value,allowed	The scope {key} ({allowed}) does not allow {value}	授权范围 {key}（{allowed}）不包括 {value}
-consent_document_missing	document	The signed document {document} is not a file under the harness root	签字文件 {document} 不在项目目录中
+consent_document_missing	document	The signed document {document} is not a file under the skill pack root	签字文件 {document} 不在项目目录中
 consent_document_changed	document	The signed document {document} is not the one recorded (document_sha256)	签字文件 {document} 与记录的不是同一份（document_sha256 不符）
 consent_incomplete	record,detail	{record}: fix the record before a person confirms it: {detail}. Nothing was written	{record}：请先把授权记录填完整再请本人确认：{detail}。未写入任何内容
 consent_changed_meanwhile	record	{record} changed while the person was being asked, so the confirmation no longer matches it. Nothing was written	在等待本人确认期间，{record} 被改动了，这次确认已经对不上。未写入任何内容

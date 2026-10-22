@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""The kit as a harness gets it: installed in a sample harness (_sample.py),
+"""The kit as a skill pack gets it: installed in a sample skill pack (_sample.py),
 every test passes; then each gate fails on the one change it exists to catch,
 and says where. A gate that stays green on its broken case fails here.
 """
@@ -43,9 +43,9 @@ BROKEN = [  # (what changed, the test file, changes, what its output must say)
     ("pull reaches the database guard in common", "test_layering.py",
      {"src/pull_ads.py": "from common import store\n" + C["src/pull_ads.py"]},
      ["FAIL  b: pull_ads: pull reaches no database", "common.store"]),
-    ("common imports a harness helper", "test_layering.py",
+    ("common imports a skill pack helper", "test_layering.py",
      {"common/dates.py": "from lib import rules\n" + SAMPLE["dates"]},
-     ["FAIL  h: common.dates: common imports nothing of the harness", "lib.rules"]),
+     ["FAIL  h: common.dates: common imports nothing of the skill pack", "lib.rules"]),
     ("common names the console", "test_layering.py",
      {"common/runner.py": "# see webconsole/serve.py\n" + SAMPLE["runner"]},
      ["FAIL  i: common never names the console", "common/runner.py:1"]),
@@ -125,7 +125,7 @@ def main() -> int:
         check(f"{test}: {what}", code == 1 and all(s in out for s in says),
               "\n".join(out.splitlines()[-12:]))
     code, out = _sample.run(sample({os.path.join("tests", "test_leak.py"): LEAK}), ENV, "tests/run.py", "leak")
-    check("run.py: a harness test that leaves a temp dir fails the run",
+    check("run.py: a skill pack test that leaves a temp dir fails the run",
           code == 1 and "test_leak.py" in out and "left 1 temp entry" in out, out)
     return finish()
 

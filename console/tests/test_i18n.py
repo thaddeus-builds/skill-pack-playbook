@@ -36,7 +36,7 @@ def params(text):
 
 
 def sources():
-    return [n for n in ("pages.py", "serve.py") if os.path.exists(os.path.join(ROOT, n))]
+    return [n for n in ("pages.py", "serve.py", "frame.py") if os.path.exists(os.path.join(ROOT, n))]
 
 
 def scan(name):
@@ -185,8 +185,8 @@ def test_a_word_for_every_problem_the_fold_can_report_and_every_step():
         assert k in i18n.WORDS
 
 
-def test_a_refusal_after_the_harness_may_have_been_written_never_says_nothing_was_saved():
-    """The second harness call can write before it fails or stops (core.CODES
+def test_a_refusal_after_the_skill_pack_may_have_been_written_never_says_nothing_was_saved():
+    """The second skill pack call can write before it fails or stops (core.CODES
     says so), so these sentences claim nothing about what was saved; the
     timeout one and the no-clear-answer one tell the person to have the agent
     check."""

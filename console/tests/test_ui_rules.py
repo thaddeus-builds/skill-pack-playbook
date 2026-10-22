@@ -25,7 +25,7 @@ import _t  # noqa: E402
 import core  # noqa: E402
 import i18n  # noqa: E402
 import pages  # noqa: E402
-from test_pages import Doc, Log, Node, T, mixed_log, ask_raw, ctx, full_log, history_log  # noqa: E402
+from test_pages import T0, Doc, Log, Node, T, mixed_log, ask_raw, ctx, full_log, history_log  # noqa: E402
 
 LANGS = i18n.LANGS
 
@@ -110,7 +110,27 @@ def problem_log():
     return L
 
 
-RES_TITLE, RES_VALUE, RES_MESSAGE, ERR_DETAIL = "Ask title here", "Given value here", "Harness message here", "Technical detail here"
+class HubLog(Log):
+    """Folded at T0, so an ask whose `expires` is before it has lapsed."""
+
+    def state(self):
+        return core.fold(self.events, T0)
+
+
+def hub_log():
+    """One console for several packs: an ask answered in chat, one that expired
+    unanswered (and was recorded), one still open with its deadline shown."""
+    L = HubLog()
+    a = L.ask(ask_raw("choose", "gads-h1", group="google-ads · Facts, US", expires="2099-01-01"))
+    L.add("chat", "agent:gads", id="gads-h1", value="a", via="chat", quote="Option A, please",
+          source="chat 2026-10-22 14:03", subject=core.subject_hash(a), suggested=True)
+    L.ask(ask_raw("confirm", "kos-h2", group="koc-script · Words", expires="2000-01-01"))
+    L.add("applied", "agent:kos", id="kos-h2", where="expired, nothing changed")
+    L.ask(ask_raw("confirm", "crp-h3", group="creator-program · Words", expires="2099-01-01"))
+    return L
+
+
+RES_TITLE, RES_VALUE, RES_MESSAGE, ERR_DETAIL = "Ask title here", "Given value here", "Skill pack message here", "Technical detail here"
 
 
 def every_page(lang):
@@ -132,6 +152,8 @@ def every_page(lang):
         pages.render_error(ctx(lang), "gate_timeout", RES_MESSAGE),
         pages.render_inbox(mixed_log().state(), ctx(lang)),
         pages.render_history(mixed_log().state(), ctx(lang)),
+        pages.render_inbox(hub_log().state(), ctx(lang)),
+        pages.render_history(hub_log().state(), ctx(lang)),
     ]
 
 
@@ -335,6 +357,17 @@ def test_u08_same_bar_everywhere_usable_at_375_no_sideways_scroll_big_tap_target
     assert decls("body")["font"].startswith("16px/1.55")
 
 
+def test_u08_a_bar_with_many_pages_scrolls_inside_itself_and_the_page_never_does():
+    nav = [{"name": "waiting", "href": "./"}] + [{"name": f"p{i}", "href": f"page-p{i}", "title": f"Page number {i}", "count": i}
+                                                 for i in range(1, 5)] + [{"name": "history", "href": "history"}]
+    for lang in LANGS:
+        d = Doc(pages.render_inbox(Log().state(), ctx(lang, nav=nav)))
+        assert len(d.find("header", "bar").find("nav").find_all("a")) == 6 and d.find("header", "bar").find("a", "lang")
+    assert decls(".tabs")["overflow-x"] == "auto" and decls(".tabs")["min-width"] == "0"
+    assert decls(".tabs a")["flex"] == "0 0 auto" and decls(".tabs a")["white-space"] == "nowrap"
+    assert decls(".tabs a", "(max-width: 480px)")["flex"] == "1 0 auto"            # on a phone they share the row, and scroll past it
+
+
 def test_u08_the_stylesheet_defines_every_colour_it_uses_in_both_schemes():
     css = re.sub(r"/\*.*?\*/", "", read("static", "console.css"), flags=re.S)
     used = set(re.findall(r"var\((--[\w-]+)\)", css))
@@ -376,7 +409,7 @@ def test_u09_the_consoles_words_come_only_from_the_dictionary_the_agents_are_sho
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs:
             assert not re.fullmatch(r"[A-Za-z][A-Za-z ,.'’:-]*", node.value) or " " not in node.value.strip(), node.value
-    for name in ("pages.py", "serve.py"):
+    for name in ("pages.py", "serve.py", "frame.py"):
         if os.path.exists(os.path.join(ROOT, name)):
             src = read(name)
             assert not re.search(r"""(?:\bt|\braw)\(\s*f["']""", src), f"{name}: a key built in an f-string cannot be checked"
@@ -401,7 +434,7 @@ def test_u09_the_consoles_words_come_only_from_the_dictionary_the_agents_are_sho
         elif isinstance(x, list):
             for v in x:
                 strings(v, agents)
-    for log in (L, over_log(), numbers_log(), problem_log(), mixed_log()):
+    for log in (L, over_log(), numbers_log(), problem_log(), mixed_log(), hub_log()):
         for e in log.events:
             strings({k: v for k, v in e.items() if k in fields})
     agent |= {"Northwind Console", "alice", "Done", RES_TITLE, RES_VALUE, RES_MESSAGE, ERR_DETAIL}
@@ -935,7 +968,7 @@ function page(opts = {}) {
 """
 
 
-def test_u11_an_answer_that_writes_to_a_harness_shows_what_before_and_what_after():
+def test_u11_an_answer_that_writes_to_a_skill_pack_shows_what_before_and_what_after():
     for lang in LANGS:
         d = Doc(pages.render_inbox(full_log().state(), ctx(lang)))
         ask = [a for a in d.find_all("details", "ask") if "Title of p1" in a.text()][0]

@@ -3,13 +3,17 @@
 //   1. stop detached jobs still running (bin/detach.js job files in
 //      <data dir>/logs/*.pid, checked to be ours: same pid AND start time);
 //   2. remove every scheduler task named in zylos/manifest.json, or managed
-//      by an earlier release (<data dir>/.zylos-tasks.json).
-// The data dir (the harness's state, .env, console log, logs) is never
+//      by an earlier release (<data dir>/.zylos-tasks.json);
+//   3. copy the console's Caddy block into <data dir>/caddy-block.saved (the
+//      uninstall deletes it from the Caddyfile; post-install names the copy).
+// The data dir (the skill pack's state, .env, console log, logs) is never
 // touched. Exits 1 with the reason on stderr when a job can't be stopped or
 // a task can't be listed or removed.
 
 const h = require('../lib.js');
 
+const saved = h.saveCaddyBlock();
+if (saved) h.log(`kept a copy of the Caddy block for the next install: ${saved}`);
 const problems = [...h.stopJobs(), ...h.removeAllTasks()];
 h.log(`data dir left as is: ${h.DATA_DIR}`);
 if (problems.length) {

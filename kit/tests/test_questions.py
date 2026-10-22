@@ -2,9 +2,9 @@
 """kit.questions: an open question never holds the plan, on SYNTHETIC rows only (neutral kinds and words).
 
   [0] the rules, each on its planted break; the sound rows pass; an answered or dropped question needs neither field
-  [1] problems(): the id (missing, repeated), by_data (missing, blank, outside the harness's kinds; ask_only allowed,
-      also when the harness lists it), meanwhile (missing, blank, placeholder, a wait in any case or punctuation, the
-      harness's own wait words), non-mapping rows, a bad list of kinds refused; nothing is mutated
+  [1] problems(): the id (missing, repeated), by_data (missing, blank, outside the skill pack's kinds; ask_only allowed,
+      also when the skill pack lists it), meanwhile (missing, blank, placeholder, a wait in any case or punctuation, the
+      skill pack's own wait words), non-mapping rows, a bad list of kinds refused; nothing is mutated
   [2] groups(): data by kind, person, unnamed, answered; a dropped question in none; the order given
   [3] readback(): data held prompts once per version of it, an answered question never, ask_only never, a blank
       fingerprint is no data, another key name; nothing is mutated
@@ -66,7 +66,7 @@ def test_problems() -> None:
     check("by_data outside the kinds names the kinds", "'gossip'" in p(row(by_data="gossip"))[0]
           and "order_export" in p(row(by_data="gossip"))[0])
     check("ask_only is always allowed", p(row(by_data="ask_only")) == [])
-    check("a harness may list ask_only itself", Q.problems([row(by_data="ask_only")], (*KINDS, "ask_only")) == [])
+    check("a skill pack may list ask_only itself", Q.problems([row(by_data="ask_only")], (*KINDS, "ask_only")) == [])
     check("another word for ask_only", Q.problems([row(by_data="person")], KINDS, ask_only="person") == []
           and len(Q.problems([row(by_data="ask_only")], KINDS, ask_only="person")) == 1)
     check("by_data blank", len(p(row(by_data=" "))) == 1)
@@ -88,7 +88,7 @@ def test_problems() -> None:
         check(f"an action: {text!r}", p(row(meanwhile=text)) == [], p(row(meanwhile=text)))
     check("a Chinese extra wait word is a prefix", len(p(row(meanwhile="静候客户回复"), extra_waits=("静候",))) == 1
           and p(row(meanwhile="先写模板"), extra_waits=("静候",)) == [])
-    check("the harness's own wait words", len(p(row(meanwhile="stand by for the client"), extra_waits=("stand by",))) == 1
+    check("the skill pack's own wait words", len(p(row(meanwhile="stand by for the client"), extra_waits=("stand by",))) == 1
           and p(row(meanwhile="stand by for the client")) == [])
     check("an extra wait word is not matched inside a word", p(row(meanwhile="standby tool built"), extra_waits=("stand",)) == [])
     check("a row that is not a mapping", p("Q1")[0] == "question #1: not a mapping")

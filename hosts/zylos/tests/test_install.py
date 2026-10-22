@@ -74,7 +74,7 @@ def test_post_install_prepares_the_runtime_and_prints_the_next_steps():
         assert "doctor-install.log" in out and os.path.isfile(os.path.join(host.logs, "doctor-install.log"))
         assert "UNREACHABLE" in out, "an unreachable endpoint is a soft note"
         assert f"no declared_markets declared yet. Next, with the owner: '{host.link}' facts init" in out, out
-        assert f"run the harness as: '{host.link}' <verb>" in out, out
+        assert f"run it as: '{host.link}' <verb>" in out, out
         assert "zylos-core 0.8.1 (minimum 0.7.1)" in out, out
         assert oct(os.stat(host.data).st_mode & 0o777) == "0o700"
         host.reset_uv_log()
@@ -256,6 +256,20 @@ def test_pre_uninstall_removes_every_managed_task_and_keeps_the_data():
         for n in NAMES + ["shop-retired-task"]:
             assert f"removed scheduler task {n}" in r.stdout, r.stdout
         assert os.path.isfile(os.path.join(host.data, ".env")) and "data dir left as is" in r.stdout
+
+
+def test_pre_uninstall_keeps_a_copy_of_the_caddy_block():
+    with Host(link=True) as host:
+        installed(host)
+        caddyfile = os.path.join(host.zylos, "http", "Caddyfile")
+        block = "# BEGIN zylos-component:shop-harness\nexample.test {\n  header_up Host x\n}\n# END zylos-component:shop-harness"
+        host.write(caddyfile, "other.test {\n}\n" + block + "\n")
+        r = host.hook("pre-uninstall.js", ZYLOS_COMPONENT=host.name, ZYLOS_SKILL_DIR=host.skill,
+                      ZYLOS_DATA_DIR=host.data)
+        saved = os.path.join(host.data, "caddy-block.saved")
+        assert r.returncode == 0 and "kept a copy of the Caddy block" in r.stdout, r.stdout + r.stderr
+        assert open(saved).read() == block + "\n", "exactly the component's block, nothing of the host's other sites"
+        assert (os.stat(saved).st_mode & 0o777) == 0o600
 
 
 def test_every_placeholder_renders_shell_quoted():

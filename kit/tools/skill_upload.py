@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The upload copy of a harness's SKILL.md, for claude.ai and the Skills API.
+"""The upload copy of a skill pack's SKILL.md, for claude.ai and the Skills API.
 
     python3 kit/tools/skill_upload.py SKILL_DIR OUT_DIR   write OUT_DIR/<name>/ and OUT_DIR/<name>.zip
     python3 kit/tools/skill_upload.py --check SKILL_DIR   exit 1 naming why the upload would refuse it
 
-A harness's SKILL.md serves two kinds of host. A host adapter (the
+A skill pack's SKILL.md serves two kinds of host. A host adapter (the
 playbook's hosts/ README) reads top-level `version` and `type` and keys of
 its own. The upload (claude.ai Settings > Features, the Skills API, the
 Agent Skills spec) refuses any top-level key outside name, description,
@@ -25,7 +25,7 @@ The YAML is read line by line (stdlib only), the subset a SKILL.md
 frontmatter uses: plain, single- or double-quoted scalars (a double-quoted
 one with JSON's escapes), `>` and `|` blocks, indented continuation lines.
 
-Stdlib only; runs without a bound harness.
+Stdlib only; runs without a bound skill pack.
 
 Test: kit/tests/test_skill_upload.py.
 """

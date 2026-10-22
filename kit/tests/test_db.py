@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """kit.db + kit.schema_base: human data survives every path into the file.
 
-Ported from the reference harness's test_db_minimal.py and
+Ported from the reference skill pack's test_db_minimal.py and
 test_human_tables_survive.py, on a generic cache (orders by day, sales
 by week, a stock snapshot):
 
@@ -25,8 +25,10 @@ by week, a stock snapshot):
       row; an added NOT NULL column without default is not "only adds"
   [6] human-table drift (columns or pk) always raises, before anything
       changes, read-only too; a missing human table is refused on a
-      read-only open unless declared human_added_later
-  [7] a file stamped by a newer harness is refused on every open and the
+      read-only open unless declared human_added_later (hub_copies always
+      is: a file older than it opens, the next write open creates it with
+      its append-only triggers)
+  [7] a file stamped by a newer skill pack is refused on every open and the
       dry run, before any read: bytes unchanged, no backup; read-only
       never stamps, write mode stamps
   [8] a read-only open of a missing file is no_db and creates nothing
@@ -59,7 +61,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import db, messages, schema_base  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
 ORDERS = {"columns": {"date": "TEXT", "sku": "TEXT", "units": "INTEGER",
@@ -97,7 +99,7 @@ def quiet(fn):
     return out, err.getvalue()
 
 
-def refusal(fn, exc=HarnessError):
+def refusal(fn, exc=SkillPackError):
     """(the exception, its message code) when fn() raises `exc`; anything
     else propagates."""
     e = raises(fn, exc)
@@ -130,7 +132,8 @@ def stamp(path) -> int:
 
 
 SEEDED = {"client_facts": 2, "client_facts_history": 3, "decisions": 1,
-          "decisions_history": 2, "action_queue": 1, "action_effects": 2}
+          "decisions_history": 2, "action_queue": 1, "action_effects": 2,
+          "hub_copies": 1}
 
 
 def seed(s: db.SchemaSpec, con: sqlite3.Connection) -> None:
@@ -165,6 +168,10 @@ def seed(s: db.SchemaSpec, con: sqlite3.Connection) -> None:
             con.execute("INSERT INTO action_effects (queue_id, market, "
                         "effect_id, state, at, changed_by) VALUES (1, 'US', "
                         "'a1', ?, ?, 'owner@cli')", (state, t))
+        con.execute("INSERT INTO hub_copies (market, key, value, hub, "
+                    "hub_history_id, hub_digest, outcome, pack_history_id, "
+                    "copied_at, copied_by) VALUES ('US', 'unit_cost', '4.2', "
+                    "'acme', 7, 'd1', 'same', 3, ?, 'owner@hub')", (t,))
 
 
 def fresh(s: db.SchemaSpec | None = None, *, seeded: bool = True,
@@ -204,9 +211,9 @@ def t1_bootstrap() -> None:
           and "SHOP_DATA_DIR" in err and "SHOP_DB" in err, err)
     check("every spec table exists (human + cache)",
           set(s.tables) <= objects(path, "table"), objects(path, "table"))
-    check("the kit's six human tables are in every spec",
+    check("the kit's seven human tables are in every spec",
           set(schema_base.HUMAN) <= set(s.human_tables)
-          and len(s.human_tables) == 6, s.human_tables)
+          and len(s.human_tables) == 7, s.human_tables)
     check("views created", objects(path, "view") == set(VIEWS))
     check("triggers installed, named per spec",
           objects(path, "trigger") == set(db.triggers(s)),
@@ -380,10 +387,10 @@ def t2_triggers() -> None:
           e is not None and "frozen" in str(e), e)
     c = raw(path)
     c.execute("CREATE TRIGGER stock_no_delete BEFORE DELETE ON stock "
-              "BEGIN SELECT 1; END")    # the harness's own, on a cache table
+              "BEGIN SELECT 1; END")    # the skill pack's own, on a cache table
     c.close()
     quiet(lambda: db.connect(s4, path).close())
-    check("a trigger of the harness's own on a cache table is left alone",
+    check("a trigger of the skill pack's own on a cache table is left alone",
           "stock_no_delete" in objects(path, "trigger"))
 
 
@@ -656,9 +663,42 @@ def t6_human_drift() -> None:
     check("… and the next write open creates it",
           "action_effects" in objects(path, "table"))
 
+    path = fresh(s1)
+    c = raw(path)
+    for n in ("hub_copies_no_update", "hub_copies_no_delete",
+              "hub_copies_no_replace"):
+        c.execute(f"DROP TRIGGER {n}")
+    c.execute("DROP TABLE hub_copies")
+    c.close()
+    con = db.connect(s1, path, read_only=True)
+    check("a file older than hub_copies (schema_base.ADDED_LATER) opens "
+          "read-only with every with_human() spec",
+          "hub_copies" in s1.human_added_later
+          and db.human_row_counts(s1, con)["hub_copies"] == 0)
+    con.close()
+    quiet(lambda: db.connect(s1, path).close())
+    c = raw(path)
+    got = []
+    for sql in ("INSERT INTO hub_copies (market, key, value, hub, "
+                "hub_history_id, hub_digest, outcome, pack_history_id, "
+                "copied_at, copied_by) VALUES ('US', 'k', 'v', 'h', 1, 'd', "
+                "'copied', 1, 't', 'u')",
+                "UPDATE hub_copies SET outcome = 'same'",
+                "DELETE FROM hub_copies"):
+        try:
+            c.execute(sql)
+            got.append("ok")
+        except sqlite3.IntegrityError as e:
+            got.append(str(e)[:26])
+    c.close()
+    check("… the next write open creates it, append-only: an UPDATE and a "
+          "DELETE are refused in the file",
+          got == ["ok", "refused: UPDATE on hub_cop",
+                  "refused: DELETE on hub_cop"], got)
+
 
 def t7_too_new() -> None:
-    print("\n[7] a file stamped by a newer harness is refused before any "
+    print("\n[7] a file stamped by a newer skill pack is refused before any "
           "read")
     s = spec()
     path = fresh(s)
@@ -706,7 +746,7 @@ def t8_no_db() -> None:
     where = Path(tmp_dir("db-")) / "nope"
     path = where / "shop.db"
     e, code = refusal(lambda: db.connect(s, path, read_only=True))
-    check("missing file: no_db with the harness's next step",
+    check("missing file: no_db with the skill pack's next step",
           code == "no_db" and e.message.params == {"path": str(path)}
           and e.next == ["shop facts init"], e)
     check("… neither the file nor its directory was created",
@@ -816,8 +856,8 @@ def t11_hash() -> None:
     print("\n[11] schema_hash: pinned, stable, moves only with the shape")
     base = db.schema_hash(db.with_human({}, version=1))
     check("the kit's human tables are pinned (a change here means every "
-          "harness bumps its schema version; then re-pin)",
-          base == "5c8623e090b32a33", base)
+          "skill pack bumps its schema version; then re-pin)",
+          base == "cbc2de94bc52aa06", base)
     h = db.schema_hash(spec())
     check("stable across calls and cache insertion order",
           h == db.schema_hash(spec())

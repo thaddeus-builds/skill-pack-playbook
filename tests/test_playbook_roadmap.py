@@ -1,4 +1,4 @@
-"""The playbook's own ROADMAP.md keeps the one roadmap format every harness's does
+"""The playbook's own ROADMAP.md keeps the one roadmap format every skill pack's does
 (kit.guards.roadmap; templates/ROADMAP.md), so a session on any machine starts from
 it. Each check is first tried on a break planted in this very file, so it cannot pass
 by reading nothing."""

@@ -1,6 +1,6 @@
 # {{name}} — operator guide
 
-This guide is for the harness's real user: a client's AI agent operating it for one client. It answers how to install it, point it at a client, run it daily, and which command answers which question. How the harness is built is in the source repository's CLAUDE.md, which a release does not carry. An agent loading this as a skill starts at [SKILL.md](SKILL.md), which points back here.
+This guide is for the skill pack's real user: a client's AI agent operating it for one client. It answers how to install it, point it at a client, run it daily, and which command answers which question. How the skill pack is built is in the source repository's CLAUDE.md, which a release does not carry. An agent loading this as a skill starts at [SKILL.md](SKILL.md), which points back here.
 
 Everything below is read-only until the queue step: `pull`, `ingest` and `compute` never change the client's systems and never ask for a confirmation. `--json` on any command is the contract: every field is named, and `meta` gives each number's source and window. Every English sentence in it carries a stable code beside it (`warning_codes`, `reason_code`, a failure's `code` and `params`). Tell the client in their own language from the code; `ssot/message_codes.tsv` has a ready wording per language.
 
@@ -22,7 +22,7 @@ Every command that touches client data needs exactly one variable:
 
     export {{env_prefix}}_DATA_DIR=/path/outside/this/checkout/client
 
-It is never guessed from the current folder, and a `./.env` next to the checkout is never read: a client's data lives outside the harness, always. Credentials load from a chain: an optional file in your home folder (`home_env_file` in `harness.toml`), then `${{env_prefix}}_DATA_DIR/.env` (template: [.env.example](.env.example)); process environment always wins. `{{env_prefix}}_AUTH_ENV_PATHS=none` uses process environment only. Run this first, and whenever something looks wrong:
+It is never guessed from the current folder, and a `./.env` next to the checkout is never read: a client's data lives outside the skill pack, always. Credentials load from a chain: an optional file in your home folder (`home_env_file` in `skill-pack.toml`), then `${{env_prefix}}_DATA_DIR/.env` (template: [.env.example](.env.example)); process environment always wins. `{{env_prefix}}_AUTH_ENV_PATHS=none` uses process environment only. Run this first, and whenever something looks wrong:
 
     {{cli}} doctor             # every path and credential, and where each came from
     {{cli}} doctor --strict    # the same, exit 1 on any warning
@@ -48,7 +48,7 @@ Trust `doctor` over this guide if they disagree.
 
 ## What needs a human
 
-The harness never raises trust on its own. An agent may write a pending value or propose an action; only a human can put it into effect, by a retype at a real terminal, a click in the console, or a one-time code sent back from chat (`{{env_prefix}}_CONFIRM_CODE_SECRET`, set in the process env of what runs the gate: the harness never loads it from a `.env`).
+The skill pack never raises trust on its own. An agent may write a pending value or propose an action; only a human can put it into effect, by a retype at a real terminal, a click in the console, or a one-time code sent back from chat (`{{env_prefix}}_CONFIRM_CODE_SECRET`, set in the process env of what runs the gate: the skill pack never loads it from a `.env`).
 
 | Command | What it needs a human for |
 | --- | --- |

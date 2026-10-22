@@ -9,7 +9,7 @@
     keys.
   * The cwd is never part of the chain: agent shells change directory, so
     a `./.env` would be whatever directory happened to be current
-    (including a harness checkout); that is how live credentials once
+    (including a skill pack checkout); that is how live credentials once
     leaked into a test. `<DATA_DIR>/.env` joins the chain only when the
     data dir is already set in the process env, and any relative entry
     (a relative data dir, override path or home file) is dropped, since
@@ -26,11 +26,11 @@
     and with the secret could make its own approval codes; kit.human's
     test seam `KIT_TTY` and the `PYTEST_CURRENT_TEST` and `KIT_TEST_RUN` markers (a file
     standing in for the terminal would pass a piped agent off as a person
-    retyping); `KIT_HARNESS_ROOT` (which harness, and so which gate, the
+    retyping); `KIT_SKILL_PACK_ROOT` (which skill pack, and so which gate, the
     kit binds); `DYLD_*`, `LD_*` and `PYTHON*` (what code a child loads);
-    and the harness's own `[env].never_from_file` names. Such a line is
+    and the skill pack's own `[env].never_from_file` names. Such a line is
     skipped by every read below, never loaded; `refused()` names it (file
-    and name, never the value) for doctor. Seen in the video-ads harness,
+    and name, never the value) for doctor. Seen in the video-ads skill pack,
     whose agent could otherwise have confirmed through its own .env.
   * `load_into_environ()` copies the chain into os.environ once, at the
     entry point, without overriding anything, and remembers where each
@@ -38,7 +38,7 @@
     one value and doctor can name its source.
 
 `chain()` is the configured singleton (`<P>_AUTH_ENV_PATHS`,
-`<P>_DATA_DIR`, `[harness].home_env_file`, `[env].default_prefixes`,
+`<P>_DATA_DIR`, `[skill_pack].home_env_file`, `[env].default_prefixes`,
 `[env].never_from_file`).
 
 Test: kit/tests/test_env.py.
@@ -50,7 +50,7 @@ import os
 from pathlib import Path
 
 from kit import config as _config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.human import TTY_ENV
 from kit.messages import msg
 
@@ -62,20 +62,20 @@ NEVER_FROM_FILE_PREFIXES = ("DYLD_", "LD_", "PYTHON")
 
 
 def is_gate_secret(name: str) -> bool:
-    """A variable that signs or checks a person's approval: any harness's
+    """A variable that signs or checks a person's approval: any skill pack's
     `<P>_CONFIRM_CODE_SECRET` (kit.human) or the console's CONSOLE_SECRET."""
     return name == CONSOLE_SECRET or name.endswith("CONFIRM_CODE_SECRET")
 
 
 def never_from_file(name: str, extra: tuple[str, ...] = ()) -> bool:
     """A variable no env file may set: a gate secret, the gate's test seam
-    or a test marker, the bound harness, a loader or interpreter variable,
-    or one of `extra` (the harness's `[env].never_from_file`)."""
+    or a test marker, the bound skill pack, a loader or interpreter variable,
+    or one of `extra` (the skill pack's `[env].never_from_file`)."""
     return (is_gate_secret(name) or name in NEVER_FROM_FILE or name in extra
             or name.startswith(NEVER_FROM_FILE_PREFIXES))
 
 
-class EnvError(HarnessError):
+class EnvError(SkillPackError):
     """A required variable is set nowhere in the chain."""
 
 
@@ -109,7 +109,7 @@ class EnvChain:
         self.data_dir_var = data_dir_var
         self.home_file = home_file or None
         self.default_prefixes = dict(default_prefixes or {})
-        self.never = tuple(never)            # the harness's own never-from-file names
+        self.never = tuple(never)            # the skill pack's own never-from-file names
         self.read: list[str] = []            # the chain load_into_environ read
         self.loaded: dict[str, str] = {}     # name -> file it was copied from
 
@@ -210,7 +210,7 @@ _chain: EnvChain | None = None
 
 
 def chain() -> EnvChain:
-    """The EnvChain the bound harness declares (cached until config.use)."""
+    """The EnvChain the bound skill pack declares (cached until config.use)."""
     global _chain
     if _chain is None:
         cfg = _config.config()

@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Golden diff: every case of a harness, BASE vs HEAD, on the same data.
+"""Golden diff: every case of a skill pack, BASE vs HEAD, on the same data.
 
 A refactor must leave every `--json` document and every page exactly as it
 was. This tool runs one tree's cases (listed by cases.py, beside this file),
@@ -87,7 +87,7 @@ BAD = ("__not_json__", "__render_failed__")
 
 
 def _load_cases():
-    """cases.py beside this file, loaded by path: a harness module that is
+    """cases.py beside this file, loaded by path: a skill pack module that is
     also called `cases` can never shadow it, or be shadowed."""
     spec = importlib.util.spec_from_file_location("golden_cases",
                                                   HERE.with_name("cases.py"))

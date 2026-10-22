@@ -42,7 +42,7 @@ is a recorded gap (the caller's gap ledger), never a day with no data.
 READS ONLY. A retried write can happen twice; the write path
 (kit.write_guard) never imports this module (its test proves that).
 
-Stdlib only, no harness needed, no other kit module. Test:
+Stdlib only, no skill pack needed, no other kit module. Test:
 kit/tests/test_retry.py.
 """
 

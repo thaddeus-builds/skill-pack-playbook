@@ -1,13 +1,13 @@
 """The build workflow names only what is there, or says it is not there yet.
 
-BUILD.md, the build-harness skill and the templates README are read as text:
+BUILD.md, the build-skill-pack skill and the templates README are read as text:
 every playbook path and link they name exists, or is in BUILD.md's one list
 "Still being built"; every template BUILD.md names exists; every template is
-listed; every harness test any of them names is one the scaffolder generates.
+listed; every skill pack test any of them names is one the scaffolder generates.
 The templates themselves are held to the shapes the docs promise: the step
 table, the skill and ssot/stages.agent.tsv list the same steps; the ssot files
 carry the columns the kit reads and the trail every owner row needs; the
-placeholders are the ones explained; harness.toml parses; CODEOWNERS names real
+placeholders are the ones explained; skill-pack.toml parses; CODEOWNERS names real
 paths; the CI templates' title rule and secret scan match what they should and
 every CI job states its rules; the digest guidance in decision-rights.md names real
 console verbs. Each check is tried on a broken input first, so it cannot pass by
@@ -28,12 +28,12 @@ REPO = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import _t  # noqa: E402
 
-BUILD, SKILL, TREADME = "BUILD.md", "skills/build-harness/SKILL.md", "templates/README.md"
+BUILD, SKILL, TREADME = "BUILD.md", "skills/build-skill-pack/SKILL.md", "templates/README.md"
 DOCS = (BUILD, SKILL, TREADME)
 TOP_DIRS = ("templates", "console", "kit", "scaffold", "build", "skills", "hosts")
 PATH = re.compile(r"(?<![\w/.$<-])((?:" + "|".join(TOP_DIRS) + r")/[A-Za-z0-9_./-]*)")
 LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
-HARNESS_TEST = re.compile(r"(?<![\w/.-])tests/(test_\w+\.py)")
+SKILL_PACK_TEST = re.compile(r"(?<![\w/.-])tests/(test_\w+\.py)")
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 ACTIONS_EXPR = re.compile(r"\$\{\{[^}]*\}\}")     # a GitHub Actions expression, not a placeholder
 STEPS = ["B0", "B0.5", "B0.6", "B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "B10"]
@@ -106,7 +106,7 @@ def header(rel: str) -> list[str]:
 def test_the_path_finder_sees_playbook_paths_and_no_others():
     text = "run `kit/x.py`, not scripts/kit/y.py or $DATA_DIR/build/z; see [a](templates/README.md) and [b](https://x.example.com)."
     assert named("BUILD.md", text) == ["kit/x.py", "templates/README.md"]
-    assert named("skills/build-harness/SKILL.md", "[b](../../BUILD.md)") == ["BUILD.md"]
+    assert named("skills/build-skill-pack/SKILL.md", "[b](../../BUILD.md)") == ["BUILD.md"]
     assert to_be_built("## Still being built\n\n- `kit/`: the kit.\n- words\n\n## Next\n- `x/`") == ["kit/"]
 
 
@@ -170,22 +170,22 @@ def rendered_problems(rendered: dict[str, str], readme: str) -> list[str]:
 
 def test_every_template_the_scaffolder_renders_is_listed_with_the_target_it_writes():
     sys.path.insert(0, os.path.join(REPO, "scaffold"))
-    import new_harness
+    import new_skill_pack
     assert dict(ROW.findall("| [a.md](a.md) | B1 | `docs/a.md` | x |")) == {"a.md": "docs/a.md"}
     assert rendered_problems({"a.md": "docs/a.md"}, "| [a.md](a.md) | B1 | `docs/b.md` | x |") != []       # the check would notice
     assert rendered_problems({"a.md": "docs/a.md"}, "") != []
-    assert len(new_harness.RENDERED) >= 15, new_harness.RENDERED
-    assert rendered_problems(new_harness.RENDERED, doc(TREADME)) == []
+    assert len(new_skill_pack.RENDERED) >= 15, new_skill_pack.RENDERED
+    assert rendered_problems(new_skill_pack.RENDERED, doc(TREADME)) == []
 
 
 def stated_test_counts(text: str) -> list[str]:
     """The number of generated tests a doc states, as the word it uses."""
-    return (re.findall(r"generates the (\w+) day-one tests", text) + re.findall(r"the (\w+) tests a new harness starts with", text)
+    return (re.findall(r"generates the (\w+) day-one tests", text) + re.findall(r"the (\w+) tests a new skill pack starts with", text)
             + re.findall(r"exactly the (\w+) tests", text))
 
 
-def test_the_docs_say_how_many_tests_a_new_harness_starts_with_and_it_is_the_real_number():
-    assert stated_test_counts("generates the nine day-one tests; the ten tests a new harness starts with") == ["nine", "ten"]
+def test_the_docs_say_how_many_tests_a_new_skill_pack_starts_with_and_it_is_the_real_number():
+    assert stated_test_counts("generates the nine day-one tests; the ten tests a new skill pack starts with") == ["nine", "ten"]
     want = NUMBER_WORDS[len(GENERATED)]
     for rel, n in (("docs/kit-and-tools.md", 2), (BUILD, 1)):
         said = stated_test_counts(doc(rel))
@@ -193,11 +193,11 @@ def test_the_docs_say_how_many_tests_a_new_harness_starts_with_and_it_is_the_rea
     assert set(stated_test_counts(doc("docs/kit-and-tools.md").replace("the thirteen tests", "the nine tests"))) != {want}   # a stale count shows
 
 
-def test_every_harness_test_named_is_one_the_scaffolder_generates():
-    table = section(doc(TREADME), "The tests a new harness starts with")
+def test_every_skill_pack_test_named_is_one_the_scaffolder_generates():
+    table = section(doc(TREADME), "The tests a new skill pack starts with")
     assert set(re.findall(r"`tests/(test_\w+\.py)`", table)) == GENERATED
     own = {n for n in os.listdir(HERE) if n.startswith("test_")}
-    assert HARNESS_TEST.findall("see tests/test_write_path.py and console/tests/test_core.py") == ["test_write_path.py"]
+    assert SKILL_PACK_TEST.findall("see tests/test_write_path.py and console/tests/test_core.py") == ["test_write_path.py"]
     texts = {rel: doc(rel) for rel in (BUILD, SKILL)}
     for rel in template_files():
         try:
@@ -206,9 +206,9 @@ def test_every_harness_test_named_is_one_the_scaffolder_generates():
             continue
     seen = set()
     for rel, text in texts.items():
-        for name in HARNESS_TEST.findall(text):
+        for name in SKILL_PACK_TEST.findall(text):
             seen.add(name)
-            assert name in GENERATED or name in own, f"{rel} names tests/{name}, which no harness is given"
+            assert name in GENERATED or name in own, f"{rel} names tests/{name}, which no skill pack is given"
     assert GENERATED <= seen, sorted(GENERATED - seen)
 
 
@@ -218,8 +218,8 @@ def test_each_invariant_in_the_agent_instructions_names_a_generated_test():
     assert len(rules) >= 10, rules
     for rule in rules:
         m = re.search(r"\*\(([^)]*)\)\*\s*$", rule)
-        assert m and HARNESS_TEST.search(m.group(1)), f"no test named: {rule[:60]}"
-    assert set(HARNESS_TEST.findall(text)) == GENERATED
+        assert m and SKILL_PACK_TEST.search(m.group(1)), f"no test named: {rule[:60]}"
+    assert set(SKILL_PACK_TEST.findall(text)) == GENERATED
     for old in ("src/", "test_write_path", "test_rebuild", "test_human_gate", "test_init", "test_contract.py"):
         assert old not in text, old
 
@@ -338,7 +338,7 @@ def test_the_ssot_templates_carry_the_columns_the_kit_reads_and_the_trail():
     for r in index:
         assert r["owner"] in ("owner", "agent", "registry"), r
         for t in r["test"].split(";"):
-            assert HARNESS_TEST.fullmatch(t.strip()) and t.strip()[6:] in GENERATED, r
+            assert SKILL_PACK_TEST.fullmatch(t.strip()) and t.strip()[6:] in GENERATED, r
         assert r["id_column"].split("+")[0] in header("templates/" + r["file"]), r
     for owner, key in (("glossary", "term"), ("user-stories", "id"), ("policies", "id")):
         problems = trail_problems(tsv(f"templates/ssot/{owner}.tsv"), tsv(f"templates/ssot/{owner}.agent.tsv"), key)
@@ -356,7 +356,7 @@ def test_the_registries_refer_only_to_rows_that_exist():
         for r in tsv(rel):
             assert set((r.get("story") or "").split()) <= stories, (rel, r)
     for r in tsv("templates/ssot/decision_keys.tsv"):
-        assert r["confirm"] in ("human", "none", "harness"), r
+        assert r["confirm"] in ("human", "none", "skill_pack"), r
     for r in tsv("templates/ssot/message_codes.tsv"):
         params = {p for p in r["params"].split(",") if p}
         for lang in ("meaning_en", "meaning_zh"):
@@ -380,20 +380,20 @@ def test_every_placeholder_is_one_the_templates_readme_explains():
     assert used == explained, (sorted(used - explained), sorted(explained - used))
 
 
-def test_harness_toml_parses_and_holds_what_the_kit_reads():
-    with open(os.path.join(REPO, "templates/harness.toml"), "rb") as f:
+def test_skill_pack_toml_parses_and_holds_what_the_kit_reads():
+    with open(os.path.join(REPO, "templates/skill-pack.toml"), "rb") as f:
         cfg = tomllib.load(f)
-    assert set(cfg) == {"harness", "kit", "ssot", "release", "layers", "guards"}
+    assert set(cfg) == {"skill_pack", "kit", "ssot", "release", "layers", "guards"}
     assert cfg["guards"] == {"evals": {"extra": ["facts init", "execute apply"]}}, "the person-only verbs besides the gated ones (SKILL.md's Never)"
-    assert cfg["kit"] == {"packs": []}, "a new harness takes base and testkit; --packs adds more"
+    assert cfg["kit"] == {"packs": []}, "a new skill pack takes base and testkit; --packs adds more"
     assert {"name", "cli", "env_prefix", "db_file", "scripts_dir", "languages", "markets", "home_env_file"} \
-        <= set(cfg["harness"])
-    assert [f"meaning_{lang}" for lang in cfg["harness"]["languages"]] == header("templates/ssot/message_codes.tsv")[2:]
+        <= set(cfg["skill_pack"])
+    assert [f"meaning_{lang}" for lang in cfg["skill_pack"]["languages"]] == header("templates/ssot/message_codes.tsv")[2:]
     for key, path in cfg["ssot"].items():
         if key != "dir":
             assert os.path.exists(os.path.join(REPO, "templates", path)), (key, path)
     assert {"CLAUDE.md", "tests", ".gitlab-ci.yml"} <= set(cfg["release"]["internal"])
-    assert {"SKILL.md", "README.md", "harness.toml"} <= set(cfg["release"]["must_ship"])
+    assert {"SKILL.md", "README.md", "skill-pack.toml"} <= set(cfg["release"]["must_ship"])
     assert {"pull", "ingest", "compute", "writer", "writer_importers", "clients", "spawn_allowed"} <= set(cfg["layers"])
     assert cfg["layers"]["writer"] == "_lib/writer" and cfg["layers"]["writer_importers"] == ["execute_actions"]
 
@@ -407,7 +407,7 @@ def test_codeowners_protects_the_risky_list_with_real_paths():
     paths = codeowned(doc("templates/CODEOWNERS"))
     assert set(paths.values()) == {"{{owner}}"}
     assert {"/scripts/kit/", "/console/", "/scripts/_lib/writer.py", "/scripts/execute_actions.py",
-            "/scripts/_lib/schema.py", "/CLAUDE.md", "/harness.toml", "/ssot/glossary.tsv",
+            "/scripts/_lib/schema.py", "/CLAUDE.md", "/skill-pack.toml", "/ssot/glossary.tsv",
             "/ssot/user-stories.tsv", "/ssot/policies.tsv", "/ssot/constants.tsv"} <= set(paths)
     assert not [p for p in paths if p.startswith("/src/")]
     for p in paths:
@@ -549,7 +549,7 @@ def test_the_zylos_check_job_runs_the_command_the_adapter_readme_gives_on_the_no
     good = "  stage: check\n  image: node:24-alpine\n  script:\n    - node zylos/lib.js check\n"
     assert zylos_job_problems(good, readme, 24) == []
     for label, broken in (("a typo in the verb", good.replace("lib.js check", "lib.js chek")),
-                          ("the adapter's path in this repository, not in a harness", good.replace("zylos/lib", "hosts/zylos/lib")),
+                          ("the adapter's path in this repository, not in a skill pack", good.replace("zylos/lib", "hosts/zylos/lib")),
                           ("a failure swallowed", good.replace("lib.js check", "lib.js check || true")),
                           ("a second script line", good + "    - true\n"),
                           ("no script", good.replace("  script:\n    - node zylos/lib.js check\n", "")),
@@ -562,37 +562,37 @@ def test_the_zylos_check_job_runs_the_command_the_adapter_readme_gives_on_the_no
 
 
 def zylos_copy_problems(text: str) -> list[str]:
-    """What is wrong with the one line of a build doc that tells a harness to copy the Zylos adapter: it sends the builder
+    """What is wrong with the one line of a build doc that tells a skill pack to copy the Zylos adapter: it sends the builder
     to the adapter's README and says that what is copied is what that README lists, not the whole folder (its `tests/`
     and two templates stay behind: the adapter's tests copy console/ and need the playbook around them)."""
     lines = [ln for ln in text.splitlines() if "hosts/zylos/README.md" in ln and re.search(r"cop(?:y|ies)", ln.lower())]
     if len(lines) != 1:
-        return [f"{len(lines)} lines tell a harness to copy the adapter, not 1"]
+        return [f"{len(lines)} lines tell a skill pack to copy the adapter, not 1"]
     line = lines[0]
     out = []
     if re.search(r"cop(?:y|ies) \[hosts/zylos/\]\(", line):
-        out.append("it has the harness copy the whole hosts/zylos/ folder")
+        out.append("it has the skill pack copy the whole hosts/zylos/ folder")
     if "tests" not in line:
         out.append("it does not say the adapter's tests stay behind")
     return out
 
 
-def test_the_build_docs_have_a_zylos_harness_copy_what_the_adapter_readme_lists_not_its_whole_folder():
+def test_the_build_docs_have_a_zylos_skill_pack_copy_what_the_adapter_readme_lists_not_its_whole_folder():
     readme = doc("hosts/zylos/README.md")
-    listed = section(readme, "What a harness copies, and what it writes")
-    assert "lib.js" in listed and "tests/" not in listed.split("A harness **writes**")[0]     # the README's list leaves tests/ out
+    listed = section(readme, "What a skill pack copies, and what it writes")
+    assert "lib.js" in listed and "tests/" not in listed.split("A skill pack **writes**")[0]     # the README's list leaves tests/ out
     assert "without `tests/` and the two templates" in readme                                # and says so
-    old_build = "- A harness installed on Zylos copies [hosts/zylos/](hosts/zylos/README.md) into itself as `zylos/`, writes x.\n"
+    old_build = "- A skill pack installed on Zylos copies [hosts/zylos/](hosts/zylos/README.md) into itself as `zylos/`, writes x.\n"
     old_skill = "12. **B9 Release**: On Zylos, copy [hosts/zylos/](../../hosts/zylos/README.md) first (BUILD.md, B9).\n"
     assert zylos_copy_problems(old_build) and zylos_copy_problems(old_skill)                  # the wording this replaced is refused
     assert zylos_copy_problems("Copy hosts/zylos/README.md's files.\nAnd hosts/zylos/README.md again: copy.\n")   # two lines, or none
-    assert zylos_copy_problems("nothing about the host") == ["0 lines tell a harness to copy the adapter, not 1"]
+    assert zylos_copy_problems("nothing about the host") == ["0 lines tell a skill pack to copy the adapter, not 1"]
     for rel in (BUILD, SKILL):
         assert zylos_copy_problems(doc(rel)) == [], (rel, zylos_copy_problems(doc(rel)))
 
 
 def zylos_release_problems(b9: str, internal: list[str]) -> list[str]:
-    """What is wrong with the B9 bullet that has a harness on Zylos bring the adapter into its release: it comes before the
+    """What is wrong with the B9 bullet that has a skill pack on Zylos bring the adapter into its release: it comes before the
     tag bullet (the release is `git archive` of the tag and the host installs that archive, so a copy made after the tag is
     not in it), says so, names [release].must_ship as the guard, and none of what it copies is [release].internal."""
     bullets = [ln for ln in b9.splitlines() if ln.startswith("- ")]
@@ -612,15 +612,15 @@ def zylos_release_problems(b9: str, internal: list[str]) -> list[str]:
 
 
 def test_the_adapter_is_copied_and_tracked_before_the_tag_so_the_release_archive_has_it():
-    with open(os.path.join(REPO, "templates/harness.toml"), "rb") as f:
+    with open(os.path.join(REPO, "templates/skill-pack.toml"), "rb") as f:
         internal = tomllib.load(f)["release"]["internal"]
     b9 = section(doc(BUILD), "B9 · Release")
     assert b9, "BUILD.md has no B9 section"
-    bullets = "- Tag `v1`: x.\n- A harness on Zylos: hosts/zylos/README.md, before the tag is cut, [release].must_ship, zylos/manifest.json, ecosystem.config.cjs.\n"
+    bullets = "- Tag `v1`: x.\n- A skill pack on Zylos: hosts/zylos/README.md, before the tag is cut, [release].must_ship, zylos/manifest.json, ecosystem.config.cjs.\n"
     assert zylos_release_problems(bullets, []) == ["the adapter's bullet comes after the tag bullet"]          # the order it had
     assert zylos_release_problems(bullets.replace("before the tag is cut, ", ""), [])                         # the sentence that says why
     assert zylos_release_problems("- Tag `v1`: x.\n", [])                                                     # no adapter bullet at all
-    assert zylos_release_problems("- A harness on Zylos: hosts/zylos/README.md.\n- Tag `v1`: x.\n", [])       # no word of the guard
+    assert zylos_release_problems("- A skill pack on Zylos: hosts/zylos/README.md.\n- Tag `v1`: x.\n", [])       # no word of the guard
     assert zylos_release_problems(b9, ["zylos"]) and zylos_release_problems(b9, ["ecosystem.config.cjs"])   # a stale internal entry hides it
     assert zylos_release_problems(b9, internal) == [], zylos_release_problems(b9, internal)
 
@@ -659,7 +659,7 @@ OLDER_CI = (("`--update-kit` does not rewrite", "says --update-kit leaves .gitla
 
 
 def older_ci_problems(build: str) -> list[str]:
-    """What is wrong with the B10 bullet for a harness scaffolded before every CI job stated its rules: --update-kit does not
+    """What is wrong with the B10 bullet for a skill pack scaffolded before every CI job stated its rules: --update-kit does not
     rewrite `.gitlab-ci.yml` (scaffold test [7]), so the owner adds the rules by hand. A job with no rules never runs in a
     merge request pipeline (GitLab's job rules page), so without them that pipeline can turn green with no test run."""
     lines = [ln for ln in section(build, "B10 · Operate").splitlines() if "`.gitlab-ci.yml`" in ln]
@@ -668,7 +668,7 @@ def older_ci_problems(build: str) -> list[str]:
     return [f"the line {why}" for need, why in OLDER_CI if need not in lines[0]]
 
 
-def test_build_md_tells_a_harness_with_an_older_ci_file_to_add_the_rules_by_hand():
+def test_build_md_tells_a_skill_pack_with_an_older_ci_file_to_add_the_rules_by_hand():
     build = doc(BUILD)
     assert older_ci_problems(build) == [], older_ci_problems(build)
     for need, why in OLDER_CI:                                                   # each part of the line is held
@@ -712,7 +712,7 @@ def test_the_skill_template_has_its_frontmatter_and_three_scopes():
         assert part in section(text, "Scope of this skill: v1"), part
     skill = doc(SKILL)
     front = skill.split("---\n")[1]
-    assert re.search(r"^name: build-harness$", front, re.M) and re.search(r"^description: \S", front, re.M)
+    assert re.search(r"^name: build-skill-pack$", front, re.M) and re.search(r"^description: \S", front, re.M)
     for heading in ("When to use", "The steps, in order", "Never", "Where questions go", "Where the state is"):
         assert section(skill, heading), heading
     assert "console" in section(skill, "Where questions go")
@@ -751,14 +751,14 @@ def test_claim_scope_names_the_stop_switch_and_what_always_stops():
     assert "blocks unconditionally" in stop_mode_problems(text + "\nAn open error blocks the spend.\n")
     assert stop_mode_problems("# t\n") == ["`compliance_stop`", "`warn`", "`block`", "the default",
                                            "Seen once, an owner decision", *ALWAYS_STOPS]
-SMALL = "Keeping a harness small as it grows"
+SMALL = "Keeping a skill pack small as it grows"
 SMALL_METHODS = ("Slim before features.", "Code filters; the agent judges.", "A newcomer-agent acceptance test.")
 
 
 def small_problems(operating: str, handoff: str) -> list[str]:
-    """What the methods for keeping a harness small fail to say: each is a numbered item that says it was seen once,
+    """What the methods for keeping a skill pack small fail to say: each is a numbered item that says it was seen once,
     the parked folder has no verbs, docs or tests and says how to come back, and the handoff's replay points at the
-    newcomer test (the replay tests the deliverable, not whether an agent can use the harness)."""
+    newcomer test (the replay tests the deliverable, not whether an agent can use the skill pack)."""
     items = re.split(r"^\d+\. ", section(operating, SMALL), flags=re.M)[1:]
     out = []
     for title in SMALL_METHODS:
@@ -772,7 +772,7 @@ def small_problems(operating: str, handoff: str) -> list[str]:
     return out
 
 
-def test_the_methods_for_keeping_a_harness_small_are_whole_and_the_handoff_points_at_the_newcomer_test():
+def test_the_methods_for_keeping_a_skill_pack_small_are_whole_and_the_handoff_points_at_the_newcomer_test():
     operating, handoff = doc("docs/operating.md"), doc("templates/client-handoff.md")
     assert small_problems(operating, handoff) == [], small_problems(operating, handoff)
     for title in SMALL_METHODS:                                                  # the check would notice each one gone
@@ -817,14 +817,14 @@ def test_the_write_door_into_someone_elses_system_is_whole():
         gone = [title, "sha256", "live object"] if title == DOOR_RULES[1] else [title]
         assert door_problems(rules.replace(f"**{title}**", "**x**")) == gone, title
     assert door_problems(rules.replace("file's sha256", "file")) == ["sha256"]
-    assert door_problems(rules.replace("*Seen once:* that harness", "that harness")) == ["*Seen once:*"]
+    assert door_problems(rules.replace("*Seen once:* that skill pack", "that skill pack")) == ["*Seen once:*"]
     assert door_problems(rules.replace("(#writing-into-someone-elses-system), rule 2)", ")")) == ["rule 5 pointer"]
     assert door_problems("# t\n") == [*DOOR_RULES, "sha256", "live object", "*Seen once:*",
                                        "`scripts/apply_shopify.py`", "`tests/test_apply_shopify.py`", "rule 5 pointer"]
 
 
 JUDGE = "What an agent judges"
-JUDGE_RULES = ("A judgement quotes its evidence, and the harness checks the quote.",
+JUDGE_RULES = ("A judgement quotes its evidence, and the skill pack checks the quote.",
                "Classify an outside party by where it sits in the value chain, apart from the switch that analyses it.",
                "A large group competes on a segment, not as a whole.")
 READ_SIDE = ("A partial pull is filed apart and flagged.", "An overview runs each report's own build and adds nothing to it.")
@@ -832,7 +832,7 @@ FORM = "A form the client fills offline is exported from the key registry."
 
 
 def judge_problems(rules: str, consoles: str) -> list[str]:
-    """What the SEO harness's read-side lessons fail to say: each judgement rule a numbered bold item, the quote rule
+    """What the SEO skill pack's read-side lessons fail to say: each judgement rule a numbered bold item, the quote rule
     with what it normalises and what it paid for, a "no" kept findable; the two read-side paragraphs in the data
     layers; the client form as a numbered item of the client console; each says where it was seen."""
     body = section(rules, JUDGE)
@@ -856,7 +856,7 @@ def judge_problems(rules: str, consoles: str) -> list[str]:
     return out
 
 
-def test_the_seo_harness_read_side_lessons_are_whole():
+def test_the_seo_skill_pack_read_side_lessons_are_whole():
     rules, consoles = doc("docs/rules.md"), doc("docs/consoles.md")
     assert judge_problems(rules, consoles) == [], judge_problems(rules, consoles)
     for title in JUDGE_RULES[1:]:                                                # the check would notice each one gone
@@ -877,7 +877,7 @@ SETTINGS = "`ssot/` is the builder's; what a client sets lives in that client's 
 
 def settings_problems(rules: str, guard: str, suites: str) -> list[str]:
     """What the client-settings rule fails to say or to check: a numbered bold item of the registries section that
-    names both ways a harness reads a client's value, that a client's vocabulary is its value too (ssot keeps the axes), the bounds on write and on read, its check and the allowlist,
+    names both ways a skill pack reads a client's value, that a client's vocabulary is its value too (ssot keeps the axes), the bounds on write and on read, its check and the allowlist,
     and where it was seen; the check exists in the ssot guard and the day-one ssot suite runs it."""
     body = section(rules, "Registries: one place per value")
     item = next((i for i in re.split(r"^\d+\. ", body, flags=re.M) if i.startswith(f"**{SETTINGS}**")), "")
@@ -948,7 +948,7 @@ def test_the_console_verbs_and_flags_the_build_docs_use_are_real():
         called |= found
         assert found <= verbs, (rel, sorted(found - verbs))
     assert {"add", "answers", "applied", "digest"} <= called, called
-    assert set(FLAG.findall(doc("templates/decision-rights.md"))) - {"--json"} <= flags   # --json is the harness's
+    assert set(FLAG.findall(doc("templates/decision-rights.md"))) - {"--json"} <= flags   # --json is the skill pack's
     assert "--deciders" not in flags and "--user-header" in flags
 
 
@@ -1002,7 +1002,7 @@ def test_every_link_in_the_readme_and_docs_resolves():
     assert len(doc("README.md").split()) <= 2000, "the README is the overview; the detail goes in docs/"
 
 
-TIERS = "A gate the human clicks through proves nothing: tier changes by what the harness can see."
+TIERS = "A gate the human clicks through proves nothing: tier changes by what the skill pack can see."
 ONE_YES = "One yes is quoted for one code only"
 THREAT = "Put the owner's threat model in every reviewer prompt, and stop when only out-of-model findings remain"
 
@@ -1010,7 +1010,7 @@ THREAT = "Put the owner's threat model in every reviewer prompt, and stop when o
 def rubber_stamp_problems(rules: str, operating: str) -> list[str]:
     """What the rubber-stamp lessons fail to say: each a numbered bold item where it belongs, saying where it was seen;
     the tier rule names the live diff, the caps, the expiry and the unticked checkboxes; the one-gate rule (4) says a
-    yes is quoted for one code only, and that no harness refuses a reused quote yet; the threat model points at R14."""
+    yes is quoted for one code only, and that no skill pack refuses a reused quote yet; the threat model points at R14."""
     out = []
     human = section(rules, "Human-in-the-loop rules")
     items = lambda body: re.split(r"^\d+\. ", body, flags=re.M)
@@ -1103,7 +1103,7 @@ def test_the_past_results_section_is_whole_and_checked():
     assert past_problems(text, module, "") == ["the test"]
 
 
-PAGES = "A page the harness delivers is drawn by the harness."
+PAGES = "A page the skill pack delivers is drawn by the skill pack."
 
 
 def page_rule_problems(rules: str, guard: str, suites: str, test: str) -> list[str]:
@@ -1114,7 +1114,7 @@ def page_rule_problems(rules: str, guard: str, suites: str, test: str) -> list[s
     body = section(rules, "Data layers and their guards")
     item = next((i for i in re.split(r"^(?=\*\*)", body, flags=re.M) if i.startswith(f"**{PAGES}**")), "")
     out = [] if item else [PAGES]
-    out += [w for w in ("one of its own verbs", "local", "never the deliverable", "installs the harness from git",
+    out += [w for w in ("one of its own verbs", "local", "never the deliverable", "installs the skill pack from git",
                         "`kit.guards.pages`", "`suites.page_links`", "`allow` row", "bans the link only", "*Seen once:*") if item and w not in item]
     if "def check_links(" not in guard or "def self_test(" not in guard:
         out.append("the guard")
@@ -1179,8 +1179,8 @@ def test_the_lessons_on_closing_the_loop_are_whole():
     assert loop_problems("# t\n", "# t\n", "# t\n") == [DONE, OTHER_WAY, COPIES]
 
 
-MECHANISM = "A past winner the harness cannot say is studied for its mechanism, never copied"
-MECHANISM_WORDS = ("*Why:*", "not a template and not a move", "a proposal for a person to confirm", "the harness's own words",
+MECHANISM = "A past winner the skill pack cannot say is studied for its mechanism, never copied"
+MECHANISM_WORDS = ("*Why:*", "not a template and not a move", "a proposal for a person to confirm", "the skill pack's own words",
                    "who the ad reached", "how it opened", "its timing", "why people converted", "is the other case",
                    "already runs on the platform", "even if it is also the strongest past ad", "never promotes a past ad to a template", "that a person can waive",
                    "claim-scope.md#waivers", "No code enforces this", "*Seen once*")
@@ -1188,7 +1188,7 @@ MECHANISM_WORDS = ("*Why:*", "not a template and not a move", "a proposal for a 
 
 def mechanism_problems(lessons: str, weights: str) -> list[str]:
     """What the mechanism lesson fails to say: a section of docs/lessons.md with its why, the rules (no template and no
-    move; a proposal in the harness's own words naming who the ad reached, how it opened, its timing and why people
+    move; a proposal in the skill pack's own words naming who the ad reached, how it opened, its timing and why people
     converted; the sayable winner as the other case; the client's reference, which already runs on the platform, as
     neither, with the waiver link), the plain statement that no code enforces it, and where it was seen; and the
     path-weights section on the past links to it by its real anchor."""
@@ -1212,10 +1212,10 @@ def test_the_mechanism_lesson_is_whole_and_linked():
     assert mechanism_problems(lessons, weights.replace("(lessons.md#", "(lessons.md?")) == ["the link from path-weights.md"]
 
 
-LEVEL_COLUMNS = ("Who decides each write", "Proof in the manifest", "What the harness checks", "What is revertible",
+LEVEL_COLUMNS = ("Who decides each write", "Proof in the manifest", "What the skill pack checks", "What is revertible",
                  "Default caps", "How it switches down", "Write kinds allowed")
-AUTONOMY_RULES = ("The harness classes each write, never the agent.",
-                  "A level is a ceiling per write kind, not a mode of the whole harness.",
+AUTONOMY_RULES = ("The skill pack classes each write, never the agent.",
+                  "A level is a ceiling per write kind, not a mode of the whole skill pack.",
                   "Raising takes a person; lowering takes anyone.",
                   "Every level above L1 expires and is capped, and the caps are counted from the archive.",
                   "Above L1 only revertible kinds, and the undo of an L3 write needs no code.",
@@ -1258,7 +1258,7 @@ def autonomy_problems(text: str, rules: str) -> list[str]:
     judge = section(text, "Where this differs from the owner's first guess")
     if not all(w in judge for w in ("L2", "L3", "L4", "channel")):
         out.append("judgement")
-    if "amazon ads" not in section(text, "Adopting it in another harness").lower():
+    if "amazon ads" not in section(text, "Adopting it in another skill pack").lower():
         out.append("adoption")
     human = section(rules, "Human-in-the-loop rules")
     if "This rule is L2 of the [autonomy levels](autonomy.md)" not in human:
@@ -1279,7 +1279,7 @@ def test_the_autonomy_levels_are_whole_and_match_the_kit():
                              rules) == ["L4 name"]
     assert autonomy_problems(text.replace("| L3 owner-switched mode |", "| L3 owner-switched mode (not built) |"),
                              rules) == ["L3 name"]
-    assert "L5 cells" in autonomy_problems(text.replace("| none by design, which is why no harness is here |", "| |"),
+    assert "L5 cells" in autonomy_problems(text.replace("| none by design, which is why no skill pack is here |", "| |"),
                                            rules)
     assert autonomy_problems(text.replace("| `undo` | none: it lowers exposure |", "| `undo` | L3 |"),
                              rules) == ["proof undo"]
@@ -1292,7 +1292,7 @@ def test_the_autonomy_levels_are_whole_and_match_the_kit():
 
 
 ROADMAP_SECTIONS = ("The method", "Executing it", "Feedback from production testers", "Who works where",
-                    "Worked example: the SEO harness", "Adopting it in another harness")
+                    "Worked example: the SEO skill pack", "Adopting it in another skill pack")
 ROADMAP_METHOD = ("Start from the owner's vision, cut into four to six pillars plus one for operations.",
                   "Inventory each pillar in parallel with read-only agents.",
                   "The roadmap lives in the story registry, not in a plan document.",
@@ -1333,6 +1333,86 @@ def test_the_roadmap_method_is_whole_and_linked():
     assert roadmap_problems(text.replace("**Only the coordinator allocates", "**Anyone allocates"), readme) == ["ids"]
     assert roadmap_problems(text, readme.replace("(docs/roadmap.md)", "(docs/x.md)")) == ["README link"]
     assert roadmap_problems(text + "\n" * 400, readme) == ["length"]
+
+WORKTREE_WORDS = ("never a child of it", "<parent>/<repo>_worktrees/<name>/", "git worktree add ../<repo>_worktrees/",
+                   "git worktree repair", "Settings → Claude Code", "`WorktreeCreate` hook", "*Paid for:*")
+
+
+def worktree_problems(operating: str, roadmap: str) -> list[str]:
+    """What the worktree rule fails to say: its section in docs/operating.md names the peer rule, the sibling layout,
+    the git commands to create and repair, how to tell the desktop app and the CLI, and what it cost; and the
+    roadmap's machine layout no longer puts worktrees inside the skill pack checkout."""
+    body = section(operating, "Where worktrees live")
+    out = [w for w in WORKTREE_WORDS if w not in body]
+    if not body:
+        out.append("section")
+    if ".claude/worktrees/<name>/" in roadmap:
+        out.append("roadmap layout nests worktrees")
+    if "<skill-pack>_worktrees/<name>/" not in roadmap:
+        out.append("roadmap layout")
+    return out
+
+
+def test_worktrees_live_beside_the_checkout():
+    operating, roadmap = doc("docs/operating.md"), doc("docs/roadmap.md")
+    assert worktree_problems(operating, roadmap) == [], worktree_problems(operating, roadmap)
+    for w in WORKTREE_WORDS:                                                      # the check would notice each one gone
+        assert worktree_problems(operating.replace(w, "x"), roadmap) == [w], w
+    assert worktree_problems(operating.replace("## Where worktrees live\n", "## x\n"), roadmap)[-1:] != [], "section"
+    assert worktree_problems(operating, roadmap + "\n  .claude/worktrees/<name>/ one per session") == [
+        "roadmap layout nests worktrees"]
+    assert worktree_problems(operating, roadmap.replace("<skill-pack>_worktrees/<name>/", "<skill-pack>/w/")) == ["roadmap layout"]
+
+
+REGISTRY_RULES = (("10.", "**The owner's own files sit apart from the registries, in `ssot/intent/`.**", ("conformance I5 holds", "*Paid for:*")),
+                  ("11.", "**A table many branches add to is append-only", ("the last row is in effect", "union", "`latest`", "*Paid for:*")))
+
+
+def registry_rule_problems(rules: str) -> list[str]:
+    body = section(rules, "Registries: one place per value")
+    out = []
+    for num, head, words in REGISTRY_RULES:
+        line = next((l for l in body.splitlines() if l.startswith(f"{num} {head}")), "")
+        if not line:
+            out.append(f"{num} missing")
+        out += [f"{num} {w}" for w in words if line and w not in line]
+    return out
+
+
+def test_the_owner_files_and_append_only_rules_are_whole():
+    rules = doc("docs/rules.md")
+    assert registry_rule_problems(rules) == [], registry_rule_problems(rules)
+    assert registry_rule_problems(rules.replace("conformance I5 holds", "x")) == ["10. conformance I5 holds"]
+    assert registry_rule_problems(rules.replace("the last row is in effect", "x")) == ["11. the last row is in effect"]
+    assert registry_rule_problems(rules.replace("**A table many branches add to is append-only", "**x")) == ["11. missing"]
+
+
+PARALLEL = "Parallel sessions append to the story files: merge them by union, take the next id from a command, generate the roadmap page instead of committing it."
+PARALLEL_WORDS = ("`merge=union`", "the next", "built on demand", "*Paid for:*", "*Built*")
+STORIES_PRIVATE = "stories are the builder's record; they do not belong in anything a client can read."
+STORIES_PRIVATE_WORDS = ("*Seen once:*", "name clients", "the owner accepted that risk", "The way out", "its own repository")
+
+
+def story_files_problems(rules: str) -> list[str]:
+    """What the two story-file rules of docs/rules.md fail to say: rule 8 (union merge of the append-only story
+    files, the next id from a command over every branch, the roadmap page generated not committed) and rule 9
+    (the story tables name clients, so they stay out of what a client reads; the accepted risk and the way out)."""
+    items = re.split(r"^\d+\. ", section(rules, "Stories that prove themselves"), flags=re.M)
+    out = []
+    for title, words in ((PARALLEL, PARALLEL_WORDS), (STORIES_PRIVATE, STORIES_PRIVATE_WORDS)):
+        item = next((i for i in items if title in i[:len(title) + 40]), None)
+        out += [title] if item is None else [w for w in words if w not in item]
+    return out
+
+
+def test_the_story_file_rules_are_whole():
+    rules = doc("docs/rules.md")
+    assert story_files_problems(rules) == [], story_files_problems(rules)
+    assert story_files_problems(rules.replace("`merge=union`", "x")) == ["`merge=union`"]
+    assert story_files_problems(rules.replace("The way out", "x")) == ["The way out"]
+    assert story_files_problems(rules.replace(PARALLEL, "x")) == [PARALLEL]
+    assert story_files_problems("# t\n") == [PARALLEL, STORIES_PRIVATE]
+
 
 ALL_RAW = "A datum a later decision needs is built from all of raw, never from the newest snapshot alone."
 ALL_RAW_WORDS = ("every raw file", "newest observation", "derived on each read", "names no platform",
@@ -1381,6 +1461,34 @@ def test_the_data_and_platform_lessons_are_whole():
     assert data_platform_problems(rules, lessons.replace("it never merges into main.", "x")) == [
         "Main merges into it; it never merges into main."]
     assert data_platform_problems("# t\n", "# t\n") == [ALL_RAW, HOST, ADAPTER, EXPORT]
+
+
+SEO_CLIENT = "Ecommerce SEO Skill Pack, first non-manufacturer client"
+
+
+def seo_client_problems(lessons: str) -> list[str]:
+    """What the SEO skill pack's lessons fail to say: a section of docs/lessons.md of at most 90 lines in plain English,
+    with nine numbered bold rules, each saying what it *Paid for:* and *Where:* the code lives."""
+    heading = next((h for h in re.findall(r"^## (.+)$", lessons, re.M) if h.startswith(SEO_CLIENT)), None)
+    if heading is None:
+        return [SEO_CLIENT]
+    body = section(lessons, heading)
+    items = re.split(r"^\d+\. ", body, flags=re.M)[1:]
+    out = [] if len(items) == 9 else [f"{len(items)} lessons, not 9"]
+    out += [f"lesson {n}: {w}" for n, i in enumerate(items, 1) for w in ("**", "*Paid for:*", "Where:") if w not in i]
+    out += ["over 90 lines"] if len(body.splitlines()) > 90 else []
+    out += ["not plain English"] if re.search("[\u4e00-\u9fff]", body) else []
+    return out
+
+
+def test_the_seo_client_lessons_are_whole():
+    lessons = doc("docs/lessons.md")
+    assert seo_client_problems(lessons) == [], seo_client_problems(lessons)
+    assert seo_client_problems(lessons.replace(f"## {SEO_CLIENT}", "## x")) == [SEO_CLIENT]
+    assert seo_client_problems(lessons.replace("*Paid for:* the first merge request", "x")) == ["lesson 1: *Paid for:*"]
+    assert seo_client_problems(lessons + "\n适用于\n") == ["not plain English"]
+    assert seo_client_problems(lessons + "\n" * 20) == ["over 90 lines"]
+    assert seo_client_problems("# t\n") == [SEO_CLIENT]
 
 
 SKILL_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}   # agentskills.io/specification

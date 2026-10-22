@@ -1,27 +1,27 @@
-r"""A page the harness delivers is drawn by the harness: no shipped file hands a person a link to a hosted artifact.
+r"""A page the skill pack delivers is drawn by the skill pack: no shipped file hands a person a link to a hosted artifact.
 
-A harness hands people pages, samples and demos (an owner's review page, a client's draft, a design demo). The rule
-(docs/rules.md, "A page the harness delivers is drawn by the harness"): each one comes from one of the harness's own
-verbs, from the data it holds or a synthetic fixture, so the cloud agent that installs the harness from git can
+A skill pack hands people pages, samples and demos (an owner's review page, a client's draft, a design demo). The rule
+(docs/rules.md, "A page the skill pack delivers is drawn by the skill pack"): each one comes from one of the skill pack's own
+verbs, from the data it holds or a synthetic fixture, so the cloud agent that installs the skill pack from git can
 draw it again and it cannot drift from the code. A link to a page someone published from a chat session is a
 convenience for looking at something locally while debugging; it is never the deliverable. This check bans the link
-from what ships; that the page really comes from a verb is the harness's own test of its verb.
+from what ships; that the page really comes from a verb is the skill pack's own test of its verb.
 
 `check_links(root)` reads the tracked files `git archive` would ship (kit.guards.release asks git: tracked, less the
 export-ignore ones; an untracked file is not read until `git add`, and a repository that tracks nothing is a problem;
 with no git or no repository the whole tree is read, less .git, virtualenvs, caches and node_modules, never a skip). Every file is read as text
 unless it holds a NUL byte (an image; UTF-16 with a byte order mark is decoded) or is over 5 MB, and a symlink is not followed. It returns a problem for
 every hosted-artifact link: its path and line, never the link. A link in a file that does not ship (a planning file, a
-local note in `[release].internal`) is fine: it never reaches the installed harness.
+local note in `[release].internal`) is fine: it never reaches the installed skill pack.
 
 A line is read after `html.unescape`, `%`-decoding (twice), `\uXXXX` and backslash-slash decoding, so an entity-,
 percent-, JSON- or double-escaped slash is a slash; the host may carry a trailing dot or a port, and a link wrapped
 across a line break (a comment or quote mark may open the next line) is read as one. What is not read: a link built from parts, and one in a file type that holds no
 text. Not read either: the vendored kit (`<scripts_dir>/kit/`) and console (`console/`) when they hold a
-MANIFEST.sha256 (the playbook's own bytes, held by the drift guard), and the `[guards.pages]` tables of harness.toml,
+MANIFEST.sha256 (the playbook's own bytes, held by the drift guard), and the `[guards.pages]` tables of skill-pack.toml,
 which name the hosts it adds.
 
-`[guards.pages]` in harness.toml:
+`[guards.pages]` in skill-pack.toml:
 
   hosts   more hosts or paths to treat as hosted artifacts, beside HOSTS (a list of plain texts with a dot, at least
           four characters, matched without case)
@@ -32,7 +32,7 @@ which name the hosts it adds.
 
 The rule prefers a false hit, which an `allow` row answers, to a miss (docs/lessons.md, "A guard's refinement never
 costs the recall it had"): any text that spells a host is a hit, in code, a string, a comment or prose. Other hosts
-that serve hosted pages are the harness's to add in `hosts`.
+that serve hosted pages are the skill pack's to add in `hosts`.
 
 `self_test()` plants each form and returns the ones the check missed.
 
@@ -47,7 +47,7 @@ import re
 from pathlib import Path
 from urllib.parse import unquote
 
-from kit.guards import harness, read, section
+from kit.guards import skill_pack, read, section
 from kit.guards import release as _release
 
 HOSTS = ("claude.ai/artifact", "claude.ai/code/artifact", "claude.ai/public/artifacts")
@@ -136,7 +136,7 @@ def files(root: Path, cfg) -> tuple[list[str], list[str]]:
     if got is not None:
         tracked, ships = got
         if not tracked:
-            problems.append("git tracks no file here: `git add` the harness's files (an untracked file is not read)")
+            problems.append("git tracks no file here: `git add` the skill pack's files (an untracked file is not read)")
         names = sorted(ships)
     else:
         names = []
@@ -148,8 +148,8 @@ def files(root: Path, cfg) -> tuple[list[str], list[str]]:
 
 
 def check_links(root: Path | str | None = None) -> list[str]:
-    """Every hosted-artifact link in a file the harness ships, outside the `allow` rows; [] when the rule holds."""
-    cfg = harness(root)
+    """Every hosted-artifact link in a file the skill pack ships, outside the `allow` rows; [] when the rule holds."""
+    cfg = skill_pack(root)
     base = Path(root) if root is not None else cfg.root
     hosts, allow, out = settings(cfg)
     names, more = files(base, cfg)
@@ -159,7 +159,7 @@ def check_links(root: Path | str | None = None) -> list[str]:
         text = _readable(base / rel)
         if text is None:
             continue
-        if rel == "harness.toml":
+        if rel == "skill-pack.toml":
             text = PAGES_TABLE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
         lines = hits(text, hosts)
         if lines:
@@ -171,7 +171,7 @@ def check_links(root: Path | str | None = None) -> list[str]:
         if rel in allow:
             out.append(f"{rel}: {len(lines)} lines hold a link, [guards.pages].allow lets {cap} (lines {lines})")
             continue
-        out += [f"{rel}:{n}: a link to a hosted artifact ships; the page is drawn by a verb of this harness "
+        out += [f"{rel}:{n}: a link to a hosted artifact ships; the page is drawn by a verb of this skill pack "
                 f"(allow it in [guards.pages].allow with its reason, or keep the link in a file that does not "
                 f"ship)" for n in lines]
     for rel, (why, _) in sorted(allow.items()):
@@ -224,7 +224,7 @@ def self_test() -> list[str]:
             or hits(PLANTED["after a decoded line break"]) != [2] or hits("%0a%0a%0a\n" + H + "/artifact/x") != [2]:
         missed.append("the line of a hit")
     if hits("see example.test/page/abc", hosts=(*HOSTS, "example.test/page")) != [1]:
-        missed.append("a host the harness adds")
+        missed.append("a host the skill pack adds")
     if hits("see example.test/page/abc"):
         missed.append("a host nobody added is no hit")
     return missed

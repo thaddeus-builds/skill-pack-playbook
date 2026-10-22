@@ -8,7 +8,7 @@ ALLOWED: dict = {}
 
 
 def transport(method, path, body, media):
-    raise ConnectionError("the shop harness has no external API")
+    raise ConnectionError("the shop skill pack has no external API")
 
 
 def writer() -> Writer:

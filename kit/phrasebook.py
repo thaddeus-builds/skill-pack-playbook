@@ -7,11 +7,11 @@ Creatives are remixes: the same few scripts rearranged. A phrase the
 reviewer refused comes back in the next variant unless something
 remembers it, and a lexicon only remembers words, not the phrase.
 
-The store is a TSV at a path the harness chooses (one per subject):
+The store is a TSV at a path the skill pack chooses (one per subject):
 
     id           P0001, P0002 …
-    text         the phrase, as it was meant (after the harness's `fix`)
-    tag          the harness's word for its role (hook, claim, cta …)
+    text         the phrase, as it was meant (after the skill pack's `fix`)
+    tag          the skill pack's word for its role (hook, claim, cta …)
     status       approved   a person approved this exact text at the gate
                  pending    no error found, nobody approved it yet
                  rejected   the check found an error, or a person marked it
@@ -26,12 +26,12 @@ What it guards:
 
   * One phrase, one row, whatever the punctuation: norm(text, fix) is the
     NFKC, case-folded text with every space and punctuation mark removed,
-    after the harness's `fix` (e.g. speech-recognition homophone fixes),
+    after the skill pack's `fix` (e.g. speech-recognition homophone fixes),
     and add() dedupes on it.
   * clauses(line) splits on ，,。！？；!?; and line breaks and keeps the
     ones at least `min_len` normalised characters long.
   * A phrase is checked on the way in: add() and harvest() run the
-    harness's `check_fn` (text -> findings, kit.copylint's shape) and
+    skill pack's `check_fn` (text -> findings, kit.copylint's shape) and
     store a phrase with an error as rejected, else pending.
   * Only a person approves, only for this exact text, only with no open
     error: approve() runs `check_fn` again (today's rules), refuses a
@@ -68,7 +68,7 @@ from typing import Callable, Iterable
 
 from kit import human
 from kit.atomic import open_atomic
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 from kit.registry import read_tsv
 
@@ -123,7 +123,7 @@ def load(path: Path | str) -> list[dict]:
     rows = read_tsv(f, HEAD, id_col="id")
     for r in rows:
         if r["status"] not in STATUSES:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "phrasebook_row_invalid",
                 f"{f}: phrase {r['id']} has status {r['status']!r}, not one "
                 f"of {' | '.join(STATUSES)}. Nothing was read",
@@ -158,7 +158,7 @@ def _next_id(rows: list[dict]) -> str:
 def _find(rows: list[dict], phrase: str, path: Path) -> dict:
     r = next((r for r in rows if r["id"] == phrase), None)
     if r is None:
-        raise HarnessError(msg("phrasebook_unknown",
+        raise SkillPackError(msg("phrasebook_unknown",
                                f"no phrase {phrase} in {path}",
                                phrase=phrase, path=str(path)))
     return r
@@ -168,7 +168,7 @@ def _add(rows: list[dict], text: str, *, check_fn: CheckFn, tag: str,
          source: str, fix: Fix) -> dict:
     meant = (fix(text or "") if fix else (text or "")).strip()
     if not norm(meant):
-        raise HarnessError(msg("phrasebook_text_blank",
+        raise SkillPackError(msg("phrasebook_text_blank",
                                "the phrase is blank once spaces and "
                                "punctuation are removed. Nothing was written"))
     have = {norm(r["text"], fix): r for r in rows}
@@ -242,7 +242,7 @@ def approve(path: Path | str, phrase: str, *, check_fn: CheckFn,
     errs = _errors(check_fn(r["text"]))
     if errs:
         first = errs[0]
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "phrasebook_has_errors",
             f"{phrase} cannot be approved: {first.get('term')!r} "
             f"({first.get('rule')}). Rewrite it as a new phrase. Nothing "
@@ -257,7 +257,7 @@ def approve(path: Path | str, phrase: str, *, check_fn: CheckFn,
         code=code)
     why += human.relay_audit(channel, relay_user, relay_at)
     if _file_sha(f) != before:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "phrasebook_changed_meanwhile",
             f"{f} changed while the person was being asked, so the approval "
             f"of {phrase} no longer matches it. Nothing was written",

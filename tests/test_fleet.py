@@ -1,7 +1,7 @@
-"""tools/fleet.py: where a harness's vendored copies stand against the playbook.
+"""tools/fleet.py: where a skill pack's vendored copies stand against the playbook.
 
 A throwaway git repository stands in for the playbook (CI checks out one
-commit, so the real history is not there): kit 0.1.0, then 0.2.0. A harness
+commit, so the real history is not there): kit 0.1.0, then 0.2.0. A skill pack
 vendored at 0.1.0 is behind; a file in no version of the playbook is local;
 the copy's own manifest names an edit made after vendoring.
 """
@@ -58,7 +58,7 @@ def setup(tmp: Path) -> tuple[Path, Path]:
     sh(pb, "git", "init", "-q")
     sh(pb, "git", "add", "-A")
     sh(pb, "git", "commit", "-qm", "0.1.0")
-    write(h, {"harness.toml": '[harness]\nname = "acme"\nscripts_dir = "scripts"\n'})
+    write(h, {"skill-pack.toml": '[skill_pack]\nname = "acme"\nscripts_dir = "scripts"\n'})
     vendor(pb / "kit", h / "scripts" / "kit")
     (pb / "kit" / "gone.py").unlink()
     write(pb, {"kit/VERSION": "0.2.0\n", "kit/a.py": "A = 2\n", "kit/b.py": "B = 1\n"})
@@ -72,7 +72,7 @@ def test_a_copy_vendored_earlier_is_behind_and_loses_nothing():
         pb, h = setup(Path(tmp))
         r = fleet(pb, "status", str(h), "--json")
         assert r.returncode == 0, r.stderr
-        [doc] = json.loads(r.stdout)["harnesses"]
+        [doc] = json.loads(r.stdout)["skill_packs"]
         [kit] = doc["copies"]
         assert doc["name"] == "acme" and doc["history"] == "ok", doc
         assert (kit["version"], kit["playbook_version"]) == ("0.1.0", "0.2.0"), kit
@@ -102,16 +102,16 @@ def test_a_copy_equal_to_the_playbook_is_in_sync():
         subprocess.run(["rm", "-rf", str(kit)], check=True)
         vendor(pb / "kit", kit)
         r = fleet(pb, "status", str(h), "--json")
-        [copy] = json.loads(r.stdout)["harnesses"][0]["copies"]
+        [copy] = json.loads(r.stdout)["skill_packs"][0]["copies"]
         assert copy["verdict"] == "in sync" and copy["files"] == [], copy
 
 
-def test_diff_shows_the_harness_copy_against_the_playbook():
+def test_diff_shows_the_skill_pack_copy_against_the_playbook():
     with _t.tmpdir() as tmp:
         pb, h = setup(Path(tmp))
         r = fleet(pb, "diff", str(h), "kit/a.py")
         assert r.returncode == 0, r.stderr
-        assert "--- harness/kit/a.py" in r.stdout and "+++ playbook/kit/a.py" in r.stdout, r.stdout
+        assert "--- skill_pack/kit/a.py" in r.stdout and "+++ playbook/kit/a.py" in r.stdout, r.stdout
         assert "-A = 1" in r.stdout and "+A = 2" in r.stdout and "b.py" not in r.stdout, r.stdout
         assert "kit/b.py" in fleet(pb, "diff", str(h)).stdout
 
@@ -120,7 +120,7 @@ def test_without_history_it_says_so():
     with _t.tmpdir() as tmp:
         pb, h = setup(Path(tmp))
         subprocess.run(["rm", "-rf", str(pb / ".git")], check=True)
-        doc = json.loads(fleet(pb, "status", str(h), "--json").stdout)["harnesses"][0]
+        doc = json.loads(fleet(pb, "status", str(h), "--json").stdout)["skill_packs"][0]
         assert doc["history"].startswith("none"), doc
         assert fleet(pb, "status", str(Path(tmp) / "nowhere")).returncode == 2
 

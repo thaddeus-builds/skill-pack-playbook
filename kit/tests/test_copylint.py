@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _shop  # noqa: E402
 from kit import copylint, messages  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.registry import read_tsv  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
@@ -145,20 +145,20 @@ def test_broken_rules() -> None:
     for label, change, code in cases:
         e = raises(lambda: copylint.banned([{**base, **change}],
                                            [("s", "x")], "drug"),
-                   HarnessError)
+                   SkillPackError)
         check(f"{label}: refused, even out of scope ({code})",
               e is not None and e.message.code == code,
               e and getattr(e.message, "code", e))
     e = raises(lambda: copylint.facts(
         {"k": {"pattern": "(\\d)", "status": "pending"}}, [("s", "1")]),
-        HarnessError)
+        SkillPackError)
     check("a fact with a pattern and no value is refused",
           e is not None and e.message.code == "copylint_rule_field_invalid"
           and e.message.params["rule"] == "fact:k",
           e and getattr(e.message, "params", e))
     e = raises(lambda: copylint.facts(
         {"k": {"value": "1", "pattern": "([", "status": "pending"}},
-        [("s", "1")]), HarnessError)
+        [("s", "1")]), SkillPackError)
     check("a fact with a bad pattern is refused",
           e is not None and e.message.code == "copylint_rule_regex_invalid")
 

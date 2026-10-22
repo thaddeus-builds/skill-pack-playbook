@@ -1,5 +1,5 @@
-"""The verb table: every command a harness answers, with what kind of thing
-it does. A harness lists its verbs once, in `<scripts_dir>/verbs.py`:
+"""The verb table: every command a skill pack answers, with what kind of thing
+it does. A skill pack lists its verbs once, in `<scripts_dir>/verbs.py`:
 
     from kit.verbs import Verb
 
@@ -66,7 +66,7 @@ Teaching the agent from --help (kit 0.6.1), two more optional fields:
 
 Both default to (); a list is kept as a tuple. doctor reports a non-dev
 verb without examples at level info (never a warning: `doctor --strict`
-stays green on a harness that has not written them yet).
+stays green on a skill pack that has not written them yet).
 
 Test: kit/tests/test_cli.py.
 """
@@ -201,14 +201,14 @@ def check(verbs: Iterable[Any]) -> list[Any]:
 
 
 def default_path() -> Path:
-    """`<root>/<scripts_dir>/verbs.py` of the bound harness."""
+    """`<root>/<scripts_dir>/verbs.py` of the bound skill pack."""
     from kit.config import config
     cfg = config()
     return cfg.root / cfg.scripts_dir / "verbs.py"
 
 
 def load(path: Path | str | None = None) -> list[Verb]:
-    """VERBS of a harness's verbs.py (default: the bound harness's),
+    """VERBS of a skill pack's verbs.py (default: the bound skill pack's),
     checked. The file is executed as a module of its own name; it must
     only build the list."""
     path = Path(path) if path is not None else default_path()

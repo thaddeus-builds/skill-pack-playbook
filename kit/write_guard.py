@@ -2,7 +2,7 @@
 
 A credential that can read an account can usually also write to it, so
 this engine, not agent discipline, is what keeps a write from happening by
-accident. The kit ships the engine and NO allowlist: a harness that writes
+accident. The kit ships the engine and NO allowlist: a skill pack that writes
 passes its own `allowed` table (one file, reviewed like code); with none,
 every call is refused.
 
@@ -24,13 +24,13 @@ Then `Guard.check(method, path, body, created)`, the allowlist:
     could match one path are refused when the Guard is built, so a path
     names at most one endpoint;
   * `read=True` endpoints pass any body (filters, not an item);
-  * a `by_id` endpoint (an archive/delete of what the harness itself
+  * a `by_id` endpoint (an archive/delete of what the skill pack itself
     made) needs exactly {by_id: {"include": [one id in `created`]}};
   * a write body is exactly {key: [one item]} (or, with key None, the body
     is the one item), and the item's field set must EQUAL one Shape's
     fields and hold every fixed value of that shape (type and value);
   * an OWN shape (`own=<id field>`) needs that id in `created`: the ids
-    the caller proved the harness created (its own action log);
+    the caller proved the skill pack created (its own action log);
   * `validators` {field: fn(value) -> bool} run last, on every item that
     carries that field (e.g. a bid must be a positive number); a
     validator that raises refuses.
@@ -61,7 +61,7 @@ from typing import Any, Callable, Mapping, NamedTuple
 
 from kit import config as _config
 from kit import paths
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, msg
 
 KILL_FILE = "STOP"
@@ -73,11 +73,11 @@ _ID_SEGMENT = re.compile(r"^[A-Za-z0-9_.~:@-]+$")
 Transport = Callable[[str, str, Any, str], tuple[int, Any]]
 
 
-class WriteRefused(HarnessError):
+class WriteRefused(SkillPackError):
     """A guard said no: kill switch, no opt-in, or not on the allowlist."""
 
 
-class WriteFailed(HarnessError):
+class WriteFailed(SkillPackError):
     """The call did not complete (a transport error); never re-sent."""
 
 
@@ -125,7 +125,7 @@ def _overlap(a: str, b: str) -> bool:
 
 
 def _validate(allowed: Mapping[tuple[str, str], Endpoint]) -> None:
-    """A malformed allowlist is a bug in the harness: ValueError."""
+    """A malformed allowlist is a bug in the skill pack: ValueError."""
     keys = list(allowed)
     for key in keys:
         ep = allowed[key]
@@ -182,7 +182,7 @@ class Guard:
                        f"goes out while it is", var=kill)
         try:
             stop = paths.data_dir() / self.kill_file
-        except HarnessError:
+        except SkillPackError:
             var = _config.config().env("DATA_DIR")
             return msg("write_stop_unchecked", f"writes refused: {var} is not "
                        f"an absolute path, so the {self.kill_file} file cannot "
@@ -222,7 +222,7 @@ class Guard:
     def check(self, method: str, path: str, body: Any,
               created: frozenset = frozenset()) -> Endpoint:
         """The allowlist: the endpoint, or WriteRefused. `created`: the ids
-        the caller proved the harness created — the only ones an OWN shape
+        the caller proved the skill pack created — the only ones an OWN shape
         or a by_id endpoint may name."""
         where = f"{method} {path}"
 
@@ -292,7 +292,7 @@ class Guard:
     @staticmethod
     def _not_own(method: str, path: str, i: Any):
         return msg("write_not_own",
-                   f"{method} {path}: {i!r} is not an entity the harness "
+                   f"{method} {path}: {i!r} is not an entity the skill pack "
                    f"created — only those may be changed this way",
                    method=method, path=path, id=str(i))
 

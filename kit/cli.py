@@ -1,5 +1,5 @@
-"""The harness CLI: `<cli> <verb words> [args…]`, one thin dispatcher over
-the verb table (kit.verbs). A harness's `<scripts_dir>/<cli>.py` is:
+"""The skill pack CLI: `<cli> <verb words> [args…]`, one thin dispatcher over
+the verb table (kit.verbs). A skill pack's `<scripts_dir>/<cli>.py` is:
 
     import sys
     from kit.cli import Dispatcher
@@ -9,12 +9,12 @@ the verb table (kit.verbs). A harness's `<scripts_dir>/<cli>.py` is:
     if __name__ == "__main__":
         raise SystemExit(Dispatcher(VERBS, scripts_dir=HERE, spec=SPEC).main())
 
-What `main(argv)` does, in order (ported from the reference harness's
+What `main(argv)` does, in order (ported from the reference skill pack's
 dispatcher; its routing table became the verb table):
 
   1. `<cli>` alone, `-h`, `--help`, `help`: the verbs grouped by kind, each
      with what it answers (kit.verbs.answers), the built-ins, the env chain
-     and the epilog. `<cli> --version`: harness and kit versions.
+     and the epilog. `<cli> --version`: skill pack and kit versions.
   2. The env chain is loaded ONCE into os.environ (kit.env: process env
      wins, never overridden), so every forwarded script and doctor agree on
      every value.
@@ -41,7 +41,7 @@ dispatcher; its routing table became the verb table):
      verb's own --help: a group's --help stays the one-line listing.
 
 Built-ins: `<cli> doctor [--live] [--strict] [--json]` (kit.doctor, with the
-harness's own checks and platform-lock hook) and `<cli> verbs [--json]`
+skill pack's own checks and platform-lock hook) and `<cli> verbs [--json]`
 (the verb table with kinds, for agents and guards). A refusal of the
 dispatcher itself is one coded failure document under --json
 (kit.contract.fail), else `error:` / `next:` on stderr.
@@ -61,7 +61,7 @@ from typing import Any, Callable, Iterable
 from kit import __version__ as KIT_VERSION
 from kit import config as _config
 from kit import contract, runner, verbs as _verbs
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 
 HELP = ("-h", "--help")
@@ -93,7 +93,7 @@ def masked(cmd: list[str]) -> list[str]:
 
 class Dispatcher:
     """`Dispatcher(verbs, *, scripts_dir, epilog, doctor_checks)` per the
-    SPEC; `spec` (the harness's SchemaSpec: doctor checks the DB's shape),
+    SPEC; `spec` (the skill pack's SchemaSpec: doctor checks the DB's shape),
     `platform_lock` (doctor's hook) and `description` are additions."""
 
     def __init__(self, verbs: Iterable[Any], *, scripts_dir: Path | str,
@@ -129,7 +129,7 @@ class Dispatcher:
              "kind": "read", "script": None, "takes_market": False,
              "needs_data_dir": False, "builtin": True,
              "answers": "This table: every verb and its kind"}]
-        return {"harness": cfg.name, "cli": cfg.cli,
+        return {"skill_pack": cfg.name, "cli": cfg.cli,
                 "kinds": dict(_verbs.KINDS), "verbs": rows,
                 "builtins": builtins}
 
@@ -169,20 +169,20 @@ class Dispatcher:
 
     # ---- main ---------------------------------------------------------------
 
-    def refuse(self, e: HarnessError, argv: list[str]) -> int:
+    def refuse(self, e: SkillPackError, argv: list[str]) -> int:
         head = argv[:argv.index("--")] if "--" in argv else argv
         return contract.fail(e, cmd=[self.cli, *argv],
                              as_json="--json" in head)
 
-    def unknown(self, args: list[str]) -> HarnessError:
+    def unknown(self, args: list[str]) -> SkillPackError:
         cli = self.cli
         words = " ".join(a for a in args[:3] if not a.startswith("-")) \
             or " ".join(args[:1])
         near = _verbs.group(args, self.verbs)
         cands = [f"{cli} {v.command}" for v in near]
-        return HarnessError(
+        return SkillPackError(
             msg("cli_unknown_verb", f"`{cli} {words}` is not a verb of this "
-                f"harness" + (f"; did you mean one of: {', '.join(cands)}"
+                f"skill_pack" + (f"; did you mean one of: {', '.join(cands)}"
                               if cands else ""),
                 cli=cli, words=words, candidates=cands),
             [f"{cli} {near[0].words[0]} --help" if near else f"{cli} --help"])
@@ -198,7 +198,7 @@ class Dispatcher:
             return 0
         if argv[0] == "--version":
             cfg = _config.config()
-            print(f"{cfg.name} {contract.harness_version() or 'unversioned'}"
+            print(f"{cfg.name} {contract.skill_pack_version() or 'unversioned'}"
                   f" (kit {KIT_VERSION})")
             return 0
 
@@ -235,11 +235,11 @@ class Dispatcher:
             from kit import paths
             try:
                 paths.data_dir()
-            except HarnessError as e:
+            except SkillPackError as e:
                 return self.refuse(e, argv)
         script = self.scripts_dir / v.script
         if not script.is_file():
-            return self.refuse(HarnessError(
+            return self.refuse(SkillPackError(
                 msg("cli_script_missing", f"`{self.cli} {v.command}` has no "
                     f"script at {script}", verb=v.command, script=v.script),
                 [f"{self.cli} doctor"]), argv)

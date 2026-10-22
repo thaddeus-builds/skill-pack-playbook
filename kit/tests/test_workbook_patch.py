@@ -12,12 +12,12 @@ tracker of _workbooks.py:
   2. The client's cells win: a formula, a value the client entered, a
      merged cell and a missing sheet are kept and listed by ref (never by
      value); a cell already holding the value is `same`; a value the
-     harness wrote last time (`ours`) may be replaced.
+     skill pack wrote last time (`ours`) may be replaced.
   3. table_sets: the owner's out and both columns of a table by key, a new
      column after the header block with its header, never over a column of
      the client's data (one with no header is skipped), found again by its
      header on the next copy; a key the sheet lacks is counted, never
-     added; another harness's columns and unconfirmed rows are not
+     added; another skill pack's columns and unconfirmed rows are not
      written.
   4. cells.tsv (kit/workbook_map.py): its shape and rules (a cell written
      twice, a bad range, an unknown field), a map without it keeps its
@@ -41,7 +41,7 @@ import _shop  # noqa: E402
 import _workbooks as X  # noqa: E402
 from kit import messages, workbook as W, workbook_map as WM  # noqa: E402
 from kit import workbook_patch as P  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish  # noqa: E402
 
 BASE = X.im(1)
@@ -132,16 +132,16 @@ def test_client_wins() -> None:
           [s.ref for s in p.same] == ["L17"] and not p.apply)
     q = P.plan(wb, [P.Set(SH, "G17", 99)],
                ours=[{"sheet": SH, "ref": "G17", "value": 15000}])
-    check("a value the harness wrote last time may be replaced",
+    check("a value the skill pack wrote last time may be replaced",
           [s.ref for s in q.apply] == ["G17"] and not q.kept, q)
     check("written() is what the next plan's ours needs",
           q.written() == [{"sheet": SH, "ref": "G17", "value": 99}])
 
 
-MAP_EXTRA = ("roster\tHarness stage\troster.stage\tout\tharness-a\ttext\t"
-             "confirmed\t\nroster\tHarness note\troster.note_out\tout\t"
-             "harness-a\ttext\tproposed\t\nroster\tOther\troster.other\tout\t"
-             "harness-b\ttext\tconfirmed\t\n")
+MAP_EXTRA = ("roster\tSkill pack stage\troster.stage\tout\tskill-pack-a\ttext\t"
+             "confirmed\t\nroster\tSkill pack note\troster.note_out\tout\t"
+             "skill-pack-a\ttext\tproposed\t\nroster\tOther\troster.other\tout\t"
+             "skill-pack-b\ttext\tconfirmed\t\n")
 
 
 def test_table() -> None:
@@ -153,14 +153,14 @@ def test_table() -> None:
                        "roster.note_out": "x", "roster.other": "y"},
             "nano04": {"roster.stage": "lift"},
             "nano99": {"roster.stage": "conv"}}
-    sets, issues = P.table_sets(wb, m, "roster", rows, "harness-a")
+    sets, issues = P.table_sets(wb, m, "roster", rows, "skill-pack-a")
     got = {(s.ref, s.value) for s in sets}
     check("the owner's new column after the block, with its header",
-          ("P16", "Harness stage") in got and ("P17", "scale") in got
+          ("P16", "Skill pack stage") in got and ("P17", "scale") in got
           and ("P20", "lift") in got, sorted(got))
     check("a both column the owner writes: its own column (Data Login)",
           ("N17", True) in got, sorted(got))
-    check("an unconfirmed row and another harness's column are not written",
+    check("an unconfirmed row and another skill pack's column are not written",
           not any(v in ("x", "y") for _, v in got)
           and not any(r.startswith("Q") for r, _ in got), sorted(got))
     check("a key the sheet lacks is counted, never added",
@@ -172,14 +172,14 @@ def test_table() -> None:
     sheets = X._creators(1)
     sheets["cells"]["P18"] = "a note with no header"   # data right of block
     gap = W.read(X.build([sheets]))
-    sets2, _ = P.table_sets(gap, m, "roster", rows, "harness-a")
+    sets2, _ = P.table_sets(gap, m, "roster", rows, "skill-pack-a")
     got2 = {(s.ref, s.value) for s in sets2}
     check("a column with the client's data (no header) right of the block "
           "is skipped: the new column goes to the next empty one",
-          ("Q16", "Harness stage") in got2 and ("Q17", "scale") in got2
+          ("Q16", "Skill pack stage") in got2 and ("Q17", "scale") in got2
           and not any(r.startswith("P") for r, _ in got2), sorted(got2))
     again = W.read(P.apply(X.build([sheets]), P.plan(gap, sets2)))
-    sets3, _ = P.table_sets(again, m, "roster", rows, "harness-a")
+    sets3, _ = P.table_sets(again, m, "roster", rows, "skill-pack-a")
     check("the next copy finds that column by its header across the gap",
           ("Q17", "scale") in {(s.ref, s.value) for s in sets3}
           and not any(s.ref == "R16" for s in sets3),
@@ -187,9 +187,9 @@ def test_table() -> None:
 
 
 CELLS = ("field\tsheet\tcell\towner\tstatus\tnote\n"
-         "roster.month_spend\tCreators\tQ3:S3\tharness-a\tconfirmed\t\n"
-         "roster.total\tCreators\tQ5\tharness-a\tconfirmed\t\n"
-         "roster.later\tCreators\tQ6\tharness-a\tproposed\t\n")
+         "roster.month_spend\tCreators\tQ3:S3\tskill-pack-a\tconfirmed\t\n"
+         "roster.total\tCreators\tQ5\tskill-pack-a\tconfirmed\t\n"
+         "roster.later\tCreators\tQ6\tskill-pack-a\tproposed\t\n")
 
 
 def test_cells() -> None:
@@ -203,8 +203,8 @@ def test_cells() -> None:
     check("the cells rows hold", not probs and WM.problems(m, fields) == [],
           WM.problems(m, fields))
     bad, _ = WM.parse(X.IM_TABLES, X.IM_COLUMNS, None, CELLS +
-                      "roster.total\tCreators\tR3\tharness-b\tconfirmed\t\n"
-                      "x.y\tCreators\tA1:B2\tharness-a\tconfirmed\t\n"
+                      "roster.total\tCreators\tR3\tskill-pack-b\tconfirmed\t\n"
+                      "x.y\tCreators\tA1:B2\tskill-pack-a\tconfirmed\t\n"
                       "roster.unknown\tCreators\tZ9\t\tconfirmed\t\n")
     codes = sorted(p.code for p in WM.problems(bad, fields))
     check("a cell written twice, a range that is not a line, an unknown "
@@ -221,7 +221,7 @@ def test_cells() -> None:
           "cell:Creators!Q3:S3" in WM.confirmed_rows(m))
     sets, issues = P.cell_sets(m, {"roster.month_spend": [1, 2, 3],
                                    "roster.total": [1, 2],
-                                   "roster.later": 9}, "harness-a")
+                                   "roster.later": 9}, "skill-pack-a")
     check("a range filled in order; a list of another length is listed",
           [(s.ref, s.value) for s in sets] == [("Q3", 1), ("R3", 2),
                                                ("S3", 3)]
@@ -242,7 +242,7 @@ def test_refusals() -> None:
         P._edit_sheet('<x:worksheet xmlns:x="m"><x:sheetData/></x:worksheet>',
                       "xl/worksheets/sheet9.xml", [P.Set("S", "A1", 1)])
         code = None
-    except HarnessError as e:
+    except SkillPackError as e:
         code = e.message.code if hasattr(e, "message") else \
             messages.code(e.args[0])["code"]
     check("a sheet under a namespace prefix is refused, coded",

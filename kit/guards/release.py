@@ -13,7 +13,8 @@ returns every problem of these rules:
     reader is not —): the registries ship, the planning files don't;
   * every `.tsv` runtime code opens by its literal name ships (runtime =
     `[release].runtime`, default the scripts dir);
-  * every `[release].must_ship` path ships, and so do the vendored kit
+  * every `[release].must_ship` path ships (a directory ships when a file
+    under it ships and none under it is internal), and so do the vendored kit
     (<scripts_dir>/kit/) and console (console/): no internal entry may
     cover them;
   * nothing else is left out;
@@ -40,8 +41,8 @@ import re
 import subprocess
 from pathlib import Path
 
-from kit.config import HarnessConfig
-from kit.guards import harness, read, report, strs
+from kit.config import SkillPackConfig
+from kit.guards import skill_pack, read, report, strs
 from kit.guards import ssot as _ssot
 
 # A string literal that is only a file name: a registry the code opens
@@ -66,6 +67,16 @@ def under(path: str, prefixes) -> bool:
                for p in prefixes)
 
 
+def _ships(path: str, tracked, ships, internal_files) -> bool:
+    """A must_ship file ships; a directory ships when a file under it ships
+    and none under it is internal."""
+    if path in tracked or path in ships:
+        return path in ships
+    below = [f for f in tracked if under(f, (path,))]
+    return any(f in ships for f in below) \
+        and not any(f in internal_files for f in below)
+
+
 def shipped(root: Path | str) -> tuple[list[str], set[str]] | None:
     """(tracked files, the ones `git archive` would ship); None when git or
     the repository is absent."""
@@ -83,7 +94,7 @@ def shipped(root: Path | str) -> tuple[list[str], set[str]] | None:
                      if f not in ignored and not ignored & set(parents(f))}
 
 
-def _params(cfg: HarnessConfig) -> tuple[tuple, tuple, tuple]:
+def _params(cfg: SkillPackConfig) -> tuple[tuple, tuple, tuple]:
     rel = cfg.release
     return (tuple(p.strip("/") for p in strs(rel.get("internal"))),
             tuple(p.strip("/") for p in strs(rel.get("must_ship"))),
@@ -94,7 +105,7 @@ def _params(cfg: HarnessConfig) -> tuple[tuple, tuple, tuple]:
 def ignored_paths(root: Path | str | None = None) -> list[str]:
     """What must be export-ignore: [release].internal, then the planning
     files of the ssot index, in that order."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     internal, _, _ = _params(cfg)
     planning = sorted(p for p in _ssot.planning_files(_ssot.rules(cfg=cfg))
                       if ":" not in p and p not in internal)
@@ -104,12 +115,12 @@ def ignored_paths(root: Path | str | None = None) -> list[str]:
 def render_gitattributes(root: Path | str | None = None) -> str:
     """The .gitattributes the config implies (write it with
     Path(".gitattributes").write_text(render_gitattributes()))."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     internal, _, _ = _params(cfg)
     planning = [p for p in ignored_paths(root) if p not in internal]
     lines = ["# A release is `git archive` of its tag: every path below "
              "stays out of it.",
-             "# Generated from harness.toml [release].internal and the ssot "
+             "# Generated from skill-pack.toml [release].internal and the ssot "
              "index rows with no",
              "# reader (kit.guards.release.render_gitattributes); the release "
              "guard fails when they differ.",
@@ -135,7 +146,7 @@ def attributes(text: str) -> set[str]:
 
 def check_gitattributes(root: Path | str | None = None) -> list[str]:
     """.gitattributes marks export-ignore exactly what the config implies."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     path = cfg.root / ATTRS
     have = attributes(read(path)) if path.is_file() else set()
     want = set(ignored_paths(root))
@@ -152,7 +163,7 @@ def check_gitattributes(root: Path | str | None = None) -> list[str]:
 def check_release(root: Path | str | None = None) -> list[str]:
     """Every problem of the release rules (module docstring); [] when git or
     the repository is absent (see shipped())."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     got = shipped(cfg.root)
     if got is None:
         return []
@@ -188,7 +199,8 @@ def check_release(root: Path | str | None = None) -> list[str]:
         out.append(f".tsv files runtime code opens by name do not ship: "
                    f"{unshipped}")
 
-    missing = sorted(set(must_ship) - ships)
+    missing = sorted(p for p in set(must_ship) if not _ships(
+        p, tracked, ships, internal_files))
     if missing:
         out.append(f"[release].must_ship paths do not ship: {missing}")
     for d in (f"{cfg.scripts_dir}/kit", "console"):
@@ -205,7 +217,7 @@ def check_release(root: Path | str | None = None) -> list[str]:
 def check_release_archive(root: Path | str | None = None) -> bool:
     """check_release() as one kit.testing.check line (a note when git is
     absent)."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     if shipped(cfg.root) is None:
         print("  (skip: no git repository to ask)")
         return report("release: skipped, git or the repository is absent",

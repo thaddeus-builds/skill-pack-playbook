@@ -1,8 +1,8 @@
-"""The day-one guards of a harness, as library calls: the tests a new
-harness is generated with (templates/README.md, "The tests a new harness
+"""The day-one guards of a skill pack, as library calls: the tests a new
+skill pack is generated with (templates/README.md, "The tests a new skill pack
 starts with") are each one thin call into this module.
 
-Every function takes the harness root and returns [(label, problems)]:
+Every function takes the skill pack root and returns [(label, problems)]:
 one check per rule, `problems` empty when the rule holds. `run(results)`
 reports them through kit.testing.check. A generated test is
 
@@ -12,16 +12,16 @@ reports them through kit.testing.check. A generated test is
 
   run_tests     the runner fails a file that exits non-zero, prints no
                 RESULT line, ran nothing, reports a failure with exit 0 or
-                leaves files in its temp folder; the harness's tests/run.py
+                leaves files in its temp folder; the skill pack's tests/run.py
                 is that runner
   ssot          kit.guards.ssot.check_index, plus the trail: every owner row
                 has an agent sibling that is accepted or retired with a
                 `decided` answer; asked needs ask; a stage is never signed
-                before a step it comes after; and check_writes: no harness
+                before a step it comes after; and check_writes: no skill pack
                 code writes under ssot/ but the builder's `writers`, with
                 its planted self-test
   layering      kit.guards.layering.check_layers, and its planted self-test
-  clock         kit.guards.clock: no calendar read in the harness's code
+  clock         kit.guards.clock: no calendar read in the skill pack's code
                 but kit.dates.now() (by AST: datetime.now/today/utcnow, a
                 time.strftime/localtime without a time value, a name bound
                 by `from kit.dates import now`), its planted self-test,
@@ -31,7 +31,7 @@ reports them through kit.testing.check. A generated test is
                 confirmed through the gate) keeps the --json contract; on an
                 empty data dir every read verb fails no_db (or a coded usage
                 error) and creates nothing
-  human_tables  the harness's SPEC holds the kit's human tables unchanged;
+  human_tables  the skill pack's SPEC holds the kit's human tables unchanged;
                 their rows survive a rebuild; a lossy rebuild, a newer file,
                 a drifted human table and a DELETE are refused
   gate          confirm and approve need a person (no terminal, no secret:
@@ -47,15 +47,15 @@ reports them through kit.testing.check. A generated test is
                 [guards.roadmap] file) keeps the one format, and its planted
                 self-test
   page_links    kit.guards.pages.check_links: no shipped file links to a
-                hosted artifact (opt-in: a harness adds `run(page_links(ROOT))`
+                hosted artifact (opt-in: a skill pack adds `run(page_links(ROOT))`
                 to a test of its own), and its planted self-test
-  kit_drift     kit.guards.drift.check_harness
+  kit_drift     kit.guards.drift.check_skill_pack
   never_table   kit.guards.evals.check_never_table: SKILL.md's first section
                 is `## Never`, whose table names exactly the verbs only a
                 person runs (every gated verb, and [guards.evals].extra),
                 and its planted self-test
 
-Test: kit/tests/test_suites.py (every suite green on a generated harness,
+Test: kit/tests/test_suites.py (every suite green on a generated skill pack,
 and each one failing on a planted violation).
 """
 
@@ -100,12 +100,12 @@ def run(results: Results) -> bool:
     return ok
 
 
-def _cfg(root: Path | str) -> _config.HarnessConfig:
+def _cfg(root: Path | str) -> _config.SkillPackConfig:
     return bind(root)
 
 
-def bind(root: Path | str) -> _config.HarnessConfig:
-    """Bind the harness at `root` (its registry decides what counts as
+def bind(root: Path | str) -> _config.SkillPackConfig:
+    """Bind the skill pack at `root` (its registry decides what counts as
     coded) unless it is bound already."""
     root = Path(root).resolve()
     try:
@@ -251,22 +251,22 @@ def ssot(root: Path | str) -> Results:
 
 
 def ssot_writes(root: Path | str) -> Results:
-    """The ssot write rule alone (it reads no index): a harness with its own
+    """The ssot write rule alone (it reads no index): a skill pack with its own
     tests/test_ssot.py adds `run(ssot_writes(ROOT))` to it."""
     bind(root)
     from kit.guards import ssot as g
     return [("the ssot write rule catches each planted write",
              g.writes_self_test()),
-            ("no harness code writes under ssot/ (it is the builder's; a "
+            ("no skill pack code writes under ssot/ (it is the builder's; a "
              "client's own value goes to its database)", g.check_writes(root))]
 
 
 def page_links(root: Path | str) -> Results:
-    """The page rule alone (it reads no index): a harness adds `run(page_links(ROOT))` to a test of its own."""
+    """The page rule alone (it reads no index): a skill pack adds `run(page_links(ROOT))` to a test of its own."""
     bind(root)
     from kit.guards import pages as g
     return [("the page-link rule catches each planted form", g.self_test()),
-            ("no shipped file links to a hosted artifact (a page the harness "
+            ("no shipped file links to a hosted artifact (a page the skill pack "
              "delivers is drawn by one of its verbs)", g.check_links(root))]
 
 
@@ -275,7 +275,7 @@ def page_links(root: Path | str) -> Results:
 def layering(root: Path | str) -> Results:
     bind(root)
     from kit.guards import layering as g
-    return [("the layering rules of harness.toml hold", g.check_layers(root)),
+    return [("the layering rules of skill-pack.toml hold", g.check_layers(root)),
             ("each layering rule catches its planted violation",
              g.self_test())]
 
@@ -285,7 +285,7 @@ def clock(root: Path | str) -> Results:
     from kit.guards import clock as g
     return [("the clock rule catches each planted calendar read",
              g.self_test()),
-            ("the harness reads the calendar only through kit.dates "
+            ("the skill pack reads the calendar only through kit.dates "
              "(one patch pins every read)", g.check_reads(root))]
 
 
@@ -300,13 +300,13 @@ def kit_drift(root: Path | str) -> Results:
     bind(root)
     from kit.guards import drift
     return [("scripts/kit/ and console/ match their MANIFEST.sha256 and "
-             "VERSION", drift.check_harness(root))]
+             "VERSION", drift.check_skill_pack(root))]
 
 
-# ---- the harness CLI in a sandbox --------------------------------------------------
+# ---- the skill pack CLI in a sandbox --------------------------------------------------
 
 class Cli:
-    """The harness's own CLI under kit.testing.sandbox's env for one data
+    """The skill pack's own CLI under kit.testing.sandbox's env for one data
     dir; `secret` sets the confirm-code secret (relay mode)."""
 
     def __init__(self, root: Path | str, data: Path | None = None):
@@ -318,7 +318,7 @@ class Cli:
     def env(self, secret: bool) -> dict:
         from kit.testing.sandbox import sandbox_env
         env = sandbox_env(self.data, PYTHONDONTWRITEBYTECODE="1")
-        env["KIT_HARNESS_ROOT"] = str(self.root)
+        env["KIT_SKILL_PACK_ROOT"] = str(self.root)
         if secret:
             env[self.cfg.env("CONFIRM_CODE_SECRET")] = SECRET
         return env
@@ -434,18 +434,18 @@ PROBE = "kit_probe"
 def human_tables(root: Path | str, spec: Any) -> Results:
     bind(root)
     from kit import db, schema_base
-    from kit.contract import HarnessError
+    from kit.contract import SkillPackError
     out: Results = []
     same = [t for t in schema_base.HUMAN
             if t not in spec.human_tables
             or spec.columns(t) != tuple(schema_base.HUMAN[t]["columns"])]
-    out.append(("the harness's SPEC holds the kit's human tables, unchanged",
+    out.append(("the skill pack's SPEC holds the kit's human tables, unchanged",
                 [f"{t}: missing or changed" for t in same]))
     with contextlib.redirect_stderr(io.StringIO()):   # the db's own notes
-        return out + _human_rows(spec, db, schema_base, HarnessError)
+        return out + _human_rows(spec, db, schema_base, SkillPackError)
 
 
-def _human_rows(spec: Any, db: Any, schema_base: Any, HarnessError: type
+def _human_rows(spec: Any, db: Any, schema_base: Any, SkillPackError: type
                 ) -> Results:
     out: Results = []
     d = Path(tmp_dir("suite-human-"))
@@ -499,7 +499,7 @@ def _human_rows(spec: Any, db: Any, schema_base: Any, HarnessError: type
         append_only=v2.append_only, frozen_columns=v2.frozen_columns),
         path))
     out.append(("a human table in another shape is refused, never migrated",
-                [] if isinstance(e, HarnessError)
+                [] if isinstance(e, SkillPackError)
                 and getattr(e.message, "code", "") == "human_table_drift"
                 else [f"got {e!r}"]))
     return out
