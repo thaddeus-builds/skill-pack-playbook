@@ -61,7 +61,10 @@ owner's one inbox says which skill pack asks. Nothing else changes: the gate's
 flag, not an environment switch: it is said on the one command line that
 makes the asks, so a shell that ran a hub once cannot change what a plain
 `pending` prints. A verb that would pass the console's word limit gets no
-gate (`pending_gate_too_many_words`).
+gate (`pending_gate_too_many_words`). A pack added to one hub once per
+market runs under its own dispatch name (`gads-tw`), which bin/hub exports
+as `<P>_HUB_CLI`: ids and gate verbs then start with it, and the group
+names it (`google-ads (gads-tw) · Facts, _`).
 
 Every text in an ask is a coded Msg: `about[i]` carries the
 {title,why,if_no,effect}_code of asks[i] (the console format has no room
@@ -79,6 +82,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
 import sqlite3
 import sys
@@ -131,13 +135,22 @@ def _ask_id(prefix: str, parts: list[str], subject: str,
     return f"{head}-{digest}"
 
 
+def _hub_name() -> str:
+    """The word the hub's dispatcher runs this pack folder by: `<P>_HUB_CLI`
+    (bin/hub exports it: `gads-tw` for a pack added once per market), else
+    the cli word."""
+    return os.environ.get(config().env("HUB_CLI"), "").strip() or config().cli
+
+
 def _hub_word() -> str:
-    """The cli word as the head of an ask id (the console's id alphabet)."""
-    return re.sub(r"[^a-z0-9._-]+", "-", config().cli.lower()).strip("-._")
+    """The hub name as the head of an ask id (the console's id alphabet)."""
+    return re.sub(r"[^a-z0-9._-]+", "-", _hub_name().lower()).strip("-._")
 
 
 def _group(text: str, hub: str | None) -> str:
-    return _clip(f"{config().name} · {text}" if hub else text, LIMITS["group"])
+    name = config().name if _hub_name() == config().cli \
+        else f"{config().name} ({_hub_name()})"
+    return _clip(f"{name} · {text}" if hub else text, LIMITS["group"])
 
 
 def _fact(label: str, value: Any, table: str) -> dict | None:
@@ -242,7 +255,7 @@ def _gate(ask_id: str, verb: list[str], expect: dict, value_arg: bool,
     """The gate block, or None with a coded warning saying why not. In hub
     mode the verb starts with the cli word (the hub's dispatcher takes it)."""
     if hub:
-        verb = [config().cli, *verb]
+        verb = [_hub_name(), *verb]
     if len(verb) > LIMITS["verb"]:
         warnings.append(msg(
             "pending_gate_too_many_words",

@@ -5,8 +5,8 @@
         --title "Northwind Tea" [--markets HK,TW] [--lang en|zh] \\
         [--language "Traditional Chinese"] [--console-home DIR] [--dry-run]
     python3 scaffold/new_hub.py add-pack --hub ../workspaces/northwind \\
-        --skill-pack ../acme-skill-pack [--folder acme] [--link DIR] \\
-        [--language "…"] [--dry-run]
+        --skill-pack ../acme-skill-pack [--market HK] [--folder acme] \\
+        [--link DIR] [--language "…"] [--dry-run]
 
 One client is served by several skill packs. The hub is the client's folder
 (a git repository; its content git-ignored): one CLIENT.md, one intake, one
@@ -50,6 +50,15 @@ row in a sibling's CLIENT.md, or a port in a sibling's .claude/launch.json
 or in one a folder deeper (a per-pack client workspace,
 <root>/<pack-clients>/<client>/.claude/launch.json).
 
+A pack that keeps no markets serves one hub market per folder (one
+workspace per market account): in a hub with markets, `add-pack --market M`
+is required for it (M one of the hub's; refused for a pack with markets of
+its own, which copies each hub market into its own). The folder defaults to
+`<name>-<m>`, bin/hub runs it as `<cli>-<m>` (e.g. `gads-tw`) and exports
+`<PREFIX>_HUB_MARKET=M` and `<PREFIX>_HUB_CLI=<cli>-<m>` for it, and the
+relay verbs follow that name. The same pack may be added again for another
+market, in another folder.
+
 `add-pack` adds one pack: with --link DIR it links an existing client
 workspace of that pack (a relative symlink; the folder is never written);
 without, it writes the pack folder from new_client.py's files() WITHOUT its
@@ -82,6 +91,7 @@ import re
 import socket
 import stat
 import sys
+import tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -191,18 +201,34 @@ def sh_dq(text: str) -> str:
     return re.sub(r'([\\"$`])', r"\\\1", text)
 
 
+def word(p: dict) -> str:
+    """The name bin/hub runs a pack folder by: its cli word, or
+    `<cli>-<market>` for a pack added once per hub market."""
+    return p.get("word") or p["cli"]
+
+
 def relay_list(h: dict) -> list[str]:
     """The console's relay verbs: the hub's own first, then each pack's."""
-    return [f"{p['cli']} {v}" for p in (HUB, *h["packs"]) for v in p["relay"]]
+    return [f"{word(p)} {v}" for p in (HUB, *h["packs"]) for v in p["relay"]]
+
+
+def _arm(p: dict) -> str:
+    """One bin/hub case arm: the pack's env names the hub (<P>_HUB_DIR), the
+    hub market its folder serves (<P>_HUB_MARKET, unset when none) and the
+    name it runs by (<P>_HUB_CLI: the console's verbs start with it)."""
+    pre, mk = p["prefix"], p.get("market")
+    market = (f'{pre}_HUB_MARKET="{mk}"; export {pre}_HUB_MARKET' if mk
+              else f"unset {pre}_HUB_MARKET")
+    return (f'  {word(p)}) shift; {pre}_HUB_DIR="$root"; {pre}_HUB_CLI="{word(p)}"\n'
+            f'    export {pre}_HUB_DIR {pre}_HUB_CLI; {market}\n'
+            f'    exec "$root/{p["folder"]}/bin/{p["cli"]}" "$@" ;;\n')
 
 
 def hub_files(h: dict, hub: Path) -> dict[str, tuple[str, int]]:
     """The files new and add-pack both (re)write, wholly from hub.json."""
     packs, home = h["packs"], f'"${{HUB_CONSOLE_HOME:-{h["console_home"]}}}"'
-    clis = " ".join(p["cli"] for p in packs) or "none yet (scaffold/new_hub.py add-pack)"
-    arms = '  hub) shift; exec "$root/hub/bin/hub" "$@" ;;\n' + "".join(
-        f'  {p["cli"]}) shift; {p["prefix"]}_HUB_DIR="$root"; export {p["prefix"]}_HUB_DIR\n'
-        f'    exec "$root/{p["folder"]}/bin/{p["cli"]}" "$@" ;;\n' for p in packs)
+    clis = " ".join(word(p) for p in packs) or "none yet (scaffold/new_hub.py add-pack)"
+    arms = '  hub) shift; exec "$root/hub/bin/hub" "$@" ;;\n' + "".join(map(_arm, packs))
     dispatch = f"""#!/bin/sh
 # {h['title']}'s hub: `bin/hub <cli> <args…>` runs that pack's own wrapper
 # (<folder>/bin/<cli>) with this environment, the console's confirm-code
@@ -216,7 +242,8 @@ case "${{1:-}}" in
 esac
 """
     secrets = "".join(f'{p["prefix"]}_CONFIRM_CODE_SECRET="$(openssl rand -hex 32)"\n'
-                      f'export {p["prefix"]}_CONFIRM_CODE_SECRET\n' for p in (HUB, *packs))
+                      f'export {p["prefix"]}_CONFIRM_CODE_SECRET\n'
+                      for p in {q["prefix"]: q for q in (HUB, *packs)}.values())
     relay = f' \\\n  --relay-cmd "$root/bin/hub" --relay-verbs "{",".join(relay_list(h))}"'
     console = f"""#!/bin/sh
 # {h['title']}'s console: the asks of every pack of this client on one page,
@@ -253,10 +280,11 @@ BRIEF_MAX = 4096
 def hub_brief_md(h: dict) -> str:
     """The brief of the agent working at the hub (under BRIEF_MAX bytes)."""
     packs = h["packs"]
-    clis = ", ".join(f"`{p['cli']}`" for p in packs) or "none yet"
-    gates = "; ".join(f"`{p['cli']} {', '.join(p['gates']) or 'none'}`"
+    clis = ", ".join(f"`{word(p)}`" + (f" ({p['market']})" if p.get("market") else "")
+                     for p in packs) or "none yet"
+    gates = "; ".join(f"`{word(p)} {', '.join(p['gates']) or 'none'}`"
                       for p in (HUB, *packs))
-    packs_arg = ",".join(p["cli"] for p in packs) or "<cli>,…"
+    packs_arg = ",".join(word(p) for p in packs) or "<cli>,…"
     text = f"""# {h['title']}: the client hub
 
 You work at this client's hub: one console, one intake and one facts store for
@@ -350,10 +378,10 @@ no_db_next = ["facts init"]
 def deny_rules(h: dict, hub: Path) -> list[str]:
     deny = list(BASE_DENY)
     for p in (HUB, *h["packs"]):
-        cli, f = p["cli"], p["folder"]
+        cli, f, w = p["cli"], p["folder"], word(p)
         for g in p["gates"]:
-            for cmd in (f"./bin/hub {cli}", f"bin/hub {cli}",
-                        f"{hub}/bin/hub {cli}", f"./{f}/bin/{cli}",
+            for cmd in (f"./bin/hub {w}", f"bin/hub {w}",
+                        f"{hub}/bin/hub {w}", f"./{f}/bin/{cli}",
                         f"{f}/bin/{cli}", f"{hub}/{f}/bin/{cli}"):
                 deny.append(f"Bash({cmd} {g}:*)")
         if p is not HUB:
@@ -452,7 +480,7 @@ def append_row(text: str, header: str, row: str) -> str | None:
 
 # --- a pack's folder -----------------------------------------------------
 
-def hub_brief(text: str, cli: str, port: int) -> str:
+def hub_brief(text: str, cli: str, port: int, name: str | None = None) -> str:
     """The client brief (templates/client/CLAUDE.md) for a pack folder in a
     hub: the console, ask and intake are the hub's, one folder up."""
     swaps = [
@@ -471,10 +499,11 @@ def hub_brief(text: str, cli: str, port: int) -> str:
             raise Refused(f"templates/client/CLAUDE.md no longer has {pattern!r}: "
                           f"update hub_brief() in scaffold/new_hub.py")
     head, sep, rest = text.partition("\n\n")
+    name = name or cli
     note = (f"this folder is the `{cli}` pack of a client hub: `..` holds the client "
             f"(`../CLIENT.md`), its one console and its one intake. the console's asks of "
             f"every pack share one cap of 10 open, and a click runs the gate through "
-            f"`../bin/hub {cli} …`, which runs `./bin/{cli}`.")
+            f"`../bin/hub {name} …`, which runs `./bin/{cli}`.")
     return head + sep + note + "\n\n" + rest
 
 
@@ -486,8 +515,18 @@ def pack_folder(h: dict, n: dict, a, gates: list[str], relay: list[str]) -> dict
     for rel in ("bin/console", "bin/ask", ".claude/launch.json"):
         del out[rel]
     brief, mode = out["CLAUDE.md"]
-    out["CLAUDE.md"] = (hub_brief(brief, n["cli"], h["port"]), mode)
+    out["CLAUDE.md"] = (hub_brief(brief, n["cli"], h["port"], n.get("word")), mode)
     return out
+
+
+def pack_markets(skill_pack: Path) -> list[str]:
+    """[skill_pack].markets of the pack (its own partition), [] for none."""
+    try:
+        doc = tomllib.loads((skill_pack / "skill-pack.toml").read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    v = doc.get("skill_pack", {}).get("markets") or []
+    return [str(x) for x in v] if isinstance(v, list) else []
 
 
 def default_folder(name: str) -> str:
@@ -566,17 +605,38 @@ def cmd_add_pack(a) -> int:
     if not CLI_RE.fullmatch(n["cli"]) or not PREFIX_RE.fullmatch(n["prefix"]):
         raise Refused(f"{n['name']}: cli {n['cli']!r} or env_prefix {n['prefix']!r} "
                       f"is not a plain word")
-    folder = a.folder or default_folder(n["name"])
+    own = pack_markets(a.skill_pack)
+    hub_markets = list(h.get("markets") or [])
+    mk = (a.market or "").strip() or None
+    if mk and own:
+        raise Refused(f"--market {mk}: {n['name']} keeps its own markets "
+                      f"({', '.join(own)}) and copies each hub market into its own")
+    if mk and mk not in hub_markets:
+        raise Refused(f"--market {mk}: not one of the hub's markets "
+                      f"({', '.join(hub_markets) or 'none'})")
+    if not mk and not own and hub_markets:
+        raise Refused(f"{n['name']} keeps no markets and the hub has "
+                      f"{', '.join(hub_markets)}: name the one this folder serves "
+                      f"with --market")
+    n["word"] = f"{n['cli']}-{mk.lower()}" if mk else n["cli"]
+    if not CLI_RE.fullmatch(n["word"]):
+        raise Refused(f"--market {mk}: {n['word']!r} is not a plain dispatch word")
+    folder = a.folder or (default_folder(n["name"]) + (f"-{mk.lower()}" if mk else ""))
     if not CLIENT_RE.fullmatch(folder):
         raise Refused(f"--folder {folder!r}: lower-case letters, digits, '.', '_' "
                       f"and '-' only")
     for p in (HUB, *h["packs"]):
+        # the same pack again, for another hub market in another folder
+        again = (p is not HUB and mk and p.get("market") and p.get("market") != mk
+                 and (p["name"], p["cli"], p["prefix"]) == (n["name"], n["cli"], n["prefix"]))
         for key, mine in (("name", n["name"]), ("cli", n["cli"]),
-                          ("prefix", n["prefix"]), ("folder", folder)):
-            if p[key] == mine and p is HUB:
+                          ("prefix", n["prefix"]), ("folder", folder),
+                          ("word", n["word"])):
+            theirs = word(p) if key == "word" else p[key]
+            if theirs == mine and p is HUB:
                 raise Refused(f"{key} {mine!r} is the hub's own (its facts "
                               f"program): name the pack otherwise")
-            if p[key] == mine:
+            if theirs == mine and not (again and key in ("name", "cli", "prefix")):
                 raise Refused(f"pack {p['name']} is already in this hub "
                               f"(same {key}: {mine})")
     dest = hub / folder
@@ -593,6 +653,7 @@ def cmd_add_pack(a) -> int:
     gates = new_client.gate_verbs(a.skill_pack, n)
     relay = [g for g in gates if g.split()[-1] in RELAYED]
     h["packs"].append({"name": n["name"], "cli": n["cli"], "prefix": n["prefix"],
+                       "word": n["word"], "market": mk,
                        "folder": folder, "skill_pack": str(a.skill_pack),
                        "link": str(link) if link else None,
                        "gates": gates, "relay": relay})
@@ -605,8 +666,10 @@ def cmd_add_pack(a) -> int:
         out[".gitignore"] = (gi + ("" if gi.endswith("\n") or not gi else "\n")
                              + f"/{folder}\n", 0o644)
     where = f"`{folder}/` → `{os.path.relpath(link, hub)}`" if link else f"`{folder}/`"
-    rows = [(PACK_HEADER, f"| {n['name']} | `{n['cli']}` | {where} | "
-                          f"{', '.join(f'`{v}`' for v in relay) or 'none'} |")]
+    w = n["word"]
+    shown = f"`{w}`" + (f" (market {mk})" if mk else "")
+    verbs = ", ".join(f"`{v}`" for v in relay) or "none"
+    rows = [(PACK_HEADER, f"| {n['name']} | {shown} | {where} | {verbs} |")]
     if link:
         rows += [(PORT_HEADER, f"| {p} | `{n['cli']}`: the linked workspace's own console "
                                f"(`{folder}/bin/console`), before this hub |")
@@ -671,6 +734,10 @@ def main(argv: list[str] | None = None) -> int:
                                       "name without -skill-pack)")
     add.add_argument("--link", type=Path,
                      help="an existing client workspace of this pack, linked, not written")
+    add.add_argument("--market", help="for a pack that keeps no markets in a hub "
+                                     "that has them: the one hub market this folder "
+                                     "serves (required then); the same pack may be "
+                                     "added again for another market")
     add.add_argument("--language", help="default: the hub's")
     add.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
