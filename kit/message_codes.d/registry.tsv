@@ -1,5 +1,5 @@
 code	params	meaning_en	meaning_zh
-registry_file_missing	path	Registry file {path} is missing (or harness.toml does not declare it)	缺少登记表文件 {path}（或 harness.toml 没有声明它）
+registry_file_missing	path	Registry file {path} is missing (or skill-pack.toml does not declare it)	缺少登记表文件 {path}（或 skill-pack.toml 没有声明它）
 registry_file_invalid	path,problem	Registry file {path} is malformed: {problem}	登记表文件 {path} 格式有误：{problem}
 fact_key_unknown	key,keys	Unknown key {key}: nothing reads it (keys: {keys})	没有 {key} 这项设置（可用的：{keys}）
 fact_value_not_number	key,value	{key} must be a number, got {value}	{key} 必须是数字，收到的是 {value}

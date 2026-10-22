@@ -1,16 +1,16 @@
 # Agent Harness Playbook
 
-How to build an **agent harness** — a small, tested tool an AI agent operates for a business owner — from the first client meeting to a system running in production, with the human in the loop at the right places and nowhere else.
+How to build an **agent skill pack** — a small, tested tool an AI agent operates for a business owner — from the first client meeting to a system running in production, with the human in the loop at the right places and nowhere else.
 
-Distilled from an eight-day build of an advertising harness (read-only data pulls, reports, a guarded write path, a web console and a remote host agent): about 850 commits, and about 180 merge requests in the last four days. Most lessons below are something that project paid for. Some come from harnesses built after it (a short-video ad harness, a KOL harness, a RedNote harness), some from a harness that ported the same code from the same source project (an SEO harness), and some from Anthropic's published guidance; each says so, and a lesson seen only once or not yet proven says so. Building for another channel? Start at [the reuse map](docs/channels.md#reusing-the-harness-for-other-channels). What every harness must keep, however it is written, and a check you can run against one: [conformance/INVARIANTS.md](conformance/INVARIANTS.md).
+Distilled from an eight-day build of an advertising skill pack (read-only data pulls, reports, a guarded write path, a web console and a remote host agent): about 850 commits, and about 180 merge requests in the last four days. Most lessons below are something that project paid for. Some come from skill packs built after it (a short-video ad skill pack, a KOL skill pack, a RedNote skill pack), some from a skill pack that ported the same code from the same source project (an SEO skill pack), and some from Anthropic's published guidance; each says so, and a lesson seen only once or not yet proven says so. Building for another channel? Start at [the reuse map](docs/channels.md#reusing-the-skill-pack-for-other-channels). What every skill pack must keep, however it is written, and a check you can run against one: [conformance/INVARIANTS.md](conformance/INVARIANTS.md).
 
-This repository is the parent of every harness: a shared kit each harness vendors, the build workflow, templates, an owner console and a host adapter. A harness adds only its channel: its pulls, reports, registries and the hooks the kit calls. The details live in [docs/](docs/); this page is the overview.
+This repository is the parent of every skill pack: a shared kit each skill pack vendors, the build workflow, templates, an owner console and a host adapter. A skill pack adds only its channel: its pulls, reports, registries and the hooks the kit calls. The details live in [docs/](docs/); this page is the overview.
 
 ---
 
 ## The pipeline at a glance
 
-A new harness starts from recorded client meetings and goes through ten stages. The owner signs only five gates: **meaning, stories, numbers, money, release**. Everything else is signed by a machine: CI tests, or a host check after install.
+A new skill pack starts from recorded client meetings and goes through ten stages. The owner signs only five gates: **meaning, stories, numbers, money, release**. Everything else is signed by a machine: CI tests, or a host check after install.
 
 ```mermaid
 flowchart TB
@@ -55,7 +55,7 @@ flowchart TB
     end
     subgraph L3["AI alone"]
       direction LR
-      c1["issue filed<br/>by an agent"] --> c2["triage against<br/>house rules"] --> c3["fix + tests in<br/>its own worktree"] --> c4["CI green:<br/>auto-merge"]
+      c1["issue filed<br/>by an agent"] --> c2["triage against<br/>house rules"] --> c3["fix + tests in<br/>its own worktree"] --> c4["local suite green:<br/>merge"]
     end
     OM["Owner merges"]:::risky
     L3 -. "touches the risky list" .-> OM
@@ -102,18 +102,19 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 - **Raw only grows.** Raw files are written once, writes are atomic, a second scheduled run skips, and throttling is a recorded gap, not a day with no data. ([`kit/raw.py`](kit/raw.py), [`kit/atomic.py`](kit/atomic.py), [`kit/single_instance.py`](kit/single_instance.py), [`kit/retry.py`](kit/retry.py))
 - **One output contract for the agent.** Every verb is declared with its kind; `--json` prints one document, failures included; every message carries a code from a closed registry. ([`kit/verbs.py`](kit/verbs.py), [`kit/contract.py`](kit/contract.py), [`kit/messages.py`](kit/messages.py))
 - **Paid generation and regulated copy are gated** (the `generation` and `compliance` packs): every paid AI call is planned, priced and approved; copy is checked against confirmed claims and banned terms before any spend. ([`kit/takes.py`](kit/takes.py), [`kit/claimscope.py`](kit/claimscope.py))
-- **A vendored copy is never edited in place.** Its manifest makes a local edit fail the harness's drift test; a fix goes upstream first. ([`kit/guards/drift.py`](kit/guards/drift.py))
+- **A vendored copy is never edited in place.** Its manifest makes a local edit fail the skill pack's drift test; a fix goes upstream first. ([`kit/guards/drift.py`](kit/guards/drift.py))
 
 ---
 
-## Start a harness
+## Start a skill pack
 
-1. Follow [BUILD.md](BUILD.md), steps B0 to B10; an agent loads [skills/build-harness/SKILL.md](skills/build-harness/SKILL.md) to do the same from the files alone.
-2. B1 scaffolds it: `python3 scaffold/new_harness.py --dir ../acme-harness --name acme-harness --cli acme --prefix ACME --packs data`. It vendors the kit packs the harness takes ([kit/README.md](kit/README.md), "Packs"), the console, and the thirteen day-one tests, and is green before its first feature.
-3. For a harness that already exists, `python3 tools/fleet.py status PATH…` says where its vendored copies stand against this playbook, and `python3 kit/tools/vendor.py --harness PATH` brings them up to date.
+1. Follow [BUILD.md](BUILD.md), steps B0 to B10; an agent loads [skills/build-skill-pack/SKILL.md](skills/build-skill-pack/SKILL.md) to do the same from the files alone.
+2. B1 scaffolds it: `python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack --name acme-skill-pack --cli acme --prefix ACME --packs data`. It vendors the kit packs the skill pack takes ([kit/README.md](kit/README.md), "Packs"), the console, and the thirteen day-one tests, and is green before its first feature.
+3. For a skill pack that already exists, `python3 tools/fleet.py status PATH…` says where its vendored copies stand against this playbook, and `python3 kit/tools/vendor.py --skill-pack PATH` brings them up to date.
 4. To show the owner how the project is going on one page, an agent loads [skills/progress-page/SKILL.md](skills/progress-page/SKILL.md); the handoff runs it at the end of each session.
+5. To show what a skill pack can do and how it works on one page, the skill pack draws its own overview from its registries ([templates/system-overview.md](templates/system-overview.md)); the pipeline above is the same for every skill pack and stays here.
 
-**Check the whole playbook with one command.** [`run_all.py`](run_all.py) runs every test suite in the repository and ends with one `RESULT:` line; it exits 1 if any suite fails. `python3 run_all.py --list` names the suites and `python3 run_all.py kit console` runs some. [CI](.github/workflows/ci.yml) runs it on every push and pull request.
+**Check the whole playbook with one command.** [`run_all.py`](run_all.py) runs every test suite in the repository and ends with one `RESULT:` line; it exits 1 if any suite fails. `python3 run_all.py --list` names the suites and `python3 run_all.py kit console` runs some. [CI](.github/workflows/ci.yml) runs it on every pull request and on every push to main.
 
 ---
 
@@ -125,9 +126,9 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/rules.md](docs/rules.md) | Data layers and their guards, the human-in-the-loop rules, writing into someone else's system, what an agent judges, stories that prove themselves, registries |
 | [docs/consoles.md](docs/consoles.md) | The owner console, the client console, one workspace per client |
 | [docs/autonomy.md](docs/autonomy.md) | Autonomy levels L0 to L5: what proof each write into someone else's system carries, scoped approvals and the owner's switch; the `autonomy` pack |
-| [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a harness small, hosting |
-| [docs/roadmap.md](docs/roadmap.md) | Planning a running harness: vision to pillars to story rows and milestones, owner questions with defaults, one story per session, feedback from testers; the SEO harness's roadmap as the example |
-| [docs/channels.md](docs/channels.md) | Reusing a harness for other channels; generated creative and real people |
+| [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a skill pack small, hosting |
+| [docs/roadmap.md](docs/roadmap.md) | Planning a running skill pack: vision to pillars to story rows and milestones, owner questions with defaults, one story per session, feedback from testers; the SEO skill pack's roadmap as the example |
+| [docs/channels.md](docs/channels.md) | Reusing a skill pack for other channels; generated creative and real people |
 | [docs/kit-and-tools.md](docs/kit-and-tools.md) | What this repository holds, the kit's admission rule, every template |
 | [docs/lessons.md](docs/lessons.md) | Lessons kept after their code was removed |
 | [docs/pattern-store.md](docs/pattern-store.md) | The `learning` pack: a per-client pattern store, what a client's outputs taught as closed rows and shrunk rates |
@@ -139,9 +140,9 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 
 | Folder | What it is |
 | --- | --- |
-| [`kit/`](kit/) | The shared modules a harness vendors, in packs |
+| [`kit/`](kit/) | The shared modules a skill pack vendors, in packs |
 | [`console/`](console/) | The owner console: where the asks go |
 | [`hosts/zylos/`](hosts/zylos/) | The host adapter, the worked example for any other host |
 | [`scaffold/`](scaffold/), [`build/`](build/), [`templates/`](templates/) | The generator, the build-time tools, the templates |
-| [`conformance/`](conformance/INVARIANTS.md) | The invariants every harness keeps, and a black-box check that drives a harness's CLI from an adapter kept here |
-| [`tools/`](tools/) | Playbook tooling: `fleet.py` |
+| [`conformance/`](conformance/INVARIANTS.md) | The invariants every skill pack keeps, and a black-box check that drives a skill pack's CLI from an adapter kept here |
+| [`tools/`](tools/) | Playbook tooling: `fleet.py`, `consumers.py` |

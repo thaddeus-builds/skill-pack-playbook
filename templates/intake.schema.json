@@ -2,14 +2,14 @@
   "$comment": "JSON Schema (draft 2020-12 keywords only: type, properties, required, additionalProperties, items, enum, pattern, minLength, maxLength, minItems, maxItems, $ref, $defs). x-code and x-missing are ours: the problem code build/check_intake.py reports when that part has the wrong type, pattern or value (x-code) or is missing or empty (x-missing). Every length limit is what the owner console shows without cutting, so what the owner accepts is what gets written.",
   "$id": "intake.schema.json",
   "title": "Meeting intake",
-  "description": "The organizer's output for one client meeting (templates/meeting-intake.md). Five buckets; every item has a stable iid, an audience, a source and, where it can be asked, a quote.",
+  "description": "The organizer's output for one client meeting (templates/meeting-intake.md). Five buckets; every item has a stable iid, an audience, a source and, where it can be asked, a quote; in a client hub, optionally the packs it is for.",
   "type": "object",
   "required": ["meeting", "goals", "words", "stories", "numbers", "questions"],
   "additionalProperties": false,
   "properties": {
     "meeting": {
       "type": "object",
-      "required": ["date", "participants", "consent"],
+      "required": ["date", "participants"],
       "additionalProperties": false,
       "properties": {
         "date": {"$ref": "#/$defs/date"},
@@ -18,8 +18,13 @@
           "items": {"type": "string", "minLength": 1, "maxLength": 120}
         },
         "consent": {
-          "description": "Who gave consent to record, and when. A blank line is refused. If it was not given or not recorded, say so in words: that passes the check, and must then be raised to the owner as a question.",
-          "type": "string", "minLength": 1, "maxLength": 200, "x-missing": "no_consent"
+          "description": "Optional, kept so older intakes still pass: who agreed to the recording. Not checked: the meeting tool asks every participant before it records.",
+          "type": "string", "maxLength": 200
+        },
+        "packs": {"description": "In a client hub: the packs every item of this meeting is for, unless the item names its own.", "$ref": "#/$defs/packs"},
+        "transcript": {
+          "description": "The transcript the quotes are checked against: a path relative to this intake file. Its speaker blocks are a line '<speaker> mm:ss' (or hh:mm:ss), then the text.",
+          "type": "string", "minLength": 1, "maxLength": 300
         }
       }
     },
@@ -40,7 +45,7 @@
       "type": "string", "pattern": "^[gwsnq][1-9][0-9]{0,4}$", "x-code": "bad_iid"
     },
     "audience": {
-      "description": "Who signs it: client (meaning, stories, numbers) or builder (the harness's shape). Each has a console of their own.",
+      "description": "Who signs it: client (meaning, stories, numbers) or builder (the skill pack's shape). Each has a console of their own.",
       "enum": ["client", "builder"]
     },
     "source": {
@@ -52,6 +57,14 @@
     "quote": {
       "description": "The client's exact words, in their language. Never translated, never shortened into our words.",
       "type": "string", "minLength": 1, "maxLength": 300, "x-missing": "no_quote"
+    },
+    "pack": {
+      "description": "A pack's CLI word (gads, kos): the same form scaffold/new_skill_pack.py gives --cli.",
+      "type": "string", "pattern": "^[a-z][a-z0-9]{1,15}$", "x-code": "unknown_pack"
+    },
+    "packs": {
+      "description": "In a client hub: the packs this item is for. check_intake.py --packs names the ones the client has.",
+      "type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/pack"}
     },
     "unsure": {"description": "The organizer is not sure it heard or understood this.", "type": "boolean"},
     "note": {"description": "The organizer's one-line note: what it is unsure about, or what it inferred.", "type": "string", "minLength": 1, "maxLength": 120},
@@ -66,6 +79,7 @@
         "text": {"type": "string", "minLength": 1, "maxLength": 400},
         "quote": {"$ref": "#/$defs/quote"},
         "source": {"$ref": "#/$defs/source"},
+        "packs": {"$ref": "#/$defs/packs"},
         "unsure": {"$ref": "#/$defs/unsure"},
         "note": {"$ref": "#/$defs/note"}
       }
@@ -82,6 +96,7 @@
         "meaning": {"description": "One sentence.", "type": "string", "minLength": 1, "maxLength": 200},
         "quote": {"$ref": "#/$defs/quote"},
         "source": {"$ref": "#/$defs/source"},
+        "packs": {"$ref": "#/$defs/packs"},
         "unsure": {"$ref": "#/$defs/unsure"},
         "note": {"$ref": "#/$defs/note"}
       }
@@ -103,6 +118,7 @@
         "human_step": {"enum": ["none", "confirm", "approve"]},
         "quote": {"$ref": "#/$defs/quote"},
         "source": {"$ref": "#/$defs/source"},
+        "packs": {"$ref": "#/$defs/packs"},
         "unsure": {"$ref": "#/$defs/unsure"},
         "note": {"$ref": "#/$defs/note"}
       }
@@ -130,6 +146,7 @@
         "applies_to": {"type": "string", "minLength": 1, "maxLength": 120},
         "quote": {"$ref": "#/$defs/quote"},
         "source": {"$ref": "#/$defs/source"},
+        "packs": {"$ref": "#/$defs/packs"},
         "unsure": {"$ref": "#/$defs/unsure"},
         "note": {"$ref": "#/$defs/note"}
       }
@@ -165,6 +182,7 @@
             "because": {"type": "string", "minLength": 1, "maxLength": 200}
           }
         },
+        "packs": {"$ref": "#/$defs/packs"},
         "unsure": {"$ref": "#/$defs/unsure"},
         "note": {"$ref": "#/$defs/note"}
       }

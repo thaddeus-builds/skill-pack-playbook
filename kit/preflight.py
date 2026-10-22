@@ -21,12 +21,12 @@ schema is published; read it first. What it guards:
                 not audio/wav); a URL's type cannot be seen offline
     min / max bound integer and number. A type the kit does not know is a
     problem itself, so a mapping mistake never passes unchecked.
-  * check(schema, body, what=…) raises one coded HarnessError listing
+  * check(schema, body, what=…) raises one coded SkillPackError listing
     every problem (preflight_refused: "nothing was sent"); it returns
-    None when the body passes. A harness calls it on the line before the
+    None when the body passes. A skill pack calls it on the line before the
     request.
 
-The schema is the kit's neutral format; a harness maps its vendor's
+The schema is the kit's neutral format; a skill pack maps its vendor's
 published schema into it (and refreshes it from the vendor, never by
 hand):
 
@@ -55,7 +55,7 @@ from __future__ import annotations
 import math
 from typing import Iterable
 
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, msg
 
 TYPES = ("enum", "boolean", "integer", "number", "string", "prompt",
@@ -170,12 +170,12 @@ def problems(schema: dict, body: dict) -> list[Msg]:
 
 def check(schema: dict, body: dict, *, what: str,
           next: Iterable[str] = ()) -> None:
-    """Raise one HarnessError listing every problem of `body` (`what`
+    """Raise one SkillPackError listing every problem of `body` (`what`
     names the request: the workflow, the endpoint); None when it
     passes."""
     found = problems(schema, body)
     if found:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "preflight_refused",
             f"{what}: {len(found)} problem(s) with the request body against "
             f"the vendor's published schema; nothing was sent: "

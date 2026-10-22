@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """One human gate per client file (kit/file_gate.py), on the fake "shop"
-harness (markets US/CA) with the SYNTHETIC influencer tracker's map
+skill pack (markets US/CA) with the SYNTHETIC influencer tracker's map
 (kit/tests/_workbooks.py) and one value read from a cell.
 
   1. plan(): the rows and values a staged bundle confirms over the bundle in
      force, and the small binding (both bundles' versions, the row count,
-     every value); a value `facts set` would refuse, a key the harness does
+     every value); a value `facts set` would refuse, a key the skill pack does
      not have and a market not onboarded are refused before any gate.
   2. ask() is one console ask through kit.pending's `staged=` hook: kind
-     file, its gate the harness's verb, `expect` exactly plan()'s items; the
+     file, its gate the skill pack's verb, `expect` exactly plan()'s items; the
      console accepts it.
   3. confirm() at a terminal: one retype for the whole file; the value is
      written confirmed (changed_by <user>@tty, the file as its source,
@@ -87,7 +87,7 @@ def ecode(e) -> str | None:
 
 
 def gate(p: dict, *, tty=None, secret=False, code=None) -> tuple:
-    """file_gate.confirm(p) as a harness verb would run it: (result, error)."""
+    """file_gate.confirm(p) as a skill pack verb would run it: (result, error)."""
     box: dict = {}
 
     def main(_argv):
@@ -160,7 +160,7 @@ def test_ask(p: dict) -> None:
         doc = pending.asks(c, keys=KEYS, registry=None, thresholds=TH,
                            staged=lambda _c: [f])
     a, about = doc["asks"][0], doc["about"][0]
-    check("pending lists it as one file ask, gated by the harness's verb",
+    check("pending lists it as one file ask, gated by the skill pack's verb",
           len(doc["asks"]) == 1 and a["kind"] == "file"
           and a["step"] == "confirm" and a["gate"]["verb"] == VERB
           and a["gate"]["expect"] == f["expect"] and about["gate"]

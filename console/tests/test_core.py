@@ -58,7 +58,7 @@ def ask(step="confirm", **over):
 
 
 def gated(**over):
-    """A provide ask whose answer goes through a harness gate."""
+    """A provide ask whose answer goes through a skill pack gate."""
     return ask("provide", id="unit-cost",
                gate={"verb": ["facts", "confirm", "unit_cost"], "value_arg": True,
                      "expect": {"items": {"unit_cost": "$value"}}}, **over)
@@ -440,7 +440,7 @@ def test_gate_shape():
 
 
 def test_a_gate_on_choose_and_provide_must_carry_the_answer():
-    """The answer has to reach the harness AND be bound to what was shown:
+    """The answer has to reach the skill pack AND be bound to what was shown:
     value_arg true and "$value" as a whole value in expect. Each missing piece
     is refused; a yes/no gate needs neither."""
     give = {"verb": ["x"], "expect": {"n": "$value"}, "value_arg": True}
@@ -977,7 +977,7 @@ def test_fold_order_groups_messages_seq():
     assert [x["id"] for x in core.open_asks(st)] == ["c", "d"]
     assert [(g, [x["id"] for x in asks]) for g, asks in core.groups(st)] == [("Words", ["c"]), ("", ["d"])]
     empty = core.fold([])
-    assert empty == {"asks": {}, "order": [], "messages": [], "problems": [], "seq": 0}
+    assert empty == {"asks": {}, "order": [], "messages": [], "problems": [], "actions": [], "seq": 0}
 
 
 def test_fold_is_pure():
@@ -1076,16 +1076,20 @@ def test_budget():
             s.post("bot", [ask(id=f"n{i}") for i in range(11)], dry_run=True)      # a dry run refuses too
 
 
-def test_max_open_can_only_be_lowered():
+def test_max_open_is_the_callers_number_and_defaults_to_the_playbooks():
+    """The budget is whatever the caller passes (ask.py passes the manifest's, or MAX_OPEN and
+    never more than it: tests/test_ask_cli.py); with nothing passed it is MAX_OPEN."""
     with tmpstore() as s:
-        r = s.post("bot", [ask(id=f"a{i}") for i in range(10)], max_open=99)
-        assert r["budget"] == 10 and r["open"] == 10
+        r = s.post("bot", [ask(id=f"a{i}") for i in range(10)])
+        assert r["budget"] == core.MAX_OPEN == 10 and r["open"] == 10
         with assert_raises("over_budget") as e:
-            s.post("bot", [ask(id="eleventh")], max_open=99)
+            s.post("bot", [ask(id="eleventh")])
         assert e.err.params["max"] == 10 and "eleventh" not in s.state()["asks"]
+        r = s.post("bot", [ask(id="eleventh"), ask(id="twelfth")], max_open=12)
+        assert r["budget"] == 12 and r["open"] == 12
         with assert_raises("over_budget"):
-            s.post("bot", [ask(id="eleventh")], max_open=10 ** 9, dry_run=True)
-        assert s.post("bot", [ask(id="a1", why="reworded")], max_open=99)["updated"] == ["a1"]
+            s.post("bot", [ask(id="thirteenth")], max_open=12, dry_run=True)
+        assert s.post("bot", [ask(id="a1", why="reworded")], max_open=12)["updated"] == ["a1"]
     with tmpstore() as s:
         assert s.post("bot", [ask(id="x")], max_open=1)["budget"] == 1
         with assert_raises("over_budget") as e:
@@ -1375,7 +1379,7 @@ def test_gate_ran_answer_is_recorded_even_if_the_ask_was_revised():
         assert ev["gate"] == gate and "revised" not in ev
 
 
-def test_a_stale_page_answers_only_what_the_harness_really_wrote():
+def test_a_stale_page_answers_only_what_the_skill_pack_really_wrote():
     G = {"ok": True, "verb": ["x"], "message": "m"}
     with tmpstore() as s:                                        # gated, updated twice while the page shows the first
         s.post("bot", [gated()])
@@ -1399,13 +1403,13 @@ def test_a_stale_page_answers_only_what_the_harness_really_wrote():
         s.post("bot", [ask("provide", id="unit-cost")])
         u1 = shown(s, "unit-cost")
         s.post("bot", [gated()])
-        with assert_raises() as r:                               # not through the stale page without the harness…
+        with assert_raises() as r:                               # not through the stale page without the skill pack…
             s.answer("bob", "unit-cost", "5", shown=u1)
         assert r.err.code in ("gate_unavailable", "changed")
         with assert_raises("changed"):                           # …and no claim of a gate the page never showed
             s.answer("bob", "unit-cost", "5", shown=u1, gate=G)
         assert s.state()["asks"]["unit-cost"]["status"] == "open"
-    with tmpstore() as s:                                        # a gate that went away: the harness was written
+    with tmpstore() as s:                                        # a gate that went away: the skill pack was written
         s.post("bot", [gated()])                                  # for what the owner was shown
         g1 = shown(s, "unit-cost")
         s.post("bot", [ask("provide", id="unit-cost")])
@@ -1460,8 +1464,8 @@ def test_reopen_and_applied_rules():
         assert s.applied("bot", ["c"], "w" * core.LIMITS["where"])["applied"] == ["c"]
 
 
-def test_reopen_is_refused_once_the_harness_wrote():
-    """An answer that passed the harness's gate is already written there: putting
+def test_reopen_is_refused_once_the_skill_pack_wrote():
+    """An answer that passed the skill pack's gate is already written there: putting
     the ask back in Waiting would tell the owner it is undone. It is refused with
     its own words; a refusal, or an answer that wrote nothing, can still be reopened."""
     G = {"ok": True, "verb": ["facts", "confirm", "unit_cost"], "message": "confirmed"}
@@ -1494,10 +1498,10 @@ def test_reopen_is_refused_once_the_harness_wrote():
         with assert_raises("already_applied") as r:
             s.reopen("bob", "plain", again["seq"])
         assert str(r.err) == core.CODES["already_applied"]
-        # the agent can still apply what the harness wrote
-        assert s.applied("bot", ["unit-cost"], "the harness")["applied"] == ["unit-cost"]
+        # the agent can still apply what the skill pack wrote
+        assert s.applied("bot", ["unit-cost"], "the skill pack")["applied"] == ["unit-cost"]
         assert s.state()["problems"] == []
-    with tmpstore() as s:                                            # a revised ask changes nothing: the harness was written
+    with tmpstore() as s:                                            # a revised ask changes nothing: the skill pack was written
         s.post("bot", [gated()])
         h1 = shown(s, "unit-cost")
         s.post("bot", [gated(why="A newer fact.")])
@@ -1642,7 +1646,7 @@ def test_every_refusal_code_is_registered():
 
 
 def test_gate_refusal_messages_do_not_claim_nothing_was_written():
-    """After the second harness call something may have been written, so the
+    """After the second skill pack call something may have been written, so the
     words for a refusal, a timeout or an unclear answer there must not say it
     was not; an unclear one says it may or may not have been, and to check."""
     for code in ("gate_refused", "gate_timeout", "gate_unsure"):
@@ -1655,7 +1659,7 @@ def test_gate_refusal_messages_do_not_claim_nothing_was_written():
     assert "was written" not in core.CODES["gate_unsure"]           # it does not claim either
 
 
-def test_the_codes_for_an_unclear_harness_and_a_missing_secret():
+def test_the_codes_for_an_unclear_skill_pack_and_a_missing_secret():
     for code in ("gate_unsure", "no_secret"):
         assert code in core.CODES
         r = core.Refused(code, id="x")
@@ -1681,12 +1685,150 @@ def test_a_retired_advice_event_in_an_old_log_is_set_aside_not_a_crash():
         s.state()
 
 
+# ------------------------------------------- expiry and answers given in chat --
+
+OLD_LOG = [  # a log as consoles before `expires` and `chat` wrote it: it must fold exactly as it always did
+    {"seq": 1, "at": "2026-01-01T00:00:00Z", "by": "agent:bot", "type": "ask",
+     "ask": {"id": "a", "step": "confirm", "kind": "general", "group": "", "title": "A?", "why": "w",
+             "evidence": [{"label": "l", "value": "v"}], "if_no": "n", "recommend": {"value": "yes", "because": "b"}}},
+    {"seq": 2, "at": "2026-01-01T00:00:00Z", "by": "agent:bot", "type": "ask",
+     "ask": {"id": "b", "step": "confirm", "kind": "general", "group": "", "title": "B?", "why": "w",
+             "evidence": [{"label": "l", "value": "v"}], "if_no": "n", "recommend": {"value": "yes", "because": "b"}}},
+    {"seq": 3, "at": "2026-01-02T00:00:00Z", "by": "web:bob", "type": "answer", "id": "a", "value": "yes", "sig": "x"},
+    {"seq": 4, "at": "2026-01-03T00:00:00Z", "by": "agent:bot", "type": "applied", "id": "a", "where": "w"},
+    {"seq": 5, "at": "2026-01-04T00:00:00Z", "by": "agent:bot", "type": "say", "text": "hi"},
+]
+
+
+def test_an_old_log_replays_unchanged_whatever_the_clock_says():
+    """The schema change is additive: an ask without `expires` never lapses, so a
+    log written before it folds to the same state at any `now`, and the store reads it."""
+    before = core.fold(copy.deepcopy(OLD_LOG))
+    for at in (None, "2026-01-05T00:00:00Z", "2999-12-31T23:59:59Z"):
+        assert core.fold(copy.deepcopy(OLD_LOG), at) == before, at
+    assert {i: x["status"] for i, x in before["asks"].items()} == {"a": "answered", "b": "open"}
+    assert before["asks"]["a"]["applied"]["where"] == "w" and before["problems"] == []
+    assert core.next_expiry(before) is None
+    with tmpstore() as s:
+        put(s, "".join(json.dumps(e) + "\n" for e in OLD_LOG).encode())
+        assert s.state()["asks"]["b"]["status"] == "open" and s.state("2999-01-01T00:00:00Z")["asks"]["b"]["status"] == "open"
+
+
+def test_expires_is_a_date_or_a_utc_time_and_a_date_lapses_when_it_ends():
+    assert ok(ask(expires="2026-10-29"))["expires"] == "2026-10-29"
+    assert ok(ask(expires="2026-10-29T12:00:00Z"))["expires"] == "2026-10-29T12:00:00Z"
+    assert "expires" not in ok(ask())                       # optional in an ask; ask.py add gives a new one its default
+    for bad in ("2026-13-01", "29/10/2026", "2026-10-29 12:00", "2026-10-29T12:00:00+08:00", 20261029, True, ["x"]):
+        assert has(errs(ask(expires=bad)), "expires", "bad_value"), bad
+    assert core.deadline("2026-10-29") == "2026-10-30T00:00:00Z" and core.deadline("2026-12-31") == "2027-01-01T00:00:00Z"
+    assert core.deadline("2026-10-29T12:00:00Z") == "2026-10-29T12:00:00Z" and core.deadline("x") is None
+    assert core.days_ahead(7, "2026-10-22T14:03:00Z") == "2026-10-29T14:03:00Z"
+
+
+def test_an_open_ask_past_its_deadline_is_expired_and_nothing_changes():
+    a = ok(ask(expires="2026-01-10"))
+    E = [event(1, "ask", ask=a)]
+    assert core.fold(E, "2026-01-10T23:59:59Z")["asks"]["tea-word"]["status"] == "open"     # open through that day
+    st = core.fold(E, "2026-01-11T00:00:00Z")
+    cur = st["asks"]["tea-word"]
+    assert cur["status"] == "expired" and cur["expired"] == {"at": "2026-01-11T00:00:00Z", "outcome": "nothing changes"}
+    assert core.open_asks(st) == [] and core.next_expiry(core.fold(E)) == "2026-01-11T00:00:00Z"
+    late = dict(event(2, "answer", id="tea-word", value="yes", subject=core.subject_hash(a), by="web:bob"),
+                at="2026-01-12T00:00:00Z")
+    st = core.fold(E + [late])                               # no clock given: the late answer's own time counts
+    assert st["asks"]["tea-word"]["status"] == "expired" and [p["code"] for p in st["problems"]] == ["not_open"]
+    st = core.fold(E + [dict(event(2, "ask", ask={**a, "title": "again"}), at="2026-01-12T00:00:00Z")])
+    assert [p["code"] for p in st["problems"]] == ["id_used"]                  # an expired id is never used again
+    recorded = core.fold(E + [dict(event(2, "applied", id="tea-word", where="expired, nothing changed"),
+                                   at="2026-01-12T00:00:00Z")])
+    assert recorded["asks"]["tea-word"]["status"] == "expired" and recorded["asks"]["tea-word"]["applied"]
+
+
+def test_the_store_refuses_to_answer_revise_or_reuse_an_expired_ask_and_records_it_as_applied():
+    with tmpstore() as s:
+        s.post("bot", [ask(expires="2099-01-01")])
+        h = shown(s)
+        with open(s.path, "rb") as f:                        # the deadline passes: rewrite it into the past
+            data = f.read().replace(b"2099-01-01", b"2000-01-01")
+        put(s, data)
+        assert s.state()["asks"]["tea-word"]["status"] == "expired"
+        with assert_raises("not_open"):
+            s.answer("bob", "tea-word", "yes", shown=h)
+        with assert_raises("id_used"):
+            s.post("bot", [ask()])
+        with assert_raises("not_open"):
+            s.withdraw("bot", ["tea-word"], "r")
+        with assert_raises("not_open"):
+            s.chat("bot", "tea-word", "yes", quote="yes")
+        with assert_raises("changed"):
+            s.applied("bot", ["tea-word"], "x", seqs={"tea-word": 1})
+        s.applied("bot", ["tea-word"], "expired, nothing changed")
+        with assert_raises("already_applied"):
+            s.applied("bot", ["tea-word"], "again")
+        assert s.state()["asks"]["tea-word"]["status"] == "expired"
+
+
+def test_post_gives_a_new_ask_its_default_expiry_and_a_revision_keeps_its_own():
+    with tmpstore() as s:
+        s.post("bot", [ask()], default_expires="2099-01-01T00:00:00Z")
+        assert s.state()["asks"]["tea-word"]["ask"]["expires"] == "2099-01-01T00:00:00Z"
+        r = s.post("bot", [ask()], default_expires="2099-02-02T00:00:00Z")
+        assert r["unchanged"] == ["tea-word"]                 # the same ask again is not a change
+        r = s.post("bot", [ask(title="New title?")], default_expires="2099-02-02T00:00:00Z")
+        assert r["updated"] == ["tea-word"] and s.state()["asks"]["tea-word"]["ask"]["expires"] == "2099-01-01T00:00:00Z"
+        s.post("bot", [ask(title="New title?", expires="2099-03-03")])
+        assert s.state()["asks"]["tea-word"]["ask"]["expires"] == "2099-03-03"     # one it names is its own
+        with assert_raises("invalid_ask") as r:
+            s.post("bot", [ask(id="late", expires="2000-01-01")])
+        assert r.err.params["errors"][0]["field"] == "expires"
+        s.post("bot", [ask(id="plain")])
+        assert "expires" not in s.state()["asks"]["plain"]["ask"]   # no default given: none (core's callers choose)
+
+
+def test_a_chat_answer_is_the_agents_record_never_a_click():
+    with tmpstore() as s, env(CONSOLE_SECRET="k" * 32):
+        s.post("bot", [ask("choose")])
+        e = s.chat("bot", "tea-word", "b", quote="Mixes, please.", source="chat 2026-10-22 14:03")
+        assert e["type"] == "chat" and e["by"] == "agent:bot" and e["via"] == "chat" and "sig" not in e
+        assert (e["value"], e["quote"], e["source"], e["suggested"]) == ("b", "Mixes, please.", "chat 2026-10-22 14:03", False)
+        cur = s.state()["asks"]["tea-word"]
+        assert cur["status"] == "answered" and cur["answer"]["seq"] == e["seq"] and e["subject"] == cur["hash"]
+        s.reopen("bob", "tea-word", e["seq"])                 # the owner can take back what the agent wrote down
+        assert s.state()["asks"]["tea-word"]["status"] == "open"
+        e = s.chat("bot", "tea-word", "a", quote="Blends after all.")
+        assert "source" not in e and e["suggested"] is True
+        s.applied("bot", ["tea-word"], "catalogue", seqs={"tea-word": e["seq"]})
+        check_log(s, 5, b"k" * 32)                            # every human event still verifies; chat is not one
+
+
+def test_a_chat_answer_is_checked_like_any_answer_and_refused_where_a_click_is_needed():
+    with tmpstore() as s:
+        s.post("bot", [ask("choose"), gated(), ask("approve", id="spend"), ask("provide", id="cost"),
+                       ask("provide", id="name", input={"type": "text"})])
+        before = raw_log(s)
+        for id, why in (("unit-cost", "gate"), ("spend", "approve"), ("cost", "number")):
+            with assert_raises("gate_needs_click") as r:
+                s.chat("bot", id, "yes" if id == "spend" else "12", quote="go ahead")
+            assert r.err.params == {"id": id, "why": why}
+        with assert_raises("bad_value"):
+            s.chat("bot", "tea-word", "z", quote="the fourth one")
+        with assert_raises("bad_request"):
+            s.chat("bot", "tea-word", "a", quote="  ")
+        with assert_raises("unknown_id"):
+            s.chat("bot", "nope", "a", quote="q")
+        assert raw_log(s) == before                           # nothing written by any refusal
+        assert s.chat("bot", "name", "Northwind", quote="Call it Northwind")["value"] == "Northwind"
+    a = ok(gated())                                           # a chat event for a gated ask in a log edited by hand
+    st = core.fold([event(1, "ask", ask=a), event(2, "chat", id="unit-cost", value="12", quote="q", subject=core.subject_hash(a))])
+    assert st["asks"]["unit-cost"]["status"] == "open" and [p["code"] for p in st["problems"]] == ["gate_needs_click"]
+
+
 # ------------------------------------------------ the role split, signing --
 
 def test_the_agent_cannot_write_a_human_event_nor_the_reverse():
     assert set(core.ROLES) == {"agent", "human"}
-    assert set(core.ROLES["agent"]) == {"ask", "withdraw", "applied", "say"}
-    assert set(core.ROLES["human"]) == {"answer", "reopen", "note"}
+    assert set(core.ROLES["agent"]) == {"ask", "withdraw", "applied", "say", "chat"}
+    assert set(core.ROLES["human"]) == {"answer", "reopen", "note", "action"}
     with tmpstore() as s:
         with s._txn() as (box, append):
             for t in core.ROLES["human"]:
@@ -2173,7 +2315,7 @@ def test_adv_names_with_a_trailing_newline_are_not_tokens():
 def test_adv_a_number_answer_is_plain_ascii_decimal():
     """A typed number is a plain ASCII decimal: '1_000', Arabic-Indic digits, '1 2',
     '+-1', '0x10', '1e' and '.e1' are refused as `number`. float() alone would take
-    some of them, and JavaScript, spreadsheets and most harnesses cannot read them."""
+    some of them, and JavaScript, spreadsheets and most skill packs cannot read them."""
     a = ok(ask("provide", input={"type": "number"}))
     for bad in ("1_000", "1_0", "\u0661\u0662", "1 2", "+-1", "0x10", "1e", ".e1"):
         v, e = core.check_value(a, bad)
@@ -2195,7 +2337,7 @@ def test_adv_a_date_answer_is_iso_and_zero_padded():
 
 def test_adv_a_typed_answer_has_no_control_characters():
     """A typed answer holds no control character ('a\\x00b', BEL, ESC, DEL), for text
-    and url alike: a NUL would reach the harness as --value=a\\x00b, where the
+    and url alike: a NUL would reach the skill pack as --value=a\\x00b, where the
     subprocess call raises, and the others would land in the log and on the page."""
     for step_input in ({"type": "text"}, {"type": "url"}):
         a = ok(ask("provide", input=step_input))
@@ -2367,7 +2509,7 @@ def test_adv_gate_bypass_needs_a_revision_the_owner_could_have_seen():
 
 def test_adv_gate_bypass_only_for_a_gated_ask():
     """A stale page answering an ask WITHOUT a gate is `changed` even when given
-    gate={'ok': True}: the proof stands in for 'the harness was really written',
+    gate={'ok': True}: the proof stands in for 'the skill pack was really written',
     which only a gated ask can mean."""
     with tmpstore() as s:
         s.post("bot", [ask()])
@@ -2378,7 +2520,7 @@ def test_adv_gate_bypass_only_for_a_gated_ask():
 
 
 def test_adv_gate_bypass_needs_an_ok_gate():
-    """Only gate={'ok': True} stands in for a written harness: a stale answer with
+    """Only gate={'ok': True} stands in for a written skill pack: a stale answer with
     gate={'ok': False, …} is refused (`changed` or a gate_ code), never recorded
     and stamped revised."""
     with tmpstore() as s:
@@ -2394,7 +2536,7 @@ def test_adv_gate_bypass_needs_an_ok_gate():
 def test_adv_a_gated_answer_needs_the_gate_proof():
     """A gated answer is never recorded without the gate's proof: Store.answer with no
     gate, for an ask whose gate runs, is refused with a gate_ code, so a caller's
-    bug cannot record a confirmed answer that no harness saw."""
+    bug cannot record a confirmed answer that no skill pack saw."""
     with tmpstore() as s:
         s.post("bot", [gated()])
         with assert_raises() as r:

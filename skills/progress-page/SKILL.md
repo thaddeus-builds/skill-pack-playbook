@@ -1,6 +1,6 @@
 ---
 name: progress-page
-description: Make or refresh the owner's one-glance progress page for a harness project, as one private Artifact built from the project's docs/ROADMAP.md and stage checks. Use when asked to "update the progress page", at the end of a session handoff, or when the owner wants to see how the project is going without reading the docs. Do NOT use for a design document, a client-facing report, or when the host cannot reach claude.ai (write the dated HTML file named under "No claude.ai" instead).
+description: Make or refresh the owner's one-glance progress page for a skill pack project, as one private Artifact built from the project's docs/ROADMAP.md and stage checks. Use when asked to "update the progress page", at the end of a session handoff, or when the owner wants to see how the project is going without reading the docs. Do NOT use for a design document, a client-facing report, or when the host cannot reach claude.ai (write the dated HTML file named under "No claude.ai" instead).
 metadata:
   version: "0.1.0"
   type: workflow
@@ -25,12 +25,12 @@ At the end of every session, in the handoff ([templates/session-handoff.md](../.
    1. Header: one sentence of verdict (what is built, whether anything ran on real data, what blocks it), a meta line (`vN · date · main sha · tests · kit`), and **three** tiles: where the project is now (its phase), how many stages ran on real data, and what is blocked and by whom.
    2. **Waiting on you**, a table: id, what to do, **who owes it** (for example "client → you"), **days waited** (from the roadmap's date to today; a pill from three days on), what it unblocks. Sort by what blocks most. This is the part the owner acts on.
    3. Since the last version: what the owner decided, what closed, what opened.
-   4. Completion track. When the project has phases (a ladder of what the harness may do), draw the track by phase; otherwise by stage. Three rows: built, checked on synthetic data, run on real data. Then the table by stage, if the stages are a separate view.
+   4. Completion track. When the project has phases (a ladder of what the skill pack may do), draw the track by phase; otherwise by stage. Three rows: built, checked on synthetic data, run on real data. Then the table by stage, if the stages are a separate view.
    5. Scope against a plan or contract, only when one exists: one row per promised item against what is built today. List what is already decided; do not repeat the blocking inputs, they are in "Waiting on you".
    6. Architecture check: four verdict cards (decoupling, focus, minimalism, scope), one line of evidence each.
    7. Cleanup: done with ids, later and what it waits for.
    8. Open roadmap items.
-   9. **Appendix, folded in one `<details>`:** the flow figure (hand-drawn SVG with the template's `.dg` classes: green border built, amber partial, red dashed not built, grey dashed outside the harness; blue tags a person, purple the agent, grey a tool; redraw only when the stages change), the table of how fast each layer can be read, what one unit is made of, deployment. These rarely change; they must not push the owner's actions down the page.
+   9. **Appendix, folded in one `<details>`:** the flow figure (hand-drawn SVG with the template's `.dg` classes: green border built, amber partial, red dashed not built, grey dashed outside the skill pack; blue tags a person, purple the agent, grey a tool; redraw only when the stages change), the table of how fast each layer can be read, what one unit is made of, deployment. These rarely change; they must not push the owner's actions down the page.
 5. **Publish.** Load the `artifact-design` skill first. Use the template's tokens (light and dark, phone width, a real fallback stack). The template names no web font host, because nothing published here may name one: when you publish, add the Artifact-allowed Google Fonts stylesheet link for IBM Plex Sans, IBM Plex Mono and Noto Sans SC to the page's head; without it the fallback stack renders. Publish with the Artifact tool to the project's existing URL; the first time, ask the owner to keep the link.
 6. **Record the URL** in the project's handoff, not in the repository's checked-in docs when the repository is public.
 
@@ -46,4 +46,4 @@ At the end of every session, in the handoff ([templates/session-handoff.md](../.
 
 ## No claude.ai
 
-When the host cannot reach claude.ai (a Zylos host, an owner who says so), the harness must not depend on it. Then render the same sections as one self-contained HTML file from the template into the client workspace, named `reports/progress-<date>.html`, and push it with the client workspace. Only the publish step changes.
+When the host cannot reach claude.ai (a Zylos host, an owner who says so), the skill pack must not depend on it. Then render the same sections as one self-contained HTML file from the template into the client workspace, named `reports/progress-<date>.html`, and push it with the client workspace. Only the publish step changes.

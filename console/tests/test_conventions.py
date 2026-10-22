@@ -1,6 +1,6 @@
 """tests/_t.py's main: a top-level test_* that main never collected (defined below the `_t.main(globals())` call, or
 hidden by a decorator without functools.wraps) fails the file, named, instead of being skipped while the file still
-prints `RESULT: N passed` (the video-ads harness: 38 tests in 8 files never ran under its runner)."""
+prints `RESULT: N passed` (the video-ads skill pack: 38 tests in 8 files never ran under its runner)."""
 
 import os
 import subprocess

@@ -612,9 +612,9 @@ def test_small_helpers() -> None:
     human.add_gate_args(p, reason=False)
     check("add_gate_args(reason=False) leaves the verb's own --reason",
           p.parse_args(["--reason", "x"]).reason == "x")
-    check("CodeRequired is a Refused is a HarnessError (exit 2)",
+    check("CodeRequired is a Refused is a SkillPackError (exit 2)",
           issubclass(human.CodeRequired, human.Refused)
-          and issubclass(human.Refused, contract.HarnessError))
+          and issubclass(human.Refused, contract.SkillPackError))
 
 
 def relay_parses(doc) -> str | None:

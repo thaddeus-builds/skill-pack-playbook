@@ -8,7 +8,7 @@ Every project starts from what the client actually said, not from what the agent
 
 ```mermaid
 flowchart LR
-    R["Record the meeting<br/>(with consent)"] --> T["Transcript"]
+    R["Record the meeting"] --> T["Transcript"]
     T --> AI["AI organizer"]
     AI --> G["Goals"]
     AI --> W["Their words<br/>(glossary candidates)"]
@@ -20,7 +20,7 @@ flowchart LR
     O -->|change / drop| X["Discarded or rewritten"]
 ```
 
-1. **Record and transcribe** each client meeting, with the client's consent. Recordings and transcripts stay in the client's own data folder, never in the code repository.
+1. **Record and transcribe** each client meeting (the meeting tool asks every participant before it records). Recordings and transcripts stay in the client's own data folder, never in the code repository.
 2. **The AI organizes the transcript into five buckets:** goals, the client's own words for things, draft user stories, numbers they stated (costs, lead times, budgets, limits), and open questions.
 3. **Every item cites its source:** meeting date and the timestamp of the quote. A number with no quote is not written down.
 4. **Numbers enter as pending values** with the meeting as their source; they drive nothing until a human confirms them.
@@ -51,19 +51,19 @@ Each stage ends at a gate someone signs; the lesson column is what the source pr
 
 Install these before the first feature; each costs an hour now and saved days in the source project.
 
-- [ ] Meeting intake: consent, recording, transcript in the client's data folder, the organizer prompt ([template](../templates/meeting-intake.md))
+- [ ] Meeting intake: recording, transcript in the client's data folder, the organizer prompt ([template](../templates/meeting-intake.md))
 - [ ] A review page before the first paid batch: the owner decides per item and the next session reads the decisions back ([loop](../templates/owner-review-loop.md)); paid vendor APIs pinned down cheaply first and every request preflighted against the vendor's published schema ([discovery](../templates/vendor-api-discovery.md))
 - [ ] `docs/ROADMAP.md` in the one roadmap format from day one, held by `tests/test_roadmap.py` ([template](../templates/ROADMAP.md)), with the session start and end checklists ([handoff](../templates/session-handoff.md))
 - [ ] The test kit before the first feature: a runner that fails a missing RESULT line, a reported failure, `0 passed` or a leaked temp file; one clock; layering rules; a release-archive test ([kit](../templates/tests/)). Every rule in the agent instructions names its test ([template](../templates/AGENT_INSTRUCTIONS.md))
 - [ ] An empty registry index with its lint test; ids are never reused; owner files linted for engineering words ([template](../templates/ssot/))
-- [ ] CI from the first commit: one pipeline per change with every job in the MR pipeline, the story-id check on every MR title, the offline suite, a secret scan ([fuller template](../templates/ci/gitlab-ci.yml); its short form, [templates/gitlab-ci.yml](../templates/gitlab-ci.yml), is what the scaffolder renders into every harness), plus a few guarantee stories for refactors to name
+- [ ] CI from the first commit: one pipeline per change with every job in the MR pipeline, the story-id check on every MR title, the offline suite, a secret scan ([fuller template](../templates/ci/gitlab-ci.yml); its short form, [templates/gitlab-ci.yml](../templates/gitlab-ci.yml), is what the scaffolder renders into every skill pack), plus a few guarantee stories for refactors to name
 - [ ] A story-check registry and a read-only runner: pass, fail, or skip when the data is missing ([template](../templates/ssot/story_checks.tsv))
 - [ ] "Declare it or refuse": a required data root, one init command to declare scope, a doctor, no defaults ([doctor checks](../templates/doctor-checks.md))
 - [ ] Raw that only grows, fixtures copied from real API responses, tests for ingesting twice and for row counts ([`kit/raw.py`](../kit/raw.py), [docs/lessons.md](../docs/lessons.md))
 - [ ] One fixture test per data bug class before the first report: zero vs missing, sparse days, matched windows, stable picks, validated raw, units and ids ([table](../templates/bug-classes.md)); the triage line's `Class:` counts repeats
 - [ ] Human tables apart from the cache: triggers, a backup before rebuilds, refusal of lossy rebuilds, a version stamp ([`kit/db.py`](../kit/db.py))
 - [ ] The `--json` contract from the first report: `meta`, one error document, message codes on every verb, tested both ways ([template](../templates/ssot/message_codes.tsv))
-- [ ] Vendor [`kit/`](../kit/) (`scaffold/new_harness.py` does it): the human gate, message codes with their contract test pointed at your own verb table, and the runner that starts a child verb in its own PEP 723 environment
+- [ ] Vendor [`kit/`](../kit/) (`scaffold/new_skill_pack.py` does it): the human gate, message codes with their contract test pointed at your own verb table, and the runner that starts a child verb in its own PEP 723 environment
 - [ ] Typed keys: every key a human or agent can set has a unit, bounds or a domain; a fact always needs a human confirm, a decision key says whether it does ([facts](../templates/ssot/fact_keys.tsv), [decisions](../templates/ssot/decision_keys.tsv))
 - [ ] Boundary and layering tests before the first adapter or console exists ([template](../templates/tests/test_layering.py)); the console's UI rules as an owner file with its lint ([template](../templates/console/ui_rules.tsv))
 - [ ] A golden-diff tool committed before the first refactor: every `--json` read and every page, BASE vs HEAD, its self-checks run once ([spec](../templates/AGENT_INSTRUCTIONS.md#golden-diff), [engine](../templates/tests/golden/))

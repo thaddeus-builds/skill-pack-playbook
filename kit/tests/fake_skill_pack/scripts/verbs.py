@@ -1,4 +1,4 @@
-"""The shop harness's verb table (kit.verbs): every command it answers,
+"""The shop skill pack's verb table (kit.verbs): every command it answers,
 and what kind of thing each does."""
 
 from kit.verbs import Verb

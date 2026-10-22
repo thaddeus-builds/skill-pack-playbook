@@ -1,4 +1,4 @@
-"""The shop harness's own messages: emits both of its registered codes
+"""The shop skill pack's own messages: emits both of its registered codes
 (the kit's registry-closure test scans this file)."""
 
 from kit.messages import Msg, msg

@@ -1,6 +1,6 @@
 code	params	meaning_en	meaning_zh
 decision_not_found	market,entity_type,entity_id,key	No decision {market} {entity_type} {entity_id} {key}	没有这项决定：{market} {entity_type} {entity_id} {key}
-decision_harness_written	entity_type,key	{entity_type} {key} is written only by the harness, inside another human confirm — it cannot be set or confirmed by itself	{entity_type} {key} 只由系统在本人确认其他决定时一并写入，不能单独设置或确认
+decision_skill_pack_written	entity_type,key	{entity_type} {key} is written only by the skill pack, inside another human confirm — it cannot be set or confirmed by itself	{entity_type} {key} 只由系统在本人确认其他决定时一并写入，不能单独设置或确认
 decision_source_required		--source is required: who said it and when (convention: <who>_<status>_<YYYY-MM-DD>)	需要写明来源：谁说的、什么时候说的（格式：<谁>_<状态>_<年-月-日>）
 decision_value_one_id		--value confirms exactly one id	指定值确认时只能针对一个对象
 decision_already_confirmed	entity_id,value	{entity_id} is already confirmed ({value})	{entity_id} 已经确认过（{value}）

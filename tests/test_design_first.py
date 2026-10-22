@@ -6,13 +6,13 @@ Checked, each on a broken copy first, so a check cannot pass by looking at nothi
     checklist, and the words that carry the rule (the prior-art scan, a recommended answer, append-only columns proven
     on a scratch copy of real data, DEMO ids, failing closed);
   - docs/lessons.md keeps the lesson (what it paid for, how often it was seen) and points at the template; a new
-    harness's CLAUDE.md (templates/AGENT_INSTRUCTIONS.md) names the template where a feature starts; the prior-art
+    skill pack's CLAUDE.md (templates/AGENT_INSTRUCTIONS.md) names the template where a feature starts; the prior-art
     scan and BUILD.md's B0.5 point at it;
   - the demo guard, the template's one Python block, is run as written: a demo page drawn with kit.pagestyle from a
     synthetic world passes it, and each way a demo breaks the rule is reported: a world not marked synthetic (any
     value but true itself); no ids, or an id that is not DEMO; no synthetic badge with its words in the page's first
     header before the decision (gone, in the owner's fold, in a comment, empty, hidden or styled); a page the style
-    did not draw, or one that shows a harness command outside the decision and the folds (the harness's commands and
+    did not draw, or one that shows a skill pack command outside the decision and the folds (the skill pack's commands and
     style are passed to problems()); a page written into any client's data folder, its review folder or not, or no
     folder given; a client term in any form the page reaches a reader (as written, unescaped, split by a tag, and in
     the page data behind each JSON escape: \\uXXXX, \\", \\\\, \\/, \\n, \\t); and no usable term list (fail closed).
@@ -40,17 +40,17 @@ TEMPLATE = "templates/design-first.md"
 LESSON = "Design and a synthetic demo before code (from adcut-harness X45, 2026-10-13)"
 SECTIONS = ("When", "The steps", "The design page", "The demo", "After the owner confirms", "Checklist")
 STEPS = ("Research first.", "One design page, in the owner's language.", "A clickable demo from a synthetic world.",
-         "Wait for the owner's yes.", "Then the code, and the harness draws the demo.")
+         "Wait for the owner's yes.", "Then the code, and the skill pack draws the demo.")
 PARTS = ("What it is.", "How it decides.", "The asks.", "What it stores.", "The traps.")
-GUARDS = ("A synthetic marker.", "DEMO ids.", "No client term.", "The harness's own renderer.",
+GUARDS = ("A synthetic marker.", "DEMO ids.", "No client term.", "The skill pack's own renderer.",
           "Never in a client's data.", "Shared privately.")
 CHECKLIST = ("The prior-art scan is dated",
              "The design page says what it is, how it decides, the asks",
              "Every append-only column is proven on a scratch copy of real data",
-             "The demo is drawn by the harness's own renderer",
+             "The demo is drawn by the skill pack's own renderer",
              "The demo guard finds nothing",
              "The demo is shared privately, and the owner confirmed before any code",
-             "After the code, the harness redraws the demo from a synthetic fixture to the same link")
+             "After the code, the skill pack redraws the demo from a synthetic fixture to the same link")
 WORDS = {"The steps": ("](prior-art-scan.md)",),
          "The design page": ("recommended answer", "append-only", "scratch copy of real data"),
          "The demo": ("`DEMO`", "fails closed", "kit.pagestyle", "kit/tools/leak_guard.py", "first `<header>`",
@@ -159,7 +159,7 @@ def ids(world: dict) -> list[str]:
 
 def draw(world: dict, *, marker: str = SYN, extra: str = "", fold: str = "", data: dict | None = None,
          style: ps.Style = ps.DEFAULT) -> str:
-    """The demo page a harness would draw from `world` with kit.pagestyle: `marker` (the badge) in the header, `extra`
+    """The demo page a skill pack would draw from `world` with kit.pagestyle: `marker` (the badge) in the header, `extra`
     after its title, the tiles and the bar, one decision, a row of cards, the owner's fold last (`fold` inside it),
     and the page data (`data` beside the project)."""
     counts = {s: sum(c["state"] == s for c in world["items"]) for s in ps.STATES}
@@ -199,7 +199,7 @@ def test_a_synthetic_demo_drawn_with_the_style_passes_the_guard():
         assert demo_problems(WORLD, ids(WORLD), page, out=out, client_data=[data], terms=[terms], style=ps.DEFAULT,
                              commands=[r"\blampctl\b"]) == []
         assert demo_problems(WORLD, ids(WORLD), draw(WORLD, style=ZH), out=out, client_data=[data], terms=[terms],
-                             style=ZH, commands=[r"\blampctl\b"]) == []          # a harness's own words and lang
+                             style=ZH, commands=[r"\blampctl\b"]) == []          # a skill pack's own words and lang
 
 
 def test_the_guard_reports_each_way_a_demo_breaks_the_rule():
@@ -248,7 +248,7 @@ def test_the_guard_reports_each_way_a_demo_breaks_the_rule():
         assert said(page=shows) == []                                         # the style alone cannot know the CLI
         assert said(page=shows, commands=[r"\blampctl\b"]) == [
             "a command (\\blampctl\\b) outside the decision and the folds: lampctl"]
-        got = said(style=ZH)                                                  # the harness's style, not the default
+        got = said(style=ZH)                                                  # the skill pack's style, not the default
         assert "lang is 'en', the style's is 'zh-CN'" in got, got
 
         for place in (data / "review" / "demo" / "map.html", data / "demo.html", data / "demo" / "map.html", data,

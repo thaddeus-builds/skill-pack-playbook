@@ -1,5 +1,5 @@
 code	params	meaning_en	meaning_zh
-unclassified_error	detail	An error the harness has no finer code for; {detail} is its raw English text	未分类的错误：{detail}
+unclassified_error	detail	An error the skill pack has no finer code for; {detail} is its raw English text	未分类的错误：{detail}
 joined	parts	Several notes; render each of {parts} in order	多条说明：{parts}
 reason_required		--reason is required and must not be empty: it says why, and is kept with the change	需要写明原因（不能为空），原因会和这次改动一起记下
 data_dir_unset	var	{var} is not set — set it to the directory that holds this client's .env and database. The current directory is never used as a default: agent shells reset it, and a wrong one lands credentials and data in the wrong place	还没有设置 {var}：请把它设为存放这个客户 .env 和数据库的目录。不会默认使用当前目录——助手的终端会切换目录，用错目录会把凭据和数据放错地方

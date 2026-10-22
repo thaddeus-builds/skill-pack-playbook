@@ -1,6 +1,6 @@
 # Triage an agent-filed issue
 
-Issues arrive in the reporter's words: an agent operating the harness, the client's own agent, the owner clicking in the console, a demo run, a golden diff. The triager adds the first line, and that line routes the issue.
+Issues arrive in the reporter's words: an agent operating the skill pack, the client's own agent, the owner clicking in the console, a demo run, a golden diff. The triager adds the first line, and that line routes the issue.
 
 ## The triage line
 

@@ -119,7 +119,7 @@ def test_runner_pattern_and_no_match():
         assert code == 0, out
         code, out = run(t, "nomatch")
         assert code == 1 and "no tests/test_*.py matches 'nomatch'" in out and "RESULT" not in out
-    with sandbox(helper="x = 1\n", fake_harness="print('RESULT: 1 passed')\n") as t:
+    with sandbox(helper="x = 1\n", fake_skill_pack="print('RESULT: 1 passed')\n") as t:
         code, out = run(t)                                    # only test_*.py files are tests
         assert code == 1 and "no tests/test_*.py matches" in out, out
 

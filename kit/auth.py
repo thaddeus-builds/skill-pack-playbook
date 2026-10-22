@@ -1,11 +1,11 @@
 """Where an API client's bearer token comes from: one setting, `<P>_TOKEN_SOURCE`.
 
-    env      (default) the harness's own env-mode fetcher for that API (a
+    env      (default) the skill pack's own env-mode fetcher for that API (a
              hook: `fetch(prefix, now) -> {"token", "expires_at"[, "origin"]}`),
              e.g. `static_env_token()` = `<prefix>_ACCESS_TOKEN` (+ optional
              `<prefix>_TOKEN_EXPIRES_AT`). The kit holds no network code: an
              exchange of a refresh token, if an API needs one, is the
-             harness's fetcher.
+             skill pack's fetcher.
     command  for a host that keeps secrets out of the client's env: it
              provides `<prefix>_TOKEN_COMMAND`. The kit runs it (shlex split,
              NO shell, stdin closed, `command_timeout` seconds) and reads ONE
@@ -36,11 +36,11 @@ What this module guards:
   * Env files are read through kit.env (parsed, never sourced); a token
     never appears in a message or in repr().
 
-`source()` is the bound harness's TokenSource: `[auth] command_fields`
-and `command_timeout` of harness.toml configure it.
+`source()` is the bound skill pack's TokenSource: `[auth] command_fields`
+and `command_timeout` of skill-pack.toml configure it.
 
 Deviations from the reference token source (none change its guards):
-AuthError is a coded HarnessError; the refresh-token exchange became the
+AuthError is a coded SkillPackError; the refresh-token exchange became the
 env-mode `fetch` hook; the expiry skew applies to env-mode tokens too
 (the fetcher returns the real expiry); a non-finite expires_at is refused
 as a bad expiry; env mode with no fetcher is refused (auth_no_env_source)
@@ -63,7 +63,7 @@ from typing import Callable, Iterable
 from kit import config as _config
 from kit import dates
 from kit import env as _env
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 
 MODES = ("env", "command")
@@ -76,7 +76,7 @@ _NO_EXPIRY = math.inf
 Fetcher = Callable[[str, float], dict]
 
 
-class AuthError(HarnessError):
+class AuthError(SkillPackError):
     """No usable token: the message names the var to fix."""
 
 
@@ -115,11 +115,11 @@ def parse_expiry(value, var: str) -> float | None:
 
 
 class TokenSource:
-    """The token-source engine for every API client of one harness.
+    """The token-source engine for every API client of one skill pack.
 
     `chain` (default: kit.env.chain(), resolved at call time) is where the
     source var, the command vars and `<prefix>_<FIELD>` settings are read.
-    `source_var` default: `<P>_TOKEN_SOURCE` of the bound harness."""
+    `source_var` default: `<P>_TOKEN_SOURCE` of the bound skill pack."""
 
     def __init__(self, *, chain: _env.EnvChain | None = None,
                  source_var: str | None = None,
@@ -355,9 +355,9 @@ _source: TokenSource | None = None
 
 
 def source() -> TokenSource:
-    """The bound harness's TokenSource (cached until config.use):
+    """The bound skill pack's TokenSource (cached until config.use):
     `<P>_TOKEN_SOURCE`, and `[auth] command_fields` / `command_timeout`
-    of harness.toml when set."""
+    of skill-pack.toml when set."""
     global _source
     if _source is None:
         spec = _config.config().raw.get("auth", {})

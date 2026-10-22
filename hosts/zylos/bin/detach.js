@@ -13,7 +13,7 @@
 // a JSON job file {pid, start, cmd}; `start` is the OS's start time for that
 // pid, so a pid reused after a reboot is not taken for a running job. A start
 // takes an exclusive lock (<name>.lock, O_EXCL) and refuses while <name>
-// runs. A leading <alias> (manifest detach.alias) is the harness CLI
+// runs. A leading <alias> (manifest detach.alias) is the skill pack CLI
 // (bin/cli.js); a leading `uv` is resolved like the hooks resolve it.
 // Stdlib only.
 
@@ -23,7 +23,7 @@ const { spawn } = require('node:child_process');
 const h = require('../lib.js');
 
 const { alias, exit_marker: MARKER } = h.M.detach;
-const USAGE = `usage: node zylos/bin/detach.js <name> -- <command> [args…]   (a leading \`${alias}\` is the harness CLI)`;
+const USAGE = `usage: node zylos/bin/detach.js <name> -- <command> [args…]   (a leading \`${alias}\` is the skill pack CLI)`;
 const STALE_LOCK_MS = 60_000;
 const [name, sep, ...cmd] = process.argv.slice(2);
 if (!name || !/^[A-Za-z0-9_.-]+$/.test(name) || sep !== '--' || !cmd.length) {
@@ -66,7 +66,7 @@ const fd = fs.openSync(logFile, 'w', 0o600);
 // The marker is a validated plain token (lib.js), safe unquoted.
 const child = spawn('sh', ['-c', `"$@"; echo "${MARKER} $?"`, 'sh', ...cmd], {
   cwd: h.DATA_DIR,
-  env: h.harnessEnv(),
+  env: h.cliEnv(),
   detached: true,
   stdio: ['ignore', fd, fd],
 });

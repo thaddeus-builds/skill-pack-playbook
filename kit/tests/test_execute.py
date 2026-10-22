@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """The executor (kit/execute.py) holds each of its guards, on the fake
-"shop" harness with a fake API behind a real kit.write_guard Writer
+"shop" skill pack with a fake API behind a real kit.write_guard Writer
 (PUT /stock/{sku} {units}, GET /stock/{sku}).
 
   1. A dry run (the default) writes nothing and calls nothing: no writer
      is built, no effect row, no status change; --json is the full plan.
      Its wording never implies --apply works when writes are off or the
-     harness's allowlist is empty (execute_dry_run_by_hand: an approved
+     skill pack's allowlist is empty (execute_dry_run_by_hand: an approved
      item is an instruction for a person).
   2. --apply with writes off (and with the kill switch / STOP file) is
      refused by the write guard before anything is written or sent.
@@ -19,7 +19,7 @@
      blocks the next execute on that target; `reconcile` reads it back
      and clears it (or, unsure, writes nothing).
   6. Per-run caps: max items, max |delta|, an unknown delta refused.
-  7. The harness's own refusal, an expired approval, an allowlist
+  7. The skill pack's own refusal, an expired approval, an allowlist
      refusal (failed, nothing sent) and a kill switch that trips mid-run
      (the run stops; later items stay approved).
   8. Markets, no DB, one run at a time; execute.tsv is closed.
@@ -233,7 +233,7 @@ def test_dry_run() -> None:
         apply_item=apply_item, read_back=read_back, allowlist={}),
         ["apply", "--json"], env=env(**ON))
     d = one_doc(out)
-    check("writes on but the harness's allowlist is empty: "
+    check("writes on but the skill pack's allowlist is empty: "
           "execute_dry_run_by_hand, apply_blocked execute_allowlist_empty",
           rc == 0 and d["message_code"]["code"] == "execute_dry_run_by_hand"
           and d["apply_blocked_code"]["code"] == "execute_allowlist_empty"
@@ -448,7 +448,7 @@ def test_caps() -> None:
 # ---- 7 ---------------------------------------------------------------------
 
 def test_refusals() -> None:
-    print("[7] harness refusal, expiry, allowlist, a switch mid-run")
+    print("[7] skill pack refusal, expiry, allowlist, a switch mid-run")
     a = approved("SKU-71")
     STATE["refuse"].add("SKU-71")
     rc, out, _ = run(["apply", "--apply", "--json"], **ON)
@@ -534,7 +534,7 @@ def test_market_lock_closure() -> None:
 
 
 def test_unplanned() -> None:
-    print("[0] unplanned: the plan_item of a harness with no executor")
+    print("[0] unplanned: the plan_item of a skill pack with no executor")
     row = {"id": 7, "kind": "restock", "target_ref": "SKU-1", "basis": "b9"}
     got = execute.unplanned(None, row)
     check("the saved basis, and a coded refusal naming the item",

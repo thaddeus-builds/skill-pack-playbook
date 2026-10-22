@@ -241,8 +241,8 @@ roster\tPartnership ads\troster.term_ads\tin\t\ttext\tconfirmed\t
 roster\tAssets\troster.term_assets\tin\t\ttext\tconfirmed\t
 roster\tOriginal Code\troster.code\tin\t\tcode\tconfirmed\t
 roster\tAds Code\troster.ads_code\tin\t\tcode\tconfirmed\t
-roster\tData Login\troster.flag.data_login\tboth\tharness-a\tbool\tconfirmed\t
-roster\tAssets uploaded\troster.flag.assets_uploaded\tout\tharness-a\tbool\tproposed\twaits on the owner
+roster\tData Login\troster.flag.data_login\tboth\tskill-pack-a\tbool\tconfirmed\t
+roster\tAssets uploaded\troster.flag.assets_uploaded\tout\tskill-pack-a\tbool\tproposed\twaits on the owner
 q1\tMonth\troster.month\tin\t\ttext\tconfirmed\t
 q1\tKOL\troster.name\tin\t\tperson\tconfirmed\t
 q1\tTier\troster.tier_band\tin\t\ttext\tconfirmed\t
@@ -252,7 +252,7 @@ q1\tCost-Euro\troster.fee\tin\t\tmoney:EUR\tconfirmed\t
 q1\tUsecase_Label\troster.label\tin\t\tlabel\tconfirmed\t
 q1\tEstimated Launch Date\troster.posted_on\tin\t\tdate\tconfirmed\t
 q1\tActivity Type > IG Reels\troster.flag.reels\tin\t\tint\tconfirmed\t
-q1\tPartnership upload\troster.flag.partnership_upload\tboth\tharness-b\tbool\tconfirmed\t
+q1\tPartnership upload\troster.flag.partnership_upload\tboth\tskill-pack-b\tbool\tconfirmed\t
 calendar\tEvent\tcalendar.event\tin\t\ttext\tconfirmed\t
 calendar\tPost Releasing Date\tcalendar.window\tin\t\tmd_range\tconfirmed\t
 calendar\tDTC Discount\tcalendar.discount\tin\t\ttext\tconfirmed\t
@@ -339,7 +339,7 @@ LUMI_COLUMNS = "table_id\theader\tfield\tdirection\towner\ttype\tstatus\tnote\n"
         f"{t}\t{fee}\troster.fee\tin\t\tmoney:{cur}\tconfirmed\t\n"
         f"{t}\t{camp}\troster.campaign\tin\t\ttext\tconfirmed\t\n"
         f"{t}\t{day}\troster.posted_on\tin\t\tdate\tconfirmed\t\n"
-        f"{t}\tStatus\troster.status\tboth\tharness-a\ttext\tconfirmed\t\n"
+        f"{t}\tStatus\troster.status\tboth\tskill-pack-a\ttext\tconfirmed\t\n"
         for t, mail, code, fee, cur, camp, day in (
             ("dk", "E-mail", "Rabatkode", "Honorar (DKK)", "DKK", "Kampagne",
              "Publiceret"),
