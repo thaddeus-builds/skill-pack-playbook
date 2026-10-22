@@ -1409,6 +1409,33 @@ def test_the_owner_files_and_append_only_rules_are_whole():
     assert registry_rule_problems(rules.replace("**A table many branches add to is append-only", "**x")) == ["11. missing"]
 
 
+PARALLEL = "Parallel sessions append to the story files: merge them by union, take the next id from a command, generate the roadmap page instead of committing it."
+PARALLEL_WORDS = ("`merge=union`", "the next", "built on demand", "*Paid for:*", "*Built*")
+STORIES_PRIVATE = "stories are the builder's record; they do not belong in anything a client can read."
+STORIES_PRIVATE_WORDS = ("*Seen once:*", "name clients", "the owner accepted that risk", "The way out", "its own repository")
+
+
+def story_files_problems(rules: str) -> list[str]:
+    """What the two story-file rules of docs/rules.md fail to say: rule 8 (union merge of the append-only story
+    files, the next id from a command over every branch, the roadmap page generated not committed) and rule 9
+    (the story tables name clients, so they stay out of what a client reads; the accepted risk and the way out)."""
+    items = re.split(r"^\d+\. ", section(rules, "Stories that prove themselves"), flags=re.M)
+    out = []
+    for title, words in ((PARALLEL, PARALLEL_WORDS), (STORIES_PRIVATE, STORIES_PRIVATE_WORDS)):
+        item = next((i for i in items if title in i[:len(title) + 40]), None)
+        out += [title] if item is None else [w for w in words if w not in item]
+    return out
+
+
+def test_the_story_file_rules_are_whole():
+    rules = doc("docs/rules.md")
+    assert story_files_problems(rules) == [], story_files_problems(rules)
+    assert story_files_problems(rules.replace("`merge=union`", "x")) == ["`merge=union`"]
+    assert story_files_problems(rules.replace("The way out", "x")) == ["The way out"]
+    assert story_files_problems(rules.replace(PARALLEL, "x")) == [PARALLEL]
+    assert story_files_problems("# t\n") == [PARALLEL, STORIES_PRIVATE]
+
+
 ALL_RAW = "A datum a later decision needs is built from all of raw, never from the newest snapshot alone."
 ALL_RAW_WORDS = ("every raw file", "newest observation", "derived on each read", "names no platform",
                  "`scripts/_lib/inventory.py`", "*Seen once:*")
