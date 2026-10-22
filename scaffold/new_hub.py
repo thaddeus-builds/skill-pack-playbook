@@ -105,10 +105,13 @@ HUB_HOME = PLAYBOOK / "scaffold" / "hub"          # the hub's own facts program
 HUB = {"name": "hub", "cli": "hub", "prefix": "HUB", "folder": "hub",
        "gates": ["facts confirm", "facts restore"], "relay": ["facts confirm"]}
 MARKET_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,15}")
+CURRENCY_RE = re.compile(r"[A-Z]{3}")                # ISO 4217 codes
 # The keys a client's packs share, defined as the packs that hold them define
 # them: a pack copies a hub fact only when type, unit, bounds and labels match.
+# currency's type is set per hub (--currencies): `text` until the client's
+# packs name their choices.
 HUB_KEY_ROWS = [
-    ("currency", "required", "choice:HKD|TWD|EUR|USD", "", "", "",
+    ("currency", "required", "text", "", "", "",
      "reporting currency of the market", "該市場的報表幣別",
      "every money amount every pack reads is in this currency"),
     ("npr_roas", "required", "number", "x ROAS", "0.1", "50",
@@ -335,7 +338,10 @@ fact_keys = "fact_keys.tsv"
 [contract]
 no_db_next = ["facts init"]
 """
-    keys = "".join("\t".join(r) + "\n" for r in (HUB_KEYS_HEADER, *HUB_KEY_ROWS))
+    cur = h.get("currencies") or []
+    rows = [(r[0], r[1], "choice:" + "|".join(cur), *r[3:]) if r[0] == "currency" and cur else r
+            for r in HUB_KEY_ROWS]
+    keys = "".join("\t".join(r) + "\n" for r in (HUB_KEYS_HEADER, *rows))
     return {"hub/bin/hub": (wrapper, 0o755),
             "hub/defs/skill-pack.toml": (toml, 0o644),
             "hub/defs/fact_keys.tsv": (keys, 0o644)}
@@ -513,13 +519,16 @@ def cmd_new(a) -> int:
     if bad or len(set(markets)) != len(markets):
         raise Refused(f"--markets {a.markets!r}: plain words (letters, digits, "
                       f"'_', '-'), each once")
+    currencies = [c.strip() for c in (a.currencies or "").split(",") if c.strip()]
+    if any(not CURRENCY_RE.fullmatch(c) for c in currencies) or len(set(currencies)) != len(currencies):
+        raise Refused(f"--currencies {a.currencies!r}: ISO 4217 codes (HKD, EUR, ...), each once")
     home = (a.console_home or PLAYBOOK / "console").expanduser().resolve()
     if not ((home / "serve.py").is_file() and (home / "ask.py").is_file()):
         raise Refused(f"{home} has no serve.py and ask.py: not a console")
     h = {"client": hub.name, "title": a.title, "lang": a.lang,
          "language": a.language, "port": choose_port(hub.parent),
          "console_home": str(home), "hub_home": str(HUB_HOME),
-         "markets": markets, "packs": []}
+         "markets": markets, "currencies": currencies, "packs": []}
     out = hub_files(h, hub) | hub_facts_files(h)
     out |= {"CLIENT.md": (client_md(h), 0o644),
             "client_terms.txt": (f"# leak-guard terms for {h['client']}: one per line, "
@@ -645,6 +654,9 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("--markets", default="",
                      help="the client's markets, comma-separated (e.g. HK,TW); "
                           "default none: the hub keeps no market partition")
+    new.add_argument("--currencies", default="",
+                     help="the currencies the client's packs allow, comma-separated ISO codes, "
+                          "as their fact_keys.tsv lists them (e.g. USD,EUR); default: currency is text")
     new.add_argument("--lang", choices=("en", "zh"), default="en",
                      help="the console's language")
     new.add_argument("--language", default="the client's language",
