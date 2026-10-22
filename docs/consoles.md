@@ -24,6 +24,15 @@ flowchart LR
 - `ask.py digest` is the decision record to forward.
 - A skill pack adds its own pages (in the same top bar) and buttons (relayed to its gate, signed in the same log) through one manifest, which also names the verbs a click may run: [`console/PAGES.md`](../console/PAGES.md).
 
+## One client, several skill packs: one console
+
+When one client is served by several skill packs, they share the client hub's one console, so the owner has one inbox and one budget. *Seen once:* a client served by four skill packs, each with its own console of 10 open asks.
+
+- **One budget across packs.** The cap of 10 open asks counts every open ask in the console's log, whoever posted it: each pack posts `ask.py --as <cli>` to the same `CONSOLE_DIR`, and an eleventh is refused (`over_budget`) whichever pack sends it. No pack has a budget of its own (`console/tests/test_ask_cli.py`, `test_asks_from_several_agents_share_one_budget_of_open_asks`).
+- **Labelled by pack.** `<cli> pending --hub` starts every ask id and every gate verb with the pack's cli word (`gads-fact-us-…`, `["gads", "facts", "confirm", key]`) and every group with the pack's name. The hub console relays through the hub's dispatcher (`--relay-cmd bin/hub`, `--relay-verbs "gads facts confirm,gads decisions confirm,gads queue approve,…"`), and a gate verb may be one word longer than a pack's own (7). A flag rather than an environment switch, so a shell that once ran a hub never changes what a plain `pending` prints.
+- **Every ask expires.** `ask.py add` gives a new ask `expires` 7 days ahead; past it the ask is `expired`, nothing changes, its id is never used again, and `answers` lists it until the agent records it with `applied`.
+- **Words and choices may be answered in chat.** `ask.py chat ID --value=V --quote="…" --source="chat <date time>"` is the agent's record of what the owner said (`via: chat`, `by: agent:<name>`, never signed, shown in History as not clicked). Confirming a number or approving a change still needs the owner's click or a relayed code: `chat` refuses an ask with a gate, an approval or a number (`gate_needs_click`).
+
 ## The client console is where clients answer
 
 Humans answer in two places: the [owner console](#the-owner-console-where-the-asks-go), where the builder-owner answers the agent about the skill pack itself, and the client console, tested in the skill pack repo, which collects the values and approvals the skill pack's rules read.

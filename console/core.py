@@ -7,7 +7,7 @@ event per line. Nothing is ever edited or deleted; every state below is a
 fold over the events (`fold()`), so the file is its own history and its own
 backup.
 
-    agent writes (Store.post / withdraw / applied / say)   ask  withdraw  applied  say
+    agent writes (Store.post / withdraw / applied / say / chat)   ask  withdraw  applied  say  chat
     human writes (Store.answer / reopen / note / act)   answer  reopen  note  action
 
 `ROLES` is that split, and the `append` that `Store._txn` hands out refuses an
@@ -24,6 +24,21 @@ a title, why now, evidence, a recommendation, and what "no" means; at most
 `MAX_OPEN` open at once unless the skill pack's manifest sets another number
 (`Store.post(max_open=…)`). `check_value()` is the one definition of a valid
 answer. Everything the agent may send is in `ASK_FIELDS`.
+
+Two things an ask may end in besides an answer or a withdrawal (both added
+without touching an older log: an ask with no `expires` never lapses, and a
+log with no `chat` event folds as it always did):
+
+  * `expires` (a date, or a time in UTC): once it has passed, an open ask is
+    `expired`, its outcome is "nothing changes", nobody can answer it, and its
+    id is never used again. The fold works it out from the clock it is given
+    (`fold(events, now)`) and from the time of every later event, so no event
+    records it; the agent marks it handled with `applied`, as for a "no".
+  * `chat`: the agent's record of an answer the owner gave in chat, with
+    their words (`quote`) and where (`source`). It is an agent event, never
+    signed and never a click (`by: agent:NAME`, `via: chat`), and only for an
+    ask without a gate that neither approves a change nor takes a number
+    (`gate_needs_click`).
 """
 
 from __future__ import annotations
@@ -37,7 +52,7 @@ import re
 import secrets
 from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 try:  # POSIX; the store is single-machine by design
     import fcntl
@@ -45,10 +60,12 @@ except ImportError:  # pragma: no cover
     fcntl = None
 
 MAX_OPEN = 10                                   # the owner's attention budget; a skill pack's manifest may set another (manifest.py)
+EXPIRES_DAYS = 7                                # `ask.py add` gives a new ask without `expires` this many days
 STEPS = ("confirm", "approve", "choose", "provide")
 INPUT_TYPES = ("text", "number", "date", "url")
-ROLES = {"agent": ("ask", "withdraw", "applied", "say"),
+ROLES = {"agent": ("ask", "withdraw", "applied", "say", "chat"),
          "human": ("answer", "reopen", "note", "action")}
+OUTCOME_EXPIRED = "nothing changes"             # what an expired ask did: the same as a no
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}\Z")
 # a token that can never be parsed as a flag: names, verbs, users
 TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,79}\Z")
@@ -60,7 +77,7 @@ LIMITS = {"id": 64, "kind": 40, "group": 60, "title": 120, "why": 400,
           "cell": 80, "option_label": 60, "option_note": 120, "unit": 12,
           "answer": 500, "comment": 500, "note": 1000, "say": 400,
           "where": 200, "reason": 200, "evidence": 12, "options": 8,
-          "columns": 6, "rows": 30, "verb": 6, "expect": 2000}
+          "columns": 6, "rows": 30, "verb": 7, "expect": 2000}
 
 # every failure a verb can return: {ok: false, code, message, params}. The
 # console words them for the human by `err.<code>` in i18n.json.
@@ -91,6 +108,7 @@ CODES = {
     "too_large": "The request is too large.",
     "verb_not_allowed": "That verb is not one the skill pack's manifest allows the console to run.",
     "page_unavailable": "The skill pack could not draw that page.",
+    "gate_needs_click": "That ask needs the owner's click on the console (it has a gate, approves a change or takes a number); an answer given in chat cannot settle it.",
 }
 # what one field of an ask can be wrong with
 FIELD_CODES = ("required", "too_long", "bad_type", "bad_value", "unknown_field",
@@ -142,6 +160,7 @@ ASK_FIELDS = {
     "effect":    (("approve",), ("approve",)),
     "input":     (None, ("provide",)),
     "gate":      (None, "all"),
+    "expires":   (None, "all"),        # when it lapses unanswered: nothing changes
 }
 
 
@@ -328,7 +347,8 @@ def _gate(errors, g, step):
     if not (isinstance(verb, list) and 1 <= len(verb) <= LIMITS["verb"]
             and all(isinstance(x, str) and TOKEN_RE.match(x) for x in verb)):
         errors.append({"field": "gate.verb", "code": "bad_value",
-                       "message": "verb: 1 to 6 plain words (letters, digits, _ . : @ / -), none starting with '-'"})
+                       "message": f"verb: 1 to {LIMITS['verb']} plain words (letters, digits, _ . : @ / -), "
+                                  "none starting with '-'"})
         ok = False
     if not (isinstance(expect, dict) and expect and _walk_ok(expect) and not _has_empty(expect)
             and len(canon(expect)) <= LIMITS["expect"]):
@@ -415,10 +435,60 @@ def validate_ask(raw) -> tuple[dict | None, list[dict]]:
         g = _gate(errors, raw["gate"], step)
         if g:
             ask["gate"] = g
+    if raw.get("expires") is not None:
+        ask["expires"] = _expires(errors, raw["expires"])
     if errors:
         seen: set = set()
         return None, [e for e in errors if (e["field"], e["code"]) not in seen and not seen.add((e["field"], e["code"]))]
     return {k: v for k, v in ask.items() if v is not None}, []
+
+
+_TIME_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
+
+
+def _expires(errors, v):
+    """`YYYY-MM-DD` (open through that day, UTC) or `YYYY-MM-DDTHH:MM:SSZ`."""
+    if isinstance(v, str) and deadline(v) is not None:
+        return v
+    errors.append({"field": "expires", "code": "bad_value",
+                   "message": "expires is a date YYYY-MM-DD or a time YYYY-MM-DDTHH:MM:SSZ (UTC)"})
+    return None
+
+
+def deadline(expires) -> str | None:
+    """The instant an ask with this `expires` lapses, as `YYYY-MM-DDTHH:MM:SSZ`
+    (comparable as text with `now()` and every event's `at`): a date lapses when
+    it ends, at the next midnight UTC. None if it is neither form."""
+    if not isinstance(expires, str):
+        return None
+    try:
+        if _DATE_RE.match(expires):
+            d = datetime.strptime(expires, "%Y-%m-%d") + timedelta(days=1)
+            return d.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if _TIME_RE.match(expires):
+            datetime.strptime(expires, "%Y-%m-%dT%H:%M:%SZ")
+            return expires
+    except (ValueError, OverflowError):
+        return None
+    return None
+
+
+def days_ahead(n: int, start: str | None = None) -> str:
+    """`now()` (or `start`) plus n days, in the same form."""
+    t = datetime.strptime(start or now(), "%Y-%m-%dT%H:%M:%SZ") + timedelta(days=n)
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def chat_blocked(ask: dict) -> str | None:
+    """Why an answer given in chat cannot settle this ask, or None: a gate (the
+    skill pack's code needs a click or a relayed code), an approval, a number."""
+    if ask.get("gate"):
+        return "gate"
+    if ask.get("step") == "approve":
+        return "approve"
+    if ask.get("step") == "provide" and (ask.get("input") or {}).get("type") == "number":
+        return "number"
+    return None
 
 
 def _options(errors, opts):
@@ -643,13 +713,15 @@ def verify(secret: bytes | None, event: dict) -> bool | None:
 
 # --------------------------------------------------------------- the fold --
 
-def fold(events: list[dict]) -> dict:
+def fold(events: list[dict], now: str | None = None) -> dict:
     """The state every page and verb reads:
 
-    asks      id -> {id, ask, hash, rev, status: open|answered|withdrawn,
+    asks      id -> {id, ask, hash, rev, status: open|answered|withdrawn|expired,
                      opened_seq, opened_at, by, answer, applied, withdrawn,
-                     history, revs}
-                     `answer` is the current answer event
+                     expired, history, revs}
+                     `answer` is the current answer event: a human `answer`,
+                     or the agent's `chat` record of what the owner said in chat
+                     `expired` {at: the deadline, outcome}: it lapsed unanswered
     order     ids by first appearance
     messages  say (agent) and note (human) events, in order
     actions   action (human: a page button the skill pack's gate ran), in order
@@ -657,12 +729,24 @@ def fold(events: list[dict]) -> dict:
               which the fold ignored: {seq, type, id, code}
     seq       the last event's seq (seq only grows: an event that does not
               raise it is a problem `bad_seq` and ignored)
+
+    An open ask whose `expires` has passed (by the time of a later event that
+    names it, or by `now` once every event is read) is `expired` first, so an
+    answer that came after its deadline is a problem, never an answer. With no
+    `now` only the events' own times count: the fold stays a pure function.
     """
     st = {"asks": {}, "order": [], "messages": [], "problems": [], "actions": [], "seq": 0}
 
     def bad(e, code):
         st["problems"].append({"seq": e.get("seq"), "type": e.get("type"),
                                "id": e.get("id"), "code": code})
+
+    def lapse(cur, at):
+        """An open ask past its deadline at time `at` is expired."""
+        due = deadline(cur["ask"].get("expires"))
+        if cur["status"] == "open" and due is not None and isinstance(at, str) and at >= due:
+            cur.update(status="expired", answer=None,
+                       expired={"at": due, "outcome": OUTCOME_EXPIRED})
     for e in events:
         if e.get("seq", 0) <= st["seq"]:
             bad(e, "bad_seq")            # a copied line must not count twice
@@ -673,12 +757,14 @@ def fold(events: list[dict]) -> dict:
             a = e["ask"]
             cur = st["asks"].get(a["id"])
             h = subject_hash(a)
+            if cur is not None:
+                lapse(cur, e.get("at"))
             if cur is None:
                 st["asks"][a["id"]] = {
                     "id": a["id"], "ask": a, "hash": h, "rev": 1,
                     "status": "open", "opened_seq": e["seq"],
                     "opened_at": e["at"], "by": e.get("by"), "answer": None,
-                    "applied": None, "withdrawn": None, "history": [],
+                    "applied": None, "withdrawn": None, "expired": None, "history": [],
                     "revs": {h: a}}
                 st["order"].append(a["id"])
             elif cur["status"] == "open":
@@ -686,13 +772,17 @@ def fold(events: list[dict]) -> dict:
                 cur["revs"][h] = a
             else:
                 bad(e, "id_used")
-        elif t in ("withdraw", "answer", "reopen", "applied"):
+        elif t in ("withdraw", "answer", "reopen", "applied", "chat"):
             cur = st["asks"].get(i)
             if cur is None:
                 bad(e, "unknown_id")
-            elif t == "withdraw" and cur["status"] == "open":
+                continue
+            lapse(cur, e.get("at"))
+            if t == "withdraw" and cur["status"] == "open":
                 cur.update(status="withdrawn", withdrawn=e)
-            elif t == "answer" and cur["status"] == "open":
+            elif t == "chat" and cur["status"] == "open" and chat_blocked(cur["ask"]):
+                bad(e, "gate_needs_click")
+            elif t in ("answer", "chat") and cur["status"] == "open":
                 cur["answer"] = e
                 cur["history"].append(e)
                 cur["status"] = "answered"
@@ -700,7 +790,7 @@ def fold(events: list[dict]) -> dict:
             elif t == "reopen" and cur["status"] == "answered" and not cur["applied"]:
                 cur.update(status="open", answer=None)
                 cur["history"].append(e)
-            elif t == "applied" and cur["status"] == "answered" and not cur["applied"]:
+            elif t == "applied" and cur["status"] in ("answered", "expired") and not cur["applied"]:
                 cur["applied"] = e
             else:
                 bad(e, "not_open")
@@ -710,7 +800,17 @@ def fold(events: list[dict]) -> dict:
             st["actions"].append(e)
         else:
             bad(e, "unknown_type")
+    if now is not None:
+        for cur in st["asks"].values():
+            lapse(cur, now)
     return st
+
+
+def next_expiry(st: dict) -> str | None:
+    """The earliest deadline of an open ask, or None: until then a folded
+    state stays true without reading the log again."""
+    dues = [d for d in (deadline(x["ask"].get("expires")) for x in open_asks(st)) if d is not None]
+    return min(dues) if dues else None
 
 
 def open_asks(st: dict) -> list[dict]:
@@ -755,6 +855,9 @@ def _well_formed(e) -> bool:
     if t == "answer" and not (isinstance(e.get("value"), str)
                               and isinstance(e.get("gate"), (dict, type(None)))):
         return False
+    if t == "chat" and not (isinstance(e.get("value"), str) and isinstance(e.get("quote"), str)
+                            and isinstance(e.get("source", ""), str) and e.get("gate") is None):
+        return False
     if t in ("say", "note") and not isinstance(e.get("text"), str):
         return False
     if t == "action" and not (isinstance(e.get("label"), str) and isinstance(e.get("verb"), list)
@@ -779,7 +882,8 @@ def _ask_shape_ok(a: dict) -> bool:
             and (opts is None if a["step"] != "choose" else
                  isinstance(opts, list) and all(isinstance(o, dict) and isinstance(o.get("value"), str)
                                                 and isinstance(o.get("label"), str) for o in opts))
-            and isinstance(a.get("input", {}), dict) and isinstance(a.get("gate", {}), dict))
+            and isinstance(a.get("input", {}), dict) and isinstance(a.get("gate", {}), dict)
+            and isinstance(a.get("expires", ""), str))
 
 
 class Store:
@@ -800,8 +904,10 @@ class Store:
             return []
         return self._parse(data)[0]
 
-    def state(self) -> dict:
-        return fold(self.events())
+    def state(self, at: str | None = None) -> dict:
+        """The fold at time `at` (default: this moment), so an ask past its
+        `expires` reads as expired."""
+        return fold(self.events(), at or now())
 
     @staticmethod
     def _parse(data: bytes) -> tuple[list[dict], int]:
@@ -873,7 +979,7 @@ class Store:
         a type outside the role."""
         if not write:                  # a dry run: read, never create or repair
             events = self.events()
-            yield {"st": fold(events), "seq": max((e["seq"] for e in events), default=0)}, None
+            yield {"st": fold(events, now()), "seq": max((e["seq"] for e in events), default=0)}, None
             return
         os.makedirs(self.dir, exist_ok=True)
         fd = os.open(self.path, os.O_RDWR | os.O_APPEND | os.O_CREAT, 0o600)
@@ -889,7 +995,7 @@ class Store:
             events, good = self._parse(data)
             if good != len(data):
                 os.ftruncate(fd, good)
-            box = {"st": fold(events),
+            box = {"st": fold(events, now()),
                    "seq": max((e["seq"] for e in events), default=0)}
 
             def append(role, type, by, **fields):
@@ -907,7 +1013,7 @@ class Store:
                 while data:            # a short write is not a saved answer
                     data = data[os.write(fd, data):]
                 os.fsync(fd)
-                box["st"] = fold(events + [ev])
+                box["st"] = fold(events + [ev], ev["at"])
                 events.append(ev)
                 return ev
             yield box, append
@@ -916,12 +1022,18 @@ class Store:
 
     # ---- the agent's side ----
     def post(self, name: str, asks: list, *, max_open: int = MAX_OPEN,
-             dry_run: bool = False, gate_verbs: list | None = None) -> dict:
+             dry_run: bool = False, gate_verbs: list | None = None,
+             default_expires: str | None = None) -> dict:
         """`max_open` is the number of open asks allowed (the caller's: the
-        manifest's, or MAX_OPEN). `gate_verbs` (a manifest's relay_verbs), when
+        manifest's, or MAX_OPEN). It counts every open ask in this log, whoever
+        posted it (`--as`), so packs that share one console share one budget.
+        `gate_verbs` (a manifest's relay_verbs), when
         given, makes an ask whose gate verb starts with none of them invalid
         (`not_allowed` on `gate.verb`), so the console never draws it as a form
-        that can only be declined."""
+        that can only be declined. `default_expires` is given to a new ask that
+        names no `expires` (ask.py add: EXPIRES_DAYS ahead); a revision that
+        names none keeps the one it had, so posting the same ask again is not a
+        change. An `expires` that has already passed is refused."""
         by = self._by("agent", name)
         clean, errors, seen = [], [], set()
         for n, raw in enumerate(asks):
@@ -947,6 +1059,16 @@ class Store:
             new, updated, same = [], [], []
             for a in clean:
                 cur = st["asks"].get(a["id"])
+                if "expires" not in a:
+                    kept = cur["ask"].get("expires") if cur is not None else default_expires
+                    if kept is not None:
+                        a["expires"] = kept
+                if cur is None or cur["status"] == "open":
+                    due = deadline(a.get("expires"))
+                    if due is not None and due <= now():
+                        raise Refused("invalid_ask", errors=[{
+                            "ask": a["id"], "field": "expires", "code": "bad_value",
+                            "message": f"expires {a['expires']} has already passed: the ask would lapse unseen"}])
                 if cur is None:
                     new.append(a)
                 elif cur["status"] != "open":
@@ -989,10 +1111,14 @@ class Store:
         ids = list(dict.fromkeys(ids))
         with self._txn() as (box, append):
             for i in ids:
-                cur = self._need(box["st"], i, "answered")
+                cur = box["st"]["asks"].get(i)
+                if cur is None or cur["status"] != "expired":
+                    cur = self._need(box["st"], i, "answered")
                 if cur["applied"]:
                     raise Refused("already_applied", id=i)
-                if seqs and i in seqs and cur["answer"]["seq"] != seqs[i]:
+                if cur["status"] == "expired" and seqs and i in seqs:
+                    raise Refused("changed", "That ask expired unanswered; record it by its id alone.", id=i)
+                if cur["status"] == "answered" and seqs and i in seqs and cur["answer"]["seq"] != seqs[i]:
                     raise Refused("changed", "The answer changed since you read it; run answers and apply the new one.",
                                   id=i)
             for i in ids:
@@ -1005,6 +1131,28 @@ class Store:
         with self._txn() as (box, append):
             append("agent", "say", by, text=text)
             return {"seq": box["seq"]}
+
+    def chat(self, name: str, id: str, value, *, quote: str, source: str = "") -> dict:
+        """The agent's record of an answer the owner gave in chat: their words
+        (`quote`) and where (`source`), bound to the ask as it is now and checked
+        like any answer. An agent event, never signed: `by` is agent:NAME and
+        `via` chat, so it is never taken for a click. Refused (`gate_needs_click`)
+        for an ask with a gate, one that approves a change or one that takes a
+        number: those need the owner on the console."""
+        by = self._by("agent", name)
+        quote = self._say(quote, "quote", "quote")
+        source = self._say(source, "source", "source", required=False)
+        with self._txn() as (box, append):
+            cur = self._need(box["st"], id, "open")
+            why = chat_blocked(cur["ask"])
+            if why:
+                raise Refused("gate_needs_click", id=id, why=why)
+            v, err = check_value(cur["ask"], value)
+            if err:
+                raise Refused("bad_value", err["message"], reason=err["reason"])
+            return append("agent", "chat", by, id=id, value=v, via="chat", quote=quote,
+                          source=source or None, subject=cur["hash"],
+                          suggested=(cur["ask"].get("recommend") or {}).get("value") == v)
 
     # ---- the human's side ----
     def answer(self, user: str, id: str, value, *, shown: str, comment: str = "",

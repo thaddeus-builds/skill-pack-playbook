@@ -107,7 +107,7 @@ h2 .count, .jump .count { background: var(--sunk); color: var(--ink2); }
 .ask.approve[open], .done.waiting[open] { box-shadow: inset 3px 0 0 var(--warn); }
 .done.applied { box-shadow: inset 3px 0 0 var(--ok-line); }
 .done.applied[open] { box-shadow: inset 3px 0 0 var(--ok); }
-.done.withdrawn .ttl { color: var(--ink2); font-weight: 500; }
+.done.withdrawn .ttl, .done.expired .ttl { color: var(--ink2); font-weight: 500; }
 .ask > summary { position: relative; display: block; padding: .85rem 2.75rem .85rem 1rem; }
 @media (hover: hover) { .ask > summary:hover { background: var(--sunk); } }
 .ask > summary:focus-visible { outline-offset: -3px; }
