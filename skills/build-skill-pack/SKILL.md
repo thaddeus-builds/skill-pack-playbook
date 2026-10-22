@@ -20,7 +20,7 @@ This skill follows [BUILD.md](../../BUILD.md). BUILD.md is the recipe; this file
 
 Read BUILD.md's table first. Then, one step at a time:
 
-1. **B0 Intake.** Consent first. Organize each meeting with [templates/meeting-intake.md](../../templates/meeting-intake.md); check it with `build/check_intake.py`.
+1. **B0 Intake.** Organize each meeting with [templates/meeting-intake.md](../../templates/meeting-intake.md); check it with `build/check_intake.py`.
 2. **B0.5 Prior-art scan** with [templates/prior-art-scan.md](../../templates/prior-art-scan.md), one agent per lens.
 3. **B0.6 Asks.** Name who decides each kind of ask ([templates/decision-rights.md](../../templates/decision-rights.md)); make each round's asks with `build/intake_to_asks.py` (the builder's round too: its items have audience `builder`); forward the digest ([templates/decision-rights.md](../../templates/decision-rights.md), "The digest").
 4. **B1 Scaffold** with `scaffold/new_skill_pack.py` (BUILD.md B1); push; CI green before the first feature.
