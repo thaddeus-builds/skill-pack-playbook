@@ -10,7 +10,7 @@ An agent loads [skills/build-skill-pack/SKILL.md](skills/build-skill-pack/SKILL.
 
 | Step | Produces | After | Fan out | Gate: who signs · which test |
 | --- | --- | --- | --- | --- |
-| B0 Intake | A consent note; transcripts in `$DATA_DIR`; one `intake.json` per meeting | — | yes: one agent per meeting or document | machine · `build/check_intake.py`: no quote, no item; a blank consent line is refused |
+| B0 Intake | Transcripts in `$DATA_DIR`; one `intake.json` per meeting | — | yes: one agent per meeting or document | machine · `build/check_intake.py`: no quote, no item |
 | B0.5 Prior-art scan | A dated verdict: what to borrow, what to avoid | B0 | yes: one agent per lens | builder owner reads the verdict · every claim carries its link and date |
 | B0.6 Build-time asks | At most 10 open asks per owner; their answers; the round's digest | B0, B0.5 | no: the integrator | each owner, in their console · the console refuses an 11th open ask (console/tests/test_core.py) |
 | B1 Scaffold | The skill pack tree: templates rendered, kit and console vendored; the first push | B0.6 | no | CI · the generated suite prints `RESULT: N passed` (tests/test_run_tests.py, tests/test_kit_drift.py) |
@@ -28,11 +28,10 @@ The same rows, with their status and the reference that signed each, are the ski
 
 ## B0 · Intake
 
-1. Ask for consent to record. Note who gave it and when.
-2. Put recordings, transcripts and briefs in `$DATA_DIR/meetings/<date>/`.
-3. One agent per meeting or document organizes it with [templates/meeting-intake.md](templates/meeting-intake.md) into `$DATA_DIR/intake/<date>.json`, in the shape of [templates/intake.schema.json](templates/intake.schema.json): every item has an `iid` that is never reused, an `audience` (`client` or `builder`) and a `source`. In a client hub the intake is `<hub>/intake/<date>.json`, and an item can name the `packs` it is for (CLI words; the meeting's `packs` is the default) and the meeting its `transcript`.
-4. `python3 build/check_intake.py $DATA_DIR/intake/*.json` checks all intakes together. It refuses an item with no source, a number with no quote or unit, a rounded or estimated number, a contradiction that is not asked as a question, and a meeting whose consent line is blank. A consent line that says consent was not given or not recorded passes the check: put it to the owner as a question (B0.6). In a client hub, check `<hub>/intake/*.json` with `--packs` naming the client's packs (an iid a pack's earlier meeting used is `iid_reused`, a pack not listed `unknown_pack`), and with a transcript (`--transcript FILE` for one intake file, or the meeting's `transcript`) each quote must sit in the speaker block at its source's time (`quote_not_at_source`).
-5. Numbers never enter a repository. After the owner answers, they wait as pending rows in `$DATA_DIR/intake/numbers.tsv` until B5.
+1. Put recordings, transcripts and briefs in `$DATA_DIR/meetings/<date>/`.
+2. One agent per meeting or document organizes it with [templates/meeting-intake.md](templates/meeting-intake.md) into `$DATA_DIR/intake/<date>.json`, in the shape of [templates/intake.schema.json](templates/intake.schema.json): every item has an `iid` that is never reused, an `audience` (`client` or `builder`) and a `source`. In a client hub the intake is `<hub>/intake/<date>.json`, and an item can name the `packs` it is for (CLI words; the meeting's `packs` is the default) and the meeting its `transcript`.
+3. `python3 build/check_intake.py $DATA_DIR/intake/*.json` checks all intakes together. It refuses an item with no source, a number with no quote or unit, a rounded or estimated number, and a contradiction that is not asked as a question. Recording consent is not checked: the meeting tool asks every participant before it records. In a client hub, check `<hub>/intake/*.json` with `--packs` naming the client's packs (an iid a pack's earlier meeting used is `iid_reused`, a pack not listed `unknown_pack`), and with a transcript (`--transcript FILE` for one intake file, or the meeting's `transcript`) each quote must sit in the speaker block at its source's time (`quote_not_at_source`).
+4. Numbers never enter a repository. After the owner answers, they wait as pending rows in `$DATA_DIR/intake/numbers.tsv` until B5.
 
 ## B0.5 · Prior-art scan
 
