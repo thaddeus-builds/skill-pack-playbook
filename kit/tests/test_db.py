@@ -25,7 +25,9 @@ by week, a stock snapshot):
       row; an added NOT NULL column without default is not "only adds"
   [6] human-table drift (columns or pk) always raises, before anything
       changes, read-only too; a missing human table is refused on a
-      read-only open unless declared human_added_later
+      read-only open unless declared human_added_later (hub_copies always
+      is: a file older than it opens, the next write open creates it with
+      its append-only triggers)
   [7] a file stamped by a newer skill pack is refused on every open and the
       dry run, before any read: bytes unchanged, no backup; read-only
       never stamps, write mode stamps
@@ -130,7 +132,8 @@ def stamp(path) -> int:
 
 
 SEEDED = {"client_facts": 2, "client_facts_history": 3, "decisions": 1,
-          "decisions_history": 2, "action_queue": 1, "action_effects": 2}
+          "decisions_history": 2, "action_queue": 1, "action_effects": 2,
+          "hub_copies": 1}
 
 
 def seed(s: db.SchemaSpec, con: sqlite3.Connection) -> None:
@@ -165,6 +168,10 @@ def seed(s: db.SchemaSpec, con: sqlite3.Connection) -> None:
             con.execute("INSERT INTO action_effects (queue_id, market, "
                         "effect_id, state, at, changed_by) VALUES (1, 'US', "
                         "'a1', ?, ?, 'owner@cli')", (state, t))
+        con.execute("INSERT INTO hub_copies (market, key, value, hub, "
+                    "hub_history_id, hub_digest, outcome, pack_history_id, "
+                    "copied_at, copied_by) VALUES ('US', 'unit_cost', '4.2', "
+                    "'acme', 7, 'd1', 'same', 3, ?, 'owner@hub')", (t,))
 
 
 def fresh(s: db.SchemaSpec | None = None, *, seeded: bool = True,
@@ -204,9 +211,9 @@ def t1_bootstrap() -> None:
           and "SHOP_DATA_DIR" in err and "SHOP_DB" in err, err)
     check("every spec table exists (human + cache)",
           set(s.tables) <= objects(path, "table"), objects(path, "table"))
-    check("the kit's six human tables are in every spec",
+    check("the kit's seven human tables are in every spec",
           set(schema_base.HUMAN) <= set(s.human_tables)
-          and len(s.human_tables) == 6, s.human_tables)
+          and len(s.human_tables) == 7, s.human_tables)
     check("views created", objects(path, "view") == set(VIEWS))
     check("triggers installed, named per spec",
           objects(path, "trigger") == set(db.triggers(s)),
@@ -656,6 +663,39 @@ def t6_human_drift() -> None:
     check("… and the next write open creates it",
           "action_effects" in objects(path, "table"))
 
+    path = fresh(s1)
+    c = raw(path)
+    for n in ("hub_copies_no_update", "hub_copies_no_delete",
+              "hub_copies_no_replace"):
+        c.execute(f"DROP TRIGGER {n}")
+    c.execute("DROP TABLE hub_copies")
+    c.close()
+    con = db.connect(s1, path, read_only=True)
+    check("a file older than hub_copies (schema_base.ADDED_LATER) opens "
+          "read-only with every with_human() spec",
+          "hub_copies" in s1.human_added_later
+          and db.human_row_counts(s1, con)["hub_copies"] == 0)
+    con.close()
+    quiet(lambda: db.connect(s1, path).close())
+    c = raw(path)
+    got = []
+    for sql in ("INSERT INTO hub_copies (market, key, value, hub, "
+                "hub_history_id, hub_digest, outcome, pack_history_id, "
+                "copied_at, copied_by) VALUES ('US', 'k', 'v', 'h', 1, 'd', "
+                "'copied', 1, 't', 'u')",
+                "UPDATE hub_copies SET outcome = 'same'",
+                "DELETE FROM hub_copies"):
+        try:
+            c.execute(sql)
+            got.append("ok")
+        except sqlite3.IntegrityError as e:
+            got.append(str(e)[:26])
+    c.close()
+    check("… the next write open creates it, append-only: an UPDATE and a "
+          "DELETE are refused in the file",
+          got == ["ok", "refused: UPDATE on hub_cop",
+                  "refused: DELETE on hub_cop"], got)
+
 
 def t7_too_new() -> None:
     print("\n[7] a file stamped by a newer skill pack is refused before any "
@@ -817,7 +857,7 @@ def t11_hash() -> None:
     base = db.schema_hash(db.with_human({}, version=1))
     check("the kit's human tables are pinned (a change here means every "
           "skill pack bumps its schema version; then re-pin)",
-          base == "5c8623e090b32a33", base)
+          base == "cbc2de94bc52aa06", base)
     h = db.schema_hash(spec())
     check("stable across calls and cache insertion order",
           h == db.schema_hash(spec())

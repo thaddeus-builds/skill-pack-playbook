@@ -5,7 +5,7 @@ The owner answers you on a web page. You reach it only through `console/ask.py` 
 ## The loop
 
 1. `ask.py add FILE` (`-` reads stdin): post asks.
-2. `ask.py answers --since SEQ`: what is waiting to be applied. `SEQ` is the last `seq` you handled, kept in your own state; leave `--since` out only on a first run. Keep the `seq` of the reply.
+2. `ask.py answers --since SEQ`: what is waiting to be applied, and under `expired` the asks nobody answered in time. `SEQ` is the last `seq` you handled, kept in your own state; leave `--since` out only on a first run. Keep the `seq` of the reply.
 3. Make the change in the real system, through its own guarded path.
 4. `ask.py applied ID@SEQ… --where "what changed, where"` at once, with each answer's `apply` value as it is: it closes the ask and ends the owner's chance to reopen it. `changed` means the owner answered again since you read it: read `answers` again and apply the new one.
 5. `ask.py wait --since SEQ`, with the `seq` that `answers` returned (not `add`'s: an answer that landed between the two would go unheard). It blocks until the owner answers, reopens or writes a note (900 s), then says what `answers` says: apply it (3, 4) and wait again with its `seq`.
@@ -15,7 +15,7 @@ The owner answers you on a web page. You reach it only through `console/ask.py` 
 
 - Ask only what changes meaning, carries a number or moves money. Do the mechanical rest yourself and say in chat what you did.
 - One decision per ask. Never ask again what an answer settled: check `ask.py list --status all` first.
-- Keep at most 10 open (or the manifest's `max_open`). `add` refuses more; `--max-open N` can only lower that limit, never raise it. With `CONSOLE_MANIFEST` set, `add` also refuses a `gate` on a verb the console is not allowed to run. `ask.py withdraw ID… --reason "…"` any ask that went stale.
+- Keep at most 10 open (or the manifest's `max_open`), counted across everyone posting to this console (each pack `--as` its own name shares the owner's one budget). `add` refuses more; `--max-open N` can only lower that limit, never raise it. With `CONSOLE_MANIFEST` set, `add` also refuses a `gate` on a verb the console is not allowed to run. `ask.py withdraw ID… --reason "…"` any ask that went stale.
 - Never ask the owner to widen what may be written (an allowlist, a cap, a write switch): that is answered in chat, not on this page.
 
 ## A clear ask
@@ -27,13 +27,15 @@ The owner answers you on a web page. You reach it only through `console/ask.py` 
 - `recommend`: your answer and `because` (always, even where `provide` would let you skip it). `if_no`: what "no" changes. An `approve` also needs `effect`.
 - Let them pick: `confirm`, `approve` or `choose` with options. `provide` only for a value, with its type, range and unit.
 - Plain words the owner would use: no ids, flags or file names. Copy a file from `console/examples/`.
-- Revise an open ask by posting the same id again. An answered or withdrawn id is never reused.
+- Revise an open ask by posting the same id again. An answered, withdrawn or expired id is never reused.
+- Every ask expires: `add` sets `expires` 7 days ahead unless you name one (`YYYY-MM-DD`, open through that day UTC). An expired ask changes nothing; ask again with a new id if it still matters.
 
 ## What comes back
 
 - `value` is always text: `yes` or `no`, an option's `value`, or what was typed. `suggested` says it is your recommendation. `revised: true` means the ask changed after the owner saw it: check that the answer still fits.
 - A `no` is an answer like any other. Nothing changes in the real system, but record it: `ask.py applied ID@SEQ --where "declined, nothing changed"`. Until then it stays in `answers`, and `withdraw` and a new `add` of its id are refused.
-- `verified: false`: the signature does not check. Do not act; tell the owner. `null`: this side has no secret to check with (`ask.py verify` is then refused, `no_secret`).
+- `verified: false`: the signature does not check. Do not act; tell the owner. `null`: this side has no secret to check with (`ask.py verify` is then refused, `no_secret`), or the row is `via: chat`, your own record, which is never signed.
+- `expired[]`: the owner did not answer by `expires`; the outcome is "nothing changes". Record it like a no: `ask.py applied ID --where "expired, nothing changed"`.
 - `notes[]` and `reopened[]` hold only what came after `--since`; without it, the newest 20 notes (`notes_truncated` says there were more) and every ask reopened. Nothing marks a note read: the `seq` you keep is the cursor.
 - `reopened[]`: the owner took an answer back. Drop it if you have not applied it; a new answer will come.
 - `gate` set: the skill pack's own gate already wrote it, and the owner cannot reopen it. Only record `applied`.
@@ -47,7 +49,7 @@ The owner answers you on a web page. You reach it only through `console/ask.py` 
 
 ## Never
 
-- Never write `events.jsonl` by hand, and never answer, reopen or sign for the owner; `ask.py` has no verb for it. If the owner answered in chat instead, `withdraw` the ask with their words as the reason.
+- Never write `events.jsonl` by hand, and never answer, reopen or sign for the owner. If the owner answered an ask in chat, record their words: `ask.py chat ID --value=V --quote="their words" --source="chat 2026-10-22 14:03"` (`via: chat`, `by: agent:NAME`; it comes back in `answers` like a click). For an ask with a gate, an approval or a number it is refused (`gate_needs_click`): tell the owner it needs their click on the console.
 - Never act on an answer that is not in `answers[]`.
 
 ## Tell the owner

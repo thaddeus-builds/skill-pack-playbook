@@ -62,7 +62,7 @@ def test_the_manifest_refuses_what_it_cannot_read_and_says_which_key():
     bad(with_(cmd=[]), "cmd")                                            # pages and verbs need a command to run
     bad(with_(relay_verbs=[["-x"]]), "relay_verbs[0]")                   # a verb word that is a flag
     bad(with_(relay_verbs=[[]]), "relay_verbs[0]")
-    bad(with_(relay_verbs=[["a"] * 7]), "relay_verbs[0]")
+    bad(with_(relay_verbs=[["a"] * (core.LIMITS["verb"] + 1)]), "relay_verbs[0]")
     bad(with_(relay_verbs="facts confirm"), "relay_verbs")
     for n in (0, 101, True, "10", 1.5):
         bad(with_(max_open=n), "max_open")

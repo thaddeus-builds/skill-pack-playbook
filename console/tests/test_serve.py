@@ -939,6 +939,30 @@ def test_a_corrupt_log_is_a_500_page_nothing_is_written_and_a_repaired_log_is_se
         noted(srv.post("note", {"text": "hello"}, token=tok))
 
 
+def test_an_ask_that_expires_leaves_the_page_without_a_write_and_cannot_be_answered():
+    """The cached state is folded again once an open ask's deadline passes, even
+    though the log did not change; the ask moves to History as expired."""
+    with _t.tmpdir() as root, inproc(root) as s:
+        s.store.post("bot", [raw_ask("confirm", "c1", expires="2099-01-01")])
+        first = s.app.state()
+        assert first["asks"]["c1"]["status"] == "open" and s.app.state() is first
+        page = urllib.request.urlopen(s.url).read().decode()
+        assert "Title of c1" in page and "Open until 2099-01-01" in page
+        real = core.now
+        core.now = lambda: "2099-01-02T00:00:00Z"
+        try:
+            st = s.app.state()
+            assert st is not first and st["asks"]["c1"]["status"] == "expired"
+            assert s.app.state() is st                                              # and then kept again
+            with s.app.lock, _t.assert_raises("not_open"):
+                s.store.answer("alice", "c1", "yes", shown=first["asks"]["c1"]["hash"])
+            hist = urllib.request.urlopen(s.url + "history").read().decode()
+            assert "Expired" in hist and "No answer by 2099-01-01, so nothing changes" in hist
+            assert "Title of c1" not in urllib.request.urlopen(s.url).read().decode()
+        finally:
+            core.now = real
+
+
 def test_the_log_is_read_again_only_when_its_size_or_time_changed():
     with _t.tmpdir() as root, inproc(root) as s:
         s.store.post("bot", [raw_ask("confirm", "c1")])

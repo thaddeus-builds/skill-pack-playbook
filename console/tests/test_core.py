@@ -1685,11 +1685,149 @@ def test_a_retired_advice_event_in_an_old_log_is_set_aside_not_a_crash():
         s.state()
 
 
+# ------------------------------------------- expiry and answers given in chat --
+
+OLD_LOG = [  # a log as consoles before `expires` and `chat` wrote it: it must fold exactly as it always did
+    {"seq": 1, "at": "2026-01-01T00:00:00Z", "by": "agent:bot", "type": "ask",
+     "ask": {"id": "a", "step": "confirm", "kind": "general", "group": "", "title": "A?", "why": "w",
+             "evidence": [{"label": "l", "value": "v"}], "if_no": "n", "recommend": {"value": "yes", "because": "b"}}},
+    {"seq": 2, "at": "2026-01-01T00:00:00Z", "by": "agent:bot", "type": "ask",
+     "ask": {"id": "b", "step": "confirm", "kind": "general", "group": "", "title": "B?", "why": "w",
+             "evidence": [{"label": "l", "value": "v"}], "if_no": "n", "recommend": {"value": "yes", "because": "b"}}},
+    {"seq": 3, "at": "2026-01-02T00:00:00Z", "by": "web:bob", "type": "answer", "id": "a", "value": "yes", "sig": "x"},
+    {"seq": 4, "at": "2026-01-03T00:00:00Z", "by": "agent:bot", "type": "applied", "id": "a", "where": "w"},
+    {"seq": 5, "at": "2026-01-04T00:00:00Z", "by": "agent:bot", "type": "say", "text": "hi"},
+]
+
+
+def test_an_old_log_replays_unchanged_whatever_the_clock_says():
+    """The schema change is additive: an ask without `expires` never lapses, so a
+    log written before it folds to the same state at any `now`, and the store reads it."""
+    before = core.fold(copy.deepcopy(OLD_LOG))
+    for at in (None, "2026-01-05T00:00:00Z", "2999-12-31T23:59:59Z"):
+        assert core.fold(copy.deepcopy(OLD_LOG), at) == before, at
+    assert {i: x["status"] for i, x in before["asks"].items()} == {"a": "answered", "b": "open"}
+    assert before["asks"]["a"]["applied"]["where"] == "w" and before["problems"] == []
+    assert core.next_expiry(before) is None
+    with tmpstore() as s:
+        put(s, "".join(json.dumps(e) + "\n" for e in OLD_LOG).encode())
+        assert s.state()["asks"]["b"]["status"] == "open" and s.state("2999-01-01T00:00:00Z")["asks"]["b"]["status"] == "open"
+
+
+def test_expires_is_a_date_or_a_utc_time_and_a_date_lapses_when_it_ends():
+    assert ok(ask(expires="2026-10-29"))["expires"] == "2026-10-29"
+    assert ok(ask(expires="2026-10-29T12:00:00Z"))["expires"] == "2026-10-29T12:00:00Z"
+    assert "expires" not in ok(ask())                       # optional in an ask; ask.py add gives a new one its default
+    for bad in ("2026-13-01", "29/10/2026", "2026-10-29 12:00", "2026-10-29T12:00:00+08:00", 20261029, True, ["x"]):
+        assert has(errs(ask(expires=bad)), "expires", "bad_value"), bad
+    assert core.deadline("2026-10-29") == "2026-10-30T00:00:00Z" and core.deadline("2026-12-31") == "2027-01-01T00:00:00Z"
+    assert core.deadline("2026-10-29T12:00:00Z") == "2026-10-29T12:00:00Z" and core.deadline("x") is None
+    assert core.days_ahead(7, "2026-10-22T14:03:00Z") == "2026-10-29T14:03:00Z"
+
+
+def test_an_open_ask_past_its_deadline_is_expired_and_nothing_changes():
+    a = ok(ask(expires="2026-01-10"))
+    E = [event(1, "ask", ask=a)]
+    assert core.fold(E, "2026-01-10T23:59:59Z")["asks"]["tea-word"]["status"] == "open"     # open through that day
+    st = core.fold(E, "2026-01-11T00:00:00Z")
+    cur = st["asks"]["tea-word"]
+    assert cur["status"] == "expired" and cur["expired"] == {"at": "2026-01-11T00:00:00Z", "outcome": "nothing changes"}
+    assert core.open_asks(st) == [] and core.next_expiry(core.fold(E)) == "2026-01-11T00:00:00Z"
+    late = dict(event(2, "answer", id="tea-word", value="yes", subject=core.subject_hash(a), by="web:bob"),
+                at="2026-01-12T00:00:00Z")
+    st = core.fold(E + [late])                               # no clock given: the late answer's own time counts
+    assert st["asks"]["tea-word"]["status"] == "expired" and [p["code"] for p in st["problems"]] == ["not_open"]
+    st = core.fold(E + [dict(event(2, "ask", ask={**a, "title": "again"}), at="2026-01-12T00:00:00Z")])
+    assert [p["code"] for p in st["problems"]] == ["id_used"]                  # an expired id is never used again
+    recorded = core.fold(E + [dict(event(2, "applied", id="tea-word", where="expired, nothing changed"),
+                                   at="2026-01-12T00:00:00Z")])
+    assert recorded["asks"]["tea-word"]["status"] == "expired" and recorded["asks"]["tea-word"]["applied"]
+
+
+def test_the_store_refuses_to_answer_revise_or_reuse_an_expired_ask_and_records_it_as_applied():
+    with tmpstore() as s:
+        s.post("bot", [ask(expires="2099-01-01")])
+        h = shown(s)
+        with open(s.path, "rb") as f:                        # the deadline passes: rewrite it into the past
+            data = f.read().replace(b"2099-01-01", b"2000-01-01")
+        put(s, data)
+        assert s.state()["asks"]["tea-word"]["status"] == "expired"
+        with assert_raises("not_open"):
+            s.answer("bob", "tea-word", "yes", shown=h)
+        with assert_raises("id_used"):
+            s.post("bot", [ask()])
+        with assert_raises("not_open"):
+            s.withdraw("bot", ["tea-word"], "r")
+        with assert_raises("not_open"):
+            s.chat("bot", "tea-word", "yes", quote="yes")
+        with assert_raises("changed"):
+            s.applied("bot", ["tea-word"], "x", seqs={"tea-word": 1})
+        s.applied("bot", ["tea-word"], "expired, nothing changed")
+        with assert_raises("already_applied"):
+            s.applied("bot", ["tea-word"], "again")
+        assert s.state()["asks"]["tea-word"]["status"] == "expired"
+
+
+def test_post_gives_a_new_ask_its_default_expiry_and_a_revision_keeps_its_own():
+    with tmpstore() as s:
+        s.post("bot", [ask()], default_expires="2099-01-01T00:00:00Z")
+        assert s.state()["asks"]["tea-word"]["ask"]["expires"] == "2099-01-01T00:00:00Z"
+        r = s.post("bot", [ask()], default_expires="2099-02-02T00:00:00Z")
+        assert r["unchanged"] == ["tea-word"]                 # the same ask again is not a change
+        r = s.post("bot", [ask(title="New title?")], default_expires="2099-02-02T00:00:00Z")
+        assert r["updated"] == ["tea-word"] and s.state()["asks"]["tea-word"]["ask"]["expires"] == "2099-01-01T00:00:00Z"
+        s.post("bot", [ask(title="New title?", expires="2099-03-03")])
+        assert s.state()["asks"]["tea-word"]["ask"]["expires"] == "2099-03-03"     # one it names is its own
+        with assert_raises("invalid_ask") as r:
+            s.post("bot", [ask(id="late", expires="2000-01-01")])
+        assert r.err.params["errors"][0]["field"] == "expires"
+        s.post("bot", [ask(id="plain")])
+        assert "expires" not in s.state()["asks"]["plain"]["ask"]   # no default given: none (core's callers choose)
+
+
+def test_a_chat_answer_is_the_agents_record_never_a_click():
+    with tmpstore() as s, env(CONSOLE_SECRET="k" * 32):
+        s.post("bot", [ask("choose")])
+        e = s.chat("bot", "tea-word", "b", quote="Mixes, please.", source="chat 2026-10-22 14:03")
+        assert e["type"] == "chat" and e["by"] == "agent:bot" and e["via"] == "chat" and "sig" not in e
+        assert (e["value"], e["quote"], e["source"], e["suggested"]) == ("b", "Mixes, please.", "chat 2026-10-22 14:03", False)
+        cur = s.state()["asks"]["tea-word"]
+        assert cur["status"] == "answered" and cur["answer"]["seq"] == e["seq"] and e["subject"] == cur["hash"]
+        s.reopen("bob", "tea-word", e["seq"])                 # the owner can take back what the agent wrote down
+        assert s.state()["asks"]["tea-word"]["status"] == "open"
+        e = s.chat("bot", "tea-word", "a", quote="Blends after all.")
+        assert "source" not in e and e["suggested"] is True
+        s.applied("bot", ["tea-word"], "catalogue", seqs={"tea-word": e["seq"]})
+        check_log(s, 5, b"k" * 32)                            # every human event still verifies; chat is not one
+
+
+def test_a_chat_answer_is_checked_like_any_answer_and_refused_where_a_click_is_needed():
+    with tmpstore() as s:
+        s.post("bot", [ask("choose"), gated(), ask("approve", id="spend"), ask("provide", id="cost"),
+                       ask("provide", id="name", input={"type": "text"})])
+        before = raw_log(s)
+        for id, why in (("unit-cost", "gate"), ("spend", "approve"), ("cost", "number")):
+            with assert_raises("gate_needs_click") as r:
+                s.chat("bot", id, "yes" if id == "spend" else "12", quote="go ahead")
+            assert r.err.params == {"id": id, "why": why}
+        with assert_raises("bad_value"):
+            s.chat("bot", "tea-word", "z", quote="the fourth one")
+        with assert_raises("bad_request"):
+            s.chat("bot", "tea-word", "a", quote="  ")
+        with assert_raises("unknown_id"):
+            s.chat("bot", "nope", "a", quote="q")
+        assert raw_log(s) == before                           # nothing written by any refusal
+        assert s.chat("bot", "name", "Northwind", quote="Call it Northwind")["value"] == "Northwind"
+    a = ok(gated())                                           # a chat event for a gated ask in a log edited by hand
+    st = core.fold([event(1, "ask", ask=a), event(2, "chat", id="unit-cost", value="12", quote="q", subject=core.subject_hash(a))])
+    assert st["asks"]["unit-cost"]["status"] == "open" and [p["code"] for p in st["problems"]] == ["gate_needs_click"]
+
+
 # ------------------------------------------------ the role split, signing --
 
 def test_the_agent_cannot_write_a_human_event_nor_the_reverse():
     assert set(core.ROLES) == {"agent", "human"}
-    assert set(core.ROLES["agent"]) == {"ask", "withdraw", "applied", "say"}
+    assert set(core.ROLES["agent"]) == {"ask", "withdraw", "applied", "say", "chat"}
     assert set(core.ROLES["human"]) == {"answer", "reopen", "note", "action"}
     with tmpstore() as s:
         with s._txn() as (box, append):
