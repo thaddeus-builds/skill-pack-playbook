@@ -119,7 +119,7 @@ def test_a_number_waits_as_pending_in_the_data_folder_and_never_enters_the_repo(
                       "applies_to": "the time from ordering Sencha to having it in the warehouse",
                       "quote": asks["intake-n1"]["evidence"][0]["quote"], "source": "meeting:2026-03-02 00:16:20",
                       "status": "pending", "suggested": "no", "comment": "it got slower",
-                      "ask": "intake-n1", "decided": "console:" + seq_of(w, "n1")}], n
+                      "ask": "intake-n1", "decided": "console:" + seq_of(w, "n1"), "packs": ""}], n
         assert _t.snapshot(w["repo"]) == before                            # the repo did not change at all
         assert out["follow_up"] and out["follow_up"][0]["comment"] == "it got slower"
 
@@ -375,6 +375,59 @@ def test_only_apply_answers_writes_and_no_build_tool_reads_the_log_or_imports_th
             assert "os.replace" in writes and "tempfile.mkstemp" in writes     # the check sees a writer
         else:
             assert not writes and not opened_for_writing, (name, writes)
+
+
+# ------------------------------------------------- a client hub's own asks --
+
+def hub_loop(w, intake, answers: dict, *extra):
+    """The hub's round: --hub asks, answered, applied."""
+    code, asks = _t.tool("intake_to_asks.py", "--intake", *intake, "--pick", ",".join(answers), "--hub")
+    assert code == 0, asks
+    assert _t.ask(w["con"], "add", "-", stdin=json.dumps(asks))[0] == 0
+    _t.owner_answers(w["con"], {f"hub-intake-{i}": v for i, v in answers.items()})
+    return _t.tool("apply_answers.py", "--answers", answers_file(w), "--intake", *intake,
+                   "--ssot", w["ssot"], "--data-dir", w["data"], *extra)
+
+
+def hub_intake(w):
+    m1 = _t.load(_t.FIX1)
+    m1["meeting"]["packs"] = ["gads"]
+    next(x for x in m1["questions"] if x["iid"] == "q1")["packs"] = ["gads", "meas"]
+    return [_t.save(os.path.join(w["root"], "m1.intake.json"), m1), _t.FIX2]
+
+
+def test_a_hub_answer_is_applied_and_numbers_and_questions_name_their_packs():
+    with _t.workspace() as w:
+        intake = hub_intake(w)
+        code, out = hub_loop(w, intake, {"w1": "yes", "n1": "45", "q1": "USD", "s3": "yes"})
+        assert code == 0 and sorted(a["iid"] for a in out["applied"]) == ["n1", "q1", "s3", "w1"], out
+        assert row(os.path.join(w["ssot"], "glossary.agent.tsv"), "term", "sampler")["ask"] == "hub-intake-w1"
+        n = _t.tsv(os.path.join(w["data"], "intake", "numbers.tsv"))
+        assert [(r["key"], r["packs"], r["ask"]) for r in n] == [("lead_time_days", "gads", "hub-intake-n1")], n
+        q = _t.tsv(os.path.join(w["data"], "intake", "questions.tsv"))
+        assert [(r["answer"], r["packs"]) for r in q] == [("USD", "gads,meas")], q   # the item's own packs win
+        assert all(c.split()[3].startswith("hub-intake-") for c in out["commands"]), out["commands"]
+
+
+def test_a_numbers_file_made_before_the_packs_column_still_loads_and_gains_it_only_when_needed():
+    with _t.workspace() as w:
+        old_cols = ["key", "value", "unit", "applies_to", "quote", "source", "status",
+                    "suggested", "comment", "ask", "decided"]
+        path = os.path.join(w["data"], "intake", "numbers.tsv")
+        os.makedirs(os.path.dirname(path))
+        old_row = ["daily_ad_cap", "25", "USD", "x", "y", "meeting:2026-01-01 00:00:01", "pending",
+                   "no", "", "intake-n9", "console:intake-n9@1"]
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\t".join(old_cols) + "\n" + "\t".join(old_row) + "\n")
+        code, out, _ = loop(w, {"n1": "45"})                          # an item with no packs: the file keeps its shape
+        assert code == 0, out
+        assert _t.read(path).splitlines()[0].split("\t") == old_cols and len(_t.tsv(path)) == 2
+        code, out = hub_loop(w, hub_intake(w), {"n3": "6"})           # an item for gads: the column is added
+        assert code == 0, out
+        rows = _t.tsv(path)
+        assert _t.read(path).splitlines()[0].split("\t") == old_cols + ["packs"], _t.read(path)
+        assert [(r["key"], r["packs"]) for r in rows] == [("daily_ad_cap", ""), ("lead_time_days", ""),
+                                                           ("reorder_point_weeks", "gads")], rows
 
 
 if __name__ == "__main__":
