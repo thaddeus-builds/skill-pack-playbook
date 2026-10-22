@@ -260,7 +260,9 @@ def with_human(cache: Mapping[str, dict], *, version: int,
                      **{t: ("DELETE",) for t in extra}, **append_only},
         frozen_columns={**schema_base.FROZEN_COLUMNS, **frozen},
         period_columns=dict(period_columns or {}), views=dict(views or {}),
-        backups_keep=backups_keep, human_added_later=tuple(human_added_later))
+        backups_keep=backups_keep,
+        human_added_later=tuple(dict.fromkeys(
+            (*schema_base.ADDED_LATER, *human_added_later))))
 
 
 def schema_hash(spec: SchemaSpec) -> str:
