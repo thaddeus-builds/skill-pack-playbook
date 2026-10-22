@@ -46,6 +46,10 @@ or default>". The kit keeps the reference order: assume > confirmed >
 default. Like the reference, get()/load() without a connection and a
 market are the plain TSV defaults (no assume, no facts).
 
+definition_diffs(mine, theirs): what two fact key files say differently
+about the keys both define (type, unit, bounds, labels), for a client
+hub's shared facts (kit.facts sync-hub, kit.guards.hub_keys).
+
 Additions: FactKeys.validate(…, thresholds=) routes `threshold_<name>`
 keys to Thresholds (the reference's SETTABLE_FACT_KEYS held both);
 DecisionRegistry(entity_ids={et: regex}) + check_entity_id() port the
@@ -333,6 +337,36 @@ def _fact_value(key: str, raw: str, kind: str, choices: tuple[str, ...],
         raise SkillPackError(msg("fact_value_empty",
                                f"{key}: a value cannot be empty", key=key))
     return v
+
+
+def definition_diffs(mine: Path | str, theirs: Path | str
+                     ) -> dict[str, list[str]]:
+    """{key: [what differs]} for every key two fact key files both define:
+    its type (a choice's options in order), unit, min and max (compared as
+    numbers) and each label_<lang> column both files have (what the key
+    means). `why` (what reads the key) is each file's own. A key one file
+    lacks is not compared. Both files are read strictly (read_tsv); either
+    may name other languages than the bound skill pack's."""
+    need = ["key", "type", "unit", "min", "max"]
+    a = {r["key"]: r for r in read_tsv(mine, need, id_col="key")}
+    b = {r["key"]: r for r in read_tsv(theirs, need, id_col="key")}
+    labels = sorted({c for r in a.values() for c in r if c.startswith("label_")}
+                    & {c for r in b.values() for c in r
+                       if c.startswith("label_")})
+    out: dict[str, list[str]] = {}
+    for key in (k for k in a if k in b):
+        x, y, diff = a[key], b[key], []
+        for col in ("type", "unit", *labels):
+            if x[col] != y[col]:
+                diff.append(f"{col}: {x[col]!r} here, {y[col]!r} there")
+        for col in ("min", "max"):
+            dx, dy = _decimal(x[col]), _decimal(y[col])
+            if (dx is None) != (dy is None) or (dx is not None and dx != dy) \
+                    or (dx is None and x[col] != y[col]):
+                diff.append(f"{col}: {x[col]!r} here, {y[col]!r} there")
+        if diff:
+            out[key] = diff
+    return out
 
 
 # ---- decision keys ---------------------------------------------------------

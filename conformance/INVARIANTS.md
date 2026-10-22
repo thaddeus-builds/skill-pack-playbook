@@ -15,6 +15,10 @@ A rule is listed only when two skill packs reached it on their own. Evidence was
 | I7 | **One CLI facade; one `RESULT: N passed` line** from the whole suite, and a suite that prints none fails. | all three | not yet: needs the skill pack's test run |
 | I8 | **At most 10 open asks per owner**, and a read-only report page built from one data object. | seoh, adcut (kit `queue`) | not yet: ppc has neither on its current branch |
 
+### I3 and a client hub's copies
+
+A client hub keeps the facts every pack of one client shares in its own store, confirmed once through the kit's gate there. `<cli> facts sync-hub` then writes such a fact into a pack's `client_facts` as confirmed without a gate of its own (history action `hub_copy`, changed_by `<user>@hub`). That is still I3: the human act is the hub's gated confirm, and the copy carries a reference to it, its `hub_history_id` and `hub_digest` (in the source `hub:<hub>@<hub_history_id>#<digest16>` and in an append-only `hub_copies` row). Only a hub row whose last history row is a `confirm` signed by a person (tty, relay or the client's own) is copied; a pack's own confirmed value is never overwritten (a differing one is a `conflict` and becomes one ask), and each hub version is copied at most once. Tested in `kit/tests/test_hub_facts.py`.
+
 ## How to read a result
 
 `python3 conformance/check.py conformance/adapters/<name>.toml --root <skill pack checkout>` prints PASS, FAIL or SKIP per check. A SKIP is a check the adapter does not cover, not a pass. The runner exits 1 on any failure and when nothing passed.
