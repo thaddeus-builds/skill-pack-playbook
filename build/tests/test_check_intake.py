@@ -83,18 +83,14 @@ def test_the_shape_is_the_schema_and_every_problem_names_iid_code_and_message():
         assert set(p) >= {"iid", "code", "message"} and p["code"] in ci.CODES, p
 
 
-def test_every_meeting_has_a_consent_line():
-    d = broken(lambda d: d["meeting"].pop("consent"))
-    assert codes(check(d)[1]) == {"no_consent"}
-    d = broken(lambda d: d["meeting"].update(consent="  "))
-    assert codes(check(d)[1]) == {"no_consent"}
-    d = broken(lambda d: d["meeting"].update(consent=""))
-    assert codes(check(d)[1]) == {"no_consent"}
-    # BUILD.md B0, meeting-intake.md and the schema say: a line that says consent was not given or not recorded
-    # passes (the owner is then asked); only a blank line is refused
-    for said in ("not given", "not recorded", "not given: the client declined at 00:00:12"):
-        d = broken(lambda d: d["meeting"].update(consent=said))
-        assert check(d)[0] == 0, said
+def test_recording_consent_is_not_checked():
+    # the meeting tool asks every participant before it records (owner, 2026-10-22): no line, a blank one or any
+    # words pass, and an older intake that still has the line passes too
+    for change in (lambda d: d["meeting"].pop("consent"), lambda d: d["meeting"].update(consent=""),
+                   lambda d: d["meeting"].update(consent="given by Mara at 00:00:12")):
+        d = broken(change)
+        assert check(d)[0] == 0
+    assert "no_consent" not in ci.CODES
 
 
 def test_every_item_has_a_source_a_timestamp_on_a_real_date_or_a_document():
@@ -364,7 +360,7 @@ REQUIRED = {
     "number": ALL_ITEMS | {"key", "value", "unit", "applies_to", "quote"},
     "question": ALL_ITEMS | {"text"},
 }
-MEETING_REQUIRED = {"date", "participants", "consent"}
+MEETING_REQUIRED = {"date", "participants"}
 TOP_REQUIRED = {"meeting", "goals", "words", "stories", "numbers", "questions"}
 
 
@@ -406,7 +402,7 @@ def test_the_schema_requires_what_the_prompt_and_build_md_promise():
     for said in ("Give every item an `iid`", "Give every item an `audience`", "A story and a number each carry a `quote`"):
         assert said in prompt, said                                      # the prose the table above is read from
     assert "every item has an `iid` that is never reused, an `audience` (`client` or `builder`) and a `source`" in build
-    assert "consent line that says consent was not given or not recorded passes the check" in build
+    assert "Recording consent is not checked" in build
 
 
 def test_the_example_holds_every_key_the_schema_requires_and_none_it_forbids():

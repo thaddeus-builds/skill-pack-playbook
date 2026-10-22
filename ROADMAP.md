@@ -45,6 +45,7 @@ Updated: 2026-10-22
 - [R3] 2026-10-21 the Amazon PPC skill pack is not moved onto the kit for now: "暂不迁移" (it holds its own copies of ten kit modules, which have drifted far from the kit's; the black-box conformance check stays, D7)
 - [R4] 2026-10-21 each skill pack draws its own overview page from its registries (templates/system-overview.md) and the README points to it; the README's pipeline diagram, which is the same for every skill pack, stays: "同意这样分工"
 - [R5] 2026-10-22 the client hub design (W4), all five recommendations: a client fact is confirmed once at the hub and packs copy it without asking again; the hub starts with the markets, the facts two packs define the same way and break-even ROAS as `npr_roas` (replacing `roas_target`); one cap of 10 open asks per owner across a client's packs; words and choices may be answered in chat, confirmations need a click or a code; start with one real client, new facts only: "agree" (chat 2026-10-22)
+- [R6] 2026-10-22 recording consent is no longer asked or checked at B0: the meeting tool asks every participant before it records, so the rule only repeated it: "删除这个playbook 规定" (chat 2026-10-22)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`

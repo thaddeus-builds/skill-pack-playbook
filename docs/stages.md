@@ -8,7 +8,7 @@ Every project starts from what the client actually said, not from what the agent
 
 ```mermaid
 flowchart LR
-    R["Record the meeting<br/>(with consent)"] --> T["Transcript"]
+    R["Record the meeting"] --> T["Transcript"]
     T --> AI["AI organizer"]
     AI --> G["Goals"]
     AI --> W["Their words<br/>(glossary candidates)"]
@@ -20,7 +20,7 @@ flowchart LR
     O -->|change / drop| X["Discarded or rewritten"]
 ```
 
-1. **Record and transcribe** each client meeting, with the client's consent. Recordings and transcripts stay in the client's own data folder, never in the code repository.
+1. **Record and transcribe** each client meeting (the meeting tool asks every participant before it records). Recordings and transcripts stay in the client's own data folder, never in the code repository.
 2. **The AI organizes the transcript into five buckets:** goals, the client's own words for things, draft user stories, numbers they stated (costs, lead times, budgets, limits), and open questions.
 3. **Every item cites its source:** meeting date and the timestamp of the quote. A number with no quote is not written down.
 4. **Numbers enter as pending values** with the meeting as their source; they drive nothing until a human confirms them.
@@ -51,7 +51,7 @@ Each stage ends at a gate someone signs; the lesson column is what the source pr
 
 Install these before the first feature; each costs an hour now and saved days in the source project.
 
-- [ ] Meeting intake: consent, recording, transcript in the client's data folder, the organizer prompt ([template](../templates/meeting-intake.md))
+- [ ] Meeting intake: recording, transcript in the client's data folder, the organizer prompt ([template](../templates/meeting-intake.md))
 - [ ] A review page before the first paid batch: the owner decides per item and the next session reads the decisions back ([loop](../templates/owner-review-loop.md)); paid vendor APIs pinned down cheaply first and every request preflighted against the vendor's published schema ([discovery](../templates/vendor-api-discovery.md))
 - [ ] `docs/ROADMAP.md` in the one roadmap format from day one, held by `tests/test_roadmap.py` ([template](../templates/ROADMAP.md)), with the session start and end checklists ([handoff](../templates/session-handoff.md))
 - [ ] The test kit before the first feature: a runner that fails a missing RESULT line, a reported failure, `0 passed` or a leaked temp file; one clock; layering rules; a release-archive test ([kit](../templates/tests/)). Every rule in the agent instructions names its test ([template](../templates/AGENT_INSTRUCTIONS.md))
