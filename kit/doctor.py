@@ -29,6 +29,13 @@ names its fix in `next`):
                  table drift, an unreadable file, stale or unknown tables warn
   markets        a declared market (confirmed); pending-only or none warns;
                  `markets = []` needs none
+  hub            with a client hub named (`<P>_HUB_DIR`, set by the hub's
+                 bin/hub): a hub fact this skill pack declares that its
+                 hub_copies has not seen at the hub's current version warns
+                 (fact_hub_copy_stale: the key and both versions; the fix is
+                 `facts sync-hub`), so do a hub fact that did not come from
+                 the hub's gate and a key defined otherwise at the hub; all
+                 current is ok. No hub named: no line (kit.facts.doctor_hub)
   writes         "writes: off" is the healthy default (ok); the kill switch or
                  STOP file is ok too; writes ON is info; a
                  `<P>_ALLOW_WRITES` value that is not 1 warns (it enables
@@ -533,11 +540,18 @@ def check_checkout(ctx: Context) -> None:
         runs_head=runs_head, runs_dirty=runs_dirty))
 
 
+def check_hub(ctx: Context) -> None:
+    """The client hub's facts this skill pack copies (kit.facts.doctor_hub):
+    nothing unless `<P>_HUB_DIR` names a hub."""
+    from kit import facts
+    facts.doctor_hub(ctx)
+
+
 BUILTIN: tuple[Check, ...] = (check_skill_pack, check_env_chain,
                               check_token_source, check_home_secrets,
                               check_env_files, check_console_secret,
                               check_data_dir, check_db,
-                              check_markets, check_writes)
+                              check_markets, check_hub, check_writes)
 
 
 # ---- run --------------------------------------------------------------------

@@ -9,6 +9,10 @@ format (console/README.md "A clear ask"; console/examples/*.json):
     be confirmed for a market before it);
   * a pending client fact -> `provide` (number / date / text, with the
     registry's bounds and unit), `choose` (a choice key) or `confirm`;
+  * a client hub's fact this skill pack confirmed otherwise (an open
+    `conflict` of `facts sync-hub`, kit.facts.hub_conflicts) -> ONE
+    `choose`: the hub's value or the own one, gated by `facts confirm
+    KEY --value`;
   * a pending decision -> `provide` / `choose` / `confirm` by its domain;
   * a pending queue item -> `approve`, its `effect` from the proposal's
     `expected`;
@@ -374,6 +378,66 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
                        if_no=if_no)
 
 
+def _hub_conflict_ask(con: sqlite3.Connection, c: dict, *,
+                      keys: FactKeys | None, relay_markets: list[str],
+                      confirmed: list[str], warnings: list[Msg],
+                      hub: str | None = None) -> tuple[dict, dict]:
+    """A hub fact this skill pack holds otherwise (kit.facts.hub_conflicts):
+    one `choose` ask, the hub's value or this skill pack's own; the gate
+    is `facts confirm KEY --value` (keeping the own value is a confirm
+    that changes nothing)."""
+    m, key, mine, theirs = c["market"], c["key"], c["value"], c["hub_value"]
+    _, label, why_row = _fact_shape(key, keys, None)
+    version = facts._last_id(con, m, key)
+    subj = q.canonical({"hub": c["hub"], "hub_history_id":
+                        c["hub_history_id"], "subject": human.subject(
+                            "facts confirm", m, "fact", {key: theirs},
+                            version)})
+    ask_id = _ask_id("hubfact", [m, key], subj, hub)
+    title = _cut(msg("pending_title_hub_conflict",
+                     f"{label} for {m}: the client hub says {theirs}, this "
+                     f"skill pack {mine}. Which is right?", label=label,
+                     market=m, hub_value=theirs, value=mine),
+                 LIMITS["title"])
+    why = _cut(msg("pending_why_hub_conflict",
+                   f"{key} [{m}] was confirmed here as {mine} and at the "
+                   f"client hub {c['hub']} as {theirs} (its confirm "
+                   f"#{c['hub_history_id']}). The copy never overwrites a "
+                   f"value confirmed here, so a person chooses."
+                   + (f" It is used for: {why_row}." if why_row else ""),
+                   key=key, market=m, value=mine, hub=c["hub"],
+                   hub_value=theirs, hub_history_id=c["hub_history_id"],
+                   why=why_row), LIMITS["why"])
+    if_no = _cut(msg("pending_if_no_hub_conflict",
+                     f"{mine} stays in effect here; if it is the right one, "
+                     f"the hub's {key} is corrected at the hub.", key=key,
+                     value=mine), LIMITS["if_no"])
+    options = [{"value": theirs, "label": _clip(f"Hub: {theirs}",
+                                                LIMITS["option_label"])},
+               {"value": mine, "label": _clip(f"Keep: {mine}",
+                                              LIMITS["option_label"])}]
+    ask = {"id": ask_id, "step": "choose", "kind": "fact",
+           "group": _group(f"Facts, {m}", hub), "title": title, "why": why,
+           "evidence": _evidence(
+               _fact("Confirmed here", mine, "client_facts"),
+               _fact("Confirmed at the hub", theirs, "hub_copies"),
+               _fact("Hub version", f"{c['hub']} #{c['hub_history_id']}",
+                     "hub_copies"),
+               _fact("Its source here", c["source"], "client_facts")),
+           "recommend": {"value": theirs, "because": None}, "if_no": if_no,
+           "options": options}
+    gate = None
+    if _reachable(ask_id, m, relay_markets, confirmed, True, warnings):
+        gate = _gate(ask_id, ["facts", "confirm", key],
+                     {"market": m, "items": {key: "$value"}}, True, warnings,
+                     _market_word(m, relay_markets), hub)
+    if gate:
+        ask["gate"] = gate
+    return ask, _about(ask_id, "hub_copies", m, {"key": key, "hub": c["hub"]},
+                       "choose", gate is not None, title=title, why=why,
+                       if_no=if_no)
+
+
 def _decision_ask(con: sqlite3.Connection, r: dict, *,
                   registry: DecisionRegistry, on_confirm: Callable | None,
                   relay_markets: list[str], warnings: list[Msg],
@@ -576,6 +640,11 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
         out.append(_fact_ask(con, r, keys=keys, thresholds=thresholds,
                              relay_markets=fact_markets, confirmed=confirmed,
                              warnings=warnings, hub=pack))
+    for c in facts.hub_conflicts(con, market):
+        out.append(_hub_conflict_ask(con, c, keys=keys,
+                                     relay_markets=fact_markets,
+                                     confirmed=confirmed, warnings=warnings,
+                                     hub=pack))
     n_facts = len(out)
     for f in (staged(con) if staged is not None else []):
         if market is None or f.get("market") in (None, "", market):
