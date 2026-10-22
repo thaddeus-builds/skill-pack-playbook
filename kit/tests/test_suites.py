@@ -258,8 +258,8 @@ def main() -> int:
                         if t != "action_effects"})
     caught("a SPEC without one of the kit's human tables",
            suites.human_tables(root, thin), "holds the kit's human tables")
-    check("(the kit's human tables are six)",
-          len(schema_base.HUMAN) == 6)
+    check("(the kit's human tables are seven)",
+          len(schema_base.HUMAN) == 7)
 
     print("\n[8] gate")
     u1 = planted(root, "scripts/force.py", FORCE)

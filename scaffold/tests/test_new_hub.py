@@ -6,7 +6,7 @@
       row), intake/README.md, INDEX.tsv header, inbox/, client_terms.txt
       0600, hub.json; bin/hub, bin/console, bin/ask executable and parsing;
       no `{{`; launch.json and bin/console on the chosen port; a console
-      with no pack yet relays nothing
+      with no pack yet relays only the hub's own `hub facts confirm`
   [3] `add-pack` writes a pack folder from new_client.py's files() with no
       console of its own (no bin/console, bin/ask, launch.json), its brief
       pointing at the hub's console, ask and intake; `bin/hub <cli> …`
@@ -60,7 +60,10 @@ if sys.argv[1:] == ["verbs", "--json"]:
     print(json.dumps({verbs}))
 else:
     print(json.dumps({{"data_dir": os.environ.get(P + "_DATA_DIR"), "argv": sys.argv[1:],
-                      "secret": os.environ.get(P + "_CONFIRM_CODE_SECRET")}}))
+                      "secret": os.environ.get(P + "_CONFIRM_CODE_SECRET"),
+                      "hub_dir": os.environ.get(P + "_HUB_DIR"),
+                      "hub_market": os.environ.get(P + "_HUB_MARKET"),
+                      "hub_cli": os.environ.get(P + "_HUB_CLI")}}))
 """
 SERVE = """import json, os, sys
 print(json.dumps({"argv": sys.argv[1:], "console_dir": os.environ.get("CONSOLE_DIR"),
@@ -156,10 +159,14 @@ def main() -> int:
     r = subprocess.run([str(hub / "bin" / "console")], capture_output=True, text=True,
                        timeout=60, env=clean_env())
     doc = json.loads(r.stdout or "{}")
-    check("a console with no pack yet runs and relays nothing",
-          r.returncode == 0 and "--relay-cmd" not in doc.get("argv", [])
+    argv = doc.get("argv", [])
+    check("a console with no pack yet runs and relays only the hub's own "
+          "facts confirm, with its secret",
+          r.returncode == 0 and "--relay-verbs" in argv
+          and argv[argv.index("--relay-verbs") + 1] == "hub facts confirm"
           and doc.get("console_dir") == str(hub / "console")
-          and doc.get("secrets") == {}, r.stdout + r.stderr)
+          and set(doc.get("secrets") or {}) == {"HUB_CONFIRM_CODE_SECRET"},
+          r.stdout + r.stderr)
     r = subprocess.run([str(hub / "bin" / "ask")], capture_output=True, text=True,
                        timeout=60, env=clean_env())
     check("bin/ask is pinned to the hub's console/",
@@ -193,6 +200,8 @@ def main() -> int:
           os.path.realpath(doc.get("data_dir") or "") == str((pf / "workspace").resolve())
           and doc.get("argv") == ["status", "--json"] and doc.get("secret") == "s3",
           r.stdout + r.stderr)
+    check("… with DEMOA_HUB_DIR = the hub (sync-hub and doctor read it)",
+          os.path.realpath(doc.get("hub_dir") or "") == str(hub.resolve()), doc)
     r = subprocess.run([str(hub / "bin" / "hub"), "nope"], capture_output=True,
                        text=True, timeout=60, env=clean_env())
     check("bin/hub with an unknown CLI word: exit 2, names the packs",
@@ -236,7 +245,8 @@ def main() -> int:
 
     print("[5] the console's relay verbs, the deny list, the secrets")
     t = texts(hub)
-    want = ("demoa facts confirm,demoa decisions confirm,demoa queue approve,"
+    want = ("hub facts confirm,"
+            "demoa facts confirm,demoa decisions confirm,demoa queue approve,"
             "demob facts confirm,demob decisions confirm,demob queue approve")
     check("the console relays every pack's confirm / approve verbs through bin/hub",
           f'--relay-cmd "$root/bin/hub" --relay-verbs "{want}"' in t["bin/console"],
@@ -268,10 +278,10 @@ def main() -> int:
     sec = [d.get("secrets", {}) for d in runs]
     hexes = [v for s_ in sec for v in s_.values()]
     check("each start: one fresh 64-hex secret per pack, in the console's env",
-          all(set(s_) == {"DEMOA_CONFIRM_CODE_SECRET", "DEMOB_CONFIRM_CODE_SECRET"}
-              for s_ in sec)
+          all(set(s_) == {"HUB_CONFIRM_CODE_SECRET", "DEMOA_CONFIRM_CODE_SECRET",
+                          "DEMOB_CONFIRM_CODE_SECRET"} for s_ in sec)
           and all(re.fullmatch(r"[0-9a-f]{64}", v) for v in hexes)
-          and len(set(hexes)) == 4, sec)
+          and len(set(hexes)) == 6, sec)
     on_disk = [p for p in hub.rglob("*") if p.is_file()
                and any(v.encode() in p.read_bytes() for v in hexes)]
     on_disk += [p for p in existing.rglob("*") if p.is_file()
@@ -335,6 +345,35 @@ def main() -> int:
                        "--link", str(existing))
     check("refused, exit 2: a --link with no bin/<cli>", rc == 2 and "no bin/democ" in err,
           err)
+    ph = fake_pack("demob").parent / "demob-skill-pack"
+    for name, cli, prefix in (("hub", "hubx", "HUBX"), ("hubby", "hub", "HUBY"),
+                              ("hubz", "hubz", "HUB")):
+        (ph / "skill-pack.toml").write_text(
+            f'[skill_pack]\nname = "{name}"\ncli = "{cli}"\n'
+            f'env_prefix = "{prefix}"\nscripts_dir = "scripts"\n', encoding="utf-8")
+        (ph / "scripts" / f"{cli}.py").write_text(
+            ENTRY.format(prefix=prefix, verbs=json.dumps({"verbs": []})), encoding="utf-8")
+        rc, out, err = run(HUB_PY, "add-pack", "--hub", str(hub), "--skill-pack", str(ph),
+                           "--folder", f"f-{cli}")
+        check(f"refused, exit 2: a pack taking the hub's own {name}/{cli}/{prefix}",
+              rc == 2 and "the hub's own" in err, err)
+    rc, out, err = run(HUB_PY, "new", "--hub", str(root / "mk"), "--title", "x",
+                       "--markets", "HK,H K")
+    check("refused, exit 2: a market that is not a plain word",
+          rc == 2 and "--markets" in err and not (root / "mk").exists(), err)
+    rc, out, err = run(HUB_PY, "new", "--hub", str(root / "cu"), "--title", "x",
+                       "--currencies", "USD,euro")
+    check("refused, exit 2: a currency that is not an ISO code",
+          rc == 2 and "--currencies" in err and not (root / "cu").exists(), err)
+    rc, out, err = run(HUB_PY, "new", "--hub", str(root / "cu2"), "--title", "x")
+    keys = (root / "cu2" / "hub" / "defs" / "fact_keys.tsv").read_text(encoding="utf-8")
+    check("without --currencies, currency is text: no client's list is built in",
+          rc == 0 and "currency\trequired\ttext\t" in keys, err or keys[:200])
+    rc, out, err = run(HUB_PY, "new", "--hub", str(root / "cu3"), "--title", "x",
+                       "--currencies", "USD,EUR")
+    keys = (root / "cu3" / "hub" / "defs" / "fact_keys.tsv").read_text(encoding="utf-8")
+    check("--currencies USD,EUR makes currency choice:USD|EUR",
+          rc == 0 and "currency\trequired\tchoice:USD|EUR\t" in keys, err or keys[:200])
     pf_existing.rmdir()
     check("a refused add-pack changed nothing in the hub", snapshot(hub) == hub_before)
 
@@ -368,6 +407,61 @@ def main() -> int:
         if rc == 0 else None
     check("a second hub in the same root takes another port, not the per-pack 8799",
           rc == 0 and p2 not in (port, 8799) and p2 >= 8770, (rc, p2, port, err))
+
+    print("[9] a pack without markets, once per hub market")
+    mh = root / "teahouse"
+    rc, out, err = run(HUB_PY, "new", "--hub", str(mh), "--title", "Tea", "--markets", "DN,DS",
+                       "--console-home", str(home))
+    pm = fake_pack("demoa")
+    for argv, what in ((["--skill-pack", str(pm)], "--market"),
+                       (["--skill-pack", str(pm), "--market", "XX"], "not one of the hub's")):
+        rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), *argv)
+        check(f"refused, exit 2: {what}", rc == 2 and what in err, err)
+    own = fake_pack("demob")
+    (own / "skill-pack.toml").write_text(
+        (own / "skill-pack.toml").read_text(encoding="utf-8") + 'markets = ["DN"]\n',
+        encoding="utf-8")
+    rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(own),
+                       "--market", "DN")
+    check("refused, exit 2: --market for a pack with its own markets",
+          rc == 2 and "keeps its own markets" in err, err)
+    for m in ("DN", "DS"):
+        rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(pm),
+                           "--market", m)
+        check(f"add-pack --market {m}: a folder of its own", rc == 0
+              and (mh / f"demoa-{m.lower()}" / "bin" / "demoa").is_file(), out + err)
+    rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(pm),
+                       "--market", "DN", "--folder", "other")
+    check("refused, exit 2: the same pack for a market it already serves",
+          rc == 2 and "already" in err, err)
+    hj = json.loads((mh / "hub.json").read_text(encoding="utf-8"))
+    check("hub.json records each folder's market and dispatch name",
+          [(p_["folder"], p_["market"], p_["word"]) for p_ in hj["packs"]]
+          == [("demoa-dn", "DN", "demoa-dn"), ("demoa-ds", "DS", "demoa-ds")], hj["packs"])
+    for m in ("DN", "DS"):
+        r = subprocess.run([str(mh / "bin" / "hub"), f"demoa-{m.lower()}", "status"],
+                           capture_output=True, text=True, timeout=60, env=clean_env())
+        doc = json.loads(r.stdout or "{}")
+        check(f"bin/hub demoa-{m.lower()} runs that folder with DEMOA_HUB_MARKET={m} and "
+              f"DEMOA_HUB_CLI=demoa-{m.lower()}",
+              os.path.realpath(doc.get("data_dir") or "")
+              == str((mh / f"demoa-{m.lower()}" / "workspace").resolve())
+              and doc.get("hub_market") == m and doc.get("hub_cli") == f"demoa-{m.lower()}",
+              r.stdout + r.stderr)
+    t = texts(mh)
+    check("the console relays each folder's verbs under its name, one secret per prefix",
+          "demoa-dn facts confirm,demoa-dn decisions confirm" in t["bin/console"]
+          and "demoa-ds queue approve" in t["bin/console"]
+          and t["bin/console"].count("DEMOA_CONFIRM_CODE_SECRET=") == 1, t["bin/console"])
+    deny = json.loads(t[".claude/settings.json"])["permissions"]["deny"]
+    check("the deny list holds each folder's gate verbs through bin/hub and its wrapper",
+          {"Bash(./bin/hub demoa-dn facts confirm:*)", "Bash(bin/hub demoa-ds queue approve:*)",
+           "Bash(./demoa-ds/bin/demoa facts confirm:*)"} <= set(deny), deny)
+    check("the pack folder's brief runs its gate through ../bin/hub demoa-dn",
+          "`../bin/hub demoa-dn …`" in t["demoa-dn/CLAUDE.md"])
+    r = subprocess.run([str(mh / "bin" / "hub"), "demoa", "status"], capture_output=True,
+                       text=True, timeout=60, env=clean_env())
+    check("the bare cli word is no dispatch name then", r.returncode == 2, r.stderr)
     return finish()
 
 
