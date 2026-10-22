@@ -25,7 +25,7 @@ import _t  # noqa: E402
 import core  # noqa: E402
 import i18n  # noqa: E402
 import pages  # noqa: E402
-from test_pages import Doc, Log, Node, T, mixed_log, ask_raw, ctx, full_log, history_log  # noqa: E402
+from test_pages import T0, Doc, Log, Node, T, mixed_log, ask_raw, ctx, full_log, history_log  # noqa: E402
 
 LANGS = i18n.LANGS
 
@@ -110,6 +110,26 @@ def problem_log():
     return L
 
 
+class HubLog(Log):
+    """Folded at T0, so an ask whose `expires` is before it has lapsed."""
+
+    def state(self):
+        return core.fold(self.events, T0)
+
+
+def hub_log():
+    """One console for several packs: an ask answered in chat, one that expired
+    unanswered (and was recorded), one still open with its deadline shown."""
+    L = HubLog()
+    a = L.ask(ask_raw("choose", "gads-h1", group="google-ads · Facts, US", expires="2099-01-01"))
+    L.add("chat", "agent:gads", id="gads-h1", value="a", via="chat", quote="Option A, please",
+          source="chat 2026-10-22 14:03", subject=core.subject_hash(a), suggested=True)
+    L.ask(ask_raw("confirm", "kos-h2", group="koc-script · Words", expires="2000-01-01"))
+    L.add("applied", "agent:kos", id="kos-h2", where="expired, nothing changed")
+    L.ask(ask_raw("confirm", "crp-h3", group="creator-program · Words", expires="2099-01-01"))
+    return L
+
+
 RES_TITLE, RES_VALUE, RES_MESSAGE, ERR_DETAIL = "Ask title here", "Given value here", "Skill pack message here", "Technical detail here"
 
 
@@ -132,6 +152,8 @@ def every_page(lang):
         pages.render_error(ctx(lang), "gate_timeout", RES_MESSAGE),
         pages.render_inbox(mixed_log().state(), ctx(lang)),
         pages.render_history(mixed_log().state(), ctx(lang)),
+        pages.render_inbox(hub_log().state(), ctx(lang)),
+        pages.render_history(hub_log().state(), ctx(lang)),
     ]
 
 
@@ -412,7 +434,7 @@ def test_u09_the_consoles_words_come_only_from_the_dictionary_the_agents_are_sho
         elif isinstance(x, list):
             for v in x:
                 strings(v, agents)
-    for log in (L, over_log(), numbers_log(), problem_log(), mixed_log()):
+    for log in (L, over_log(), numbers_log(), problem_log(), mixed_log(), hub_log()):
         for e in log.events:
             strings({k: v for k, v in e.items() if k in fields})
     agent |= {"Northwind Console", "alice", "Done", RES_TITLE, RES_VALUE, RES_MESSAGE, ERR_DETAIL}
