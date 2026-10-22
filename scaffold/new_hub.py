@@ -2,8 +2,8 @@
 """Make one client's hub, and add each skill pack that serves the client.
 
     python3 scaffold/new_hub.py new --hub ../workspaces/northwind \\
-        --title "Northwind Tea" [--lang en|zh] [--language "Traditional Chinese"] \\
-        [--console-home DIR] [--dry-run]
+        --title "Northwind Tea" [--markets HK,TW] [--lang en|zh] \\
+        [--language "Traditional Chinese"] [--console-home DIR] [--dry-run]
     python3 scaffold/new_hub.py add-pack --hub ../workspaces/northwind \\
         --skill-pack ../acme-skill-pack [--folder acme] [--link DIR] \\
         [--language "…"] [--dry-run]
@@ -18,9 +18,21 @@ owner console, and one folder per pack. What `new` writes, under <hub>/:
   * intake/README.md, intake/INDEX.tsv (its header) and intake/inbox/: the
     one intake every pack reads;
   * hub.json: what the generated files are made from (title, port, the
-    console's code, each pack's CLI word, env prefix, folder, gate verbs);
+    console's code, the hub program, the markets, each pack's CLI word,
+    env prefix, folder, gate verbs);
   * bin/hub: `bin/hub <cli> <args…>` runs that pack's own wrapper
-    `<folder>/bin/<cli>`, the environment passed through;
+    `<folder>/bin/<cli>` with `<PREFIX>_HUB_DIR` = the hub (where the
+    pack's `facts sync-hub` and doctor find the hub's facts), the
+    environment passed through; `bin/hub hub <args…>` runs the hub's own;
+  * hub/: the hub's own facts, the kit's facts and pending verbs run from
+    scaffold/hub/hub.py: hub/bin/hub (its wrapper), hub/defs/skill-pack.toml
+    (cli `hub`, env prefix `HUB`, the --markets, default none) and
+    hub/defs/fact_keys.tsv, seeded with the keys a client's packs share
+    (currency, avg_order_value, incremental_factor, incremental_source,
+    npr_includes_creator_fee, npr_roas; a market enters through the kit's
+    market door, `facts init`). The store hub/hub.db is made by the first
+    write. The console relays `hub facts confirm` before every pack's verbs;
+  * CLAUDE.md: the brief of the agent working at the hub;
   * bin/console, bin/ask: the ONE console of this client (CONSOLE_DIR =
     <hub>/console), run from --console-home (default: this playbook's
     console/); it relays `<cli> <verb…>` through bin/hub. Each start makes
@@ -43,17 +55,18 @@ workspace of that pack (a relative symlink; the folder is never written);
 without, it writes the pack folder from new_client.py's files() WITHOUT its
 own console (no bin/console, bin/ask or launch.json; the brief points at
 the hub's console and intake). Then it rewrites hub.json, bin/hub,
-bin/console (relay verbs: each pack's gated verbs ending in confirm,
-approve or answer, as `<cli> facts confirm,<cli> decisions confirm,<cli>
-queue approve`), adds the pack's deny rules to .claude/settings.json
+bin/console (relay verbs: `hub facts confirm`, then each pack's gated
+verbs ending in confirm, approve or answer, as `<cli> facts confirm,<cli>
+decisions confirm,<cli> queue approve`), CLAUDE.md, adds the pack's deny rules to .claude/settings.json
 (rules already there are kept), and appends the pack's row to CLIENT.md
 (and a port row for a linked workspace's own console) and its folder to
 .gitignore.
 
 `new` refuses a hub folder that exists and is not empty, a folder name that
-is not a client id, and a path the console's --relay-cmd could not carry
-(white space, quotes, `$`, `\\`). `add-pack` refuses a folder that is not a
-hub, a pack (name, CLI word, prefix or folder) already in it, a folder
+is not a client id, a market that is not a plain word, and a path the
+console's --relay-cmd could not carry (white space, quotes, `$`, `\\`).
+`add-pack` refuses a folder that is not a hub, a pack (name, CLI word,
+prefix or folder) already in it or the hub's own (`hub`, `HUB`), a folder
 that exists, and a --link without that pack's bin/<cli>. Refusals exit 2
 with one line; `--dry-run` lists what would be written.
 
@@ -88,6 +101,35 @@ INDEX_HEADER = ("id\tdate\tsource\tkind\ttitle\tpath\tbytes\tfiles\tsha256\t"
                 "read_by\tduplicate_of\tnote\n")
 BASE_DENY = ["Edit(./hub/**)", "Write(./hub/**)",
              "Edit(./console/**)", "Write(./console/**)"]
+HUB_HOME = PLAYBOOK / "scaffold" / "hub"          # the hub's own facts program
+HUB = {"name": "hub", "cli": "hub", "prefix": "HUB", "folder": "hub",
+       "gates": ["facts confirm", "facts restore"], "relay": ["facts confirm"]}
+MARKET_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,15}")
+# The keys a client's packs share, defined as the packs that hold them define
+# them: a pack copies a hub fact only when type, unit, bounds and labels match.
+HUB_KEY_ROWS = [
+    ("currency", "required", "choice:HKD|TWD|EUR|USD", "", "", "",
+     "reporting currency of the market", "該市場的報表幣別",
+     "every money amount every pack reads is in this currency"),
+    ("npr_roas", "required", "number", "x ROAS", "0.1", "50",
+     "NPR: minimum profitable ROAS", "NPR：最低獲利 ROAS",
+     "break-even ROAS: every call on spend is above or below it"),
+    ("avg_order_value", "optional", "number", "currency", "0", "",
+     "average order value", "客單價",
+     "minimum spends are judged as multiples of it"),
+    ("npr_includes_creator_fee", "optional", "choice:yes|no", "", "", "",
+     "does NPR already count creator fees", "NPR 是否已含達人費用",
+     "when no, creator fees are added to spend before comparing with NPR"),
+    ("incremental_source", "optional",
+     "choice:none|meta_modeled|lift_study|holdout", "", "", "",
+     "where an incremental factor comes from", "增量係數的來源",
+     "the evidence level every incremental call names"),
+    ("incremental_factor", "optional", "number", "ratio", "0", "2",
+     "incremental share of attributed sales", "歸因成交中的增量比例",
+     "the share of attributed sales counted as incremental"),
+]
+HUB_KEYS_HEADER = ("key", "group", "type", "unit", "min", "max", "label_en",
+                   "label_zh", "why")
 
 
 # --- ports ---------------------------------------------------------------
@@ -147,29 +189,32 @@ def sh_dq(text: str) -> str:
 
 
 def relay_list(h: dict) -> list[str]:
-    return [f"{p['cli']} {v}" for p in h["packs"] for v in p["relay"]]
+    """The console's relay verbs: the hub's own first, then each pack's."""
+    return [f"{p['cli']} {v}" for p in (HUB, *h["packs"]) for v in p["relay"]]
 
 
 def hub_files(h: dict, hub: Path) -> dict[str, tuple[str, int]]:
     """The files new and add-pack both (re)write, wholly from hub.json."""
     packs, home = h["packs"], f'"${{HUB_CONSOLE_HOME:-{h["console_home"]}}}"'
     clis = " ".join(p["cli"] for p in packs) or "none yet (scaffold/new_hub.py add-pack)"
-    arms = "".join(f'  {p["cli"]}) shift; exec "$root/{p["folder"]}/bin/{p["cli"]}" "$@" ;;\n'
-                   for p in packs)
+    arms = '  hub) shift; exec "$root/hub/bin/hub" "$@" ;;\n' + "".join(
+        f'  {p["cli"]}) shift; {p["prefix"]}_HUB_DIR="$root"; export {p["prefix"]}_HUB_DIR\n'
+        f'    exec "$root/{p["folder"]}/bin/{p["cli"]}" "$@" ;;\n' for p in packs)
     dispatch = f"""#!/bin/sh
 # {h['title']}'s hub: `bin/hub <cli> <args…>` runs that pack's own wrapper
 # (<folder>/bin/<cli>) with this environment, the console's confirm-code
-# secrets included. Written from hub.json by the playbook's
+# secrets included, and <PREFIX>_HUB_DIR = this hub (the pack's `facts
+# sync-hub` and doctor read the hub's facts there); `bin/hub hub …` runs the
+# hub's own facts (hub/bin/hub). Written from hub.json by the playbook's
 # scaffold/new_hub.py; `new_hub.py add-pack` rewrites it.
 root="$(cd "$(dirname "$0")/.." && pwd)"
 case "${{1:-}}" in
-{arms}  *) echo "bin/hub: usage: bin/hub <cli> <args…>; <cli> is one of: {clis}" >&2; exit 2 ;;
+{arms}  *) echo "bin/hub: usage: bin/hub <cli> <args…>; <cli> is hub or one of: {clis}" >&2; exit 2 ;;
 esac
 """
     secrets = "".join(f'{p["prefix"]}_CONFIRM_CODE_SECRET="$(openssl rand -hex 32)"\n'
-                      f'export {p["prefix"]}_CONFIRM_CODE_SECRET\n' for p in packs)
-    relay = (f' \\\n  --relay-cmd "$root/bin/hub" --relay-verbs "{",".join(relay_list(h))}"'
-             if packs else "")
+                      f'export {p["prefix"]}_CONFIRM_CODE_SECRET\n' for p in (HUB, *packs))
+    relay = f' \\\n  --relay-cmd "$root/bin/hub" --relay-verbs "{",".join(relay_list(h))}"'
     console = f"""#!/bin/sh
 # {h['title']}'s console: the asks of every pack of this client on one page,
 # log in ./console. A click on a gated ask runs `bin/hub <cli> <verb…>` with
@@ -195,20 +240,119 @@ exec "$py" {home}/ask.py "$@"
         indent=2) + "\n"
     return {"hub.json": (json.dumps(h, indent=2, ensure_ascii=False) + "\n", 0o644),
             "bin/hub": (dispatch, 0o755), "bin/console": (console, 0o755),
-            "bin/ask": (ask, 0o755), ".claude/launch.json": (launch, 0o644)}
+            "bin/ask": (ask, 0o755), ".claude/launch.json": (launch, 0o644),
+            "CLAUDE.md": (hub_brief_md(h), 0o644)}
+
+
+BRIEF_MAX = 4096
+
+
+def hub_brief_md(h: dict) -> str:
+    """The brief of the agent working at the hub (under BRIEF_MAX bytes)."""
+    packs = h["packs"]
+    clis = ", ".join(f"`{p['cli']}`" for p in packs) or "none yet"
+    gates = "; ".join(f"`{p['cli']} {', '.join(p['gates']) or 'none'}`"
+                      for p in (HUB, *packs))
+    packs_arg = ",".join(p["cli"] for p in packs) or "<cli>,…"
+    text = f"""# {h['title']}: the client hub
+
+You work at this client's hub: one console, one intake and one facts store for
+every pack that serves the client (packs: {clis}; `CLIENT.md` says who the client
+is). `bin/hub <cli> <args…>` runs a pack; `bin/hub hub <args…>` runs the hub's own
+facts. Never edit `hub/`, `console/` or a pack's `workspace/` by hand.
+
+## Start
+
+1. `bin/hub hub doctor`, then `bin/hub <cli> doctor` for each pack. A warning names
+   its fix; `fact_hub_copy_stale` means `bin/hub <cli> facts sync-hub`.
+2. What waits on the owner: `bin/hub hub pending --hub --json` first, then
+   `bin/hub <cli> pending --hub --json` for each pack. One cap of 10 open asks for
+   the owner across all of them; the hub's own asks first.
+3. Post asks through `bin/ask add FILE` (write `recommend.because` in each), read
+   them back with `bin/ask answers --since SEQ`, close each with `bin/ask applied`.
+
+## Facts
+
+A fact every pack shares (the markets, currency, break-even ROAS `npr_roas`, …) is
+confirmed once, here: `bin/hub hub facts set KEY VALUE --market M --source S
+--reason R` makes it pending and the console asks the owner. Each pack then copies
+the confirmed value with `bin/hub <cli> facts sync-hub`: it never overwrites a value
+a pack confirmed itself (that is a conflict, and the pack's `pending` makes it one
+ask) and never refreshes on its own.
+
+## Chat answers
+
+If the owner answers in chat, record their words with `bin/ask chat ID --value=V
+--quote="their words" --source="chat <date> <time>"`, only for words and choices.
+A number, a confirmation or an approval needs the owner's click on the console.
+
+## Intake
+
+New material lands in `intake/inbox/<YYYY-MM-DD>-<source>/` and gets its
+`intake/INDEX.tsv` row at once (`intake/README.md`). Check a meeting's intake with
+`python3 {PLAYBOOK / 'build' / 'check_intake.py'} intake/*.json --packs {packs_arg}
+--transcript FILE`.
+
+## Never
+
+Never run a gate verb yourself: {gates}. They are the owner's, through the console.
+"""
+    if len(text.encode("utf-8")) > BRIEF_MAX:
+        raise Refused(f"the hub's CLAUDE.md would be {len(text.encode())} bytes "
+                      f"(at most {BRIEF_MAX}): too many packs for one brief")
+    return text
+
+
+def hub_facts_files(h: dict) -> dict[str, tuple[str, int]]:
+    """The hub's own facts program, bound: hub/bin/hub (its wrapper),
+    hub/defs/skill-pack.toml and hub/defs/fact_keys.tsv. Written by `new`
+    only: from then on the definitions are the hub's."""
+    wrapper = f"""#!/bin/sh
+# {h['title']}'s hub facts: the playbook's scaffold/hub/hub.py over ./hub.db
+# (HUB_DATA_DIR = this folder; the definitions in ./defs). HUB_HOME points
+# at another copy of the program; HUB_PYTHON names the interpreter.
+{new_client.python_check("HUB", "hub/bin/hub")}here="$(cd "$(dirname "$0")/.." && pwd)"
+export KIT_SKILL_PACK_ROOT="$here/defs" HUB_DATA_DIR="$here"
+exec "$py" "${{HUB_HOME:-{h['hub_home']}}}/hub.py" "$@"
+"""
+    markets = ", ".join(json.dumps(m) for m in h["markets"])
+    toml = f"""# {h['title']}'s hub facts (scaffold/hub/hub.py), written by scaffold/new_hub.py.
+# A market enters through the kit's door, `bin/hub hub facts init`; a person
+# confirms its declaration on the console.
+[skill_pack]
+name = "{h['client']}-hub"
+cli = "hub"
+env_prefix = "HUB"
+db_file = "hub.db"
+languages = ["en", "zh"]
+markets = [{markets}]
+home_env_file = ""
+
+[ssot]
+dir = "."
+fact_keys = "fact_keys.tsv"
+
+[contract]
+no_db_next = ["facts init"]
+"""
+    keys = "".join("\t".join(r) + "\n" for r in (HUB_KEYS_HEADER, *HUB_KEY_ROWS))
+    return {"hub/bin/hub": (wrapper, 0o755),
+            "hub/defs/skill-pack.toml": (toml, 0o644),
+            "hub/defs/fact_keys.tsv": (keys, 0o644)}
 
 
 def deny_rules(h: dict, hub: Path) -> list[str]:
     deny = list(BASE_DENY)
-    for p in h["packs"]:
+    for p in (HUB, *h["packs"]):
         cli, f = p["cli"], p["folder"]
         for g in p["gates"]:
             for cmd in (f"./bin/hub {cli}", f"bin/hub {cli}",
                         f"{hub}/bin/hub {cli}", f"./{f}/bin/{cli}",
                         f"{f}/bin/{cli}", f"{hub}/{f}/bin/{cli}"):
                 deny.append(f"Bash({cmd} {g}:*)")
-        deny += [f"Edit(./{f}/workspace/**)", f"Write(./{f}/workspace/**)",
-                 f"Read(./{f}/workspace/.env)"]
+        if p is not HUB:
+            deny += [f"Edit(./{f}/workspace/**)", f"Write(./{f}/workspace/**)",
+                     f"Read(./{f}/workspace/.env)"]
     return deny
 
 
@@ -273,7 +417,9 @@ GITIGNORE = """# The client's content, the console log and the hub's data: never
 # new_hub.py add-pack appends each pack folder (a local folder or link).
 /client_terms.txt
 /console/
-/hub/
+/hub/*
+!/hub/bin/
+!/hub/defs/
 /intake/*
 !/intake/README.md
 !/intake/INDEX.tsv
@@ -362,13 +508,19 @@ def cmd_new(a) -> int:
                       f"the console's --relay-cmd cannot carry them")
     if hub.exists() and (not hub.is_dir() or any(hub.iterdir())):
         raise Refused(f"{hub} exists and is not empty")
+    markets = [m.strip() for m in (a.markets or "").split(",") if m.strip()]
+    bad = [m for m in markets if not MARKET_RE.fullmatch(m)]
+    if bad or len(set(markets)) != len(markets):
+        raise Refused(f"--markets {a.markets!r}: plain words (letters, digits, "
+                      f"'_', '-'), each once")
     home = (a.console_home or PLAYBOOK / "console").expanduser().resolve()
     if not ((home / "serve.py").is_file() and (home / "ask.py").is_file()):
         raise Refused(f"{home} has no serve.py and ask.py: not a console")
     h = {"client": hub.name, "title": a.title, "lang": a.lang,
          "language": a.language, "port": choose_port(hub.parent),
-         "console_home": str(home), "packs": []}
-    out = hub_files(h, hub)
+         "console_home": str(home), "hub_home": str(HUB_HOME),
+         "markets": markets, "packs": []}
+    out = hub_files(h, hub) | hub_facts_files(h)
     out |= {"CLIENT.md": (client_md(h), 0o644),
             "client_terms.txt": (f"# leak-guard terms for {h['client']}: one per line, "
                                  f"'#' a comment, 're:' a regular expression\n"
@@ -409,9 +561,12 @@ def cmd_add_pack(a) -> int:
     if not CLIENT_RE.fullmatch(folder):
         raise Refused(f"--folder {folder!r}: lower-case letters, digits, '.', '_' "
                       f"and '-' only")
-    for p in h["packs"]:
+    for p in (HUB, *h["packs"]):
         for key, mine in (("name", n["name"]), ("cli", n["cli"]),
                           ("prefix", n["prefix"]), ("folder", folder)):
+            if p[key] == mine and p is HUB:
+                raise Refused(f"{key} {mine!r} is the hub's own (its facts "
+                              f"program): name the pack otherwise")
             if p[key] == mine:
                 raise Refused(f"pack {p['name']} is already in this hub "
                               f"(same {key}: {mine})")
@@ -487,6 +642,9 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("--hub", required=True, type=Path,
                      help="the hub folder, named for the client id, under the workspaces root")
     new.add_argument("--title", required=True)
+    new.add_argument("--markets", default="",
+                     help="the client's markets, comma-separated (e.g. HK,TW); "
+                          "default none: the hub keeps no market partition")
     new.add_argument("--lang", choices=("en", "zh"), default="en",
                      help="the console's language")
     new.add_argument("--language", default="the client's language",
