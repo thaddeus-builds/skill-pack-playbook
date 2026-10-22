@@ -199,13 +199,15 @@ class Console:
         self._cache: tuple = (None, None)  # ((mtime_ns, size), state)
 
     def state(self) -> dict:
-        """The folded log, re-read only when the file changed. Raises Refused(corrupt_log)."""
+        """The folded log, re-read only when the file changed or an open ask's
+        `expires` has passed since. Raises Refused(corrupt_log)."""
         try:
             s = os.stat(self.store.path)
         except FileNotFoundError:
             return core.fold([])
         key = (s.st_mtime_ns, s.st_size)
-        if self._cache[0] != key:
+        due = core.next_expiry(self._cache[1]) if self._cache[1] else None
+        if self._cache[0] != key or (due is not None and core.now() >= due):
             self._cache = (key, self.store.state())
         return self._cache[1]
 

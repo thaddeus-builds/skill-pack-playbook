@@ -7,7 +7,7 @@ page works with the script off. Every URL is relative, so a proxy that strips
 a prefix needs no configuration.
 
     render_inbox(st, ctx)       the waiting page: one column, top down
-    render_history(st, ctx)     what was answered or withdrawn, newest first
+    render_history(st, ctx)     what was answered, withdrawn or expired, newest first
     render_result(ctx, lines)   the page after a POST
     render_error(ctx, code, message="")
     answer_label(lang, ask, value)   an answer as the human saw it, for a result line
@@ -52,6 +52,7 @@ CSS classes (console.css styles exactly these):
   group list ask done              a group, its rows, one row (`done` in History)
   approve                          a row that approves something: it reads heavier than a confirmation
   waiting applied withdrawn        a History row's loop state: the agent still owes it, did it, or it was withdrawn
+  expired                          a History row that lapsed unanswered: nothing changes
   ttl meta chip age inner          a row's title, chip line, chip, age, opened body
   why txt                          the agent's reason; `txt` keeps its line breaks
   ev facts fact k v src            evidence: the block, fact chips, label, value, source
@@ -470,6 +471,8 @@ def _ask(t: _T, ctx: dict, a: dict, is_open: bool) -> str:
     chips = f'<span class="chip{" warn" if step == "approve" else ""}">{t("step." + step)}</span>'
     if rec:
         chips += f'<span class="chip ok">{t("suggested.chip", answer=_answer(t, k, rec["value"]))}</span>'
+    if k.get("expires"):
+        chips += f'<span class="chip mute">{t("expires.chip", date=_day(k["expires"]))}</span>'
     chips += f'<span class="age">{_e(_age(t, a.get("opened_at"), ctx["now"]))}</span>'
     parts = [f'<p class="why txt">{_e(k.get("why"))}</p>', _evidence(t, k.get("evidence"))]
     if rec:
@@ -579,22 +582,46 @@ def _reopen_form(t: _T, ctx: dict, a: dict) -> str:
             f'<p class="hint">{t("reopen.hint")}</p></form>')
 
 
+def _day(when) -> str:
+    """`2026-10-29` of a date or a UTC time, as the page shows a deadline."""
+    return str(when or "")[:10]
+
+
+def _expired(t: _T, a: dict) -> tuple[list[str], str]:
+    """The chips and the status line of an ask that lapsed unanswered."""
+    chips = [f'<span class="chip mute">{t("state.expired")}</span>']
+    status = t("state.expired_on", date=_day(a["ask"].get("expires")))
+    if a["applied"]:
+        status += f'<p class="hint">{t("state.applied_where", where=a["applied"].get("where"))}</p>'
+    return chips, status
+
+
 def _done(t: _T, ctx: dict, a: dict) -> str:
     answered = a["status"] == "answered"
-    ev = a["answer"] if answered else a["withdrawn"]
+    expired = a["status"] == "expired"
+    ev = a["answer"] if answered else a["withdrawn"] if not expired else None
     shown = a["revs"].get(ev.get("subject"), a["ask"]) if answered else a["ask"]
     chips, rec = [], []
     gate = ev.get("gate") if answered else None
-    if answered:
+    chat = answered and ev.get("type") == "chat"
+    if expired:
+        chips, status = _expired(t, a)
+    elif answered:
         chips.append(f'<span class="chip">{_e(_answer(t, shown, ev.get("value")))}</span>')
+        if chat:
+            chips.append(f'<span class="chip">{t("chip.chat")}</span>')
         chips.append(f'<span class="chip ok">{t("state.applied")}</span>' if a["applied"]
                      else f'<span class="chip warn">{t("state.waiting")}</span>')
-        if core.verify(ctx.get("secret"), ev) is False:
+        if not chat and core.verify(ctx.get("secret"), ev) is False:
             chips.append(f'<span class="chip warn">{t("sig.bad")}</span>')
         revised = f' <span class="chip warn">{t("history.revised")}</span>' if ev.get("revised") else ""
         rec.append((t("form.answer"), _e(_answer(t, shown, ev.get("value"))) + revised))
         if ev.get("comment"):
             rec.append((t("history.comment"), f'<span class="txt">{_e(ev["comment"])}</span>'))
+        if chat:               # the agent's record of the owner's words, never a click
+            src = f'<footer>{_source(ev.get("source"), None)}</footer>' if ev.get("source") else ""
+            rec.append((t("history.chat"), f'<blockquote class="quote"><p class="txt">{_e(ev.get("quote"))}</p>{src}'
+                                           f'</blockquote><p class="hint">{t("history.chat_by", agent=_who(ev.get("by")))}</p>'))
         if shown.get("recommend"):
             rec.append((t("history.compare"),
                         f'<span class="chip ok">{t("chip.suggested")}</span>' if ev.get("suggested")
@@ -613,8 +640,10 @@ def _done(t: _T, ctx: dict, a: dict) -> str:
         status = t("state.withdrawn_reason", reason=ev.get("reason"))
     rec.append((t("history.status"), status))
     dl = "".join(f"<dt>{dt}</dt><dd>{dd}</dd>" for dt, dd in rec)
-    byline = f'{_e(_who(ev.get("by")))} · {_e(_age(t, ev.get("at"), ctx["now"]))}'
-    state = "waiting" if answered and not a["applied"] else "applied" if answered else "withdrawn"
+    byline = (_e(_age(t, a["expired"]["at"], ctx["now"])) if expired
+              else f'{_e(_who(ev.get("by")))} · {_e(_age(t, ev.get("at"), ctx["now"]))}')
+    state = ("expired" if expired else "waiting" if answered and not a["applied"]
+             else "applied" if answered else "withdrawn")
     return (f'<details class="ask done {state}"><summary><span class="ttl">{_e(shown.get("title"))}</span>'
             f'<span class="meta">{"".join(chips)}<span class="age">{byline}</span></span></summary>'
             f'<div class="inner"><h3>{t("history.shown")}</h3>'
@@ -625,8 +654,9 @@ def _done(t: _T, ctx: dict, a: dict) -> str:
 
 def render_history(st: dict, ctx: dict) -> str:
     t = _T(_lang(ctx))
-    rows = [st["asks"][i] for i in st["order"] if st["asks"][i]["status"] in ("answered", "withdrawn")]
-    rows.sort(key=lambda a: (a["answer"] or a["withdrawn"])["seq"], reverse=True)
+    rows = [st["asks"][i] for i in st["order"] if st["asks"][i]["status"] in ("answered", "withdrawn", "expired")]
+    # newest first; an expiry has no event of its own, so it sits where the last event before it did
+    rows.sort(key=lambda a: (a["answer"] or a["withdrawn"] or {"seq": a["opened_seq"]})["seq"], reverse=True)
     waiting = sum(1 for a in rows if a["status"] == "answered" and not a["applied"])
     parts = [f'<div class="head"><h1>{t("page.history")}</h1>'
              f'<p class="sub">{t("history.sub", n=len(rows), m=waiting)}</p></div>']

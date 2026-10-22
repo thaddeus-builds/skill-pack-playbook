@@ -17,7 +17,7 @@ Updated: 2026-10-22
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
 - [X9] 2026-10-13 a first skill pack imports `kit.autonomy` (0.27.0): the SEO skill pack when it moves onto the kit (W2); the Amazon PPC skill pack does not (it does not vendor the kit, read 2026-10-21). Two minor versions have passed with no known importer (the rule of kit/packs.tsv): delete it unless N1 finds one
-- [X10] 2026-10-22 build the client hub (R5), one pull request each, in order: intake `packs` field and quote check (build/); new-hub and add-pack scaffolds; one inbox across packs (console, kit/pending.py); hub facts and the copy table (kit version bump); then the first real client
+- [X10] 2026-10-22 the first real client moves onto its hub (R5, step 5 of the client hub): re-vendor kit 0.35.0 into its packs (schema version bump, the `facts sync-hub` verb row, a test calling `kit.guards.hub_keys.check`), make its hub with `scaffold/new_hub.py`, move the shared facts there, put each disagreeing value to the owner once
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)
@@ -38,6 +38,7 @@ Updated: 2026-10-22
 - [D17] 2026-10-17 kit 0.32.0 and 0.33.0: the roadmap's Milestones section; the console takes a skill pack's own pages and buttons (commit e98df6c)
 - [D18] 2026-10-21 kit 0.33.1 (a `must_ship` directory ships), the tier registry retired (RESTRUCTURE.md phase 3, steps 1 and 4), issue and pull request templates, `tools/consumers.py` (PR #120, PR #121, PR #122, PR #123)
 - [D19] 2026-10-21 twelve stale issues closed: #19, #21, #24, #43, #45 as done or decided, #28 to #33 and #35 as not planned until a skill pack asks (no ref)
+- [D20] 2026-10-22 the client hub, steps 1 to 4 (R5): intake `packs` and quotes checked at their source (build/); `scaffold/new_hub.py` new and add-pack, one console per client; one inbox across packs with ask expiry and chat answers (kit 0.34.0); hub facts, `facts sync-hub`, `hub_copies`, a pack without markets serving one hub market (kit 0.35.0); end to end on a synthetic hub through real console clicks (branch client-hub-design)
 ## Parked
 ## Decisions
 - [R1] 2026-10-05 which console copy stays (#24): "the playbook's" (as recorded in this roadmap's open decisions, 2026-10-05)
