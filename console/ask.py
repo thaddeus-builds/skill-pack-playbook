@@ -16,19 +16,23 @@ only the verbs that read the log look for it (`schema` and --help need none).
 Every ok document carries `dir`, the absolute folder it used (null when none is
 declared, as for `schema`): a relative or mistyped path shows up there, instead
 of an agent and a console quietly working in two folders.
-This side writes only the agent's events (ask, withdraw, applied, say). It has
+This side writes only the agent's events (ask, withdraw, applied, say, chat). It has
 no verb that answers, reopens or notes, and it never makes the
 console's secret: it only reads it to check signatures (`verify`, `verified`);
 with no secret `verify` is refused (`no_secret`), it does not pass.
 
     add [FILE|-] [--dry-run] [--max-open N]   post one ask or an array, all or nothing
-                                              (with a manifest: a gate verb it does not allow is refused here)
-    list [--status open|answered|withdrawn|all]
-    answers [--since SEQ] [--all]             what the human said, ready to apply
-    wait [--since SEQ] [--timeout SEC]        block until the human says something new
-    applied ID[@SEQ]... --where TEXT          the answer was applied, and where
+                                              (with a manifest: a gate verb it does not allow is refused here;
+                                              a new ask without `expires` lapses in 7 days)
+    list [--status open|answered|withdrawn|expired|all]
+    answers [--since SEQ] [--all]             what the human said, ready to apply, and the asks that expired
+    wait [--since SEQ] [--timeout SEC]        block until the human says something new or an ask expires
+    applied ID[@SEQ]... --where TEXT          the answer was applied, and where (an expired ask: by its ID)
     withdraw ID... --reason TEXT
     say TEXT                                  a message on top of the human's inbox
+    chat ID --value V --quote TEXT [--source TEXT]
+                                              the owner answered in chat: record their words (no gate,
+                                              no approval, no number: those are refused, gate_needs_click)
     schema                                    fields, limits, one example per step
     verify                                    check every human event's signature
     digest [--format md|json]                 the decision record, to forward
@@ -86,6 +90,8 @@ ABOUT = {
     "effect": "What happens when they approve, in plain words.",
     "input": "How a provided value is typed: {type: text|number|date|url, min?, max?, unit?}.",
     "gate": "{verb: [words], expect: {payload}, value_arg?, market?}: run the skill pack's own human gate when this is answered; use \"$value\" in expect for the answer.",
+    "expires": "When it lapses unanswered: a date YYYY-MM-DD (open through that day, UTC) or YYYY-MM-DDTHH:MM:SSZ. "
+               f"add gives a new ask {core.EXPIRES_DAYS} days when it names none; an expired ask changes nothing and its id is never used again.",
 }
 ANSWER_VALUES = ("The value of an answer is always text: yes or no for confirm and approve, "
                  "an option's value for choose, what was typed for provide.")
@@ -155,7 +161,7 @@ def _parser() -> Parser:
                         f"never raise it above {core.MAX_OPEN}, or the manifest's max_open when there is one "
                         f"(default {core.MAX_OPEN} or the manifest's)")
     v = verb("list", cmd_list, "the asks and where each stands")
-    v.add_argument("--status", choices=("open", "answered", "withdrawn", "all"), default="open")
+    v.add_argument("--status", choices=("open", "answered", "withdrawn", "expired", "all"), default="open")
     v = verb("answers", cmd_answers, "answers not yet applied, asks reopened and notes since SEQ")
     v.add_argument("--since", type=_number(int, 0), default=0, metavar="SEQ",
                    help="only reopened asks and notes after this seq (the newest "
@@ -176,6 +182,12 @@ def _parser() -> Parser:
     v.add_argument("--reason", required=True)
     v = verb("say", cmd_say, "a message the human sees on top of the inbox")
     v.add_argument("text", metavar="TEXT")
+    v = verb("chat", cmd_chat, "record an answer the owner gave in chat, in their words; refused "
+             "(gate_needs_click) for an ask with a gate, an approval or a number")
+    v.add_argument("id", metavar="ID")
+    v.add_argument("--value", required=True, help="the answer, as for a click: yes or no, an option's value, the text")
+    v.add_argument("--quote", required=True, help="the owner's own words, as they wrote them")
+    v.add_argument("--source", default="", help='where they said it, e.g. "chat 2026-10-22 14:03"')
     verb("schema", cmd_schema, "the fields of an ask, the limits and one example per step")
     verb("verify", cmd_verify, "check every human event's signature with the console's secret")
     v = verb("digest", cmd_digest, "the decision record: every ask, what was shown, the answer and who gave it, "
@@ -246,7 +258,8 @@ def cmd_add(a):
     limit = manifest_mod.limit(man)
     return {"ok": True, **store.post(a.name, _read_asks(a.file), dry_run=a.dry_run,
                                      max_open=min(a.max_open, limit) if a.max_open else limit,
-                                     gate_verbs=man["relay_verbs"] if man else None)}
+                                     gate_verbs=man["relay_verbs"] if man else None,
+                                     default_expires=core.days_ahead(core.EXPIRES_DAYS))}
 
 
 def _brief_event(e, *keys):
@@ -264,33 +277,55 @@ def cmd_list(a):
         rows.append({"id": i, "step": x["ask"]["step"], "kind": x["ask"]["kind"],
                      "group": x["ask"]["group"], "title": x["ask"]["title"],
                      "status": x["status"], "rev": x["rev"], "opened_at": x["opened_at"],
-                     "answer": _brief_event(x["answer"], "value", "suggested"),
+                     "expires": x["ask"].get("expires"),
+                     "answer": _brief_event(x["answer"], "value", "suggested", "via"),
                      "applied": _brief_event(x["applied"], "where"),
-                     "withdrawn": _brief_event(x["withdrawn"], "reason")})
+                     "withdrawn": _brief_event(x["withdrawn"], "reason"),
+                     "expired": x.get("expired")})
     return {"ok": True, "seq": st["seq"], "open": len(core.open_asks(st)), "asks": rows}
+
+
+def _verified(secret, e):
+    """A click's signature check; None for a chat answer, which is the agent's
+    own record (never signed: its quote and source are what it rests on)."""
+    return None if e["type"] == "chat" else core.verify(secret, e)
 
 
 def _answer_row(x, secret):
     e = x["answer"]
     shown = x["revs"].get(e.get("subject"), x["ask"])      # what the human saw
-    return {"seq": e["seq"], "at": e["at"], "by": e["by"], "id": x["id"],
-            "apply": f"{x['id']}@{e['seq']}",
-            "step": x["ask"]["step"], "kind": x["ask"]["kind"], "title": shown["title"],
-            "value": e["value"], "comment": e.get("comment", ""),
-            "suggested": bool(e.get("suggested")), "revised": bool(e.get("revised")),
-            "gate": e.get("gate"), "verified": core.verify(secret, e),
+    row = {"seq": e["seq"], "at": e["at"], "by": e["by"], "id": x["id"],
+           "apply": f"{x['id']}@{e['seq']}",
+           "step": x["ask"]["step"], "kind": x["ask"]["kind"], "title": shown["title"],
+           "value": e["value"], "comment": e.get("comment", ""),
+           "suggested": bool(e.get("suggested")), "revised": bool(e.get("revised")),
+           "gate": e.get("gate"), "verified": _verified(secret, e),
+           "via": "chat" if e["type"] == "chat" else "console",
+           "applied": _brief_event(x["applied"], "where")}
+    if e["type"] == "chat":
+        row.update(quote=e.get("quote", ""), source=e.get("source", ""))
+    return row
+
+
+def _expired_row(x):
+    return {"id": x["id"], "apply": x["id"], "step": x["ask"]["step"], "kind": x["ask"]["kind"],
+            "title": x["ask"]["title"], "expires": x["ask"].get("expires"),
+            "at": x["expired"]["at"], "outcome": x["expired"]["outcome"],
             "applied": _brief_event(x["applied"], "where")}
 
 
 def _report(events, secret, since, everything=False) -> dict:
     """What the human has said, from one snapshot of the log: the answers
-    waiting to be applied, the asks reopened after `since` and the newest notes
-    after it. `seq` is that snapshot's
-    last event, the `since` to pass next time."""
-    st = core.fold(events)
+    waiting to be applied, the asks that expired unanswered and are not yet
+    recorded (`expired`: nothing changes; `applied ID` records one), the asks
+    reopened after `since` and the newest notes after it. `seq` is that
+    snapshot's last event, the `since` to pass next time."""
+    st = core.fold(events, core.now())
     asks = [st["asks"][i] for i in st["order"]]
     answers = [_answer_row(x, secret) for x in asks
                if x["status"] == "answered" and (everything or not x["applied"])]
+    expired = [_expired_row(x) for x in asks
+               if x["status"] == "expired" and (everything or not x["applied"])]
     reopened = []
     for x in asks:
         last = x["history"][-1] if x["history"] else None
@@ -302,6 +337,7 @@ def _report(events, secret, since, everything=False) -> dict:
              for e in st["messages"] if e["type"] == "note" and e["seq"] > since]
     return {"ok": True, "seq": st["seq"], "open": len(core.open_asks(st)),
             "answers": sorted(answers, key=lambda r: r["seq"]),
+            "expired": sorted(expired, key=lambda r: (r["at"], r["id"])),
             "reopened": sorted(reopened, key=lambda r: r["seq"]),
             "notes": notes[-NOTES:], "notes_truncated": len(notes) > NOTES}
 
@@ -317,13 +353,21 @@ def cmd_wait(a):
     events = store.events()          # a folder or file that does not exist yet reads as empty
     since = max((e["seq"] for e in events), default=0) if a.since is None else a.since
     deadline = time.monotonic() + a.timeout
+    lapsed = _lapsed(events)         # what had already expired is not news
     while True:
-        heard = any(e["type"] in HUMAN and e["seq"] > since for e in events)
+        heard = (any(e["type"] in HUMAN and e["seq"] > since for e in events)
+                 or bool(_lapsed(events) - lapsed))
         left = deadline - time.monotonic()
         if heard or left <= 0:
             return {**_report(events, store.secret(), since), "timed_out": not heard}
         time.sleep(min(POLL, left))
         events = store.events()
+
+
+def _lapsed(events) -> set:
+    """The asks that have expired by now and are not yet recorded."""
+    st = core.fold(events, core.now())
+    return {i for i, x in st["asks"].items() if x["status"] == "expired" and not x["applied"]}
 
 
 def _once(ids):
@@ -346,6 +390,12 @@ def cmd_withdraw(a):
 
 def cmd_say(a):
     return {"ok": True, **_store(a).say(a.name, a.text)}
+
+
+def cmd_chat(a):
+    e = _store(a).chat(a.name, a.id, a.value, quote=a.quote, source=a.source)
+    return {"ok": True, "id": e["id"], "apply": f"{e['id']}@{e['seq']}", "value": e["value"],
+            "via": e["via"], "by": e["by"], "seq": e["seq"]}
 
 
 def _steps(v) -> list:
@@ -400,7 +450,8 @@ def cmd_verify(a):
 # ----------------------------------------------------------------- digest --
 
 STATUS_WORDS = {"open": "Open: waiting for an answer", "waiting": "Answered: waiting for the agent to apply",
-                "applied": "Applied", "withdrawn": "Withdrawn"}
+                "applied": "Applied", "withdrawn": "Withdrawn",
+                "expired": f"Expired unanswered: {core.OUTCOME_EXPIRED}"}
 YES_NO = {("confirm", "yes"): "Yes", ("confirm", "no"): "No", ("approve", "yes"): "Approve", ("approve", "no"): "Reject"}
 
 
@@ -419,9 +470,13 @@ def _label(ask: dict, value):
 
 def _given(e, shown, secret) -> dict:
     """One answer as the record keeps it: what, who, when, and whether it was the suggestion."""
-    return {"seq": e["seq"], "at": e["at"], "by": e["by"], "value": e["value"], "label": _label(shown, e["value"]),
-            "suggested": bool(e.get("suggested")), "comment": e.get("comment", ""),
-            "revised": bool(e.get("revised")), "gate": e.get("gate"), "verified": core.verify(secret, e)}
+    out = {"seq": e["seq"], "at": e["at"], "by": e["by"], "value": e["value"], "label": _label(shown, e["value"]),
+           "suggested": bool(e.get("suggested")), "comment": e.get("comment", ""),
+           "revised": bool(e.get("revised")), "gate": e.get("gate"), "verified": _verified(secret, e),
+           "via": "chat" if e["type"] == "chat" else "console"}
+    if e["type"] == "chat":
+        out.update(quote=e.get("quote", ""), source=e.get("source", ""))
+    return out
 
 
 def _record(x, secret) -> dict:
@@ -433,8 +488,9 @@ def _record(x, secret) -> dict:
     reopens = {e["answer_seq"]: e for e in x["history"] if e["type"] == "reopen"}
     earlier = [{**_given(e, x["revs"].get(e.get("subject"), x["ask"]), secret),
                 "reopened": _brief_event(reopens.get(e["seq"]), "by")}
-               for e in x["history"] if e["type"] == "answer" and e is not ans]
-    state = "applied" if x["applied"] else "waiting" if x["status"] == "answered" else x["status"]
+               for e in x["history"] if e["type"] in ("answer", "chat") and e is not ans]
+    state = ("expired" if x["status"] == "expired" else "applied" if x["applied"]
+             else "waiting" if x["status"] == "answered" else x["status"])
     return {"id": x["id"], "title": shown["title"], "kind": shown.get("kind", "general"),
             "group": shown.get("group", ""), "step": shown["step"], "status": x["status"], "state": state,
             "asked": {"seq": x["opened_seq"], "at": x["opened_at"], "by": x["by"]},
@@ -443,6 +499,7 @@ def _record(x, secret) -> dict:
             "suggestion": ({"value": rec["value"], "label": _label(shown, rec["value"]), "because": rec.get("because")}
                            if rec else None),
             "answer": _given(ans, shown, secret) if ans else None, "earlier": earlier,
+            "expires": shown.get("expires"), "expired": x.get("expired"),
             "applied": _brief_event(x["applied"], "by", "where"),
             "withdrawn": _brief_event(x["withdrawn"], "by", "reason")}
 
@@ -506,6 +563,9 @@ def _md_record(n: int, r: dict) -> list[str]:
         bits = [f"{_md(a['label'])}, by {_who(a['by'])}, {_when(a['at'])}"] + ([took] if took else [])
         if a["comment"]:
             bits.append(f"comment: \u201c{_md(a['comment'])}\u201d")
+        if a["via"] == "chat":
+            bits.append(f"answered in chat, recorded by {_who(a['by'])}: \u201c{_md(a['quote'])}\u201d"
+                        + (f" ({_md(a['source'])})" if a.get("source") else ""))
         if isinstance(a["gate"], dict):
             bits.append("written to the system" + (f": {_md(a['gate'].get('message'))}" if a["gate"].get("message") else ""))
         out += ["**Answer:** " + "; ".join(bits) + _unsigned(a), ""]
@@ -513,20 +573,22 @@ def _md_record(n: int, r: dict) -> list[str]:
         out += [f"**Applied:** {_md(r['applied']['where'])}, {_when(r['applied']['at'])}", ""]
     if r["withdrawn"]:
         out += [f"**Withdrawn:** {_md(r['withdrawn']['reason'])}, {_when(r['withdrawn']['at'])}", ""]
+    if r["expired"]:
+        out += [f"**Expired:** no answer by {_when(r['expired']['at'])}; {_md(r['expired']['outcome'])}", ""]
     return out
 
 
 def cmd_digest(a):
     store = _store(a)
     secret = store.secret()
-    st = core.fold(store.events())
+    st = core.fold(store.events(), core.now())
     records = [_record(st["asks"][i], secret) for i in st["order"]]
     if a.format == "json":
         return {"ok": True, "format": "json", "seq": st["seq"], "asks": records}
     count = {k: sum(r["state"] == k for r in records) for k in STATUS_WORDS}
     lines = ["# Decision record", "",
              f"{len(records)} asks: {count['applied']} applied, {count['waiting']} answered and waiting to be applied, "
-             f"{count['open']} open, {count['withdrawn']} withdrawn. As of {_when(core.now())}.",
+             f"{count['open']} open, {count['withdrawn']} withdrawn, {count['expired']} expired. As of {_when(core.now())}.",
              "Signatures checked with this console's secret." if secret else
              "Signatures not checked: there is no secret here.", ""]
     for n, r in enumerate(records, 1):
