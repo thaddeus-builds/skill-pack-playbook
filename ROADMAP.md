@@ -1,5 +1,5 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-21
+Updated: 2026-10-22
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
 - [N1] 2026-10-21 inventory the skill packs, read-only, with the GitLab token the environment now holds (`GITLAB_TOKEN`, git.coco.xyz allowed): list the skill pack repositories, run `python3 tools/consumers.py` and `python3 tools/fleet.py status` on each one's main branch, and report who imports which kit module, which kit version each holds, and whether `kit.autonomy` has an importer (X9)
@@ -17,6 +17,7 @@ Updated: 2026-10-21
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
 - [X9] 2026-10-13 a first skill pack imports `kit.autonomy` (0.27.0): the SEO skill pack when it moves onto the kit (W2); the Amazon PPC skill pack does not (it does not vendor the kit, read 2026-10-21). Two minor versions have passed with no known importer (the rule of kit/packs.tsv): delete it unless N1 finds one
+- [X10] 2026-10-22 build the client hub (R5), one pull request each, in order: intake `packs` field and quote check (build/); new-hub and add-pack scaffolds; one inbox across packs (console, kit/pending.py); hub facts and the copy table (kit version bump); then the first real client
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)
@@ -43,6 +44,7 @@ Updated: 2026-10-21
 - [R2] 2026-10-05 selective vendoring go-ahead and date (#19): "yes, after turn 2"; built in kit 0.7.0, RESTRUCTURE.md phase 2 (as recorded in this roadmap's open decisions, 2026-10-05)
 - [R3] 2026-10-21 the Amazon PPC skill pack is not moved onto the kit for now: "暂不迁移" (it holds its own copies of ten kit modules, which have drifted far from the kit's; the black-box conformance check stays, D7)
 - [R4] 2026-10-21 each skill pack draws its own overview page from its registries (templates/system-overview.md) and the README points to it; the README's pipeline diagram, which is the same for every skill pack, stays: "同意这样分工"
+- [R5] 2026-10-22 the client hub design (W4), all five recommendations: a client fact is confirmed once at the hub and packs copy it without asking again; the hub starts with the markets, the facts two packs define the same way and break-even ROAS as `npr_roas` (replacing `roas_target`); one cap of 10 open asks per owner across a client's packs; words and choices may be answered in chat, confirmations need a click or a code; start with one real client, new facts only: "agree" (chat 2026-10-22)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`
