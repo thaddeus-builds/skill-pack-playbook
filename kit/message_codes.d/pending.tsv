@@ -23,3 +23,4 @@ pending_summary_files	facts,files,decisions,queue	asks waiting on a person: {fac
 pending_title_file	name,rows,values	What the agent read from {name}: {rows} map row(s) and {values} value(s). Confirm them together?	从 {name} 读出的内容：映射 {rows} 行、数值 {values} 项。一起确认吗？
 pending_why_file	name,version,values	The agent mapped {name} (version {version}) and read {values} value(s) from its cells. One yes confirms all of it; nothing from this version is used before that	agent 映射了 {name}（版本 {version}），并从单元格读出 {values} 项数值。一次确认全部生效；确认前，这个版本的内容都不使用
 pending_if_no_file		Nothing from this version is used; the agent corrects the map or the values and stages the file again	这个版本的内容都不使用；agent 改正映射或数值后重新提交
+pending_gate_too_many_words	id,words	{id}: no gate, its verb is {words} words, more than the console sends; confirm it at the terminal	{id}：无法通过控制台确认，它的命令有 {words} 个词，超出控制台上限；请在终端确认

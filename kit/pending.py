@@ -44,6 +44,21 @@ What it guards:
   * An ask id carries a digest of the subject (value and version), so a
     new pending value is a new question, never a reused id.
 
+Hub mode (`<cli> pending --hub`, `asks(..., hub=True)`): when one client is
+served by several skill packs, all of them post to ONE console, the hub's,
+whose relay command is the hub's dispatcher (`bin/hub <cli> <verb…>`). Then
+every ask id starts with the skill pack's cli word (`gads-fact-us-…`), every
+gate verb starts with it (`["gads", "facts", "confirm", key]`, which the
+console's verb limit admits: one word more than a skill pack's own), and every
+group starts with the skill pack's name (`google-ads · Facts, US`), so the
+owner's one inbox says which skill pack asks. Nothing else changes: the gate's
+`expect` binds the same subject, and the hub console's `--relay-verbs` lists
+`<cli> facts confirm,<cli> decisions confirm,<cli> queue approve` per pack. A
+flag, not an environment switch: it is said on the one command line that
+makes the asks, so a shell that ran a hub once cannot change what a plain
+`pending` prints. A verb that would pass the console's word limit gets no
+gate (`pending_gate_too_many_words`).
+
 Every text in an ask is a coded Msg: `about[i]` carries the
 {title,why,if_no,effect}_code of asks[i] (the console format has no room
 for codes inside the ask).
@@ -80,7 +95,7 @@ LIMITS = {"id": 64, "kind": 40, "group": 60, "title": 120, "why": 400,
           "if_no": 200, "effect": 200, "label": 40, "value": 120,
           "source": 120, "caption": 80, "cell": 80, "option_label": 60,
           "unit": 12, "evidence": 12, "rows": 30, "options": 8,
-          "expect": 2000, "answer": 500}
+          "expect": 2000, "answer": 500, "verb": 7}
 TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,79}\Z")
 FILL = ["recommend.because"]
 SKIP_EVIDENCE = ("because", "because_code")
@@ -102,11 +117,23 @@ def _cell(v: Any) -> str:
     return _clip(v if isinstance(v, str) else q.canonical(v), LIMITS["cell"])
 
 
-def _ask_id(prefix: str, parts: list[str], subject: str) -> str:
+def _ask_id(prefix: str, parts: list[str], subject: str,
+            hub: str | None = None) -> str:
+    """`<prefix>-<slug>-<digest>`; in hub mode `<cli>-` first."""
     slug = re.sub(r"[^a-z0-9._-]+", "-", "-".join(parts).lower()).strip("-._")
     digest = hashlib.sha256(subject.encode()).hexdigest()[:8]
-    head = f"{prefix}-{slug}"[:LIMITS["id"] - 9].rstrip("-._")
+    head = f"{hub}-{prefix}" if hub else prefix
+    head = f"{head}-{slug}"[:LIMITS["id"] - 9].rstrip("-._")
     return f"{head}-{digest}"
+
+
+def _hub_word() -> str:
+    """The cli word as the head of an ask id (the console's id alphabet)."""
+    return re.sub(r"[^a-z0-9._-]+", "-", config().cli.lower()).strip("-._")
+
+
+def _group(text: str, hub: str | None) -> str:
+    return _clip(f"{config().name} · {text}" if hub else text, LIMITS["group"])
 
 
 def _fact(label: str, value: Any, table: str) -> dict | None:
@@ -206,8 +233,19 @@ def _recommend(shape: dict, value: str) -> dict:
 
 
 def _gate(ask_id: str, verb: list[str], expect: dict, value_arg: bool,
-          warnings: list[Msg], market: str | None = None) -> dict | None:
-    """The gate block, or None with a coded warning saying why not."""
+          warnings: list[Msg], market: str | None = None,
+          hub: str | None = None) -> dict | None:
+    """The gate block, or None with a coded warning saying why not. In hub
+    mode the verb starts with the cli word (the hub's dispatcher takes it)."""
+    if hub:
+        verb = [config().cli, *verb]
+    if len(verb) > LIMITS["verb"]:
+        warnings.append(msg(
+            "pending_gate_too_many_words",
+            f"{ask_id}: no gate, its verb is {len(verb)} words (the console "
+            f"sends at most {LIMITS['verb']}); confirm it at the terminal",
+            id=ask_id, words=len(verb)))
+        return None
     for w in verb:
         if not TOKEN_RE.match(w):
             warnings.append(msg(
@@ -270,7 +308,8 @@ def _about(ask_id: str, table: str, m: str, ref: dict, step: str,
 
 def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
               thresholds: Thresholds | None, relay_markets: list[str],
-              confirmed: list[str], warnings: list[Msg]) -> tuple[dict, dict]:
+              confirmed: list[str], warnings: list[Msg],
+              hub: str | None = None) -> tuple[dict, dict]:
     m, key, value = r["market"], r["key"], r["value"]
     version = facts._last_id(con, m, key)
     subj = human.subject("facts confirm", m, "fact", {key: value}, version)
@@ -278,7 +317,7 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
     declared = key == markets.MARKET_KEY
     if declared:
         shape, label, why_row = {"step": "confirm"}, "Market", ""
-        ask_id = _ask_id("market", [m], subj)
+        ask_id = _ask_id("market", [m], subj, hub)
         title = msg("pending_title_declared",
                     f"Do we work on market {m} for you?", market=m)
         why = msg("pending_why_declared",
@@ -290,7 +329,7 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
                     f"the agent asks which markets are right.", market=m)
     else:
         shape, label, why_row = _fact_shape(key, keys, thresholds)
-        ask_id = _ask_id("fact", [m, key], subj)
+        ask_id = _ask_id("fact", [m, key], subj, hub)
         title = msg("pending_title_fact",
                     f"{label} for {m}: is {value} right?", label=label,
                     market=m, value=value)
@@ -308,7 +347,7 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
                          _cut(why, LIMITS["why"]), _cut(if_no, LIMITS["if_no"]))
     ask = {"id": ask_id, "step": shape["step"],
            "kind": "market" if declared else "fact",
-           "group": _clip(f"Facts, {m}", LIMITS["group"]),
+           "group": _group(f"Facts, {m}", hub),
            "title": title, "why": why,
            "evidence": _evidence(
                _fact("Value waiting", value, "client_facts"),
@@ -327,7 +366,7 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
         gate = _gate(ask_id, ["facts", "confirm", key],
                      {"market": m, "items": {key: "$value" if value_arg
                                              else value}},
-                     value_arg, warnings, _market_word(m, relay_markets))
+                     value_arg, warnings, _market_word(m, relay_markets), hub)
     if gate:
         ask["gate"] = gate
     return ask, _about(ask_id, "client_facts", m, {"key": key},
@@ -337,8 +376,8 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
 
 def _decision_ask(con: sqlite3.Connection, r: dict, *,
                   registry: DecisionRegistry, on_confirm: Callable | None,
-                  relay_markets: list[str], warnings: list[Msg]
-                  ) -> tuple[dict, dict]:
+                  relay_markets: list[str], warnings: list[Msg],
+                  hub: str | None = None) -> tuple[dict, dict]:
     m, et, eid, key, value = (r["market"], r["entity_type"], r["entity_id"],
                               r["key"], r["value"])
     try:
@@ -358,7 +397,7 @@ def _decision_ask(con: sqlite3.Connection, r: dict, *,
     subj = plan["subject"] if plan and not plan["already"] else \
         human.subject("decisions confirm", m, et, {eid: {key: value}},
                       decisions.last_change(con, m, et, eid, [key]))
-    ask_id = _ask_id("decision", [m, et, eid, key], subj)
+    ask_id = _ask_id("decision", [m, et, eid, key], subj, hub)
     title = _cut(msg("pending_title_decision",
                      f"{label} of {et} {eid}: is {value} right?",
                      label=label, entity_type=et, entity_id=eid, value=value),
@@ -378,7 +417,7 @@ def _decision_ask(con: sqlite3.Connection, r: dict, *,
                      f"proposal or sets another value.", effective=in_force),
                  LIMITS["if_no"])
     ask = {"id": ask_id, "step": shape["step"], "kind": "decision",
-           "group": _clip(f"Decisions, {m}", LIMITS["group"]),
+           "group": _group(f"Decisions, {m}", hub),
            "title": title, "why": why,
            "evidence": _evidence(
                _fact("Value waiting", value, "decisions"),
@@ -402,7 +441,7 @@ def _decision_ask(con: sqlite3.Connection, r: dict, *,
             items[eid][key] = "$value"
         gate = _gate(ask_id, ["decisions", "confirm", et, eid, key],
                      {"market": m, "items": items}, value_arg, warnings,
-                     _market_word(m, relay_markets))
+                     _market_word(m, relay_markets), hub)
     if gate:
         ask["gate"] = gate
     return ask, _about(ask_id, "decisions", m,
@@ -411,11 +450,12 @@ def _decision_ask(con: sqlite3.Connection, r: dict, *,
                        if_no=if_no)
 
 
-def _queue_ask(r: dict, warnings: list[Msg]) -> tuple[dict, dict]:
+def _queue_ask(r: dict, warnings: list[Msg],
+               hub: str | None = None) -> tuple[dict, dict]:
     m, kind, target = r["market"], r["kind"], r["target_ref"]
     row = q.row_dict(r)
     ev, expected = row["evidence"] or {}, row["expected"] or {}
-    ask_id = _ask_id("action", [m, str(r["id"])], q.approve_subject([r]))
+    ask_id = _ask_id("action", [m, str(r["id"])], q.approve_subject([r]), hub)
     title = _cut(msg("pending_title_queue",
                      f"Approve {kind} on {target} ({m})?", kind=kind,
                      target_ref=target, market=m), LIMITS["title"])
@@ -440,7 +480,7 @@ def _queue_ask(r: dict, warnings: list[Msg]) -> tuple[dict, dict]:
                      "reason code, and the next proposal run reads it."),
                  LIMITS["if_no"])
     ask = {"id": ask_id, "step": "approve", "kind": "action",
-           "group": _clip(f"Actions, {m}", LIMITS["group"]),
+           "group": _group(f"Actions, {m}", hub),
            "title": title, "why": why,
            "evidence": _evidence(
                _table("What would be written", row["payload"], "action_queue"),
@@ -452,7 +492,8 @@ def _queue_ask(r: dict, warnings: list[Msg]) -> tuple[dict, dict]:
            "recommend": {"value": "yes", "because": None},
            "effect": effect, "if_no": if_no}
     gate = _gate(ask_id, ["queue", "approve", str(r["id"])],
-                 {"market": m, "items": q.approve_items([r])}, False, warnings)
+                 {"market": m, "items": q.approve_items([r])}, False, warnings,
+                 None, hub)
     if gate:
         ask["gate"] = gate
     return ask, _about(ask_id, "action_queue", m, {"id": r["id"]}, "approve",
@@ -460,7 +501,8 @@ def _queue_ask(r: dict, warnings: list[Msg]) -> tuple[dict, dict]:
                        if_no=if_no)
 
 
-def _file_ask(f: dict, warnings: list[Msg]) -> tuple[dict, dict]:
+def _file_ask(f: dict, warnings: list[Msg],
+              hub: str | None = None) -> tuple[dict, dict]:
     """One ask for one staged client file. `f` (the skill pack's): name (the
     file's id), version (the staged bundle's), source (where it lives, for
     the evidence), rows (how many map rows it confirms), shown ([[row id,
@@ -470,7 +512,7 @@ def _file_ask(f: dict, warnings: list[Msg]) -> tuple[dict, dict]:
     the verb needs one)."""
     name, version = str(f["name"]), str(f["version"])
     values, n_rows = list(f.get("values") or []), int(f.get("rows") or 0)
-    ask_id = _ask_id("file", [name], q.canonical(f["expect"]))
+    ask_id = _ask_id("file", [name], q.canonical(f["expect"]), hub)
     title = _cut(msg("pending_title_file",
                      f"What the agent read from {name}: {n_rows} map row(s) "
                      f"and {len(values)} value(s). Confirm them together?",
@@ -487,7 +529,7 @@ def _file_ask(f: dict, warnings: list[Msg]) -> tuple[dict, dict]:
                      "the map or the values and stages the file again."),
                  LIMITS["if_no"])
     ask = {"id": ask_id, "step": "confirm", "kind": "file",
-           "group": _clip("Files", LIMITS["group"]),
+           "group": _group("Files", hub),
            "title": title, "why": why,
            "evidence": _evidence(
                _grid("Values read from the file", ["Value", "Market",
@@ -501,7 +543,7 @@ def _file_ask(f: dict, warnings: list[Msg]) -> tuple[dict, dict]:
                _fact("Stored as", f.get("source"), "workbook map")),
            "recommend": {"value": "yes", "because": None}, "if_no": if_no}
     gate = _gate(ask_id, list(f["verb"]), f["expect"], False, warnings,
-                 f.get("market"))
+                 f.get("market"), hub)
     if gate:
         ask["gate"] = gate
     return ask, _about(ask_id, "workbook_map", f.get("market") or "",
@@ -516,12 +558,14 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
          thresholds: Thresholds | None = None,
          on_confirm: Callable | None = None,
          market: str | None = None,
-         staged: Callable | None = None) -> dict:
+         staged: Callable | None = None, hub: bool = False) -> dict:
     """{asks, about, warnings, message} for every row waiting on a human
     (of `market`, or of every market): declarations first, then facts,
     staged files (`staged(con)`, the skill pack's list of _file_ask's
-    dicts), decisions and queue items."""
+    dicts), decisions and queue items. `hub`: for a client hub's one
+    console (the module doc, "Hub mode")."""
     warnings: list[Msg] = []
+    pack = _hub_word() if hub else None
     out: list[tuple[dict, dict]] = []
     fact_markets = markets.declared(con, include_pending=True)
     confirmed = markets.declared(con)
@@ -531,11 +575,11 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
     for r in rows:
         out.append(_fact_ask(con, r, keys=keys, thresholds=thresholds,
                              relay_markets=fact_markets, confirmed=confirmed,
-                             warnings=warnings))
+                             warnings=warnings, hub=pack))
     n_facts = len(out)
     for f in (staged(con) if staged is not None else []):
         if market is None or f.get("market") in (None, "", market):
-            out.append(_file_ask(f, warnings))
+            out.append(_file_ask(f, warnings, pack))
     n_files = len(out) - n_facts
     if registry is not None:
         for m in ([market] if market else confirmed):
@@ -545,10 +589,10 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
                 out.append(_decision_ask(con, r, registry=registry,
                                          on_confirm=on_confirm,
                                          relay_markets=confirmed,
-                                         warnings=warnings))
+                                         warnings=warnings, hub=pack))
     n_dec = len(out) - n_facts - n_files
     for r in q.pending(con, market):
-        out.append(_queue_ask(r, warnings))
+        out.append(_queue_ask(r, warnings, pack))
     n_q = len(out) - n_facts - n_files - n_dec
     summary = msg("pending_summary",
                   f"{len(out)} ask(s) waiting on a person: {n_facts} fact(s), "
@@ -565,7 +609,7 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
             f"write recommend.because in each of the {len(out)} ask(s) (your "
             f"argument, apart from the skill pack's evidence) before `ask.py "
             f"add`; the console refuses an ask without it", count=len(out)))
-    return {**coded("message", summary), "market": market,
+    return {**coded("message", summary), "market": market, "hub": hub,
             "asks": [a for a, _ in out], "about": [b for _, b in out],
             **coded("warnings", warnings)}
 
@@ -575,14 +619,18 @@ def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
          thresholds: Thresholds | None = None,
          on_confirm: Callable | None = None,
          staged: Callable | None = None) -> int:
-    """`<cli> pending [--market M] [--json]`; the exit code. `staged(con)`:
-    the skill pack's staged client files (see asks())."""
+    """`<cli> pending [--market M] [--hub] [--json]`; the exit code.
+    `staged(con)`: the skill pack's staged client files (see asks())."""
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = config()
     cmd = [cfg.cli, "pending", *argv]
     p = contract.Parser(prog=f"{cfg.cli} pending",
                                 description=__doc__.splitlines()[0])
     p.add_argument("--market")
+    p.add_argument("--hub", action="store_true",
+                   help="for a client hub's one console: ask ids and gate "
+                        "verbs start with the cli word, groups with the "
+                        "skill pack's name")
     contract.add_json_arg(p)
 
     def run(argv: list[str]) -> Any:
@@ -594,7 +642,7 @@ def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
         try:
             doc = asks(con, keys=keys, registry=registry,
                        thresholds=thresholds, on_confirm=on_confirm, market=m,
-                       staged=staged)
+                       staged=staged, hub=a.hub)
         finally:
             con.close()
         if a.json:
