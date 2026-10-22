@@ -13,7 +13,7 @@ them with the skill pack's own cache tables):
                                           client hub's confirmed facts, and
                                           what it did with each version
 
-`ADDED_LATER` names the human tables a file written before them may lack:
+`ADDED_LATER` names the human tables that a file written earlier can lack:
 a read-only open proceeds without one, the next write-mode open creates
 it (kit.db human_added_later; with_human always passes these).
 
