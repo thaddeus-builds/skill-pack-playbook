@@ -168,10 +168,14 @@ def test_iids_are_unique_across_files_and_carry_their_bucket_letter():
     d2 = broken(lambda d: item(d, "numbers", "n5").update(iid="n1"), M2)
     for q in d2["questions"]:
         q["about"] = ["n2", "n1"]
-    code, r = check(M1, d2)
-    assert "duplicate_iid" in codes(r, "n1") and code == 2, r
+    code, r = check(M1, d2)                                   # a later meeting reuses an iid: it names the next free one
+    assert codes(r, "n1") == {"iid_reused"} and code == 2, r
+    assert "next free one is n5" in r["problems"][0]["message"], r
     code, r = check(M1, M1)
-    assert {p["code"] for p in r["problems"]} == {"duplicate_iid"} and len(r["problems"]) == 16, r
+    assert {p["code"] for p in r["problems"]} == {"iid_reused"} and len(r["problems"]) == 16, r
+    d = broken(lambda d: item(d, "words", "w2").update(iid="w1"))
+    code, r = check(d, M2)                                    # twice in one file
+    assert codes(r, "w1") == {"duplicate_iid"}, r
     for bad in ("n9", "w01", "W1", "w", "word1"):
         d = broken(lambda d: item(d, "words", "w1").update(iid=bad))
         assert codes(check(d, M2)[1], bad) == {"bad_iid"}, bad
@@ -232,6 +236,117 @@ def test_the_schema_uses_only_keywords_the_checker_understands_and_codes_it_regi
     walk(schema)
     assert named and named <= set(ci.CODES), named - set(ci.CODES)
     assert "$schema" not in json.dumps(schema)            # no link to a host: the repository publishes no outside URL
+
+
+# --------------------------------------------------- a client hub's packs --
+
+def check_packs(*docs, packs=None):
+    with _t.tmpdir() as d:
+        paths = [_t.save(os.path.join(d, f"m{n}.intake.json"), doc) for n, doc in enumerate(docs)]
+        return _t.tool("check_intake.py", *(["--packs", packs] if packs else []), *paths)
+
+
+def test_packs_are_optional_and_every_pack_named_is_one_of_the_clients():
+    assert check_packs(M1, M2)[0] == 0                                # no packs, no list: as before
+    assert check_packs(M1, M2, packs="gads,kos")[0] == 0              # a list, nothing named: fine
+    d = broken(lambda d: (d["meeting"].update(packs=["gads"]), item(d, "words", "w1").update(packs=["kos", "gads"])))
+    assert check_packs(d, M2, packs="gads,kos")[0] == 0
+    code, r = check_packs(d, M2, packs="gads")                        # w1 names kos, which the client has not
+    assert code == 2 and codes(r) == {"unknown_pack"} and r["problems"][0]["iid"] == "w1", r
+    code, r = check_packs(broken(lambda d: d["meeting"].update(packs=["gdas"])), M2, packs="gads")
+    assert codes(r) == {"unknown_pack"} and "gdas" in r["problems"][0]["message"], r   # a typo surfaces
+    for bad in (["GADS"], ["g"], [], "gads", ["google-ads"]):
+        code, r = check_packs(broken(lambda d: item(d, "numbers", "n3").update(packs=bad)), M2, packs="gads")
+        assert code == 2 and codes(r) <= {"unknown_pack", "too_short", "bad_type"}, (bad, r)
+    code, r = check_packs(d, M2)                                      # packs named and no list: a typo would vanish
+    assert code == 2 and codes(r) == {"unknown_pack"} and "--packs" in r["problems"][0]["message"], r
+    assert ci.check([_t.FIX1], packs=["gads"])["ok"]                  # the library call with a list
+    code, doc = _t.tool("check_intake.py", "--packs", "", _t.FIX1)
+    assert code == 2 and doc["code"] == "bad_request", doc
+
+
+def test_an_item_is_for_its_own_packs_else_its_meetings():
+    d = broken(lambda d: (d["meeting"].update(packs=["gads"]), item(d, "words", "w1").update(packs=["kos"])))
+    assert ci.item_packs(item(d, "words", "w1"), d["meeting"]) == ["kos"]
+    assert ci.item_packs(item(d, "words", "w2"), d["meeting"]) == ["gads"]
+    assert ci.item_packs(item(M1, "words", "w2"), M1["meeting"]) == []
+
+
+# ------------------------------------------ quotes against the transcript --
+
+TRANSCRIPT = os.path.join(_t.FIXTURES, "2026-03-02-northwind.transcript.md")
+
+
+def check_quotes(doc, *, flag=True, transcript=TRANSCRIPT):
+    """(exit, report) for one intake against the transcript: by --transcript, or by the meeting's path."""
+    with _t.tmpdir() as d:
+        doc = copy.deepcopy(doc)
+        if not flag:
+            with open(os.path.join(d, "meeting.md"), "w", encoding="utf-8") as f:
+                f.write(_t.read(transcript))
+            doc["meeting"]["transcript"] = "meeting.md"
+        p = _t.save(os.path.join(d, "m0.intake.json"), doc)
+        return _t.tool("check_intake.py", *(["--transcript", transcript] if flag else []), p)
+
+
+def test_every_quote_is_in_the_speaker_block_at_the_time_its_source_names():
+    for flag in (True, False):
+        assert check_quotes(M1, flag=flag) == (0, {"ok": True, "files": 1, "items": 16, "problems": []})
+        d = broken(lambda d: item(d, "words", "w1").update(source="2026-03-02 00:12:40"))   # the next block's time
+        code, r = check_quotes(d, flag=flag)
+        assert code == 2 and codes(r) == {"quote_not_at_source"} and r["problems"][0]["iid"] == "w1", (flag, r)
+        assert "does not hold it" in r["problems"][0]["message"]
+    d = broken(lambda d: item(d, "numbers", "n1").update(source="2026-03-02 00:16:21"))     # no block starts then
+    code, r = check_quotes(d)
+    assert codes(r) == {"quote_not_at_source"} and "no speaker block starts at 00:16:21" in r["problems"][0]["message"]
+    d = broken(lambda d: item(d, "stories", "s2").update(quote="Nothing may start spending before I say yes."))
+    assert codes(check_quotes(d)[1], "s2") == {"quote_not_at_source"}                 # words the client did not say
+    d = broken(lambda d: item(d, "goals", "g2").update(quote="We pushed it anyway."))   # a goal's quote is checked too
+    assert codes(check_quotes(d)[1], "g2") == {"quote_not_at_source"}
+
+
+def test_spaces_line_breaks_escapes_and_both_clock_forms_are_read_as_the_transcript_means():
+    # s1's quote spans a line break, w1's and n2's end on an escaped "\.", n1's holds "\-", n4's block is hh:mm:ss
+    text = _t.read(TRANSCRIPT)
+    assert "what sold,\nwhat" in text and "samplers\\." in text and "forty\\-five" in text and " 00:31:45\n" in text
+    blocks = ci.parse_transcript(text)
+    assert blocks[31 * 60 + 45] == ["In the rainy season it is more like sixty days."], blocks
+    assert blocks[12 * 60 + 31] == ["The little 50 gram pouches, we call those samplers."]
+    assert ci.parse_transcript("# Title\n> 2026-03-02 10:00\nno speaker yet\n") == {}
+    assert ci.parse_transcript("A 1:05:09\nhi\nB 75:00\nho\n") == {3909: ["hi"], 4500: ["ho"]}
+    d = broken(lambda d: item(d, "words", "w2").update(quote="The 250 gram  tins are\nwhat people come back for."))
+    assert check_quotes(d)[0] == 0
+
+
+def test_a_document_source_or_another_meeting_is_not_checked_against_this_transcript():
+    d = broken(lambda d: item(d, "words", "w1").update(source="doc:price list"))
+    assert check_quotes(d)[0] == 0
+    d = broken(lambda d: item(d, "words", "w1").update(source="2026-02-20 00:01:00"))   # an earlier meeting's time
+    assert check_quotes(d)[0] == 0
+    d = broken(lambda d: item(d, "words", "w1").update(source="doc:price list; 2026-03-02 00:12:40"))
+    assert codes(check_quotes(d)[1], "w1") == {"quote_not_at_source"}
+
+
+def test_a_transcript_that_cannot_be_read_or_has_no_speaker_block_is_a_problem_and_one_meeting_takes_one():
+    with _t.tmpdir() as d:
+        empty = os.path.join(d, "empty.md")
+        with open(empty, "w", encoding="utf-8") as f:
+            f.write("# notes\nno speaker lines here\n")
+        for flag in (True, False):
+            code, r = check_quotes(M1, flag=flag, transcript=empty)
+            assert code == 2 and codes(r) == {"no_transcript"}, (flag, r)
+        code, r = check_quotes(M1, transcript=os.path.join(d, "missing.md"))
+        assert code == 2 and codes(r) == {"no_transcript"}, r
+    d = broken(lambda d: d["meeting"].update(transcript="nowhere.md"))
+    assert codes(check(d)[1]) == {"no_transcript"}
+    code, doc = _t.tool("check_intake.py", "--transcript", TRANSCRIPT, _t.FIX1, _t.FIX2)
+    assert code == 2 and doc["code"] == "bad_request" and "one intake file" in doc["message"], doc
+    code, doc = _t.tool("check_intake.py", "--transcript", TRANSCRIPT, _t.FIX1)
+    assert code == 0, doc
+    code, doc = _t.tool("check_intake.py", "--unknown", _t.FIX1)
+    assert code == 2 and doc["code"] == "bad_request", doc
+    for c in ("unknown_pack", "quote_not_at_source", "iid_reused", "no_transcript"):
+        assert c in ci.CODES and c in _t.tool("check_intake.py", "--help")[1]["codes"], c
 
 
 # ------------------------------------------- the organizer prompt's own example --
