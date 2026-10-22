@@ -359,6 +359,19 @@ def main() -> int:
                        "--markets", "HK,H K")
     check("refused, exit 2: a market that is not a plain word",
           rc == 2 and "--markets" in err and not (root / "mk").exists(), err)
+    rc, out, err = run(HUB_PY, "new", "--hub", str(root / "cu"), "--title", "x",
+                       "--currencies", "USD,euro")
+    check("refused, exit 2: a currency that is not an ISO code",
+          rc == 2 and "--currencies" in err and not (root / "cu").exists(), err)
+    rc, out, err = run(HUB_PY, "new", "--hub", str(root / "cu2"), "--title", "x")
+    keys = (root / "cu2" / "hub" / "defs" / "fact_keys.tsv").read_text(encoding="utf-8")
+    check("without --currencies, currency is text: no client's list is built in",
+          rc == 0 and "currency\trequired\ttext\t" in keys, err or keys[:200])
+    rc, out, err = run(HUB_PY, "new", "--hub", str(root / "cu3"), "--title", "x",
+                       "--currencies", "USD,EUR")
+    keys = (root / "cu3" / "hub" / "defs" / "fact_keys.tsv").read_text(encoding="utf-8")
+    check("--currencies USD,EUR makes currency choice:USD|EUR",
+          rc == 0 and "currency\trequired\tchoice:USD|EUR\t" in keys, err or keys[:200])
     pf_existing.rmdir()
     check("a refused add-pack changed nothing in the hub", snapshot(hub) == hub_before)
 
