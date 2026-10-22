@@ -120,13 +120,14 @@ def main() -> int:
         check(f"it says {want}", want in brief, brief)
     pa = fake_pack("demoa")
     r = subprocess.run([sys.executable, str(HUB_PY), "add-pack", "--hub",
-                        str(hub), "--skill-pack", str(pa)],
+                        str(hub), "--skill-pack", str(pa), "--market", "DA"],
                        capture_output=True, text=True, timeout=120, env=env())
     brief = (hub / "CLAUDE.md").read_text(encoding="utf-8")
-    check("add-pack rewrites it: the pack, its gate verbs, --packs demoa",
-          r.returncode == 0 and "packs: `demoa`" in brief
-          and "`demoa facts confirm, facts restore, decisions confirm, queue "
-          "approve`" in brief and "--packs demoa" in brief,
+    check("add-pack rewrites it: the pack folder by its name, its market, "
+          "its gate verbs, --packs demoa-da",
+          r.returncode == 0 and "packs: `demoa-da` (DA)" in brief
+          and "`demoa-da facts confirm, facts restore, decisions confirm, "
+          "queue approve`" in brief and "--packs demoa-da" in brief,
           r.stdout + r.stderr + brief)
 
     print("[3] bin/hub hub …: the kit's facts verbs over <hub>/hub/hub.db")

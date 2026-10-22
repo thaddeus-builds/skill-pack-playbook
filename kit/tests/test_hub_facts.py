@@ -28,6 +28,12 @@ KIT_TTY seam), then the fake "shop" skill pack (markets US, CA) syncs:
       missing hub store is coded too
   [5] definition_diffs (type, unit, bounds as numbers, shared labels; why
       ignored) and the guard kit.guards.hub_keys.check a pack's test calls
+  [6] a pack without markets: serving no hub market, every hub fact of a
+      market is fact_hub_copy_missing in doctor (never ok) and skipped by
+      sync (no_hub_market); with <P>_HUB_MARKET it copies that market's
+      facts into "_" (declarations never), the source and hub_copies naming
+      the hub row; doctor current; pending --hub under <P>_HUB_CLI; a pack
+      with markets refuses a hub market
 """
 
 import hashlib
@@ -455,10 +461,124 @@ def test_definition_guard() -> None:
           len(got) == 1 and "cannot be read" in got[0], got)
 
 
+# ---- 6 -----------------------------------------------------------------------
+
+def test_market_less_pack() -> None:
+    print("[6] a pack without markets serves one hub market")
+    flat = Path(tmp_dir("shop-flat-"))
+    shutil.copytree(_shop.SHOP, flat, dirs_exist_ok=True)
+    toml = flat / "skill-pack.toml"
+    toml.write_text(toml.read_text(encoding="utf-8").replace(
+        'markets = ["US", "CA"]', "markets = []"), encoding="utf-8")
+    data = Path(tmp_dir("shop-flat-data-"))
+
+    def fenv(market=None, cli=None):
+        cfg = config.use(flat)
+        extra = {cfg.env("HUB_MARKET"): market} if market else {}
+        if cli:
+            extra[cfg.env("HUB_CLI")] = cli
+        return clean_env(**{cfg.env("DATA_DIR"): str(data),
+                            cfg.env("AUTH_ENV_PATHS"): "none",
+                            cfg.env("HUB_DIR"): str(HUB), **extra})
+
+    def frun(argv, market=None, tty=None):
+        return capture(lambda a: facts.main(a, spec=SPEC, keys=FactKeys(),
+                                            thresholds=None),
+                       list(argv), env=fenv(market), tty_answers=tty)
+
+    def flines(market=None):
+        box = {}
+
+        def go(_a):
+            box["ctx"] = doctor.collect(spec=SPEC)
+            return 0
+        capture(go, [], env=fenv(market))
+        return [(f.level, f.message.code, f.message.params)
+                for f in box["ctx"].findings if f.check == "hub"]
+
+    def ffact(key):
+        with closing(sqlite3.connect(data / "shop.db")) as c:
+            return c.execute("SELECT value, is_assumption, source FROM "
+                             "client_facts WHERE market='_' AND key=?",
+                             (key,)).fetchone()
+
+    lines = flines()
+    missing = {(x[2]["key"], x[2]["market"]) for x in lines
+               if x[1] == "fact_hub_copy_missing"}
+    check("doctor, no hub market named: every hub fact of a market is "
+          "fact_hub_copy_missing (key and market), never ok",
+          {("unit_cost", "US"), ("channel", "US"), ("unit_cost", "MX")}
+          <= missing and not any(x[1] == "fact_hub_current" for x in lines)
+          and all(x[0] == "warn" for x in lines), lines)
+    rc, out, err = frun(["sync-hub", "--json"])
+    doc = one_doc(out) or {}
+    reasons = {(i["key"], i["market"]): (i["outcome"], i.get(
+        "message_code", {}).get("params", {}).get("reason"))
+        for i in doc.get("results", [])}
+    check("sync, no hub market: skipped, saying no hub market is served "
+          "(the declarations: not this pack's door)",
+          rc == 0 and reasons[("unit_cost", "US")] == ("skipped",
+                                                       "no_hub_market")
+          and reasons[("market_declared", "US")] == ("skipped", "market")
+          and doc["counts"]["copied"] == 0, reasons)
+    rc, out, err = frun(["sync-hub", "--json"], market="US")
+    doc = one_doc(out) or {}
+    got = {(i["key"], i["market"]): (i["outcome"], i.get("pack_market"))
+           for i in doc.get("results", [])}
+    hid = hub_id("unit_cost")
+    digest = facts.hub_digest("demo-hub", "US", "unit_cost", "4.5", hid)
+    check("with <P>_HUB_MARKET=US: US's facts copied into '_', other "
+          "markets and every declaration skipped",
+          got[("unit_cost", "US")] == ("copied", "_")
+          and got[("channel", "US")] == ("copied", "_")
+          and got[("unit_cost", "MX")][0] == "skipped"
+          and got[("market_declared", "US")][0] == "skipped", got)
+    check("… the copy's source names the hub row (its US history id and a "
+          "digest over the hub's own market)",
+          ffact("unit_cost") == ("4.5", 0,
+                                 f"hub:demo-hub@{hid}#{digest[:16]}"),
+          ffact("unit_cost"))
+    with closing(sqlite3.connect(data / "shop.db")) as c:
+        rows = c.execute("SELECT market, key, hub_history_id, hub_digest "
+                         "FROM hub_copies ORDER BY copy_id").fetchall()
+    check("… hub_copies records the pack's '_' and the hub row's id and "
+          "digest", ("_", "unit_cost", hid, digest) in rows, rows)
+    lines = flines("US")
+    check("doctor with the hub market: current, nothing missing",
+          ("ok", "fact_hub_current") in [x[:2] for x in lines]
+          and not any(x[1] in ("fact_hub_copy_missing", "fact_hub_copy_stale")
+                      for x in lines), lines)
+    frun(["unconfirm", "channel", "--reason", "doubt"])
+
+    def hub_asks(_a):
+        with closing(db.connect(SPEC, data / "shop.db", read_only=True)) as c:
+            box["doc"] = pending.asks(c, keys=FactKeys(), registry=None,
+                                      hub=True)
+        return 0
+    box: dict = {}
+    capture(hub_asks, [], env=fenv("US", cli="shop-us"))
+    a = (box["doc"]["asks"] or [{}])[0]
+    check("pending --hub under the folder's dispatch name (<P>_HUB_CLI): "
+          "the id, the gate verb and the group name it",
+          a.get("id", "").startswith("shop-us-fact-")
+          and a.get("gate", {}).get("verb", [None])[0] == "shop-us"
+          and "(shop-us)" in a.get("group", ""), a)
+    env = as_pack()
+    env[config.config().env("HUB_MARKET")] = "US"
+    rc, out, err = capture(lambda x: facts.main(x, spec=SPEC, keys=FactKeys(),
+                                                thresholds=None),
+                           ["sync-hub", "--json"], env=env)
+    check("a pack with its own markets refuses a hub market "
+          "(fact_hub_market_partitioned)",
+          rc == 2 and one_doc(out)["code"] == "fact_hub_market_partitioned",
+          out)
+
+
 if __name__ == "__main__":
     test_first_sync()
     test_once_per_version()
     test_stale_and_conflict()
     test_definitions_and_no_hub()
     test_definition_guard()
+    test_market_less_pack()
     raise SystemExit(finish())
