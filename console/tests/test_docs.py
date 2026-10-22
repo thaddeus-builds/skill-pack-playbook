@@ -186,7 +186,7 @@ def test_every_flag_the_docs_show_is_real_and_the_ones_that_matter_are_shown():
 
 def test_every_verb_the_docs_call_is_real_and_every_verb_is_told():
     verbs = ask_verbs()
-    assert {"add", "wait", "answers", "applied", "withdraw", "say", "schema", "verify", "list", "digest"} == verbs
+    assert {"add", "wait", "answers", "applied", "withdraw", "say", "schema", "verify", "list", "digest", "chat"} == verbs
     for rel in (CONSOLE, AGENT, QUEUE):
         called = set(CALL.findall(doc(rel)))
         assert called and called <= verbs, (rel, called - verbs)
@@ -265,25 +265,34 @@ def diagram(needle: str) -> str:
 
 
 def edges_of_the_fold() -> set[tuple[str, str]]:
-    """Every (from, to) one event can make an ask do, found by trying each event on each state."""
-    a, _ = core.validate_ask(example("confirm-word.json"))
+    """Every (from, to) one event, or the clock passing an ask's `expires`, can make
+    an ask do, found by trying each on each state. Recording an expired ask
+    (`applied`) leaves it expired: no edge."""
+    a, _ = core.validate_ask({**example("confirm-word.json"), "expires": "2026-01-05"})
     changed = {**a, "title": a["title"] + " again"}
+    late = "2026-02-01T00:00:00Z"
 
     def ev(seq, type, **f):
         return {"seq": seq, "at": "2026-01-01T00:00:00Z", "by": "x", "type": type, "id": a["id"], **f}
     ans = dict(value="yes", subject=core.subject_hash(a))
     made = {"open": [ev(1, "ask", ask=a)], "answered": [ev(1, "ask", ask=a), ev(2, "answer", **ans)],
             "applied": [ev(1, "ask", ask=a), ev(2, "answer", **ans), ev(3, "applied", where="x")],
-            "withdrawn": [ev(1, "ask", ask=a), ev(2, "withdraw", reason="x")]}
+            "withdrawn": [ev(1, "ask", ask=a), ev(2, "withdraw", reason="x")],
+            "expired": [ev(1, "ask", ask=a)]}
     edges = set()
     for src, path in made.items():
         n = len(path) + 1
-        for move in (ev(n, "ask", ask=changed), ev(n, "answer", **ans), ev(n, "reopen", answer_seq=2),
-                     ev(n, "applied", where="x"), ev(n, "withdraw", reason="x")):
-            st = core.fold(path + [move])
+        moves = [ev(n, "ask", ask=changed), ev(n, "answer", **ans), ev(n, "chat", quote="q", **ans),
+                 ev(n, "reopen", answer_seq=2), ev(n, "applied", where="x"), ev(n, "withdraw", reason="x"), None]
+        for move in moves:
+            if src == "expired" and move is not None:
+                move = {**move, "at": late}
+            st = core.fold(path + ([move] if move else []), late if move is None or src == "expired" else None)
             if not st["problems"]:
                 cur = st["asks"][a["id"]]
-                edges.add((src, "applied" if cur["applied"] else cur["status"]))
+                to = "applied" if cur["applied"] and cur["status"] == "answered" else cur["status"]
+                if not (move is None and to == src) and not (src == to == "expired"):
+                    edges.add((src, to))
     return edges
 
 
@@ -292,8 +301,9 @@ def test_the_state_diagram_is_the_fold():
     drawn = set(re.findall(r"^\s*(\w+) --> (\w+)", states, re.M))
     assert drawn == edges_of_the_fold(), (drawn ^ edges_of_the_fold())
     assert "[*] --> open" in states
-    assert set(re.findall(r"^\s*(\w+) --> \[\*\]", states, re.M)) == {"applied", "withdrawn"}
-    assert not {e for e in edges_of_the_fold() if e[0] in ("applied", "withdrawn")}    # nothing leaves an end
+    assert set(re.findall(r"^\s*(\w+) --> \[\*\]", states, re.M)) == {"applied", "withdrawn", "expired"}
+    assert not {e for e in edges_of_the_fold() if e[0] in ("applied", "withdrawn", "expired")}    # nothing leaves an end
+    assert ("open", "expired") in edges_of_the_fold()                                  # the clock is an edge too
 
 
 # ------------------------------------------------ the quick start, end to end --
@@ -441,7 +451,7 @@ def test_an_id_is_refused_once_it_is_answered_not_only_once_it_is_applied():
         store.answer("alice", ask_id, "yes", shown=store.state()["asks"][ask_id]["hash"])
         again = cli(d, "add", path)
         assert again["code"] == "id_used" and again["params"]["status"] == "answered"
-    assert "once an ask is answered or withdrawn, `add` refuses it (`id_used`)" in doc(CONSOLE)
+    assert "once an ask is answered, withdrawn or expired, `add` refuses it (`id_used`)" in doc(CONSOLE)
 
 
 def test_every_ok_reply_names_the_folder_and_verify_without_a_secret_is_refused():

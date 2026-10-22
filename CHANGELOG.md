@@ -121,6 +121,16 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.34.0] - 2026-10-22
+### Added
+- `kit/pending.py` hub mode: `<cli> pending --hub` (`asks(..., hub=True)`) makes asks for a client hub's one console, shared by every skill pack that serves the client. Every ask id starts with the cli word (`gads-fact-us-…`), every gate verb with it (`["gads", "facts", "confirm", key]`, relayed through the hub's dispatcher `bin/hub <cli> …`), every group with the skill pack's name (`google-ads · Facts, US`); the gate's `expect` is unchanged. A verb that would pass the console's word limit gets no gate and the coded warning `pending_gate_too_many_words`. A flag, not an environment switch. Without `--hub` nothing changes; the JSON gains `hub`. Test: `kit/tests/test_pending.py` [6].
+- Console (re-vendored with the kit): a gate or relay verb may be 7 words (was 6), one more for the hub's cli word.
+- Console: every ask may carry `expires` (`YYYY-MM-DD`, open through that day UTC, or `YYYY-MM-DDTHH:MM:SSZ`); `ask.py add` gives a new ask 7 days when it names none, and a revision keeps its own. Past it an open ask is `expired`: nothing changes, nobody can answer it, its id is never used again, `answers` and `wait` list it under `expired` until the agent records it with `applied ID`, `list --status expired` finds it, History and `digest` say "Expired unanswered: nothing changes". Derived from the clock and the events' own times, so no new event; `wait` also returns when an ask expires.
+- Console: `ask.py chat ID --value=V --quote=TEXT [--source=TEXT]`, the agent's record of an answer the owner gave in chat: a new agent event `chat` (`via: chat`, `by: agent:NAME`, never signed, `verified: null`), checked like a click and applied like one; History shows it as "Answered in chat" with the quote and source, "not clicked here". Refused with the new code `gate_needs_click` for an ask with a gate, one that approves a change or one that takes a number.
+- Console: the cap of 10 open asks is the owner's across every agent posting to one log (each pack `--as` its own name), now tested and said in `docs/consoles.md`.
+### Changed
+- The console's event log gains `chat` events, an ask's `expires` and answer rows' `via` (and `quote`, `source` for chat): additive. A log written before folds exactly as it did at any clock (`test_an_old_log_replays_unchanged_whatever_the_clock_says`); a console older than this one sets a `chat` event aside as `unknown_type`.
+
 ## [0.33.1] - 2026-10-21
 ### Fixed
 - `kit.guards.release`: a `[release].must_ship` entry that is a directory (for instance `kit` where `scripts_dir` is `.`) ships when a tracked file under it ships and none under it is internal; it was always reported as `[release].must_ship paths do not ship`, because only file paths were compared. Seen in the video-ads skill pack (kit 0.30.1), which dropped `kit` from its list meanwhile (issue 108).
