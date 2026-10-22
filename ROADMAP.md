@@ -1,22 +1,21 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-22
+Updated: 2026-10-23
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
-- [N1] 2026-10-21 inventory the skill packs, read-only, with the GitLab token the environment now holds (`GITLAB_TOKEN`, git.coco.xyz allowed): list the skill pack repositories, run `python3 tools/consumers.py` and `python3 tools/fleet.py status` on each one's main branch, and report who imports which kit module, which kit version each holds, and whether `kit.autonomy` has an importer (X9)
+- [N2] 2026-10-23 turn 2 (#20), now that the checkouts are read: bring the skill packs to one kit version. Where they stand (D21): the KOL skill pack 0.32.0, adcut 0.33.0, RedNote 0.5.0 with local changes in 15 kit files, the console in two of them and the adapter in three; playbook 0.35.0. Start with `python3 tools/fleet.py status` on full clones (a shallow clone cannot tell an older file from a local one), upstream or drop each local change, then re-vendor one skill pack per merge request
 ## Waiting on owner
 - [W1] 2026-10-05 Anthropic source links in the README (#23): allow-list `www.anthropic.com` in the console leak scan and restore the three links (recommended); "no" leaves sources named by title only. unblocks: X4
 - [W2] 2026-10-05 does the SEO skill pack migrate onto the kit; does the outreach scraper take only the guide (#26)? Recommended: migrate SEO after selective vendoring; outreach takes the guide only. unblocks: X6
-- [W3] 2026-10-05 the skill pack checkouts for turn 2, and each skill pack owner's review. unblocks: X1
+- [W3] 2026-10-23 each skill pack owner's review of its re-vendor, and a GitLab token that can push to the skill pack repositories (the one held today only reads, and only a project whose path is named: it cannot list projects or groups, which need User and Group read). unblocks: N2
+- [W6] 2026-10-23 the `workbook` pack (five modules, 2.4k lines) and `questions` have no importer in the five skill packs read; the KOL skill pack was the reason for the workbook pack and does not import it yet. Delete, or keep until the KOL skill pack adopts it? Recommended: keep until the KOL skill pack answers; delete `questions` if the next read still finds no importer. unblocks: X5
 ## Next
-- [X1] 2026-10-05 turn 2 (#20): bring the three skill packs to one kit version: start with `python3 tools/fleet.py status` on the three checkouts; the stale digest.py mention, CI jobs with no rules, the KOL skill pack's forked copy upstreamed. Needs the skill pack checkouts and each skill pack owner's review (W3)
-- [X2] 2026-10-05 turn 3 (#19): selective vendoring, a skill pack takes only the packs it needs (breaking). Needs turn 2 done, the owner's go-ahead (R2) and a quiet week for the short-video skill pack. Packs and the vendor side are built (D3); what is left is moving each skill pack onto them
+- [X2] 2026-10-05 turn 3 (#19): selective vendoring, a skill pack takes only the packs it needs (breaking). Needs turn 2 done (N2), the owner's go-ahead (R2) and a quiet week for the short-video skill pack. Packs and the vendor side are built (D3); what is left is moving each skill pack onto them
 - [X3] 2026-10-05 the scaffold sets up Zylos itself: vendors the adapter, writes the manifest, passes `node zylos/lib.js check` (#25)
 - [X4] 2026-10-05 restore the three Anthropic source links in the README once the leak scan allows them (#23, W1)
-- [X5] 2026-10-05 kit modules with no or one user: count them with `python3 tools/consumers.py` on each skill pack's main branch (N1), then delete, move or keep; recheck `copylint` after the KOL skill pack merges (#22)
+- [X5] 2026-10-05 kit modules with no or one user: count them with `python3 tools/consumers.py` on each skill pack's main branch (D21 read five), then delete, move or keep (W6); `copylint` has one importer, adcut; the KOL skill pack's branch with a second one is not on its main (#22)
 - [X6] 2026-10-05 quality evals in every skill pack; SEO and outreach adoption (#26)
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
-- [X9] 2026-10-13 a first skill pack imports `kit.autonomy` (0.27.0): the SEO skill pack when it moves onto the kit (W2); the Amazon PPC skill pack does not (it does not vendor the kit, read 2026-10-21). Two minor versions have passed with no known importer (the rule of kit/packs.tsv): delete it unless N1 finds one
 - [X10] 2026-10-22 the first real client moves onto its hub (R5, step 5 of the client hub): re-vendor kit 0.35.0 into its packs (schema version bump, the `facts sync-hub` verb row, a test calling `kit.guards.hub_keys.check`), make its hub with `scaffold/new_hub.py`, move the shared facts there, put each disagreeing value to the owner once
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
@@ -39,6 +38,7 @@ Updated: 2026-10-22
 - [D18] 2026-10-21 kit 0.33.1 (a `must_ship` directory ships), the tier registry retired (RESTRUCTURE.md phase 3, steps 1 and 4), issue and pull request templates, `tools/consumers.py` (PR #120, PR #121, PR #122, PR #123)
 - [D19] 2026-10-21 twelve stale issues closed: #19, #21, #24, #43, #45 as done or decided, #28 to #33 and #35 as not planned until a skill pack asks (no ref)
 - [D20] 2026-10-22 the client hub, steps 1 to 4 (R5): intake `packs` and quotes checked at their source (build/); `scaffold/new_hub.py` new and add-pack, one console per client; one inbox across packs with ask expiry and chat answers (kit 0.34.0); hub facts, `facts sync-hub`, `hub_copies`, a pack without markets serving one hub market (kit 0.35.0); end to end on a synthetic hub through real console clicks (branch client-hub-design)
+- [D21] 2026-10-23 the skill packs read once, read-only, on each main branch (`tools/consumers.py`, `tools/fleet.py`): the KOL skill pack (video-ads-skill-pack on GitLab, once kol-harness) imports 22 kit modules, adcut 24 (alone in `compliance`, `generation`, `learning`, `pages`, `autonomy`, so `kit.autonomy` stays), RedNote 18; the SEO skill pack vendors no kit (its adapter is 0.3.0); the `workbook` pack and `questions` have no importer (W6); the Amazon PPC skill pack none (R3) (no ref)
 ## Parked
 ## Decisions
 - [R1] 2026-10-05 which console copy stays (#24): "the playbook's" (as recorded in this roadmap's open decisions, 2026-10-05)
@@ -47,12 +47,13 @@ Updated: 2026-10-22
 - [R4] 2026-10-21 each skill pack draws its own overview page from its registries (templates/system-overview.md) and the README points to it; the README's pipeline diagram, which is the same for every skill pack, stays: "同意这样分工"
 - [R5] 2026-10-22 the client hub design (W4), all five recommendations: a client fact is confirmed once at the hub and packs copy it without asking again; the hub starts with the markets, the facts two packs define the same way and break-even ROAS as `npr_roas` (replacing `roas_target`); one cap of 10 open asks per owner across a client's packs; words and choices may be answered in chat, confirmations need a click or a code; start with one real client, new facts only: "agree" (chat 2026-10-22)
 - [R6] 2026-10-22 recording consent is no longer asked or checked at B0: the meeting tool asks every participant before it records, so the rule only repeated it: "删除这个playbook 规定" (chat 2026-10-22)
+- [R7] 2026-10-23 the kit supports English and Simplified Chinese only; the Traditional Chinese design (pull request #116, closed) is not built: "只有英文和简体中文" (the one client who writes Traditional is an exception, and Simplified is enough for them)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`
 - Zylos adapter and console: `hosts/zylos/` (0.3.1) and `console/`; the host every skill pack is adapted to; always stays
-- skill packs that vendor the kit: the short-video ad skill pack (two worktrees of one repository), the KOL skill pack, the RedNote skill pack; on different kit versions
-- skill packs that do not: the SEO skill pack (forked its own gate), the outreach scraper, the Amazon PPC skill pack the kit came from (read 2026-10-21: no vendored kit, its own copies of ten modules, its own console and Zylos adapter; R3) (#26)
+- skill packs that vendor the kit (GitLab, git.coco.xyz/ming.liu/): the KOL skill pack (`video-ads-skill-pack`, 0.32.0), adcut (`adcut-skill-pack`, the short-video ad creatives, 0.33.0), the RedNote skill pack (`social-marketing-harness`, 0.5.0, not touched since 2026-10-01); on different kit versions (D21)
+- skill packs that do not: the SEO skill pack (`ecommerce-seo-skill-pack`, forked its own gate; it holds the adapter 0.3.0 only), the outreach scraper, the Amazon PPC skill pack the kit came from (read 2026-10-21: no vendored kit, its own copies of ten modules, its own console and Zylos adapter; R3) (#26)
 - restructure: RESTRUCTURE.md (accepted 2026-10-05); turns 2 to 4 follow it: one kit version first, then packs and selective vendoring, then docs
 - new machine: clone this repository; install Python 3.11 or newer and Node 22 or newer; `python3 run_all.py` must end `RESULT: N passed` (9 suites, about 3 minutes); clone each skill pack you will touch (the kit is copied into them, never imported from here); read the open issues, then Now and Next
 - session start: read this file and `kit/packs.tsv`; fetch every remote (other sessions may have merged since this file was written); do the one turn Now names, anything else goes to an issue; before changing `kit/`, a changed byte the vendor tool copies needs a `VERSION` bump and a regenerated `MANIFEST.sha256` (kit/README.md, "Upgrades and drift"), and a move or rename breaks the skill packs that import it
