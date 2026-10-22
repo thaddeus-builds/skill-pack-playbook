@@ -6,7 +6,7 @@ dates	base	the one clock
 messages	base	coded messages
 paths	base	data dir and DB path
 db	base	database with protected human tables
-schema_base	base	the six human tables
+schema_base	base	the seven human tables
 human	base	the gate
 market	base	the scope partition
 registry	base	closed fact/decision keys and thresholds
@@ -50,6 +50,7 @@ guards.changelog	testkit
 guards.clock	testkit	
 guards.drift	testkit	
 guards.evals	testkit	eval cases: no consumer yet; the Never table: suites.never_table
+guards.hub_keys	testkit	a client hub's shared fact keys defined alike in the skill pack
 guards.json_contract	testkit	
 guards.layering	testkit	
 guards.pages	testkit	no shipped file links to a hosted artifact: a page is drawn by a verb
