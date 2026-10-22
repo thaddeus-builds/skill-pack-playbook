@@ -85,8 +85,13 @@ come from the gate is refused; a key defined otherwise at the hub
 (kit.registry.definition_diffs), a market this skill pack does not keep and
 a value it refuses are skipped. The hub is never written. doctor's `hub`
 check (with `<P>_HUB_DIR` set, as the hub's bin/hub sets it) names every
-copy that lags the hub's current version (`fact_hub_copy_stale`). Nothing
-refreshes on its own: a person decides.
+copy that lags the hub's current version (`fact_hub_copy_stale`) and every
+declared, confirmed hub fact never copied (`fact_hub_copy_missing`). A
+skill pack without markets serves one hub market per workspace
+(`<P>_HUB_MARKET`, exported by the hub's bin/hub): that market's facts land
+in its "_" (declarations never: it has no market door); hub_copies keeps
+the pack's "_", and the hub row is named by hub_history_id and a digest
+over the hub's own market. Nothing refreshes on its own: a person decides.
 
 Deviations from the reference and from the SPEC, each deliberate:
   * No klass, no value_type: the kit's client_facts has neither (a key's
@@ -1198,12 +1203,44 @@ def hub_digest(hub: str, m: str, key: str, value: str, history_id: int
         doc, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def _pack_market(m: str) -> bool:
-    """Is the hub's market `m` one of this skill pack's, as spelled?"""
+def hub_market() -> str | None:
+    """The one hub market a skill pack without a market partition serves:
+    `<P>_HUB_MARKET` (the hub's bin/hub exports it for that pack folder,
+    `new_hub.py add-pack --market`), None when unset. A skill pack with
+    markets copies each hub market into its own and is refused one
+    (fact_hub_market_partitioned)."""
+    var = config().env("HUB_MARKET")
+    raw = os.environ.get(var, "").strip()
+    if not raw:
+        return None
+    if config().markets:
+        raise SkillPackError(msg(
+            "fact_hub_market_partitioned", f"{var}={raw}: this skill pack "
+            f"keeps its own markets and copies each hub market into its "
+            f"own; unset {var}", var=var, value=raw))
+    return raw
+
+
+def _to_pack(m: str, key: str, served: str | None) -> str | None:
+    """The market of this skill pack a hub row of market `m` lands in, None
+    when it is not this skill pack's: with a served hub market (a skill
+    pack without partition), that market's rows land in "_" and its
+    declaration does not (no market door there); else the same market,
+    as spelled, when this skill pack keeps it."""
+    if served is not None:
+        return market.PSEUDO if m == served and key != MARKET_KEY else None
     try:
-        return market.validate(m) == m
+        return m if market.validate(m) == m else None
     except SkillPackError:
-        return False
+        return None
+
+
+def _unserved(m: str, key: str, served: str | None) -> bool:
+    """A hub row this skill pack should hold and cannot: it keeps no market,
+    serves none, and the hub's row is of a real market (not a
+    declaration)."""
+    return (not config().markets and served is None and m != market.PSEUDO
+            and key != MARKET_KEY)
 
 
 def _applied(con: sqlite3.Connection, m: str, key: str, hub: str,
@@ -1304,6 +1341,7 @@ def cmd_sync_hub(run: _Run) -> dict | None:
             f"{config().env('HUB_DIR')} (the hub's bin/hub sets it)",
             var=config().env("HUB_DIR")))
     name = hub.name
+    served = hub_market()
     snap = hub_snapshot(hub)
     try:
         keys, diffs = _hub_scope(run.keys, hub)
@@ -1313,13 +1351,23 @@ def cmd_sync_hub(run: _Run) -> dict | None:
     results: list[dict] = []
     for r in rows:
         m, key, value, hid = r["market"], r["key"], r["value"], r["history_id"]
+        pm = _to_pack(m, key, served)
         item = {"market": m, "key": key, "value": value,
                 "hub_history_id": hid}
+        if pm is not None and pm != m:
+            item["pack_market"] = pm
         note = None
-        if not _pack_market(m):
+        if pm is None and _unserved(m, key, served):
+            item["outcome"] = "skipped"
+            note = msg("fact_hub_skipped", f"{key} [{m}]: not copied (this "
+                       f"skill pack keeps no market and serves no hub market: "
+                       f"set {config().env('HUB_MARKET')}, as the hub's "
+                       f"bin/hub does for a folder added with --market)",
+                       key=key, market=m, reason="no_hub_market")
+        elif pm is None:
             item["outcome"] = "skipped"
             note = msg("fact_hub_skipped", f"{key} [{m}]: not copied "
-                       f"(market {m} is not one of this skill pack's)",
+                       f"(market {m} is not one this skill pack serves)",
                        key=key, market=m, reason="market")
         elif key in diffs:
             item["outcome"] = "skipped"
@@ -1337,7 +1385,7 @@ def cmd_sync_hub(run: _Run) -> dict | None:
         else:
             try:
                 item["outcome"] = apply_hub_copy(
-                    run.spec, run.con, keys=run.keys, hub=name, m=m,
+                    run.spec, run.con, keys=run.keys, hub=name, m=pm,
                     key=key, value=value, history_id=hid,
                     digest=hub_digest(name, m, key, value, hid))
             except SkillPackError as e:
@@ -1346,7 +1394,7 @@ def cmd_sync_hub(run: _Run) -> dict | None:
                            f"({e.message})", key=key, market=m,
                            reason=getattr(e.message, "code", None) or "")
             if item["outcome"] == "conflict":
-                mine = _fetch(run.con, m, key)["value"]
+                mine = _fetch(run.con, pm, key)["value"]
                 item["pack_value"] = mine
                 note = msg("fact_hub_conflict", f"{key} [{m}]: the hub "
                            f"confirmed {value}, this skill pack confirmed "
@@ -1418,15 +1466,20 @@ def hub_conflicts(con: sqlite3.Connection | None, m: str | None = None
 
 def doctor_hub(ctx: Any) -> None:
     """kit.doctor's `hub` check: with a hub named (`<P>_HUB_DIR`), each
-    gated hub fact of a key this skill pack declares, of one of its
-    markets, that hub_copies has not seen at the hub's current version is
-    `fact_hub_copy_stale` (the key, both versions; the fix is sync-hub).
-    A hub fact that did not come from the hub's gate and a key defined
-    otherwise at the hub warn too. No hub named: nothing."""
+    gated hub fact of a key this skill pack declares, of a market it
+    serves (_to_pack), is checked against hub_copies: never seen is
+    `fact_hub_copy_missing` (the key and market), seen at an older version
+    `fact_hub_copy_stale` (the key, both versions); the fix is sync-hub.
+    A skill pack without markets that serves no hub market has every hub
+    row of a market missing. A hub fact that did not come from the hub's
+    gate and a key defined otherwise at the hub warn too; ok only when
+    every checked fact is copied at its current version. No hub named:
+    nothing."""
     hub = hub_dir()
     if hub is None:
         return
     try:
+        served = hub_market()
         snap = hub_snapshot(hub)
         try:
             scope, diffs = _hub_scope(FactKeys(), hub)
@@ -1437,7 +1490,7 @@ def doctor_hub(ctx: Any) -> None:
         ctx.warn("hub", e.message, e.next)
         return
     con, name, sync = ctx.con(), hub.name, f"{_cli()} facts sync-hub"
-    stale = 0
+    stale = checked = 0
     for key, diff in sorted(diffs.items()):
         ctx.warn("hub", msg(
             "fact_hub_definition_differs", f"{key} is defined differently "
@@ -1445,8 +1498,10 @@ def doctor_hub(ctx: Any) -> None:
             f"until the two agree", key=key, hub=name, diff=diff))
     for r in rows:
         m, key, hid = r["market"], r["key"], r["history_id"]
-        if not _pack_market(m) or key in diffs:
+        pm = _to_pack(m, key, served)
+        if key in diffs or (pm is None and not _unserved(m, key, served)):
             continue
+        checked += 1
         if not r["gated"]:
             ctx.warn("hub", msg(
                 "fact_hub_ungated", f"{key} [{m}]: the hub's value "
@@ -1455,20 +1510,27 @@ def doctor_hub(ctx: Any) -> None:
                 key=key, market=m, history_id=hid, action=r["action"],
                 by=r["changed_by"]))
             continue
-        seen = hub_copied(con, m, key, name)
-        if seen is None or seen < hid:
+        seen = None if pm is None else hub_copied(con, pm, key, name)
+        if seen is None:
+            stale += 1
+            fix = [sync] if pm is not None else [
+                f"export {config().env('HUB_MARKET')}=<the hub market this "
+                f"folder serves>  # new_hub.py add-pack --market", sync]
+            ctx.warn("hub", msg(
+                "fact_hub_copy_missing", f"{key} [{m}]: confirmed at the hub, "
+                f"never copied here", key=key, market=m), fix)
+        elif seen < hid:
             stale += 1
             ctx.warn("hub", msg(
                 "fact_hub_copy_stale", f"{key} [{m}]: hub {name} is at "
-                f"#{hid}, this skill pack copied "
-                + ("nothing yet" if seen is None else f"#{seen}"),
-                key=key, market=m, hub=name, hub_version=hid,
-                copied_version=seen), [sync])
-    if not stale:
+                f"#{hid}, this skill pack copied #{seen}", key=key,
+                market=m, hub=name, hub_version=hid, copied_version=seen),
+                [sync])
+    if not stale and not diffs:
         ctx.ok("hub", msg("fact_hub_current", f"hub {name}: every confirmed "
                           f"fact this skill pack declares is copied at its "
-                          f"current version ({len(rows)} checked)",
-                          hub=name, checked=len(rows)))
+                          f"current version ({checked} checked)",
+                          hub=name, checked=checked))
 
 
 # ---- the verb --------------------------------------------------------------
