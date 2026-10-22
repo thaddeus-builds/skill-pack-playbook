@@ -1,8 +1,8 @@
 """The executor: approved queue items go out through the guarded writer,
 each with a durable effect record, and never twice.
 
-Ported from the reference harness's `execute_actions.py` (the generic
-core; its domain guards, re-reads and API calls become the harness's
+Ported from the reference skill pack's `execute_actions.py` (the generic
+core; its domain guards, re-reads and API calls become the skill pack's
 hooks) plus prior-art #10 (a basis hash; an effect ledger where an
 ambiguous send blocks its target until a read-back reconciles it).
 
@@ -16,7 +16,7 @@ What it guards:
     plan (`--json`: one document) shows per approved item its verdict,
     coded, and the numbers each cap was checked with.
   * A dry run never implies that `--apply` would send what it cannot:
-    when the harness's allowlist (the `allowlist` it passes) is empty, or
+    when the skill pack's allowlist (the `allowlist` it passes) is empty, or
     the write switches are off (kit.write_guard: kill switch, STOP file,
     opt-in unset), the plan says so (execute_dry_run_by_hand, with the
     reason; `apply_possible` false, `apply_blocked` coded) and names what
@@ -37,7 +37,7 @@ What it guards:
     marks the row superseded (reason_code execute_basis_changed), so the
     next `queue add` proposes afresh. An approval older than `ttl_hours`
     is refused (execute_expired) and, under --apply, marked expired.
-  * The harness's own refusal (`plan_item` returns {"refusal": Msg}) is
+  * The skill pack's own refusal (`plan_item` returns {"refusal": Msg}) is
     the item's verdict, its code kept.
   * Per-run caps (thresholds, via hooks): at most `max_items` items are
     sent per run, and the |delta| of the sent items together (`plan_item`
@@ -63,7 +63,7 @@ What it guards:
     False -> failed + failed, None -> nothing written, still blocked
     (execute_reconcile_unsure).
 
-Hooks (all harness code; the kit knows no API):
+Hooks (all skill pack code; the kit knows no API):
 
   * writer_factory() -> kit.write_guard.Writer (built only under --apply
     or reconcile)
@@ -99,7 +99,7 @@ from kit import market as markets
 from kit import paths
 from kit import queue as q
 from kit.config import config
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import Msg, code, coded, failure, msg
 from kit.single_instance import hold
 from kit.write_guard import Guard, WriteRefused, Writer
@@ -121,12 +121,12 @@ Cap = Callable[[sqlite3.Connection, str], "float | None"]
 # ---- the effect ledger -----------------------------------------------------
 
 def unplanned(con: sqlite3.Connection, row: dict) -> dict:
-    """The `plan_item` hook of a harness with no executor yet (a new
-    harness, B1): every approved item is refused, coded, with its saved
+    """The `plan_item` hook of a skill pack with no executor yet (a new
+    skill pack, B1): every approved item is refused, coded, with its saved
     basis, so a dry run shows it and --apply sends nothing."""
     return {"basis": row["basis"], "refusal": msg(
         "execute_unplanned", f"#{row['id']} {row['kind']} on "
-        f"{row['target_ref']}: this harness has no executor for it yet",
+        f"{row['target_ref']}: this skill pack has no executor for it yet",
         id=row["id"], kind=row["kind"], target_ref=row["target_ref"])}
 
 
@@ -351,12 +351,12 @@ def _send(spec: db.SchemaSpec, con: sqlite3.Connection, w: Writer,
 
 def apply_blocked(allowlist: Any = None) -> Msg | None:
     """Why `--apply` could send nothing right now, or None: an empty
-    allowlist (when the harness passed one), else the write guard's switch
+    allowlist (when the skill pack passed one), else the write guard's switch
     refusal (kill switch, STOP file, opt-in unset). Reads env and the data
     dir only; builds no writer."""
     if allowlist is not None and len(allowlist) == 0:
         return msg("execute_allowlist_empty",
-                   "this harness's allowlist is empty: it may write nothing "
+                   "this skill pack's allowlist is empty: it may write nothing "
                    "to the external system")
     return Guard({}).refusal()
 
@@ -397,7 +397,7 @@ def apply(spec: db.SchemaSpec, con: sqlite3.Connection, market: str, *,
     lock = paths.data_dir() / LOCK_FILE
     with hold(lock) as mine:
         if not mine:
-            raise HarnessError(msg(
+            raise SkillPackError(msg(
                 "execute_busy", f"another execute run holds {lock}; nothing "
                 f"was written", lock=str(lock)))
         w = None
@@ -438,12 +438,12 @@ def reconcile(spec: db.SchemaSpec, con: sqlite3.Connection, queue_id: int, *,
     """Read an ambiguous item back and record what it did."""
     raw = q.fetch(con, queue_id)
     if raw is None:
-        raise HarnessError(msg("execute_item_not_found",
+        raise SkillPackError(msg("execute_item_not_found",
                                f"no queue item #{queue_id}", id=queue_id))
     last = latest(con, queue_id)
     state = last["state"] if last else None
     if state not in BLOCKING:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "execute_reconcile_nothing",
             f"#{queue_id}: its latest effect is {state or 'none'}, not sent "
             f"or unknown; nothing to reconcile", id=queue_id,
@@ -451,7 +451,7 @@ def reconcile(spec: db.SchemaSpec, con: sqlite3.Connection, queue_id: int, *,
     row = q.row_dict(raw)
     ok = read_back(writer_factory(), row, None)
     if ok is None:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "execute_reconcile_unsure",
             f"#{queue_id}: the read-back cannot tell whether it was written; "
             f"it stays {state} and keeps blocking {row['target_ref']}. Check "

@@ -1,5 +1,5 @@
 {
-  "_comment": "A fictional harness, shop-harness (CLI word shop, env prefix SHOP). Copy to <harness>/zylos/manifest.json and replace every value; zylos/README.md \"The manifest\" explains each key; runtime.uv_installer_url is a placeholder for Astral's installer of uv_version.",
+  "_comment": "A fictional skill pack, shop-harness (CLI word shop, env prefix SHOP). Copy to <skill-pack>/zylos/manifest.json and replace every value; zylos/README.md \"The manifest\" explains each key; runtime.uv_installer_url is a placeholder for Astral's installer of uv_version.",
   "name": "shop-harness",
   "min_zylos": "0.7.1",
   "cli": {

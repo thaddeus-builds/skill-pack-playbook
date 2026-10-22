@@ -2,22 +2,22 @@
 and the shared mechanics of the two levels that need no per-change code
 (docs/autonomy.md has the model, the worked example and the adoption note).
 
-    L0  hand-carried         the harness writes nothing; a person does it
+    L0  hand-carried         the skill pack writes nothing; a person does it
     L1  per-change consent   tty | relay: kit.human.confirm, one yes = one code
     L2  scoped approval      approval: one approve of a work item covers the
-                             writes the harness classes inside its frozen scope
+                             writes the skill pack classes inside its frozen scope
     L3  owner-switched mode  auto: a switch the owner turned on covers the
                              writes of eligible registry rows, until a day
     L4  rule-started work    not built: the mode also starts work a fixed
                              rule picked, with no per-item approve
     L5  full autonomy        not built: nobody switches it, nothing expires
 
-Every function here is pure over data the harness passes in (registry rows,
+Every function here is pure over data the skill pack passes in (registry rows,
 the switch fact's history rows, its raw archive's manifests, the clock), so
-any harness can use it whatever its tables and store; nothing here reads a
+any skill pack can use it whatever its tables and store; nothing here reads a
 database, a file or the time of day. What it decides:
 
-  * the tier registry: canon() reads a harness's own column names into
+  * the tier registry: canon() reads a skill pack's own column names into
     {id, verb, change, tier, undo, auto}; check_tiers() is the registry's
     test (tier A | B, auto yes | undo | no, a B or yes row names an undo, a
     yes row's undo is itself a registered code-free undo, no orphan undo
@@ -27,7 +27,7 @@ database, a file or the time of day. What it decides:
     (switch_value / parse_switch). mode() reads its history: on only while
     the latest row is a confirm signed by a human channel (tty, relay), its
     day not before the confirm's, today (UTC) on or before min(its day, the
-    confirm's day + max_days), and the archive the harness counts is its
+    confirm's day + max_days), and the archive the skill pack counts is its
     own; `ids` the value's ids still eligible now, so a registry edit
     narrows a mode that is on and never widens it. Any later row turns it
     off; may_set() is the agent's write: only a day before today (off).
@@ -53,17 +53,17 @@ database, a file or the time of day. What it decides:
     mode, its caps or the item's status; undone_by() maps each write to the
     undo that undid it.
   * digest(): the covered writes of the last days, newest first, with
-    verified, undone_by and the undo command the harness words.
+    verified, undone_by and the undo command the skill pack words.
   * lock(): the exclusive lock a covered write holds from its cap check
     through its manifest, so parallel runs cannot all pass one cap.
 
-A manifest is the dict a harness keeps beside each write under raw: the
+A manifest is the dict a skill pack keeps beside each write under raw: the
 keys read here are action, item, dir, applied_at (ISO 8601), verified and
 gate {proof, undoes}; a weight function may read others (rows).
 
-Codes, not messages: every `why` is a code the harness registers and
-words (the SEO harness's own message codes are the same strings).
-Seen once: the SEO harness's store write (scripts/apply_shopify.py,
+Codes, not messages: every `why` is a code the skill pack registers and
+words (the SEO skill pack's own message codes are the same strings).
+Seen once: the SEO skill pack's store write (scripts/apply_shopify.py,
 S46 and S47). Test: kit/tests/test_autonomy.py.
 """
 
@@ -95,8 +95,8 @@ OFF = ("auto_off_never", "auto_off_lowered", "auto_off_unproven", "auto_off_expi
 def canon(rows: Iterable[dict], columns: dict[str, str] | None = None,
           words: dict[str, str] | None = None) -> list[dict]:
     """The registry rows as {id, verb, change, tier, undo, auto}: `columns`
-    maps the harness's own column names to these, `words` its own auto
-    values to yes | undo | no (the SEO harness: 是 / 撤回 / 否)."""
+    maps the skill pack's own column names to these, `words` its own auto
+    values to yes | undo | no (the SEO skill pack: 是 / 撤回 / 否)."""
     columns, words = columns or {}, words or {}
     out = []
     for r in rows:
@@ -212,7 +212,7 @@ def mode(history: list[dict], *, today: date, max_days: int, eligible_ids: Itera
     why_off is None when on, else auto_off_never (no human confirm ever),
     _lowered (a later row, or a confirm of a past day), _unproven (the
     latest confirm signed by no person), _expired, _paths_moved (the
-    harness counts its caps from an archive that is not its own)."""
+    skill pack counts its caps from an archive that is not its own)."""
     out = {"on": False, "until": None, "ids": [], "history_id": None, "confirmed_by": None,
            "confirmed_at": None, "why_off": "auto_off_never"}
     if not history:
@@ -277,7 +277,7 @@ def auto_verdict(*, mode: dict, write_ids: list[str | None], item_approved: bool
     the mode's ids (auto_not_eligible); the item not approved by a person
     or left approval (auto_item_unproven: a mode covers approved work
     only); its latest write did not read back (auto_prev_unverified); the
-    verb's own check (`check`, a harness code); then each cap (code, used,
+    verb's own check (`check`, a skill pack code); then each cap (code, used,
     planned, cap): over it when used + planned > cap. `stop` is True for a
     cap, an unverified last write or a mixed run: issue no code, hand it
     to the owner. Otherwise the write takes its per-change code."""
@@ -390,7 +390,7 @@ def digest(manifests: list[dict], *, now: datetime, days: int, proofs: Iterable[
            undo: Callable[[dict], str | None] | None = None) -> list[dict]:
     """The covered writes of the last `days`, newest first: {at, item,
     action, proof, level, verified, undone_by, undo}. `undo` words the
-    command that undoes one (the harness's own verb); None once undone."""
+    command that undoes one (the skill pack's own verb); None once undone."""
     by, ps, since = undone_by(manifests), set(proofs), now - timedelta(days=days)
     out = []
     for m in manifests:

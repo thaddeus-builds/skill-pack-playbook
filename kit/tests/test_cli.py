@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """kit.verbs + kit.cli: the verb table and the dispatcher, on the fake
-"shop" harness (kit/tests/fake_harness: scripts/verbs.py, scripts/shop.py).
+"shop" skill pack (kit/tests/fake_skill_pack: scripts/verbs.py, scripts/shop.py).
 
   [1] the verb table: a malformed verb, a built-in word, a duplicate or an
-      empty table fails at load; load() reads a harness's verbs.py; of_kind,
+      empty table fails at load; load() reads a skill pack's verbs.py; of_kind,
       targets, match (longest prefix), group, script_args (a shared script
       gets its sub-verb, a single one none), answers (docstring fallback);
       examples and keys: tuples, each example starting with the verb's own
@@ -23,7 +23,7 @@
       child's exit code, a signal as 128+n; the env chain loaded once into
       the child's env, the process env winning
   [5] through the real CLI (a subprocess): a read verb never creates the
-      DB; init, list, pending; the kit's guards read the harness's
+      DB; init, list, pending; the kit's guards read the skill pack's
       verbs.py (json contract, boundary patterns); `shop facts list
       --help` ends with its examples, and each example of a read verb run
       through the CLI returns a document with the keys it declares
@@ -78,7 +78,7 @@ TABLE_SRC = """[Verb(("things", "list"), "multi.py", "read"),
       keys=("argv", "script")),
  Verb(("gone",), "missing.py", "read", False, False)]"""
 ECHO_TABLE = eval(TABLE_SRC)
-DRIVER = f'''"""A dispatcher over the echo scripts (kit.cli, as a harness CLI)."""
+DRIVER = f'''"""A dispatcher over the echo scripts (kit.cli, as a skill pack CLI)."""
 import sys
 from pathlib import Path
 from kit.cli import Dispatcher
@@ -154,11 +154,11 @@ def test_table() -> None:
           "routes to 'a b c'" in str(raises(lambda: verbs.check([
               Verb(("a", "b"), "a.py", "read", examples=("a b c --json",)),
               Verb(("a", "b", "c"), "a_b_c.py", "read")]))))
-    check("load(): the shop harness's verbs.py, checked, in order",
+    check("load(): the shop skill pack's verbs.py, checked, in order",
           len(TABLE) == 23 and TABLE[0].words == ("facts", "init")
           and all(isinstance(x, Verb) for x in TABLE))
     config.use(_shop.SHOP)
-    check("load() without a path reads the bound harness's table",
+    check("load() without a path reads the bound skill pack's table",
           verbs.load() == TABLE)
     d = Path(tmp_dir("verbs-file-"))
     (d / "verbs.py").write_text("X = 1\n", encoding="utf-8")
@@ -278,7 +278,7 @@ def test_help() -> None:
           rc == 0 and "shop facts confirm" in out and "shop queue" not in out
           and "built-in" not in out, out)
     rc, out, _ = capture(d.main, ["--version"], env=env())
-    check("--version: harness and kit versions",
+    check("--version: skill pack and kit versions",
           rc == 0 and out.startswith("shop-harness ") and f"(kit {(_shop.KIT / 'VERSION').read_text().strip()})" in out,
           out)
     rc, out, _ = capture(d.main, ["verbs", "--json"], env=env())
@@ -464,7 +464,7 @@ def shop(data: Path, *argv: str, stdin: str | None = None, **extra):
 
 
 def test_real_cli() -> None:
-    print("\n[5] through the harness CLI (a subprocess)")
+    print("\n[5] through the skill pack CLI (a subprocess)")
     data = Path(tmp_dir("cli-real-"))
     rc, out, err = shop(data, "facts", "list", "--", "--json")
     check("a read verb without a DB: no_db, nothing created",
@@ -514,7 +514,7 @@ def test_real_cli() -> None:
     check("the boundary guard reads the kinds from verbs.py",
           write.search("shop facts set x 1") and gated.search(
               "shop queue approve 1") and not write.search("shop facts list"))
-    check("harness.toml gives the sample arguments of the verbs that need "
+    check("skill-pack.toml gives the sample arguments of the verbs that need "
           "some", json_contract.sample_args(config.config())
           == {"facts get": ["unit_cost"],
               "decisions get": ["product", "SKU-1", "stage"]})

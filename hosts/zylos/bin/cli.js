@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// The harness CLI for the agent: zylos-core links this file (SKILL.md `bin`,
+// The skill pack CLI for the agent: zylos-core links this file (SKILL.md `bin`,
 // manifest cli.bin) as $ZYLOS_DIR/bin/<cli.bin>. That dir is not on the
 // agent's PATH, so the hooks and prompts call it by its absolute path. It
 // runs `uv run --no-project <skill dir>/<cli.entry> <args…>` in the caller's
@@ -19,7 +19,7 @@ const here = path.dirname(fs.realpathSync(__filename));
 const h = require(path.join(here, '..', 'lib.js'));
 
 const r = spawnSync(h.findUv() || 'uv', h.cliArgs(...process.argv.slice(2)),
-                    { stdio: 'inherit', env: h.harnessEnv() });
+                    { stdio: 'inherit', env: h.cliEnv() });
 if (r.error) {
   console.error(`${h.BIN_NAME}: could not run uv (${r.error.code || r.error.message}); run node ${h.POST_INSTALL}`);
   process.exit(127);

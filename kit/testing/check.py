@@ -214,7 +214,7 @@ def one_doc(out: str) -> Any:
 
 def clean_env(prefix: str | None = None, **set_: str) -> dict[str, str]:
     """os.environ without any `<prefix>_*` var (default prefix: the bound
-    harness's) nor KIT_TTY, then `set_` on top."""
+    skill pack's) nor KIT_TTY, then `set_` on top."""
     if prefix is None:
         from kit.config import config
         prefix = config().env_prefix

@@ -38,7 +38,9 @@ sys.path.insert(0, ROOT)
 import _t  # noqa: E402
 import ask  # noqa: E402
 import core  # noqa: E402
+import frame  # noqa: E402
 import i18n  # noqa: E402
+import manifest  # noqa: E402
 import pages  # noqa: E402
 import relay  # noqa: E402
 import run as runner  # noqa: E402
@@ -46,9 +48,10 @@ import serve  # noqa: E402
 
 CONSOLE, AGENT, TOP = "console/README.md", "console/AGENT.md", "docs/consoles.md"
 QUEUE, INSTR = "templates/owner-queue-item.md", "templates/AGENT_INSTRUCTIONS.md"
-DOCS = (CONSOLE, AGENT, TOP, QUEUE, INSTR)
-HARNESS_FLAGS = {"--value", "--market", "--reason", "--json", "--code", "--relay-user",
-                 "--relay-at"}                                    # a harness's, not ours
+PAGES_DOC = "console/PAGES.md"
+DOCS = (CONSOLE, AGENT, TOP, QUEUE, INSTR, PAGES_DOC)
+SKILL_PACK_FLAGS = {"--lang", "--value", "--market", "--reason", "--json", "--code", "--relay-user",
+                 "--relay-at"}                                    # a skill pack's, not ours
 SCHEMATIC = {"--name"}                                                                       # `--name=value`, the shape
 LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
 PATH = re.compile(r"(?<![\w/.-])((?:console|templates)/[A-Za-z0-9_./-]*[A-Za-z0-9_/])")
@@ -170,20 +173,20 @@ def test_every_link_and_path_the_docs_name_exists():
 def test_every_flag_the_docs_show_is_real_and_the_ones_that_matter_are_shown():
     real = flags_of(serve._parser()) | flags_of(ask._parser()) | {"--help"}
     assert {"--user-header", "--max-open", "--relay-verbs", "--since"} <= real
-    for rel in (CONSOLE, AGENT, QUEUE):
+    for rel in (CONSOLE, AGENT, QUEUE, PAGES_DOC):
         shown = set(FLAG.findall(doc(rel)))
         assert shown, rel
-        assert not shown - real - HARNESS_FLAGS - SCHEMATIC, (rel, sorted(shown - real - HARNESS_FLAGS - SCHEMATIC))
+        assert not shown - real - SKILL_PACK_FLAGS - SCHEMATIC, (rel, sorted(shown - real - SKILL_PACK_FLAGS - SCHEMATIC))
     assert "--gone" in set(FLAG.findall("`--gone`")) - real                # the check would notice
     said = "".join(doc(r) for r in (CONSOLE, AGENT))
     for flag in ("--user", "--user-header", "--allow-host", "--host", "--port", "--relay-cmd", "--relay-verbs",
-                 "--default-reason", "--max-open", "--since", "--where", "--dir", "--as"):
+                 "--default-reason", "--max-open", "--since", "--where", "--dir", "--as", "--manifest"):
         assert flag in real and flag in said, flag
 
 
 def test_every_verb_the_docs_call_is_real_and_every_verb_is_told():
     verbs = ask_verbs()
-    assert {"add", "wait", "answers", "applied", "withdraw", "say", "schema", "verify", "list", "digest"} == verbs
+    assert {"add", "wait", "answers", "applied", "withdraw", "say", "schema", "verify", "list", "digest", "chat"} == verbs
     for rel in (CONSOLE, AGENT, QUEUE):
         called = set(CALL.findall(doc(rel)))
         assert called and called <= verbs, (rel, called - verbs)
@@ -262,25 +265,34 @@ def diagram(needle: str) -> str:
 
 
 def edges_of_the_fold() -> set[tuple[str, str]]:
-    """Every (from, to) one event can make an ask do, found by trying each event on each state."""
-    a, _ = core.validate_ask(example("confirm-word.json"))
+    """Every (from, to) one event, or the clock passing an ask's `expires`, can make
+    an ask do, found by trying each on each state. Recording an expired ask
+    (`applied`) leaves it expired: no edge."""
+    a, _ = core.validate_ask({**example("confirm-word.json"), "expires": "2026-01-05"})
     changed = {**a, "title": a["title"] + " again"}
+    late = "2026-02-01T00:00:00Z"
 
     def ev(seq, type, **f):
         return {"seq": seq, "at": "2026-01-01T00:00:00Z", "by": "x", "type": type, "id": a["id"], **f}
     ans = dict(value="yes", subject=core.subject_hash(a))
     made = {"open": [ev(1, "ask", ask=a)], "answered": [ev(1, "ask", ask=a), ev(2, "answer", **ans)],
             "applied": [ev(1, "ask", ask=a), ev(2, "answer", **ans), ev(3, "applied", where="x")],
-            "withdrawn": [ev(1, "ask", ask=a), ev(2, "withdraw", reason="x")]}
+            "withdrawn": [ev(1, "ask", ask=a), ev(2, "withdraw", reason="x")],
+            "expired": [ev(1, "ask", ask=a)]}
     edges = set()
     for src, path in made.items():
         n = len(path) + 1
-        for move in (ev(n, "ask", ask=changed), ev(n, "answer", **ans), ev(n, "reopen", answer_seq=2),
-                     ev(n, "applied", where="x"), ev(n, "withdraw", reason="x")):
-            st = core.fold(path + [move])
+        moves = [ev(n, "ask", ask=changed), ev(n, "answer", **ans), ev(n, "chat", quote="q", **ans),
+                 ev(n, "reopen", answer_seq=2), ev(n, "applied", where="x"), ev(n, "withdraw", reason="x"), None]
+        for move in moves:
+            if src == "expired" and move is not None:
+                move = {**move, "at": late}
+            st = core.fold(path + ([move] if move else []), late if move is None or src == "expired" else None)
             if not st["problems"]:
                 cur = st["asks"][a["id"]]
-                edges.add((src, "applied" if cur["applied"] else cur["status"]))
+                to = "applied" if cur["applied"] and cur["status"] == "answered" else cur["status"]
+                if not (move is None and to == src) and not (src == to == "expired"):
+                    edges.add((src, to))
     return edges
 
 
@@ -289,8 +301,9 @@ def test_the_state_diagram_is_the_fold():
     drawn = set(re.findall(r"^\s*(\w+) --> (\w+)", states, re.M))
     assert drawn == edges_of_the_fold(), (drawn ^ edges_of_the_fold())
     assert "[*] --> open" in states
-    assert set(re.findall(r"^\s*(\w+) --> \[\*\]", states, re.M)) == {"applied", "withdrawn"}
-    assert not {e for e in edges_of_the_fold() if e[0] in ("applied", "withdrawn")}    # nothing leaves an end
+    assert set(re.findall(r"^\s*(\w+) --> \[\*\]", states, re.M)) == {"applied", "withdrawn", "expired"}
+    assert not {e for e in edges_of_the_fold() if e[0] in ("applied", "withdrawn", "expired")}    # nothing leaves an end
+    assert ("open", "expired") in edges_of_the_fold()                                  # the clock is an edge too
 
 
 # ------------------------------------------------ the quick start, end to end --
@@ -438,7 +451,7 @@ def test_an_id_is_refused_once_it_is_answered_not_only_once_it_is_applied():
         store.answer("alice", ask_id, "yes", shown=store.state()["asks"][ask_id]["hash"])
         again = cli(d, "add", path)
         assert again["code"] == "id_used" and again["params"]["status"] == "answered"
-    assert "once an ask is answered or withdrawn, `add` refuses it (`id_used`)" in doc(CONSOLE)
+    assert "once an ask is answered, withdrawn or expired, `add` refuses it (`id_used`)" in doc(CONSOLE)
 
 
 def test_every_ok_reply_names_the_folder_and_verify_without_a_secret_is_refused():
@@ -489,7 +502,7 @@ def test_an_answer_the_gate_wrote_cannot_be_reopened_as_the_docs_say():
         with _t.assert_raises("already_applied"):
             store.reopen("alice", gated["id"], seq(gated["id"]))
         store.reopen("alice", plain["id"], seq(plain["id"]))                 # an answer nothing was written for can be taken back
-    assert "not once a harness's gate has written the answer (`already_applied`" in doc(CONSOLE)
+    assert "not once a skill pack's gate has written the answer (`already_applied`" in doc(CONSOLE)
     assert "the owner cannot reopen it" in doc(AGENT)
 
 
@@ -511,7 +524,7 @@ def test_the_top_readme_does_not_promise_what_the_console_does_not_do():
     assert core.validate_ask(typed)[1] == []                                 # a typed value may go without a recommendation
     choose = {k: v for k, v in example("choose-priority.json").items() if k != "recommend"}
     assert [e["field"] for e in core.validate_ask(choose)[1]] == ["recommend"]   # every other step may not
-    assert "never typed" not in top and "the one thing typed is a value the harness validates" in top
+    assert "never typed" not in top and "the one thing typed is a value the skill pack validates" in top
     assert "(a typed value may go without one)" in top
     assert "Widening what may be written counts only when typed in chat, not clicked on a page." in top
     assert "answered in chat (rule 8), not clicked" in top
@@ -555,9 +568,12 @@ def test_every_key_of_a_reply_that_the_agent_file_names_is_in_a_real_reply():
 
 def test_max_open_can_only_lower_as_the_docs_say():
     with _t.tmpstore() as store:
-        got = store.post("main", [example("confirm-word.json")], max_open=50, dry_run=True)
+        got = store.post("main", [example("confirm-word.json")], dry_run=True)
         assert got["budget"] == core.MAX_OPEN == 10
         assert store.post("main", [example("confirm-word.json")], max_open=3, dry_run=True)["budget"] == 3
+    with _t.tmpdir() as d:                  # and the verb, which is what the docs describe, never goes above it
+        shown = cli(d, "add", os.path.join(ROOT, "examples", "confirm-word.json"), "--max-open", "50", "--dry-run")
+        assert shown["budget"] == 10
     assert "can only lower" in doc(CONSOLE) and re.search(r"--max-open N` can only lower", doc(AGENT))
     subs = next(a for a in ask._parser()._actions if isinstance(a, argparse._SubParsersAction)).choices
     assert "only lower" in next(a.help for a in subs["add"]._actions if "--max-open" in a.option_strings)
@@ -603,11 +619,11 @@ def test_a_proxy_must_pass_the_host_through_as_the_docs_say():
     assert "so it stays under the prefix" in text and "`Path`" in text
 
 
-def test_a_harness_that_stalls_may_have_written_and_the_docs_and_words_say_so():
+def test_a_skill_pack_that_stalls_may_have_written_and_the_docs_and_words_say_so():
     assert "may have written" in relay.LATE and "ask the agent" in core.CODES["gate_timeout"]
     assert "may or may not have been saved" in i18n.t("err.gate_timeout", "en")
     assert "may or may not have been saved" in doc(AGENT)
-    assert "**the harness may have written**" in doc(CONSOLE) and "the ask stays open" in doc(CONSOLE)
+    assert "**the skill pack may have written**" in doc(CONSOLE) and "the ask stays open" in doc(CONSOLE)
     assert int(serve.RELAY_TIMEOUT) == 60 and "Each call gets 60 seconds" in doc(CONSOLE)
 
 
@@ -615,11 +631,11 @@ def test_the_relay_protocol_in_the_readme_is_the_one_relay_speaks():
     readme = doc(CONSOLE)
     assert relay.CHALLENGE in readme and f"{relay.MAX_MESSAGE} characters" in readme
     gated_ask, _ = core.validate_ask(example("provide-number.json"))
-    with _t.tmpdir() as d:                                                  # one real exchange, as the harness sees it
+    with _t.tmpdir() as d:                                                  # one real exchange, as the skill pack sees it
         log = os.path.join(d, "calls")
-        env = {**os.environ, "FAKE_HARNESS_LOG": log, "FAKE_HARNESS_STATE": os.path.join(d, "state")}
+        env = {**os.environ, "FAKE_SKILL_PACK_LOG": log, "FAKE_SKILL_PACK_STATE": os.path.join(d, "state")}
         with stdin_is_a_pipe():
-            got = relay.run(gated_ask, "4.20", cmd=[sys.executable, os.path.join(HERE, "fake_harness.py")],
+            got = relay.run(gated_ask, "4.20", cmd=[sys.executable, os.path.join(HERE, "fake_skill_pack.py")],
                             verbs=[["facts", "confirm"]], user="alice", reason="why", timeout=20, env=env)
         assert got["ok"], got
         with open(log, encoding="utf-8") as f:
@@ -638,7 +654,7 @@ def test_the_relay_protocol_in_the_readme_is_the_one_relay_speaks():
     assert "is one `--name=value` argument" in readme
 
 
-HARNESS = """import json, os, sys
+SKILL_PACK = """import json, os, sys
 if not any(a.startswith("--code=") for a in sys.argv):
     print(json.dumps({"code": "confirm_code_required", "params": {"confirm_code": "c-1"},
                       "subject": {"items": {"unit_cost": 4.2}}}))
@@ -652,9 +668,9 @@ sys.exit(1)
 def test_a_second_call_that_ends_without_words_is_unsure_and_one_with_words_is_a_refusal():
     gated, _ = core.validate_ask(example("provide-number.json"))
     with _t.tmpdir() as d:
-        script = os.path.join(d, "harness.py")
+        script = os.path.join(d, "skill_pack.py")
         with open(script, "w", encoding="utf-8") as f:
-            f.write(HARNESS)
+            f.write(SKILL_PACK)
         got = {}
         for ends in ("crash", "says"):
             got[ends] = relay.run(gated, "4.20", cmd=[sys.executable, script], verbs=[["facts", "confirm"]], user="alice",
@@ -673,8 +689,8 @@ def test_the_code_is_sent_only_for_a_subject_that_matches_what_expect_names_exac
     with _t.tmpdir() as d:
         for mode, ok, code, calls in (("ok", True, None, 2), ("extra", False, "gate_changed", 1)):
             log = os.path.join(d, mode)
-            env = child_env({"FAKE_HARNESS_MODE": mode, "FAKE_HARNESS_LOG": log, "FAKE_HARNESS_STATE": log + "-state"})
-            got = relay.run(gated, "4.20", cmd=[sys.executable, os.path.join(HERE, "fake_harness.py")],
+            env = child_env({"FAKE_SKILL_PACK_MODE": mode, "FAKE_SKILL_PACK_LOG": log, "FAKE_SKILL_PACK_STATE": log + "-state"})
+            got = relay.run(gated, "4.20", cmd=[sys.executable, os.path.join(HERE, "fake_skill_pack.py")],
                             verbs=[["facts", "confirm"]], user="alice", reason="why", timeout=20, env=env)
             assert (got["ok"], got["code"]) == (ok, code), (mode, got)
             with open(log, encoding="utf-8") as f:
@@ -860,6 +876,64 @@ def test_nothing_that_must_not_be_public_is_in_the_repository():
         except UnicodeDecodeError:
             found = leaks(rel, raw.decode("latin-1"), binary=True)
         assert not found, found
+
+
+def json_blocks(text: str) -> list:
+    return [json.loads(b) for b in re.findall(r"```json\n(.*?)\n```", text, re.S)]
+
+
+def test_pages_md_shows_a_manifest_and_a_page_the_console_accepts_and_names_its_real_keys():
+    text = doc(PAGES_DOC)
+    man, page = json_blocks(text)
+    parsed = manifest.parse(man)
+    assert parsed["pages"][0]["blocking"] is True and parsed["max_open"] == 20 and parsed["counts"]
+    assert set(man) == manifest.KEYS and set(man["pages"][0]) == manifest.PAGE_KEYS      # the example shows every key
+    cleaned = frame.clean(page)
+    assert cleaned["bad"] == [] and cleaned["count"] == 2
+    kinds = set()
+
+    def walk(blocks):
+        for b in blocks:
+            kinds.add(b["type"])
+            walk(b.get("blocks", []))
+    walk(page["blocks"])
+    assert kinds == set(frame.TYPES) - {"link"}                              # the example uses every type but the link
+    assert "`link` (http and https only)" in text
+    for t in frame.TYPES:
+        assert f"`{t}`" in text, t
+    (h, b), = frame.buttons("space", cleaned).items()
+    assert b["label"] == "Confirm delivery" and core.verb_allowed(parsed["relay_verbs"], b["gate"]["verb"])
+    broken = dict(man, colour=1)
+    try:
+        manifest.parse(broken)
+    except manifest.ManifestError:
+        pass
+    else:
+        raise AssertionError("the example check would not notice a bad manifest")
+
+
+def test_the_numbers_pages_md_gives_are_the_real_limits():
+    text = doc(PAGES_DOC)
+    for said in (f"{frame.MAX_BLOCKS} blocks", f"{frame.MAX_DEPTH} levels", f"text {frame.BLOCK_LIMITS['text']} characters",
+                 f"{frame.BLOCK_LIMITS['columns']} columns by {frame.BLOCK_LIMITS['rows']} rows",
+                 f"At most {manifest.MAX_PAGES}.", f"(1 to {manifest.MAX_OPEN_CEILING}; default {core.MAX_OPEN}",
+                 f"for {int(serve.COUNTS_TTL)} seconds", f"hangs ({int(serve.PAGE_TIMEOUT)} seconds)",
+                 f"Waiting is {manifest.BUILTIN_ORDER['waiting']} and History {manifest.BUILTIN_ORDER['history']}"):
+        assert said in text, said
+    assert core.verb_allowed([["queue", "approve"]], ["queue", "approve", "n7"])           # the prefix rule it describes
+    assert not core.verb_allowed([["queue", "approve"]], ["queue", "approvals"])
+    assert not core.verb_allowed([["queue", "approve"]], ["queue"])
+    assert PAGES_DOC.endswith("PAGES.md") and "PAGES.md" in doc(CONSOLE)                    # the README points at it
+
+
+def test_the_pages_md_diagram_is_sound_and_names_real_files_and_the_flows_it_draws_exist():
+    blocks = MERMAID.findall(doc(PAGES_DOC))
+    assert len(blocks) == 1 and sound(blocks[0]) is None
+    for name in re.findall(r"\b([a-z_]+\.py)\b", blocks[0]):
+        assert os.path.exists(os.path.join(ROOT, name)), name
+    for needle in ("manifest.json", "events.jsonl", "invalid_ask"):
+        assert needle in blocks[0]
+    assert "action" in core.ROLES["human"] and "invalid_ask" in core.CODES
 
 
 if __name__ == "__main__":

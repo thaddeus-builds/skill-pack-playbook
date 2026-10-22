@@ -1,20 +1,37 @@
 # Changelog
 
-What a harness gets when it re-vendors the kit, and what else changed in the
+What a skill pack gets when it re-vendors the kit, and what else changed in the
 playbook, newest first. Format: Keep a Changelog.
 A release is a `kit/VERSION` (a patch for a fix, a minor for a new module or hook,
-a major when a harness must change). `hosts/zylos` has its own `VERSION`, noted
+a major when a skill pack must change). `hosts/zylos` has its own `VERSION`, noted
 where it moved. The short hash on a version line is the commit that set it; dates
 are the merge day. Everything under *Other* is outside the kit: templates, build,
 scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `build/` and the intake template, for a client hub (ROADMAP X10, step 1): an intake item, or a meeting as the default, may name the `packs` it is for (CLI words); `check_intake.py --packs CLI,...` refuses a pack the client does not have (`unknown_pack`, also when packs are named and no list is given), reports an iid a later file reuses as `iid_reused` with the next free one (`duplicate_iid` is now within one file), and with `--transcript FILE` or the meeting's `transcript` checks each quote is in the speaker block at its source's time (`quote_not_at_source`, `no_transcript`). `intake_to_asks.py --hub` makes the hub's own asks (`hub-intake-<iid>`, one group per meeting and its packs), `--pack CLI` keeps a round to one pack; `apply_answers.py` applies `hub-intake-` answers and writes a `packs` column in `numbers.tsv` and `questions.tsv` (a file made before it gains the column only for an item that names packs). Intakes without `packs` pass as before. Not vendored: no kit version.
 - `docs/consoles.md`, client console item 8: a page behind a gateway answers within the gateway's limit (about 15 s)
   whatever the read costs. Profile the read first; keep what is left per state of the data, made in a background
   thread started with the console, with a bounded wait, then the previous result and a note, or a self-reloading page;
-  never cache a failure; the keep-alive probe's timeout exceeds the slowest page. Seen once (the SEO harness's
+  never cache a failure; the keep-alive probe's timeout exceeds the slowest page. Seen once (the SEO skill pack's
   `/insights`, S36), tested in `tests/test_docs_build.py`.
+- `kit-tiers.tsv` and `kit/tests/test_tiers.py` are deleted (RESTRUCTURE.md, phase 3): `kit/packs.tsv` and `kit/tests/test_packs.py` already hold what the tiers held (one registry row per module, no import across packs), and the tier rule (core, stack, extra) said the same thing a second way. `docs/kit-and-tools.md`, "The admission rule", is now written in packs: a new module goes in the pack named for its concern, moves to `base` at two merged users, is deleted after two minor versions with none. Outside the vendored bytes: no kit version, no re-vendor.
+- `templates/install-checklist.md`, "Scheduled tasks and long jobs": renewals (a cloned voice, a token, a licence) are a plan-and-run verb of the skill pack with no scheduler of its own; the host agent chooses the trigger, says what it set up and the next date, and reports a failed run the same day. Seen once, in the adcut skill pack.
+- `.github/ISSUE_TEMPLATE/from-a-skill-pack.md` and `.github/PULL_REQUEST_TEMPLATE.md`: an issue or pull request from a skill pack says where it was seen, who else needs it and what test fails without it; the pull request lists the checks `CLAUDE.md` already requires (one concern, no channel code, version bump with manifest and changelog for vendored bytes, `run_all.py`). No new rule; `CLAUDE.md` points to them.
+- `docs/lessons.md`, "Checking the specification and the tests": the rebuild trial (a fresh agent rebuilds rule engines from the spec alone, scored on hidden cases from the real code, its `GUESSES.md` the list of gaps) and the mutation sample (45 random logic mutants against the tests that mention the module), with what each showed in the SEO skill pack.
+- `tools/consumers.py` (RESTRUCTURE.md, phase 3, step 2): `python3 tools/consumers.py SKILL_PACK... [--json]` lists the kit modules each skill pack's own code imports (tests, the vendored kit and hidden folders excluded), and the ones that only come in through another module, so "two skill packs import it" and "no skill pack imports it" are counted, not remembered. Playbook tooling, not vendored. Test: `tests/test_consumers.py`.
+- `docs/operating.md` rule 4 and the git rules in `docs/roadmap.md`: merge on the local suite (plus the golden diff for a refactor), CI on main is the clean-environment check, fixed or reverted at once when red; the risky list and the environment-dependent changes still wait for the MR's CI. Evidence from the SEO harness: more shards did not shorten a CPU-bound shared runner; 9 of 300 pipelines failed.
+- `hosts/zylos` 0.3.0: pre-uninstall keeps a copy of the console's Caddy block in `<data dir>/caddy-block.saved` and post-install names it when the block is missing (found in the SEO skill pack, which had changed its copy: it now comes from here); the adapter's function `harnessEnv` is `cliEnv`, and what the hooks print to the owner no longer says "the harness" ("run it as:", "the CLI"): the adapter serves projects that do not call themselves a harness. No behaviour change; copy the folder again to take it (the SEO skill pack did, S172).
+- `docs/rules.md`, registries items 10 and 11, from the SEO harness (each seen once): the owner's own files sit apart
+  from the registries (`ssot/intent/`, both still TSV files in `ssot/`, so conformance I5 holds; the index says which
+  edit changes behaviour); and a table many branches add to is append-only, a change being a new row of the same id
+  with the last row in effect. `tests/test_docs_build.py` holds both.
+- Worktrees live beside the checkout, never inside it (`docs/operating.md`, "Where worktrees live"; the layout block
+  of `docs/roadmap.md` follows): `<repo>/` stays on main and `<repo>_worktrees/<name>/` holds one worktree per session.
+  Paid for once in the SEO harness: a session in `.claude/worktrees/` read the checkout's stale `CLAUDE.md` too, 21 KB
+  of context that disagreed with itself. Git commands to create, remove, move and repair; how to point the Claude Code
+  desktop app and CLI at it; the sources. `tests/test_docs_build.py` holds the section and the layout.
 - `docs/roadmap.md` (new): planning a harness that already runs. The vision cut into four to six pillars plus one for
   operations; a read-only inventory per pillar (state, evidence, smallest task, size, a do-not-build-now list); the
   roadmap kept in the story registry (an owner row with its milestone, an agent row with proof commands as DONE and
@@ -109,6 +126,110 @@ scaffold, console, docs, conformance.
   switch that travels with a copied database; an agent narrows it, only the owner moves it (`write_host`, S34, S47).
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
+
+## [0.35.0] - 2026-10-22
+### Added
+- A client hub's facts, confirmed once at the hub and copied by each pack (ROADMAP X10, step 4). `kit/facts.py`: `<cli> facts sync-hub [--hub DIR] [--json]` (default `$<PREFIX>_HUB_DIR`, which the hub's `bin/hub` exports) reads the hub's store `<hub>/hub/hub.db` as one in-memory snapshot (the backup API over a `mode=ro` connection: consistent, the hub's read lock held only for the copy, never `immutable=1` on a live WAL file, never a write; SQLite may touch the hub's `-shm`) and takes the confirmed rows of the keys this pack's `fact_keys.tsv` declares, plus the declarations of its own markets, declarations first. A hub row whose last history row is not a `confirm` a person signed (tty, relay or the client's own) is `refused` (`fact_hub_ungated`); a market the pack does not keep, a key defined otherwise at the hub and a value the pack refuses are `skipped` (`fact_hub_skipped`). Each other row goes through `apply_hub_copy()`: `same`, `conflict` (the pack's own confirmed value differs: never overwritten, `fact_hub_conflict`), `copied` (absent or pending here: written confirmed, source `hub:<hub>@<history id>#<digest16>`, changed_by `<user>@hub`, history action `hub_copy`, now in `facts.ACTIONS`) or `kept` (this hub version was applied before: a person's later unconfirm stands). Summary `fact_hub_synced`; refusals `fact_hub_none`, `fact_hub_not_absolute`, `fact_hub_missing`, `fact_hub_unreadable`, `fact_hub_value_form`.
+- `kit/schema_base.py`: a seventh human table, `hub_copies` (copy_id, market, key, value, hub, hub_history_id, hub_digest, outcome, pack_history_id, copied_at, copied_by; all NOT NULL, unique per market, key, hub, hub version and pack version), append-only (UPDATE and DELETE refused in the file). `schema_base.ADDED_LATER` names it and `db.with_human()` always passes it as `human_added_later`: a file written before it opens read-only as before, the next write-mode open creates it. **A skill pack's pinned `schema_hash` moves: bump its schema version when it re-vendors** (no row of any other table changes).
+- A pack without markets (one workspace per market account) serves one hub market: `<P>_HUB_MARKET`, which the hub's `bin/hub` exports for a folder added with `new_hub.py add-pack --market M`. `sync-hub` copies that market's facts into the pack's `_` (its declaration never: no market door there; `hub_copies.market` is `_`, the hub row named by `hub_history_id` and a digest over the hub's own market, no column added); serving none, a hub row of a market is skipped (`no_hub_market`). A pack with markets keeps same-market copying and refuses a hub market (`fact_hub_market_partitioned`). `pending --hub` names a folder by `<P>_HUB_CLI` (ids, gate verbs, group), e.g. `gads-tw`.
+- `kit/doctor.py`, check `hub` (`facts.doctor_hub`): with `<P>_HUB_DIR` set, each gated hub fact of a key the pack declares, in a market it serves, that `hub_copies` never saw warns `fact_hub_copy_missing` (key and market; also every hub row of a market for a pack without markets serving none), one seen at an older version `fact_hub_copy_stale` (the key, the hub's version and the one copied; next `<cli> facts sync-hub`); ok only when every checked fact is current; a hub row not from the gate warns `fact_hub_ungated`, a key defined otherwise `fact_hub_definition_differs`; all current is `fact_hub_current`. No hub named: no line.
+- `kit/pending.py`: an open conflict (`facts.hub_conflicts`) is one `choose` ask (`hubfact-<market>-<key>-…`; the hub's value, recommended, or the pack's own), gated by `facts confirm KEY --value`; choosing the own value is a confirm that changes nothing. Codes `pending_title_hub_conflict`, `pending_why_hub_conflict`, `pending_if_no_hub_conflict`.
+- `kit/registry.py` `definition_diffs(mine, theirs)`: what two fact key files say differently about the keys both define (type with its options, unit, min and max as numbers, the labels both carry; `why` and `group` are each file's own). `kit/guards/hub_keys.py` `check(hub, root=None)`: the same as a pack's test (`[]` = alike; no hub given checks nothing).
+- To take it: re-vendor, bump the schema version, add `Verb(("facts", "sync-hub"), "facts.py", "human")` to `scripts/verbs.py`, and call `kit.guards.hub_keys.check(os.environ.get("<PREFIX>_HUB_DIR"))` from a test. Tests: `kit/tests/test_hub_facts.py`, `kit/tests/test_db.py` [6] [11].
+### Other
+- `scaffold/hub/` (new, not vendored): the hub's own facts program, the kit's `facts` and `pending` verbs over `<hub>/hub/hub.db`, run from the playbook like the hub's console. `scaffold/new_hub.py new --markets A,B` writes `hub/bin/hub` (it binds `KIT_SKILL_PACK_ROOT=<hub>/hub/defs`, `HUB_DATA_DIR=<hub>/hub`), `hub/defs/skill-pack.toml` (cli `hub`, env prefix `HUB`, the markets) and `hub/defs/fact_keys.tsv` (currency, npr_roas, avg_order_value, npr_includes_creator_fee, incremental_source, incremental_factor, defined as the two packs that hold them define them; the markets enter through the kit's door, `facts init`); `bin/hub hub …` runs it and `bin/hub <cli> …` exports `<PREFIX>_HUB_DIR`; the console relays `hub facts confirm` first and makes `HUB_CONFIRM_CODE_SECRET`; the deny list holds `hub facts confirm` and `hub facts restore`; `add-pack` refuses a pack named `hub`; `add-pack --market M` (required for a pack without markets in a hub with markets, refused for one with its own) gives the folder `<name>-<m>`, the dispatch name `<cli>-<m>` and `<PREFIX>_HUB_MARKET`/`<PREFIX>_HUB_CLI`, and the same pack may be added once per market; `hub/defs` and `hub/bin` are versioned, the rest of `hub/` is not. A short `CLAUDE.md` for the agent at the hub (how to start, one console, chat answers only for words and choices, intake, never a gate verb), rewritten by `add-pack`. Tests: `scaffold/tests/test_hub_program.py`, `scaffold/tests/test_new_hub.py`.
+- `conformance/INVARIANTS.md`: how a hub copy keeps I3 (the human act is the hub's gated confirm, referenced by `hub_history_id` and `hub_digest`).
+
+## [0.34.0] - 2026-10-22
+### Added
+- `kit/pending.py` hub mode: `<cli> pending --hub` (`asks(..., hub=True)`) makes asks for a client hub's one console, shared by every skill pack that serves the client. Every ask id starts with the cli word (`gads-fact-us-…`), every gate verb with it (`["gads", "facts", "confirm", key]`, relayed through the hub's dispatcher `bin/hub <cli> …`), every group with the skill pack's name (`google-ads · Facts, US`); the gate's `expect` is unchanged. A verb that would pass the console's word limit gets no gate and the coded warning `pending_gate_too_many_words`. A flag, not an environment switch. Without `--hub` nothing changes; the JSON gains `hub`. Test: `kit/tests/test_pending.py` [6].
+- Console (re-vendored with the kit): a gate or relay verb may be 7 words (was 6), one more for the hub's cli word.
+- Console: every ask may carry `expires` (`YYYY-MM-DD`, open through that day UTC, or `YYYY-MM-DDTHH:MM:SSZ`); `ask.py add` gives a new ask 7 days when it names none, and a revision keeps its own. Past it an open ask is `expired`: nothing changes, nobody can answer it, its id is never used again, `answers` and `wait` list it under `expired` until the agent records it with `applied ID`, `list --status expired` finds it, History and `digest` say "Expired unanswered: nothing changes". Derived from the clock and the events' own times, so no new event; `wait` also returns when an ask expires.
+- Console: `ask.py chat ID --value=V --quote=TEXT [--source=TEXT]`, the agent's record of an answer the owner gave in chat: a new agent event `chat` (`via: chat`, `by: agent:NAME`, never signed, `verified: null`), checked like a click and applied like one; History shows it as "Answered in chat" with the quote and source, "not clicked here". Refused with the new code `gate_needs_click` for an ask with a gate, one that approves a change or one that takes a number.
+- Console: the cap of 10 open asks is the owner's across every agent posting to one log (each pack `--as` its own name), now tested and said in `docs/consoles.md`.
+### Changed
+- The console's event log gains `chat` events, an ask's `expires` and answer rows' `via` (and `quote`, `source` for chat): additive. A log written before folds exactly as it did at any clock (`test_an_old_log_replays_unchanged_whatever_the_clock_says`); a console older than this one sets a `chat` event aside as `unknown_type`.
+
+## [0.33.1] - 2026-10-21
+### Fixed
+- `kit.guards.release`: a `[release].must_ship` entry that is a directory (for instance `kit` where `scripts_dir` is `.`) ships when a tracked file under it ships and none under it is internal; it was always reported as `[release].must_ship paths do not ship`, because only file paths were compared. Seen in the video-ads skill pack (kit 0.30.1), which dropped `kit` from its list meanwhile (issue 108).
+
+## [0.33.0] - 2026-10-17
+### Added
+- `console/manifest.py`, `console/frame.py`, `console/PAGES.md`: a skill pack registers its own pages and buttons with the
+  console. One manifest file (`serve.py --manifest FILE` or `$CONSOLE_MANIFEST`; `ask.py --manifest FILE` or the same
+  variable) declares `cmd`, `relay_verbs`, `max_open`, an optional `counts` verb and `pages` (name, zh/en title, order,
+  the read-only verb that prints the page as JSON blocks, `blocking`). The pages join the built-in Waiting and History in
+  one top bar with a number on each tab (the bar scrolls inside itself at 375 px), at `page-<name>`. A page `button`
+  is relayed to the skill pack's gate with the console's own words: the form carries only the page and a hash, the page
+  is drawn again at the click, and the click is the signed, append-only `action` event (a new human event type; `fold`
+  gains `actions`; `ask.py verify` checks it). Read `console/PAGES.md` to write one; nothing changes for a skill pack that
+  passes no manifest.
+- `ask.py add` refuses (`invalid_ask`, field `gate.verb`, code `not_allowed`, naming the verb and the allowed ones) a gated
+  ask whose verb the manifest's `relay_verbs` do not allow, instead of leaving the owner a form that can only be declined.
+  A button on an unallowed verb is drawn as a sentence, and a forged click on it is refused (`verb_not_allowed`).
+### Changed
+- The cap of 10 open asks is the default of the manifest's `max_open` (1 to 100), no longer a constant of the store:
+  `core.Store.post(max_open=...)` takes the caller's number (it no longer clamps it to `MAX_OPEN`); `ask.py add` passes
+  the manifest's, or `MAX_OPEN`, and `--max-open N` still can only lower it. The budget line and meter of the Waiting page
+  follow it. New codes `verb_not_allowed` and `page_unavailable`; new `relay.fetch()` runs a page verb the way
+  `relay.run()` runs a gate (no shell, no stdin, no terminal, the console's secret withheld, killed on a timeout).
+  Copy the console again to take it (`python3 kit/tools/vendor.py --skill-pack PATH --console`).
+
+## [0.32.0] - 2026-10-17
+### Added
+- `kit.guards.roadmap`: an optional `## Milestones` section right after Next (rule 8 of its docstring). A row `- [M1] YYYY-MM-DD name. includes: X1, D2. closes when: the proof` is one integration unit; the guard refuses a row with no items or no proof, an item that is no row of the file or is not in Next/Done, an item in two milestones, a fourth open milestone, and a milestone whose items are all Done (it leaves and a Done row records it). A skill pack without the section is unchanged: nothing to do when re-vendoring.
+### Other
+- `docs/operating.md` rule 8, "Integrate by milestone, not by step": one branch per milestone, one commit per item (every commit with the whole local suite green; a refactor never shares a commit with a behaviour change), no merge request until the closing proof is green, a backup push without a pipeline (`git push -o ci.skip`), one merge request per milestone, an early one only for an owner's question (draft), a client's fix or the risky list, a milestone splits past about ten items or two weeks. `docs/roadmap.md` (planning item 6, executing item 3): a builder's branch merges into the milestone's branch, not main. Paid for in the video-ads skill pack: five merge requests in two days for one restructure, three stacked, each waiting for a pipeline the local suite had already answered.
+- `templates/gitlab-ci.yml` and `templates/ci/gitlab-ci.yml`: pipelines run for merge requests, the default branch and tags, no longer for each push to a branch; the `story id` job also accepts `M..` in a title. `templates/AGENT_INSTRUCTIONS.md` and `templates/ROADMAP.md` say so. A skill pack takes it by copying the two `workflow:` and `story id` blocks.
+
+## [0.31.0] - 2026-10-16
+### Changed (breaking: a project must follow the table below when it re-vendors)
+The noun "harness" is "skill pack" everywhere in the playbook: the kit, the console, the scaffolder, the build and
+conformance tools, the templates, the Zylos adapter and the docs. Nothing else changed: no behaviour, no new check.
+A project pinned at 0.30.x keeps working as it is until it re-vendors, because a vendored copy brings its own kit; the
+rename is felt only when `kit/` is copied again (`kit/tools/vendor.py --skill-pack PATH`, or `scaffold/new_skill_pack.py
+--update-kit`). Then follow the table, search the project for `harness` and run its suite.
+
+| Old name | New name | Where |
+| --- | --- | --- |
+| `harness.toml` | `skill-pack.toml` | the project's one declaration; `kit.config.FILE`; renamed in the project root |
+| `[harness]` (table in the TOML) | `[skill_pack]` | the keys under it keep their names (`name`, `cli`, `env_prefix`, `db_file`, ...) |
+| `[harness].version` | `[skill_pack].version` | read by `kit.contract` |
+| `HarnessError` | `SkillPackError` | `kit.contract` (and the raise/except sites of the project) |
+| `HarnessConfig` | `SkillPackConfig` | `kit.config` |
+| `KIT_HARNESS_ROOT` | `KIT_SKILL_PACK_ROOT` | the env var that binds a project root for tests and child processes |
+| `<PREFIX>_HARNESS` | `<PREFIX>_SKILL_PACK` | the checkout path in a client's wrapper (`scaffold/new_client.py`) |
+| `--harness` | `--skill-pack` | `kit/tools/vendor.py`, `scaffold/new_client.py`; `tools/fleet.py` names its arguments `SKILL_PACK...` |
+| `scaffold/new_harness.py` | `scaffold/new_skill_pack.py` | the project generator; its tests `scaffold/tests/test_new_skill_pack.py` |
+| `skills/build-harness/` | `skills/build-skill-pack/` | the build skill |
+| `templates/harness.toml` | `templates/skill-pack.toml` | the template for `skill-pack.toml` |
+| `kit.messages.harness_files` | `kit.messages.skill_pack_files` | the project's message-code files |
+| `kit.guards.drift.check_harness` | `kit.guards.drift.check_skill_pack` | the drift check of a vendored copy |
+| `kit.contract.harness_version` | `kit.contract.skill_pack_version` | |
+| `kit.tools.packs.harness_imports` | `kit.tools.packs.skill_pack_imports` | the import reader of the pack table |
+| `DecisionRegistry.harness_written` | `DecisionRegistry.skill_pack_written` | `kit.registry` |
+| `confirm = harness` (decision keys) | `confirm = skill_pack` | the value in the `confirm` column of `ssot/decision_keys.tsv`; `kit.registry.CONFIRM` |
+| message code `decision_harness_written` | `decision_skill_pack_written` | `kit/message_codes.d/decisions.tsv` |
+| message code `doctor_harness` | `doctor_skill_pack` | `kit/message_codes.d/doctor.tsv` |
+| `origin: "harness"` (merged message registry) | `origin: "skill_pack"` | `kit.messages.registry()` |
+| key `harness` in the `--json` meta and in `doctor --json` | key `skill_pack` | `kit.contract`, `kit.doctor`; `kit.guards.json_contract` checks it |
+| doctor check id `harness` | `skill_pack` | `kit.doctor` |
+| `FAKE_HARNESS_*` | `FAKE_SKILL_PACK_*` | the fake used by the console and golden tests |
+| `kit/tests/fake_harness/`, `fake_harness.py` | `kit/tests/fake_skill_pack/`, `fake_skill_pack.py` | test stand-ins |
+| `{{harness_name}}`, `{{harness_dir}}` | `{{skill_pack_name}}`, `{{skill_pack_dir}}` | placeholders in `templates/client/` |
+| `harness.py` (a project's entry file) | `skill_pack.py` | name used in the docs and the tier table only |
+| prose "harness", "harnesses" | "skill pack", "skill packs" | docs, docstrings, messages |
+
+Not renamed: the repository and directory name `Agent-Harness-playbook` and the title "Agent Harness Playbook" (the
+repository's own name), the names of other projects (`shop-harness`, `adcut-harness`, `amazon-ads-harness`, ...), the
+old entries of this file and the generic phrase "test harness" (the little runner in each `tests/_t.py`).
+Each of these is one mechanical search and replace in a project; the whole suite of the playbook (`python3 run_all.py`)
+passes on the new names.
+
+### Other
+- `hosts/zylos` 0.3.1: wording only (the usage line of `bin/detach.js`, comments and the README say "skill pack"); no behaviour change. Copy the folder again to take it.
+- `docs/lessons.md` and the other docs say "skill pack" for the noun; the sibling projects keep their own names.
 
 ## [0.30.1] - 2026-10-13
 ### Fixed

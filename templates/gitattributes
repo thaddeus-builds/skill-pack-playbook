@@ -4,8 +4,8 @@
 #
 # A release is `git archive` of its tag, so every path below stays out of it:
 # a host gets only what runs. The release test (templates/tests/test_release_archive.py
-# here; tests/test_release.py in a scaffolded harness, which renders this file
-# from harness.toml) fails an entry that names no tracked path, an internal file
+# here; tests/test_release.py in a scaffolded skill pack, which renders this file
+# from skill-pack.toml) fails an entry that names no tracked path, an internal file
 # that ships, and a runtime file left out. Keep only the lines for what your
 # repository has.
 

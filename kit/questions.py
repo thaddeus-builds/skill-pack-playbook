@@ -1,35 +1,35 @@
-"""Open questions never hold the plan: what the harness cannot answer yet is recorded with the data that can answer
+"""Open questions never hold the plan: what the skill pack cannot answer yet is recorded with the data that can answer
 it and with what the plan does until then. Rule: docs/rules.md, Human-in-the-loop rule 13.
 
-A harness keeps its open questions as rows (any mapping, any store): `id`, `text`, an optional `answer`, an optional
+A skill pack keeps its open questions as rows (any mapping, any store): `id`, `text`, an optional `answer`, an optional
 `dropped`, and the two fields this module reads:
 
-  * `by_data`: which data, once the harness holds it, can answer the question without asking anyone. One of the
-    harness's own closed list of kinds (its results file, an audience report, an order export, the comments under its
-    ads), or `ask_only` (the default name; a harness may rename it) when only a person can. Never blank and never
+  * `by_data`: which data, once the skill pack holds it, can answer the question without asking anyone. One of the
+    skill pack's own closed list of kinds (its results file, an audience report, an order export, the comments under its
+    ads), or `ask_only` (the default name; a skill pack may rename it) when only a person can. Never blank and never
     defaulted: a question that names nothing is a problem;
   * `meanwhile`: what the plan does until the answer is known, an action ("write the template, compile it, make
     nothing"), never a wait. A step that waits for an answer is the fault this rule removes.
 
-and, only when the harness records a read-back, `checked`: the fingerprint of the data the agent last read for it.
+and, only when the skill pack records a read-back, `checked`: the fingerprint of the data the agent last read for it.
 
 What the kit holds (pure: no file, no database, no clock; stdlib only):
 
   * `problems(questions, sources)`: every unanswered question that breaks the two fields (a missing or repeated id, a
-    `by_data` outside `sources` and `ask_only`, a blank `meanwhile`, a `meanwhile` that is a bare wait). A harness test
-    calls it on its rows; whether an old row is refused or only warned about is the harness's. The wait test is a floor,
-    not a proof: it catches the obvious waits (English, plus a few Chinese; `extra_waits` adds a harness's own words),
+    `by_data` outside `sources` and `ask_only`, a blank `meanwhile`, a `meanwhile` that is a bare wait). A skill pack test
+    calls it on its rows; whether an old row is refused or only warned about is the skill pack's. The wait test is a floor,
+    not a proof: it catches the obvious waits (English, plus a few Chinese; `extra_waits` adds a skill pack's own words),
     where a word that also opens ordinary actions (hold, pause, stop) counts only in a short text or with an "until"
     cue; a short action that opens with one ("idle time scenes") is a false hit: reword it;
   * `groups(questions, sources)`: the questions as a page shows them: `data` (by kind: the data will answer),
     `person` (only a person can), `unnamed` (no data named: the rows `problems` reports), `answered`;
-  * `readback(questions, held)`: `held` maps a data kind to a fingerprint of what the harness holds now (a file's
+  * `readback(questions, held)`: `held` maps a data kind to a fingerprint of what the skill pack holds now (a file's
     sha256, an import id). Every unanswered question whose kind is held and whose `checked` is not that fingerprint,
-    each with the fingerprint: the harness prompts the agent to read the data and either record the answer or record
+    each with the fingerprint: the skill pack prompts the agent to read the data and either record the answer or record
     the fingerprint it read. A new version of the data prompts again; `ask_only` is never prompted;
   * `self_test()`: every rule tried on a planted break; returns the rules that missed theirs (empty is sound).
 
-*Seen once:* the video-ads harness (docs/rules.md, rule 13, says how).
+*Seen once:* the video-ads skill pack (docs/rules.md, rule 13, says how).
 
 Test: kit/tests/test_questions.py.
 """
@@ -92,7 +92,7 @@ def _open(q: Mapping) -> bool:
 
 def _kinds(sources: Collection[str], ask_only: str) -> frozenset[str]:
     if sources is None or isinstance(sources, str):
-        raise ValueError("sources: give the harness's closed list of data kinds (a collection of names)")
+        raise ValueError("sources: give the skill pack's closed list of data kinds (a collection of names)")
     sources = tuple(sources)
     if not sources or not all(isinstance(s, str) and s.strip() for s in sources) or not _text(ask_only):
         raise ValueError("sources and ask_only: a closed list of data kinds, every kind a non-blank name")
@@ -106,7 +106,7 @@ def _cjk(x: str) -> bool:
 def waits(meanwhile: object, extra: Iterable[str] = ()) -> bool:
     """True when a `meanwhile` is only a wait: blank, a bare placeholder ("TBD", "none"), or a text that begins by
     waiting (BARE, SURE, PHRASES; SOFT and SOFT_PHRASES only in a short text or with a cue; ZH in Chinese, see the
-    constants), or by one of `extra`, the harness's own words (a list of strings; a word is matched whole, so "waiter"
+    constants), or by one of `extra`, the skill pack's own words (a list of strings; a word is matched whole, so "waiter"
     is no wait). Errs toward a false hit on SOFT words ("Hold on: write the template"): reword it as the action."""
     if isinstance(extra, str):
         raise ValueError("extra_waits: a list of words, not one string")
@@ -221,7 +221,7 @@ PLANTED = {
     "a question with no id": ([{**_SOUND[0], "id": ""}], "has no id"),
     "a repeated id": ([*_SOUND, dict(_SOUND[1])], "used twice"),
     "no by_data": (_plant(by_data=None), "names no data"),
-    "a by_data outside the harness's kinds": (_plant(by_data="gossip"), "is not one of"),
+    "a by_data outside the skill pack's kinds": (_plant(by_data="gossip"), "is not one of"),
     "no meanwhile": (_plant(meanwhile=None), "says nothing"),
     "a blank meanwhile": (_plant(meanwhile="  "), "says nothing"),
     "a bare placeholder meanwhile": (_plant(meanwhile="TBD"), "only waits"),

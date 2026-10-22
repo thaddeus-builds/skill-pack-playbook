@@ -84,7 +84,7 @@ def test_bad_values_are_named():
     with Host() as host:
         bad(lambda x: x.update(nmae="typo"), "nmae", "unknown key")
         bad(lambda x: x["console"].update(prot=1), "console.prot", "unknown key")
-        bad(lambda x: x.update(name="Shop Harness"), "name", "component name")
+        bad(lambda x: x.update(name="Shop Skill pack"), "name", "component name")
         bad(lambda x: x["cli"].update(bin="shop"), "cli.bin", "<brand>-<cli>")
         bad(lambda x: x["cli"].update(entry="../x.py"), "cli.entry", "inside the skill dir")
         bad(lambda x: x["env"].update(data_dir="DATA_DIR"), "env.data_dir", "SHOP_")

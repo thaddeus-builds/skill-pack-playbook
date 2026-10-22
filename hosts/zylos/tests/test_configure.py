@@ -1,6 +1,6 @@
 """hooks/configure.js: stdin JSON → <data dir>/.env, 0600, merge-only, silent;
 and lib.js's env chain, which must read a .env exactly like the kit's
-kit/env.py parse() (the twin the harness itself uses).
+kit/env.py parse() (the twin the skill pack itself uses).
 
 Run: python3 hosts/zylos/tests/test_configure.py
 """
@@ -18,7 +18,7 @@ import _t  # noqa: E402
 from _host import PLAYBOOK, Host, example  # noqa: E402
 
 sys.path.insert(0, PLAYBOOK)
-from kit.env import parse as kit_parse  # noqa: E402  the harness's own .env reader
+from kit.env import parse as kit_parse  # noqa: E402  the skill pack's own .env reader
 
 
 def js_parse(host, path):

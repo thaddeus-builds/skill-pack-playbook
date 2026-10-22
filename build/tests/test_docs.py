@@ -56,10 +56,10 @@ def vendor_problems(text: str) -> list[str]:
 def test_a_console_without_the_digest_verb_is_vendored_again_by_a_real_command_not_copied_over():
     text = _t.read(README)
     assert vendor_problems(text) == [], vendor_problems(text)
-    assert "--harness" in text and "--console" in text and "MANIFEST.sha256" in text    # the two files a hand copy leaves behind
+    assert "--skill-pack" in text and "--console" in text and "MANIFEST.sha256" in text    # the two files a hand copy leaves behind
     assert "copying this playbook" not in text                                          # the advice that turned the drift test red
-    assert vendor_problems("Run it again.") and vendor_problems("`python3 kit/tools/vendor.py --harness DIR --consol`")
-    assert vendor_problems("`python3 kit/tools/vendor.py --harness DIR --console`") == []
+    assert vendor_problems("Run it again.") and vendor_problems("`python3 kit/tools/vendor.py --skill-pack DIR --consol`")
+    assert vendor_problems("`python3 kit/tools/vendor.py --skill-pack DIR --console`") == []
 
 
 def test_every_script_names_the_test_that_holds_its_rules():

@@ -13,4 +13,4 @@ Each entry names the story (`S..`) or rule (`P..`) it serves.
 ## [Unreleased]
 
 ### Added
-- The harness skeleton, scaffolded from the playbook.
+- The skill pack skeleton, scaffolded from the playbook.

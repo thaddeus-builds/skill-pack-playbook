@@ -1,6 +1,6 @@
 # Zylos host adapter
 
-This folder runs a playbook harness as a Zylos component (zylos-core, the Zylos agent host): the lifecycle hooks, the linked CLI, detached long jobs, the scheduled tasks and the owner console as a pm2 service. It is generic. Everything that belongs to one harness (its names, env prefix, pinned runtime, endpoints, scope check, console settings, tasks and their prompts) comes from that harness's `zylos/manifest.json`, which `lib.js` loads and checks once.
+This folder runs a playbook skill pack as a Zylos component (zylos-core, the Zylos agent host): the lifecycle hooks, the linked CLI, detached long jobs, the scheduled tasks and the owner console as a pm2 service. It is generic. Everything that belongs to one skill pack (its names, env prefix, pinned runtime, endpoints, scope check, console settings, tasks and their prompts) comes from that skill pack's `zylos/manifest.json`, which `lib.js` loads and checks once.
 
 The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented surface:
 
@@ -10,13 +10,13 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 - the `components/<name>` data dir;
 - the scheduler CLI's `add`, `update`, `list --json` and `remove <id>`.
 
-The harness itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the harness still runs anywhere.
+The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.2.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.3.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
-## What a harness copies, and what it writes
+## What a skill pack copies, and what it writes
 
-A harness **copies** these files into `<harness>/zylos/` and never edits them. Keep the executable bit on `bin/*.js`.
+A skill pack **copies** these files into `<skill-pack>/zylos/` and never edits them. Keep the executable bit on `bin/*.js`.
 
 | From `hosts/zylos/` | To | What it is |
 | --- | --- | --- |
@@ -24,17 +24,17 @@ A harness **copies** these files into `<harness>/zylos/` and never edits them. K
 | `hooks/*.js` | `zylos/hooks/` | `configure`, `post-install`, `post-upgrade`, `pre-uninstall`: thin wrappers over `lib.js` |
 | `bin/cli.js`, `bin/detach.js`, `bin/console.js` | `zylos/bin/` | The linked CLI, detached long jobs, the console service |
 | `Caddyfile.snippet` | `zylos/Caddyfile.snippet` | The console's login route; `node zylos/lib.js caddy` fills it in |
-| `README.md`, `VERSION` | `zylos/` | This guide; the adapter version the harness vendored |
+| `README.md`, `VERSION` | `zylos/` | This guide; the adapter version the skill pack vendored |
 
-A harness **writes** only three things:
+A skill pack **writes** only three things:
 
 1. `zylos/manifest.json`, starting from [manifest.example.json](manifest.example.json) (a fictional `shop-harness`).
 2. The Zylos keys of its `SKILL.md` frontmatter (below).
 3. The root `ecosystem.config.cjs`, a copy of [ecosystem.config.cjs.template](ecosystem.config.cjs.template) (three lines). Core looks for it at the skill root only.
 
-The owner console itself is the playbook's `console/`, vendored as usual (`python3 kit/tools/vendor.py --harness <dir> --console`); `console.entry` points at its `serve.py`.
+The owner console itself is the playbook's `console/`, vendored as usual (`python3 kit/tools/vendor.py --skill-pack <dir> --console`); `console.entry` points at its `serve.py`.
 
-Then add `node zylos/lib.js check` to the harness's CI. It exits 1 and names each problem when the manifest, the `SKILL.md` frontmatter, the root ecosystem file or a file they name disagree.
+Then add `node zylos/lib.js check` to the skill pack's CI. It exits 1 and names each problem when the manifest, the `SKILL.md` frontmatter, the root ecosystem file or a file they name disagree.
 
 ## The manifest
 
@@ -43,13 +43,13 @@ Then add `node zylos/lib.js check` to the harness's CI. It exits 1 and names eac
 | Section | Key | What it is |
 | --- | --- | --- |
 | | `name` | The component name: equals `SKILL.md` `name`; the data dir is `$ZYLOS_DIR/components/<name>`, the pm2 service `zylos-<name>` |
-| | `min_zylos` | The oldest zylos-core this harness supports; post-install and post-upgrade refuse an older one |
+| | `min_zylos` | The oldest zylos-core this skill pack supports; post-install and post-upgrade refuse an older one |
 | `cli` | `bin` | The linked command, `<brand>-<cli>` (a generic name clashes, and core overwrites clashing links); equals the `SKILL.md` `bin` key |
-| `cli` | `entry` | The harness CLI inside the skill dir, a PEP 723 script run with `uv run --no-project` |
+| `cli` | `entry` | The skill pack CLI inside the skill dir, a PEP 723 script run with `uv run --no-project` |
 | `cli` | `doctor` | The CLI arguments of its health check, run by post-install (`[]` skips it) |
-| `env` | `prefix` | The harness's env prefix, e.g. `SHOP`; it also names the test knobs `<PREFIX>_ZYLOS_HOOK_*` and `<PREFIX>_AUTH_ENV_PATHS` |
+| `env` | `prefix` | The skill pack's env prefix, e.g. `SHOP`; it also names the test knobs `<PREFIX>_ZYLOS_HOOK_*` and `<PREFIX>_AUTH_ENV_PATHS` |
 | `env` | `data_dir` | The env var that holds the data dir, `<PREFIX>_DATA_DIR`; cli.js, detach.js and console.js set it |
-| `env` | `files` | The env files between the process env and `<data dir>/.env` (`~/` or absolute), as the harness's own chain reads them |
+| `env` | `files` | The env files between the process env and `<data dir>/.env` (`~/` or absolute), as the skill pack's own chain reads them |
 | `runtime` | `python` | The Python version installed with `uv python install` when `uv python find` fails |
 | `runtime` | `uv_version` | The uv version Astral's installer is pinned to |
 | `runtime` | `uv_installer_url` | The address of Astral's standalone uv installer script for exactly `uv_version` (Astral's site, path `/uv/<uv_version>/install.sh`; uv's installation docs give it); it must name `uv_version` |
@@ -70,7 +70,7 @@ Then add `node zylos/lib.js check` to the harness's CI. It exits 1 and names eac
 | `console` | `args` | More `serve.py` flags, e.g. `--relay-verbs`, `--lang`, `--default-reason`, a static `--allow-host`; console.js owns `--dir`, `--host`, `--port`, `--user`, `--user-header`, `--relay-cmd`, `--title` |
 | `console` | `allow_host_key` | Optional. The config key holding the public domain(s) the console answers to (`--allow-host`) |
 | `detach` | `exit_marker` | The last log line of a detached job, `<MARKER> <status>`, e.g. `SHOP-EXIT` |
-| `detach` | `alias` | The word that means the harness CLI at the start of a detached command, e.g. `shop` |
+| `detach` | `alias` | The word that means the skill pack CLI at the start of a detached command, e.g. `shop` |
 | `tasks[]` | `name` | The scheduler task name (names identify tasks; unique) |
 | `tasks[]` | `cron` | A five-field cron, in the scheduler's time zone |
 | `tasks[]` | `miss_threshold` | Seconds late a run still happens after the agent was offline |
@@ -84,7 +84,7 @@ The two fields of a `defaults` entry are `value` (a string) and `when` (a list o
 
 | Placeholder | Becomes |
 | --- | --- |
-| `{cli}` | The harness CLI as a shell calls it: the absolute, quoted `$ZYLOS_DIR/bin/<bin>` link, or `node '<skill>/zylos/bin/cli.js'` without the link |
+| `{cli}` | The skill pack CLI as a shell calls it: the absolute, quoted `$ZYLOS_DIR/bin/<bin>` link, or `node '<skill>/zylos/bin/cli.js'` without the link |
 | `{node}` | `node` |
 | `{detach}` | `node '<skill>/zylos/bin/detach.js'` |
 | `{data_dir}` | The quoted data dir |
@@ -93,7 +93,7 @@ The two fields of a `defaults` entry are `value` (a string) and `when` (a list o
 | `{log:NAME}` | The quoted `<data dir>/logs/NAME.log` |
 | `{exit}` | `detach.exit_marker`, unquoted (it is a plain token) |
 
-Write prompts as the example does: "run only these commands", the done/report contract, the error lines to the owner. They name harness verbs and JSON fields, so a harness test should render each one and check that the fields it names exist.
+Write prompts as the example does: "run only these commands", the done/report contract, the error lines to the owner. They name skill pack verbs and JSON fields, so a skill pack test should render each one and check that the fields it names exist.
 
 ## SKILL.md frontmatter
 
@@ -206,7 +206,7 @@ Zylos treats a failing post-install or post-upgrade as a warning, so read the ou
   - Soft checks, which print a note and continue: each endpoint's reachability; `<cli> <doctor>` (summary line printed, full report in `logs/doctor-install.log`); the declared scope, with the exact `scope.declare` command when none is; the console entry present; the Caddy block and the public Host (below).
   - It prints the absolute CLI command, then reconciles the scheduled tasks.
 - **post-upgrade** is post-install in light mode: uv, Python, the CLI and the tasks; it skips the endpoint, doctor and scope checks and says so.
-- **pre-uninstall** stops the detached jobs still running (a job counts only if its pid *and* start time match), removes every task this adapter manages, and never touches the data dir. It exits 1 with the reason when a job or a task can't be stopped or removed.
+- **pre-uninstall** stops the detached jobs still running (a job counts only if its pid *and* start time match), removes every task this adapter manages, copies the console's Caddy block to `<data dir>/caddy-block.saved` (uninstall deletes it from the Caddyfile), and never touches the rest of the data dir. It exits 1 with the reason when a job or a task can't be stopped or removed.
 
 Each hook's runtime is capped at 9 minutes, under the agent's 10-minute command cap. A soft step the cap cuts is listed as skipped with the command that finishes it; a hard step the cap cuts fails with "rerun post-install". The hooks are idempotent, so a rerun picks up where it stopped.
 
@@ -214,22 +214,22 @@ Each hook's runtime is capped at 9 minutes, under the agent's 10-minute command 
 
 ## Config
 
-A terminal `zylos add` prompts only for the required keys; a chat install prompts for nothing, and the agent collects them. The configure hook stores every value in the component's own `<data dir>/.env` (mode 0600), which the harness reads as `$<PREFIX>_DATA_DIR/.env`; never the Zylos root `.env`. No Zylos command reruns configure: to add or change keys later, pipe just those keys again. The owner can run it at a terminal on the host (no heredoc; paste the JSON; Ctrl-D), which keeps secrets out of chat.
+A terminal `zylos add` prompts only for the required keys; a chat install prompts for nothing, and the agent collects them. The configure hook stores every value in the component's own `<data dir>/.env` (mode 0600), which the skill pack reads as `$<PREFIX>_DATA_DIR/.env`; never the Zylos root `.env`. No Zylos command reruns configure: to add or change keys later, pipe just those keys again. The owner can run it at a terminal on the host (no heredoc; paste the JSON; Ctrl-D), which keeps secrets out of chat.
 
 - **It only merges.** A key it isn't given is kept. An empty or null value keeps the stored value. It never deletes a key; delete the line by hand.
 - **Values are strings, numbers or booleans**, stored as given (numbers and booleans as their JSON text). An object, an array or a multi-line value refuses the whole input, and nothing is written.
 - **Values read back exactly.** A value with edge whitespace or surrounding quotes is written quoted, so the kit's `.env` parser (`kit/env.py`) returns it unchanged. `lib.js` reads `.env` files by the same rules.
 - **Defaults.** A `defaults` entry is written when its group is in use and the key is absent.
-- **Never a gate secret.** `<PREFIX>_CONFIRM_CODE_SECRET` (or any `*CONFIRM_CODE_SECRET`) and `CONSOLE_SECRET` refuse the whole input, and the manifest and `SKILL.md` config may not name them: the harness never loads a gate secret from an env file (`kit/env.py`), since an agent that can read or write the file could make its own approval codes. console.js makes the confirm-code secret itself (below). Before 0.2.0 the relay read it from `<data dir>/.env`; delete that line if it is there (`doctor` names it).
+- **Never a gate secret.** `<PREFIX>_CONFIRM_CODE_SECRET` (or any `*CONFIRM_CODE_SECRET`) and `CONSOLE_SECRET` refuse the whole input, and the manifest and `SKILL.md` config may not name them: the skill pack never loads a gate secret from an env file (`kit/env.py`), since an agent that can read or write the file could make its own approval codes. console.js makes the confirm-code secret itself (below). Before 0.2.0 the relay read it from `<data dir>/.env`; delete that line if it is there (`doctor` names it).
 - **Interrupted runs clean up**: a half-written `.env.tmp-*` is removed.
 
-The adapter resolves a key as the harness does: process env, then `env.files`, then `<data dir>/.env` (later wins). `<PREFIX>_AUTH_ENV_PATHS` replaces the file chain (`none`: process env only).
+The adapter resolves a key as the skill pack does: process env, then `env.files`, then `<data dir>/.env` (later wins). `<PREFIX>_AUTH_ENV_PATHS` replaces the file chain (`none`: process env only).
 
 ## One client per host
 
 A Zylos host runs one agent for one owner, and nothing isolates one client from another. So a host serves exactly one client: one data dir. A second client needs a second host. One client with several scopes (markets) fits on one host.
 
-## Running the harness CLI
+## Running the skill pack CLI
 
 Call the link by its absolute path; post-install prints it. It runs `uv run --no-project <skill dir>/<cli.entry> …` in the caller's cwd, sets `<PREFIX>_DATA_DIR` to the data dir unless the caller set one, keeps bytecode caches under the data dir, finds `uv` in `~/.local/bin` when it isn't on PATH, and exits with the CLI's status.
 
@@ -254,7 +254,7 @@ A foreground agent command is capped at 10 minutes, and an agent's background jo
 
     node ~/zylos/.claude/skills/<name>/zylos/bin/detach.js pull-orders -- shop pull orders --days 30
 
-- The command runs in its own session and process group, with cwd = the data dir and `<PREFIX>_DATA_DIR` set. A leading `detach.alias` means the harness CLI; a leading `uv` is resolved like the hooks resolve it.
+- The command runs in its own session and process group, with cwd = the data dir and `<PREFIX>_DATA_DIR` set. A leading `detach.alias` means the skill pack CLI; a leading `uv` is resolved like the hooks resolve it.
 - Output goes to `<data dir>/logs/<name>.log`, whose last line is `<exit_marker> <status>` when it ends. `<data dir>/logs/<name>.pid` holds `{pid, start, cmd}`.
 - It refuses to start `<name>` again while that job runs (pid and start time both match; a pid owned by another user counts as alive). Concurrent starts are serialized by `<name>.lock`.
 
@@ -262,7 +262,7 @@ Poll with `tail -n 5 <data dir>/logs/<name>.log`. `<MARKER> 0` is done; another 
 
 ## The console service
 
-The owner console (the playbook's `console/serve.py`: the asks inbox and the relay to the harness's human gate) runs as a pm2 service. The public URL and the login are a Caddy block the host agent adds once.
+The owner console (the playbook's `console/serve.py`: the asks inbox and the relay to the skill pack's human gate) runs as a pm2 service. The public URL and the login are a Caddy block the host agent adds once.
 
 **What runs.** `lifecycle.service` names the pm2 app `zylos-<name>` and its entry `zylos/bin/console.js`. The root `ecosystem.config.cjs` runs it with cwd = the data dir and its log at `<data dir>/logs/console.log`. console.js runs `uv run --no-project <console.entry>` with:
 
@@ -273,7 +273,7 @@ The owner console (the playbook's `console/serve.py`: the asks inbox and the rel
 - `--allow-host` for each domain in `allow_host_key`;
 - `--relay-cmd '<node>' '<skill>/zylos/bin/cli.js'` when `console.args` carries `--relay-verbs` (serve.py wants both or neither);
 - then `console.args`;
-- and in its environment a fresh random `<PREFIX>_CONFIRM_CODE_SECRET`, made at each start and never written to a file or printed: the relay's harness runs (`bin/cli.js`) issue and check a click's one-time code with it, and both calls of one click run under the same start.
+- and in its environment a fresh random `<PREFIX>_CONFIRM_CODE_SECRET`, made at each start and never written to a file or printed: the relay's skill pack runs (`bin/cli.js`) issue and check a click's one-time code with it, and both calls of one click run under the same start.
 
 Who starts it: a terminal `zylos add` (`pm2 start ecosystem.config.cjs`, `pm2 save`); in a chat install the agent runs `pm2 start <skill dir>/ecosystem.config.cjs && pm2 save`; `zylos upgrade` restarts it if it ran; `zylos uninstall` deletes it; at boot core's own pm2 ecosystem loads it. A broken manifest makes the root file export no app (and log why) rather than break core's boot.
 
@@ -307,7 +307,7 @@ For the example manifest it prints:
 
 Validate, then reload: `~/zylos/bin/caddy validate --config ~/zylos/http/Caddyfile --adapter caddyfile && pm2 reload caddy`.
 
-Core never rewrites the block on upgrade (no routes are declared). A reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it: paste it again. post-install and post-upgrade warn when `users_file` has logins but the Caddyfile has no BEGIN marker; they never edit the Caddyfile.
+Core never rewrites the block on upgrade (no routes are declared). A reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it: paste it again. post-install and post-upgrade warn when `users_file` has logins but the Caddyfile has no BEGIN marker, and name the copy pre-uninstall kept (`caddy-block.saved`, with the host's own edits); they never edit the Caddyfile.
 
 **Adding a person.** The logins are `<data dir>/<users_file>` (mode 0600), one `<username> <bcrypt hash>` per line, never in the repository. Caddy fails to start on a missing or empty list, so add the first person before pasting the block. Hash at a terminal so the password never goes through chat:
 
@@ -329,12 +329,12 @@ Then open the URL, log in, and check that the page names you.
 
 ## Known limits
 
-- **Checked against a fake host only.** The hooks and bin are tested with a fake scheduler CLI, a fake `uv` and a fake `zylos --version`. The console is tested once for real (the playbook's `serve.py` behind a kept public Host). Real zylos-core has not run this adapter yet: its frontmatter parser, pm2 ecosystem and `linkBins`, the scheduler daemon dispatching a task to a live agent, a full `zylos upgrade`, and the Caddy block under a real Caddy (`caddy validate`). The reference harness's CI smoke against core tags has not been ported to the manifest yet.
+- **Checked against a fake host only.** The hooks and bin are tested with a fake scheduler CLI, a fake `uv` and a fake `zylos --version`. The console is tested once for real (the playbook's `serve.py` behind a kept public Host). Real zylos-core has not run this adapter yet: its frontmatter parser, pm2 ecosystem and `linkBins`, the scheduler daemon dispatching a task to a live agent, a full `zylos upgrade`, and the Caddy block under a real Caddy (`caddy validate`). The reference skill pack's CI smoke against core tags has not been ported to the manifest yet.
 - **`requires` is a plain list of keys.** A task whose keys depend on other keys (a configurable credential prefix, a token-command mode) can't say so; list the keys of the default layout, or register the task by hand.
-- **A task renamed with the state file lost is orphaned.** `.zylos-tasks.json` lives in the data dir. If it is deleted, a task dropped from the manifest is no longer known to be this harness's; remove it with the scheduler CLI.
+- **A task renamed with the state file lost is orphaned.** `.zylos-tasks.json` lives in the data dir. If it is deleted, a task dropped from the manifest is no longer known to be this skill pack's; remove it with the scheduler CLI.
 - **`{cli}` and `{detach}` need `node` on the agent's PATH** (the link's shebang, the fallback form, detach). Zylos hosts have it. The console service instead calls the absolute node that runs it.
 - **The console's secret sits in `<data dir>/console/secret`**, which the agent on a single-user host can read: the signature is then an accident guard, not a wall. To keep it out of the agent's reach, give only the pm2 app a `CONSOLE_SECRET` (16+ characters) in its environment and keep that out of the data dir.
-- **One client per host**, and one console per component: a second console for the same harness needs a second host.
+- **One client per host**, and one console per component: a second console for the same skill pack needs a second host.
 - **Windows is not supported.** Detached jobs rely on POSIX sessions and `sh`.
 - **The hooks never edit the Caddyfile**, and the scheduler's time zone is the host's; both are the host agent's job.
 - **Vendoring is by hand for now.** `kit/tools/vendor.py` copies `kit/` and `console/`; copy this folder (without `tests/` and the two templates) yourself and keep `VERSION` with it.

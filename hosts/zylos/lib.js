@@ -1,8 +1,8 @@
 'use strict';
 // The generic Zylos host adapter (the playbook's hosts/zylos/, README.md).
-// A harness vendors this folder as <harness>/zylos/ and writes only three
+// A skill pack vendors this folder as <skill-pack>/zylos/ and writes only three
 // things: zylos/manifest.json, its SKILL.md frontmatter and the root
-// ecosystem.config.cjs. Everything harness-specific (names, env prefix,
+// ecosystem.config.cjs. Everything skill-pack-specific (names, env prefix,
 // pinned runtime, endpoints, scope check, console, scheduled tasks and their
 // prompts) is read from the manifest, which is loaded and checked once, here.
 //
@@ -23,8 +23,8 @@ const https = require('node:https');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const ADAPTER_DIR = __dirname;                        // <harness>/zylos
-const SKILL_DIR = path.resolve(ADAPTER_DIR, '..');    // <harness>
+const ADAPTER_DIR = __dirname;                        // <skill-pack>/zylos
+const SKILL_DIR = path.resolve(ADAPTER_DIR, '..');    // <skill-pack>
 const MANIFEST_FILE = path.join(ADAPTER_DIR, 'manifest.json');
 // Each hook's total runtime, under the agent's 10-minute command cap.
 const HOOK_BUDGET_MS = 9 * 60_000;
@@ -65,11 +65,11 @@ const CONSOLE_OWNED = ['--dir', '--host', '--port', '--user', '--user-header', '
 const NOT_ALIASES = ['uv', 'node', 'sh', 'python', 'python3'];
 // A config key whose name says it holds a secret must be `sensitive: true`.
 const SECRET_KEY = /SECRET|TOKEN|PASSWORD|ACCESS_KEY|API_KEY|PRIVATE_KEY/;
-// A gate secret (the kit's kit/env.py is_gate_secret): the harness never loads
+// A gate secret (the kit's kit/env.py is_gate_secret): the skill pack never loads
 // it from an env file, so it is never a config key; console.js makes the
 // confirm-code secret itself.
 const isGateSecret = (k) => k === 'CONSOLE_SECRET' || k.endsWith('CONFIRM_CODE_SECRET');
-const GATE_SECRET_WHY = 'a gate secret: the harness never loads it from an env file '
+const GATE_SECRET_WHY = 'a gate secret: never loaded from an env file '
   + '(zylos/bin/console.js makes the confirm-code secret at each start)';
 
 function relPath(v) {
@@ -183,7 +183,7 @@ function validate(m) {
   shape(m.detach, 'detach', ['exit_marker', 'alias']);
   str(m.detach.exit_marker, 'detach.exit_marker', re(RE.marker), 'an upper-case marker such as ACME-EXIT');
   str(m.detach.alias, 'detach.alias', (s) => RE.name.test(s) && !NOT_ALIASES.includes(s),
-      'the word a detached command starts with to mean the harness CLI (not uv, node or sh)');
+      'the word a detached command starts with to mean the CLI (not uv, node or sh)');
 
   const seen = new Set();
   list(m.tasks, 'tasks', (t, key) => {
@@ -356,7 +356,7 @@ function envFiles() {
   return files.map(expandHome).filter((p) => path.isAbsolute(p));
 }
 
-// A value as the harness would resolve it: process env, then the files.
+// A value as the skill pack would resolve it: process env, then the files.
 // Values are never printed.
 function envValue(key) {
   if (process.env[key]) return process.env[key];
@@ -364,11 +364,11 @@ function envValue(key) {
   return merged[key] || '';
 }
 
-// The env every harness run gets: the data dir (unless the caller set one),
+// The env every skill pack run gets: the data dir (unless the caller set one),
 // and bytecode caches under it, so nothing is written into the skill dir
 // (which `zylos upgrade` backs up and merges). console.js adds the
-// confirm-code secret (CONFIRM_SECRET_VAR) for its relay's harness runs.
-function harnessEnv(base = process.env) {
+// confirm-code secret (CONFIRM_SECRET_VAR) for its relay's skill pack runs.
+function cliEnv(base = process.env) {
   const dataDir = base[DATA_VAR] || DATA_DIR;
   return { ...base, [DATA_VAR]: dataDir,
            PYTHONPYCACHEPREFIX: base.PYTHONPYCACHEPREFIX || path.join(dataDir, '.pycache') };
@@ -460,15 +460,15 @@ function run(cmd, args, timeout = 600_000) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const r = spawnSync(cmd, args, {
     cwd: DATA_DIR, encoding: 'utf8', timeout: Math.min(timeout, left),
-    env: harnessEnv({ ...process.env, [DATA_VAR]: DATA_DIR }),
+    env: cliEnv({ ...process.env, [DATA_VAR]: DATA_DIR }),
   });
   return { ...r, timedOut: r.error?.code === 'ETIMEDOUT' && remaining() <= 0 };
 }
 
-// `uv run` arguments for the harness CLI (a PEP 723 script: no project venv).
+// `uv run` arguments for the skill pack CLI (a PEP 723 script: no project venv).
 const cliArgs = (...args) => ['run', '--no-project', ENTRY, ...args];
 
-// How a shell (the agent, a scheduled prompt) calls the harness CLI: the
+// How a shell (the agent, a scheduled prompt) calls the skill pack CLI: the
 // absolute path of the link zylos-core made in $ZYLOS_DIR/bin (not on the
 // agent's PATH: core only adds it to shell rc files), or, without the link,
 // node on this adapter's bin/cli.js. Quoted for a shell.
@@ -752,7 +752,7 @@ function allowHosts() {
   return raw.split(/[\s,]+/).filter(Boolean);
 }
 
-// How the console's relay calls the harness: this node on bin/cli.js, which
+// How the console's relay calls the skill pack: this node on bin/cli.js, which
 // sets the data dir itself (no link or PATH needed under pm2). serve.py
 // splits it like a shell does.
 const relayCommand = () => `${q(process.execPath)} ${q(CLI_JS)}`;
@@ -810,6 +810,23 @@ function caddyBlockMissing() {
   try {
     return !fs.readFileSync(CADDYFILE, 'utf8').split('\n').some((l) => l.trim() === CADDY_MARKER);
   } catch { return false; }
+}
+
+// pre-uninstall: `zylos uninstall` removes the BEGIN/END block, and with it the
+// hand edits of the host (e.g. a header_up Host line). Keep a copy beside the
+// data so the next post-install can name it; the Caddyfile itself is not touched.
+const CADDY_SAVED = path.join(DATA_DIR, 'caddy-block.saved');
+
+function saveCaddyBlock() {
+  try {
+    const lines = fs.readFileSync(CADDYFILE, 'utf8').split('\n');
+    const from = lines.findIndex((l) => l.trim() === CADDY_MARKER);
+    const to = lines.findIndex((l, i) => i > from && l.trim() === CADDY_MARKER.replace('BEGIN', 'END'));
+    if (from < 0 || to < 0) return null;
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(CADDY_SAVED, lines.slice(from, to + 1).join('\n') + '\n', { mode: 0o600 });
+    return CADDY_SAVED;
+  } catch { return null; }
 }
 
 // People have logins but the console would refuse the public Host (421).
@@ -968,14 +985,14 @@ module.exports = {
   CONFIRM_SECRET_VAR, NAME, BIN_NAME, MIN_ZYLOS, PREFIX, DATA_VAR, SERVICE, PYTHON_VERSION, UV_VERSION, UV_INSTALLER, UV_SHA256,
   ENDPOINTS, TEST_MODE, testKnob,
   ADAPTER_DIR, SKILL_DIR, ZYLOS_DIR, DATA_DIR, LOGS_DIR, CONSOLE_DIR, ENTRY, CONSOLE_ENTRY, CLI_JS, DETACH_JS,
-  CONSOLE_JS, POST_INSTALL, SCHEDULER_CLI, BIN_LINK, TASK_STATE, USERS_FILE, CADDYFILE, CADDY_MARKER,
+  CONSOLE_JS, POST_INSTALL, SCHEDULER_CLI, BIN_LINK, TASK_STATE, USERS_FILE, CADDYFILE, CADDY_MARKER, CADDY_SAVED,
   log, fail, q, tail, remaining, budgetMinutes,
-  readEnvFile, envFiles, envValue, harnessEnv,
+  readEnvFile, envFiles, envValue, cliEnv,
   findUv, ensureUv, checkZylosVersion, run, cliArgs, cliCommand, reachable,
   renderPrompt, unresolved, tasksNamed, addTask, updateTask, removeTask, readTaskState, requiredKeys,
   reconcileTask, reconcileAll, removeAllTasks,
   procStart, pidAlive, readJob, jobAlive, stopJobs,
-  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, allowHostMissing, caddyBlock,
+  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, saveCaddyBlock, allowHostMissing, caddyBlock,
   skillProblems, checkProblems,
 };
 

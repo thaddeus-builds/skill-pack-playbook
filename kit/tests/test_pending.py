@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """`<cli> pending` (kit/pending.py) turns every row waiting on a human into
-one valid console ask, on the fake "shop" harness.
+one valid console ask, on the fake "shop" skill pack.
 
   1. A read verb: no DB = no_db, nothing created; nothing waiting = no asks.
   2. Every pending fact (number / choice / date / threshold), decision
      (number / choice / text / sha256) and queue item becomes exactly one
-     ask of the right step, with evidence from the harness's own rows
-     (source "harness …"), recommend.because left null and flagged; the
+     ask of the right step, with evidence from the skill pack's own rows
+     (source "skill pack …"), recommend.because left null and flagged; the
      console refuses them as they are and, once the agent writes
      `because`, `console/ask.py add --dry-run` accepts every one.
   3. The gate block is what the kit's gate binds: every gated ask,
      answered through console/relay.py (in a child process, against a
-     harness command that runs kit.facts / kit.decisions / kit.queue),
+     skill pack command that runs kit.facts / kit.decisions / kit.queue),
      passes relay's subject check and writes exactly that row, @relay
      (a provided value other than the recommendation too).
   4. Several markets declared or waiting: each fact or decision gate names
@@ -21,6 +21,11 @@ one valid console ask, on the fake "shop" harness.
      than the console holds.
   5. Ask ids are stable while nothing moves and new when the value does;
      pending.tsv is closed over pending.py.
+  6. Hub mode (--hub): every ask id and every gate verb starts with the cli
+     word and every group with the skill pack's name; the console takes them,
+     a relayed confirm through a hub dispatcher (`<hub> <cli> <verb…>`)
+     writes the row, and a verb one word past the console's limit gets no
+     gate (pending_gate_too_many_words).
 """
 
 import copy
@@ -66,8 +71,8 @@ TH = Thresholds(FIX / "constants.tsv")
 IDS = {"product": r"SKU-[A-Z0-9]+", "campaign": r"[0-9]+"}
 REG = DecisionRegistry(entity_ids=IDS)
 
-# the harness command console/relay.py runs: `<cmd> facts|decisions|queue …`
-HARNESS = r'''
+# the skill pack command console/relay.py runs: `<cmd> facts|decisions|queue …`
+SKILL_PACK = r'''
 import os, sys
 sys.path.insert(0, os.environ["PLAYBOOK"])
 from pathlib import Path
@@ -111,8 +116,8 @@ def env() -> dict:
                         CFG.env("AUTH_ENV_PATHS"): "none"})
 
 
-def pend(registry=REG) -> dict:
-    rc, out, err = capture(lambda a: PEND(a, registry), ["--json"],
+def pend(registry=REG, *flags: str) -> dict:
+    rc, out, err = capture(lambda a: PEND(a, registry), ["--json", *flags],
                            env=env())
     assert rc == 0, (rc, out, err)
     return one_doc(out)
@@ -150,7 +155,7 @@ def prop(target, payload, **kw):
 
 def filled(asks: list[dict]) -> list[dict]:
     return [{**a, "recommend": {**a["recommend"],
-                                "because": "the harness's own numbers"}}
+                                "because": "the skill pack's own numbers"}}
             for a in asks]
 
 
@@ -166,18 +171,33 @@ def console_add(asks: list[dict]) -> dict:
     return one_doc(r.stdout) or {"stdout": r.stdout, "stderr": r.stderr}
 
 
-def relay(ask: dict, value: str) -> dict:
-    d = Path(tmp_dir("harness-"))
-    script = d / "shop_harness.py"
-    script.write_text(HARNESS, encoding="utf-8")
+# a client hub's dispatcher: `hub <cli> <verb…>` runs that pack's command
+HUB = r'''
+import os, runpy, sys
+assert sys.argv[1] == os.environ["HUB_CLI"], sys.argv
+sys.argv = [os.environ["HUB_PACK"], *sys.argv[2:]]
+runpy.run_path(os.environ["HUB_PACK"], run_name="__main__")
+'''
+
+
+def relay(ask: dict, value: str, hub: bool = False) -> dict:
+    d = Path(tmp_dir("skill-pack-"))
+    script = d / "shop_skill_pack.py"
+    script.write_text(SKILL_PACK, encoding="utf-8")
+    cmd, verbs = [sys.executable, str(script)], [["facts", "confirm"],
+                                                 ["decisions", "confirm"],
+                                                 ["queue", "approve"]]
+    extra = {}
+    if hub:
+        (d / "hub.py").write_text(HUB, encoding="utf-8")
+        cmd = [sys.executable, str(d / "hub.py")]
+        verbs = [[CFG.cli, *v] for v in verbs]
+        extra = {"HUB_CLI": CFG.cli, "HUB_PACK": str(script)}
     child_env = sandbox_env(DATA, PLAYBOOK=str(_shop.PLAYBOOK), FIX=str(FIX),
                             PYTHONDONTWRITEBYTECODE="1",
-                            **{SECRET: "s3cret"})
-    cfg = json.dumps({"ask": ask, "value": value,
-                      "cmd": [sys.executable, str(script)],
-                      "verbs": [["facts", "confirm"],
-                                ["decisions", "confirm"],
-                                ["queue", "approve"]], "env": child_env})
+                            **{SECRET: "s3cret"}, **extra)
+    cfg = json.dumps({"ask": ask, "value": value, "cmd": cmd,
+                      "verbs": verbs, "env": child_env})
     r = subprocess.run([sys.executable, "-c", RELAY, str(CONSOLE), cfg],
                        env=child_env, capture_output=True, text=True,
                        timeout=180)
@@ -293,8 +313,8 @@ def test_asks_and_relay() -> None:
           and qa["recommend"] == {"value": "yes", "because": None}, qa)
     sources = [e.get("source") or e["table"]["caption"]
                for a in asks for e in a["evidence"]]
-    check("every evidence item is sourced from the harness",
-          sources and all("harness" in s for s in sources), sources)
+    check("every evidence item is sourced from the skill pack",
+          sources and all("skill_pack" in s for s in sources), sources)
     check("every ask is flagged: recommend.because null, about.fill, the "
           "coded pending_fill_because warning; the texts coded",
           all(a["recommend"]["because"] is None for a in asks)
@@ -441,8 +461,78 @@ def test_ids_and_closure() -> None:
           "pending.tsv code is emitted", probs == [], probs)
 
 
+# ---- 6 ---------------------------------------------------------------------
+
+def staged_file(words: int):
+    return lambda con: [{"name": "plan.xlsx", "version": "v1", "rows": 1,
+                         "shown": [["r1", "unit cost"]], "values": [],
+                         "source": "raw/plan.xlsx",
+                         "verb": ["workbook", "confirm", *["w"] * (words - 2)],
+                         "expect": {"items": {"plan.xlsx": "v1"}}}]
+
+
+def test_hub() -> None:
+    print("[6] hub mode: one console for several skill packs")
+    plain, doc = pend(), pend(REG, "--hub")
+    cli, name = CFG.cli, CFG.name
+    check("the same asks, in the same order, each id the plain one with the "
+          "cli word first", len(doc["asks"]) == len(plain["asks"]) > 3
+          and doc["hub"] is True and plain["hub"] is False
+          and all(h["id"] == f"{cli}-{p['id']}" for h, p in
+                  zip(doc["asks"], plain["asks"]))
+          and [b["id"] for b in doc["about"]] == [a["id"] for a in doc["asks"]],
+          [a["id"] for a in doc["asks"]])
+    gated = [(h, p) for h, p in zip(doc["asks"], plain["asks"]) if "gate" in p]
+    check("every gate verb starts with the cli word, the rest of the gate "
+          "unchanged", gated and all(
+              h["gate"]["verb"] == [cli, *p["gate"]["verb"]]
+              and h["gate"]["expect"] == p["gate"]["expect"] for h, p in gated),
+          [h["gate"]["verb"] for h, _ in gated])
+    check("every group names the skill pack",
+          all(h["group"] == f"{name} · {p['group']}"[:60]
+              for h, p in zip(doc["asks"], plain["asks"])),
+          [a["group"] for a in doc["asks"]])
+    got = console_add(filled(doc["asks"]))
+    check("the console takes every hub ask (ids, verbs of one word more)",
+          got.get("ok") is True and len(got.get("posted", [])) ==
+          len(doc["asks"]), got)
+    fact = next(a for a in doc["asks"] if a["kind"] == "fact"
+                and a["gate"]["verb"][1:3] == ["facts", "confirm"])
+    key = fact["gate"]["verb"][3]
+    value = fact["recommend"]["value"]
+    got = relay(filled([fact])[0], value, hub=True)
+    check("relayed through the hub's dispatcher (<hub> <cli> facts confirm "
+          "KEY), the fact is confirmed @relay", got.get("ok") is True
+          and fact_row(key)[1] == 0 and fact_row(key)[2].endswith("@relay"),
+          (got, fact_row(key)))
+    got = relay(filled([fact])[0], value)
+    check("control: the hub ask is refused by a console whose verbs are a "
+          "skill pack's own (no cli word)", got.get("code") ==
+          "gate_unavailable", got)
+
+    def staged(words, *flags):
+        rc, out, _ = capture(lambda a: pending.main(
+            a, spec=SPEC, keys=KEYS, registry=REG, thresholds=TH,
+            staged=staged_file(words)), ["--json", *flags], env=env())
+        d = one_doc(out)
+        return next((a, b) for a, b in zip(d["asks"], d["about"])
+                    if b["table"] == "workbook_map"), d
+    (a, b), d = staged(6, "--hub")
+    check("a staged file's verb of 6 words: 7 with the cli word, gated",
+          b["gate"] and a["gate"]["verb"][0] == cli
+          and len(a["gate"]["verb"]) == pending.LIMITS["verb"], a.get("gate"))
+    (a, b), d = staged(7, "--hub")
+    check("one word more: no gate, pending_gate_too_many_words",
+          "gate" not in a and not b["gate"]
+          and "pending_gate_too_many_words" in wcodes(d), d["warning_codes"])
+    (a, b), _ = staged(7)
+    check("the same 7-word verb without --hub keeps its gate",
+          b["gate"] and len(a["gate"]["verb"]) == 7, a.get("gate"))
+
+
 test_read_only()
 test_asks_and_relay()
 test_no_gate()
 test_ids_and_closure()
+test_hub()
 raise SystemExit(finish())

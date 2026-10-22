@@ -1,4 +1,4 @@
-"""zylos/bin: cli.js (the linked harness CLI), detach.js (long jobs) and
+"""zylos/bin: cli.js (the linked skill pack CLI), detach.js (long jobs) and
 console.js (the pm2 console service, run from the root ecosystem.config.cjs),
 including one run of the real playbook console behind a Caddy-style proxy
 that keeps the public Host.
@@ -118,7 +118,7 @@ def test_detach_runs_a_job_in_its_own_session_with_a_job_file_and_lock():
         assert r7.returncode == 2 and "usage" in r7.stderr and "`shop`" in r7.stderr, r7.stderr
 
 
-def test_detach_alias_is_the_harness_cli_and_pre_uninstall_stops_jobs():
+def test_detach_alias_is_the_skill_pack_cli_and_pre_uninstall_stops_jobs():
     with Host() as host:
         detach = os.path.join(host.adapter, "bin", "detach.js")
         r = host.node(detach, "pull-orders", "--", "shop", "pull", "orders", "--days", "30")
@@ -229,7 +229,7 @@ echo "SECRET=$SHOP_CONFIRM_CODE_SECRET" > "$FAKE_UV_LOG"
 
 
 def test_console_js_makes_the_confirm_code_secret_at_each_start_never_in_a_file():
-    """The relay's harness runs need <PREFIX>_CONFIRM_CODE_SECRET; the kit never
+    """The relay's skill pack runs need <PREFIX>_CONFIRM_CODE_SECRET; the kit never
     loads it from <data dir>/.env, so console.js exports a fresh one itself."""
     with Host(uv=FAKE_UV_SECRET) as host:
         os.makedirs(host.data, exist_ok=True)

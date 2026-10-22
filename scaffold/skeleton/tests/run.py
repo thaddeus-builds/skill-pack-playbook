@@ -15,7 +15,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-os.environ["KIT_HARNESS_ROOT"] = str(ROOT)
+os.environ["KIT_SKILL_PACK_ROOT"] = str(ROOT)
 
 from kit.testing import run_tests  # noqa: E402
 

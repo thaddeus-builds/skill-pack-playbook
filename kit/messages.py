@@ -1,17 +1,17 @@
-"""Stable machine codes for every human-readable message a harness emits.
+"""Stable machine codes for every human-readable message a skill pack emits.
 
-Every English sentence a harness puts in a `--json` document is a Msg:
+Every English sentence a skill pack puts in a `--json` document is a Msg:
 still that same string (text output and every JSON key are unchanged),
 plus a `code` from a closed registry and the `params` that fill it. The
 agent renders code + params in the client's own language (each registry
-row carries `meaning_<lang>` for every language the harness declares)
+row carries `meaning_<lang>` for every language the skill pack declares)
 instead of pasting the English.
 
 The registry = the kit base (kit/message_codes.tsv, then every
-kit/message_codes.d/<module>.tsv in sorted order) + the harness's own
-(`[ssot].message_codes` in harness.toml, then every
+kit/message_codes.d/<module>.tsv in sorted order) + the skill pack's own
+(`[ssot].message_codes` in skill-pack.toml, then every
 `<ssot dir>/message_codes.d/*.tsv` in sorted order: one fragment per unit
-of a fan-out, so parallel workers never edit the same file; `harness_files()`
+of a fan-out, so parallel workers never edit the same file; `skill_pack_files()`
 lists them). Columns: `code`, `params`
 (comma-separated names, may be empty), `meaning_<lang>`…; extra columns
 are allowed. A code defined twice (in any two files) or a row missing a
@@ -32,13 +32,13 @@ A param that is itself a message is nested as its own {code, params}.
 The registry is closed both ways, and check_registry_closed() is that
 guard as a library call: every msg() call names its code as a string
 literal, the code is registered, the call passes exactly the registered
-params, and every registered harness code is emitted somewhere.
+params, and every registered skill pack code is emitted somewhere.
 
 Deviation (SPEC §messages): kit base rows must carry the kit's own
 languages (KIT_LANGUAGES = en, zh), not every language of
-`config().languages`: the kit ships en + zh only, so a harness declaring
+`config().languages`: the kit ships en + zh only, so a skill pack declaring
 a third language would otherwise be unable to load the kit at all.
-Harness rows must carry every declared language.
+Skill pack rows must carry every declared language.
 
 Test: kit/tests/test_messages.py.
 """
@@ -59,7 +59,7 @@ KIT_DIR = Path(__file__).resolve().parent
 BASE_TSV = KIT_DIR / "message_codes.tsv"
 FRAGMENTS_DIR = KIT_DIR / "message_codes.d"
 KIT_LANGUAGES = ("en", "zh")
-# An error the harness has no finer code for (sqlite, a crash…): its one
+# An error the skill pack has no finer code for (sqlite, a crash…): its one
 # param is the raw English text.
 UNCLASSIFIED = "unclassified_error"
 CODE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -124,18 +124,18 @@ def kit_files() -> list[Path]:
 
 @functools.cache
 def base_registry() -> dict[str, dict]:
-    """The kit base registry alone (no harness needed)."""
+    """The kit base registry alone (no skill pack needed)."""
     reg: dict[str, dict] = {}
     for f in kit_files():
         _merge(reg, read_rows(f, KIT_LANGUAGES), "kit")
     return reg
 
 
-HARNESS_FRAGMENTS = "message_codes.d"
+SKILL_PACK_FRAGMENTS = "message_codes.d"
 
 
-def harness_files(cfg: _config.HarnessConfig | None = None) -> list[Path]:
-    """The bound harness's registry files in load order: `[ssot].
+def skill_pack_files(cfg: _config.SkillPackConfig | None = None) -> list[Path]:
+    """The bound skill pack's registry files in load order: `[ssot].
     message_codes` (when declared), then every `<ssot dir>/message_codes.d/
     *.tsv`, sorted by name."""
     cfg = cfg or _config.config()
@@ -143,7 +143,7 @@ def harness_files(cfg: _config.HarnessConfig | None = None) -> list[Path]:
     path = cfg.ssot_path("message_codes")
     if path is not None:
         out.append(path)
-    frag = cfg.root / cfg.ssot.get("dir", "ssot") / HARNESS_FRAGMENTS
+    frag = cfg.root / cfg.ssot.get("dir", "ssot") / SKILL_PACK_FRAGMENTS
     if frag.is_dir():
         out += sorted(frag.glob("*.tsv"))
     return out
@@ -152,13 +152,13 @@ def harness_files(cfg: _config.HarnessConfig | None = None) -> list[Path]:
 @functools.cache
 def registry() -> dict[str, dict]:
     """code -> its row: {"code", "params": (names…), "meaning_<lang>"…,
-    "file", "origin": "kit"|"harness"}; kit base ∪ the bound harness's
+    "file", "origin": "kit"|"skill_pack"}; kit base ∪ the bound skill pack's
     (its registry and its fragments). A code defined twice anywhere is a
     RegistryError naming both files."""
     reg = dict(base_registry())
     cfg = _config.config()
-    for path in harness_files(cfg):
-        _merge(reg, read_rows(path, cfg.languages), "harness")
+    for path in skill_pack_files(cfg):
+        _merge(reg, read_rows(path, cfg.languages), "skill_pack")
     return reg
 
 
@@ -227,7 +227,7 @@ def _param(v):
 
 def code(m: Msg | None) -> dict | None:
     """{code, params} of a message, None for None. A plain str is a bug:
-    every message a harness emits under --json is a Msg."""
+    every message a skill pack emits under --json is a Msg."""
     if m is None:
         return None
     if not isinstance(m, Msg):
@@ -257,7 +257,7 @@ def failure(e: BaseException) -> dict:
 
 
 def relayed(c: dict | None, text: str) -> Msg:
-    """`text` tagged with the {code, params} another harness process put in
+    """`text` tagged with the {code, params} another skill pack process put in
     its failure document (a child's, kit.runner.ChildFailed), unchanged;
     unclassified_error when it had none (a crash) or one this registry
     cannot hold (unknown code, other params)."""
@@ -336,11 +336,11 @@ def check_registry_closed(root: Path | str, sources: list[str],
                           strict_kit: bool = False) -> list[str]:
     """Problems (empty = closed) of the msg() calls in the files matching
     `sources` (globs relative to `root`, `**` recursive) against `registry`
-    (default: the bound harness's full registry): a code that is not a
+    (default: the bound skill pack's full registry): a code that is not a
     literal, an unregistered code, params other than the registered ones,
     a registered code never emitted, plus lint_registry(). Codes of origin
     "kit" are exempt from "never emitted" unless `strict_kit` (the kit's
-    own closure test); a harness's own codes never are."""
+    own closure test); a skill pack's own codes never are."""
     root = Path(root)
     reg = _full_registry() if registry is None else registry
     files = sorted({Path(p) for s in sources

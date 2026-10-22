@@ -184,5 +184,60 @@ def test_it_writes_nothing():
         assert code == 0 and os.listdir(d) == [] and _t.snapshot(_t.FIXTURES) == before
 
 
+# ------------------------------------------------------ a client hub's asks --
+
+def hub_intake(d):
+    """The fixture in folder d with packs: the first meeting is for gads, w1 for kos and gads."""
+    m1 = copy.deepcopy(M1)
+    m1["meeting"]["packs"] = ["gads"]
+    next(x for x in m1["words"] if x["iid"] == "w1")["packs"] = ["kos", "gads"]
+    return [_t.save(os.path.join(d, "m1.intake.json"), m1), _t.FIX2]
+
+
+def test_in_a_hub_an_intake_ask_is_the_hubs_own_one_group_per_meeting_and_its_packs():
+    with _t.tmpdir() as d:
+        intake = hub_intake(d)
+        code, asks = convert(["w1", "w2", "n1", "s3"], "--hub", intake=intake)
+        assert code == 0, asks
+        assert [(a["id"], a["group"]) for a in asks] == [
+            ("hub-intake-w1", "From the meeting of 2026-03-02 · kos, gads"),
+            ("hub-intake-w2", "From the meeting of 2026-03-02 · gads"),
+            ("hub-intake-n1", "From the meeting of 2026-03-02 · gads"),
+            ("hub-intake-s3", "From the meeting of 2026-03-16")], asks           # a meeting with no packs
+        code, plain = convert(["w1", "w2", "n1", "s3"], intake=intake)          # without --hub: as before
+        assert [a["id"] for a in plain] == ["intake-w1", "intake-w2", "intake-n1", "intake-s3"]
+        assert [{k: v for k, v in a.items() if k not in ("id", "group")} for a in asks] == \
+               [{k: v for k, v in a.items() if k not in ("id", "group")} for a in plain]
+        con = os.path.join(d, "console")
+        os.makedirs(con)
+        code, doc = _t.ask(con, "add", "-", stdin=json.dumps(asks))             # the real console takes them
+        assert code == 0 and doc["posted"] == [a["id"] for a in asks], doc
+        _t.owner_answers(con, {"hub-intake-w1": "yes"})
+        code, doc = convert(["w1"], "--hub", "--console-dir", con, intake=intake)
+        assert code == 2 and doc["code"] == "already_asked", doc                # settled under its hub id
+        assert convert(["w1"], "--console-dir", con, intake=intake)[0] == 0     # (a pack's own id is another ask)
+
+
+def test_a_hub_group_fits_the_console_however_many_packs():
+    with _t.tmpdir() as d:
+        m1 = copy.deepcopy(M1)
+        m1["meeting"]["packs"] = ["vads", "kos", "gads", "crp", "feed", "meas", "intel", "adcut"]
+        code, asks = convert(["w1"], "--hub", intake=[_t.save(os.path.join(d, "m.json"), m1), _t.FIX2])
+        assert code == 0 and len(asks[0]["group"]) <= 60 and asks[0]["group"].endswith("…"), asks
+        os.makedirs(os.path.join(d, "console"))
+        assert _t.ask(os.path.join(d, "console"), "add", "-", stdin=json.dumps(asks))[0] == 0
+
+
+def test_a_round_for_one_pack_takes_only_the_items_for_that_pack():
+    with _t.tmpdir() as d:
+        intake = hub_intake(d)
+        code, asks = convert(["w1", "w2"], "--pack", "kos", intake=intake)
+        assert code == 2 and asks["code"] == "wrong_pack" and [x["iid"] for x in asks["problems"]] == ["w2"], asks
+        code, asks = convert(["w1", "s3"], "--pack", "gads", "--hub", intake=intake)   # s3's meeting names no pack
+        assert code == 2 and [x["iid"] for x in asks["problems"]] == ["s3"], asks
+        code, asks = convert(["w1", "w2", "n1"], "--pack", "gads", "--hub", intake=intake)
+        assert code == 0 and [a["id"] for a in asks] == ["hub-intake-w1", "hub-intake-w2", "hub-intake-n1"]
+
+
 if __name__ == "__main__":
     _t.main(globals())

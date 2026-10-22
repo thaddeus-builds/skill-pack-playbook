@@ -3,7 +3,7 @@
 Runs each `<tests_dir>/<pattern>` file (sorted; an argument keeps the
 files whose name contains it, several arguments = any of them) as its own
 process, `workers` at a time, with cwd = `root` and `KIT_TEST_RUN=1`
-(kit.config.TEST_RUN_ENV: how a harness tells a test from production, see
+(kit.config.TEST_RUN_ENV: how a skill pack tells a test from production, see
 kit.human), and fails a file that
 
   1. exits non-zero, or times out (its whole process group is killed);
@@ -25,7 +25,7 @@ default keeps a hang from waiting as long as the slowest file.
 When several RESULT lines appear (a test that prints a nested run's
 output), the last one counts. Both conventions the playbook uses parse
 here: `RESULT: N passed` (console/tests/_t.py, kit check.finish() when
-all passed) and `RESULT: N passed, M failed` (the reference harness).
+all passed) and `RESULT: N passed, M failed` (the reference skill pack).
 
 Prints one line per file (the tail of a failing file's output below it)
 and one summary line: `RESULT: T passed` when every file passed (T = the

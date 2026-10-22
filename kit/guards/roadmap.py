@@ -5,13 +5,14 @@ The file (templates/ROADMAP.md is the starting point):
 
     # <Project> roadmap
     Updated: YYYY-MM-DD
-    ## Now / ## Waiting on owner / ## Next / ## Done / ## Parked / ## Decisions / ## Links
+    ## Now / ## Waiting on owner / ## Next / (## Milestones) / ## Done / ## Parked / ## Decisions / ## Links
 
 `problems(text)` returns every break of these rules:
 
   1. the first line is the `# ` title, the second `Updated: YYYY-MM-DD` (a
-     real day); then exactly those seven `## ` sections, in that order (other
-     lines, a comment or a paragraph, are allowed and not read);
+     real day); then exactly those seven `## ` sections, in that order, with
+     an optional `## Milestones` right after Next (other lines, a comment or
+     a paragraph, are allowed and not read);
   2. every `- ` item outside Links is `- [ID] YYYY-MM-DD text`: the ID's
      letter names its section (N now, W waiting, X next, D done, P parked,
      R decisions), the ID is unique in the file (never reused: git keeps
@@ -21,16 +22,21 @@ The file (templates/ROADMAP.md is the starting point):
   5. a Done row ends in a reference in parentheses, `(commit abc1234)`,
      `(MR !12)`, `(no ref)`;
   6. a Decisions row quotes the owner's words in double quotes;
-  7. a Links item is `name: where`, with no ID.
+  7. a Links item is `name: where`, with no ID;
+  8. a Milestones row (letter M) is one integration unit: it ends
+     `includes: <ID>[, <ID>]. closes when: <the proof>`, naming rows of the
+     file (each in at most one milestone); at most three are open; one whose
+     items are all Done is closed and moves to Done as a row of its own (the
+     method: docs/operating.md, "Integrate by milestone").
 
 `check_file(path)` checks one file (a missing one is a problem);
-`check_roadmap(root)` checks a harness's: harness.toml `[guards.roadmap]
+`check_roadmap(root)` checks a skill pack's: skill-pack.toml `[guards.roadmap]
 file`, else whichever of `docs/ROADMAP.md` and `ROADMAP.md` exists (both is
 a problem: one home). `self_test()` plants each break and returns the rules
 that missed theirs.
 
-Paid for: the video-ads harness has kept its roadmap in this format, held
-by its own test, since 2026-10-01, and a second harness adopted it; before,
+Paid for: the video-ads skill pack has kept its roadmap in this format, held
+by its own test, since 2026-10-01, and a second skill pack adopted it; before,
 one roadmap was prose in its own layout, another a memory note that did not
 travel to the next machine, and neither could be searched for what waited
 on the owner.
@@ -44,11 +50,15 @@ import re
 from datetime import date
 from pathlib import Path
 
-from kit.guards import harness, section
+from kit.guards import skill_pack, section
 
 SECTIONS = ("Now", "Waiting on owner", "Next", "Done", "Parked", "Decisions", "Links")
-LETTER = {"Now": "N", "Waiting on owner": "W", "Next": "X", "Done": "D",
+WITH_MILESTONES = ("Now", "Waiting on owner", "Next", "Milestones", "Done", "Parked", "Decisions", "Links")
+LETTER = {"Now": "N", "Waiting on owner": "W", "Next": "X", "Milestones": "M", "Done": "D",
           "Parked": "P", "Decisions": "R"}
+MAX_OPEN_MILESTONES = 3
+INCLUDES = re.compile(r"includes:\s*([A-Z]\d+(?:\s*,\s*[A-Z]\d+)*)")
+CLOSES = re.compile(r"closes when:\s*\S")
 ROW = re.compile(r"^\[([A-Z])(\d+)\]\s+(\d{4}-\d{2}-\d{2})\s+(\S.*)$", re.S)
 UPDATED = re.compile(r"Updated:\s*(\d{4}-\d{2}-\d{2})")
 LINK = re.compile(r"^[^:\[\]]+:\s*\S")
@@ -90,12 +100,13 @@ def problems(text: str) -> list[str]:
     if updated is None:
         return p + ["the second line must be `Updated: YYYY-MM-DD`, a real day"]
     heads = tuple(x[3:].strip() for x in lines if x.startswith("## "))
-    if heads != SECTIONS:
+    if heads not in (SECTIONS, WITH_MILESTONES):
         return p + [f"the sections must be exactly, in order: "
-                    f"{', '.join(SECTIONS)}; found: {', '.join(heads) or 'none'}"]
+                    f"{', '.join(SECTIONS)} (with Milestones allowed after Next); "
+                    f"found: {', '.join(heads) or 'none'}"]
     found = sections(text)
     rows: dict[str, tuple[str, str]] = {}            # id -> (section, text)
-    for name in SECTIONS:
+    for name in heads:
         for it in found[name]:
             if name == "Links":
                 if not LINK.match(it):
@@ -124,6 +135,7 @@ def problems(text: str) -> list[str]:
                 p.append(f"[{rid}]: a Decisions row quotes the owner's words in double quotes")
     if len(found["Now"]) > 1:
         p.append("Now holds more than one item: one turn per session")
+    p += _milestones(rows)
     for rid, (name, rest) in rows.items():
         if name != "Waiting on owner":
             continue
@@ -134,6 +146,33 @@ def problems(text: str) -> list[str]:
         p += [f"[{rid}] unblocks {t}, which is not a row of this file"
               for t in re.split(r"\s*,\s*", m.group(1)) if t not in rows]
     return p
+
+
+def _milestones(rows: dict[str, tuple[str, str]]) -> list[str]:
+    """Rule 8 on the rows read so far."""
+    out: list[str] = []
+    mine = {rid: rest for rid, (name, rest) in rows.items() if name == "Milestones"}
+    if len(mine) > MAX_OPEN_MILESTONES:
+        out.append(f"Milestones holds {len(mine)} rows; at most {MAX_OPEN_MILESTONES} are open at once")
+    owner: dict[str, str] = {}
+    for rid, rest in mine.items():
+        m = INCLUDES.search(rest)
+        if not m:
+            out.append(f"[{rid}]: a Milestones row names its items, `includes: <ID>[, <ID>]`")
+            continue
+        if not CLOSES.search(rest):
+            out.append(f"[{rid}]: a Milestones row says its proof, `closes when: <the proof>`")
+        ids = re.split(r"\s*,\s*", m.group(1))
+        out += [f"[{rid}] includes {t}, which is not a row of this file" for t in ids if t not in rows]
+        for t in ids:
+            if t in rows and rows[t][0] not in ("Next", "Done"):
+                out.append(f"[{rid}] includes {t}, which is in {rows[t][0]}: a milestone holds Next and Done rows")
+            if t in owner and owner[t] != rid:
+                out.append(f"{t} is in two milestones, {owner[t]} and {rid}")
+            owner.setdefault(t, rid)
+        if ids and all(t in rows and rows[t][0] == "Done" for t in ids):
+            out.append(f"[{rid}] is closed (every item is Done): remove it and record it as a Done row")
+    return out
 
 
 def check_file(path: Path | str, name: str | None = None) -> list[str]:
@@ -148,10 +187,10 @@ def check_file(path: Path | str, name: str | None = None) -> list[str]:
 
 
 def where(root: Path | str | None = None) -> tuple[Path, str, list[str]]:
-    """The harness's roadmap as (path, its name under the root, problems):
+    """The skill pack's roadmap as (path, its name under the root, problems):
     `[guards.roadmap] file`, else the one of PLACES that exists (the first
     when neither does); two of them is a problem."""
-    cfg = harness(root)
+    cfg = skill_pack(root)
     base = Path(root) if root is not None else cfg.root
     rel = section(cfg, "guards", "roadmap").get("file")
     if rel:
@@ -188,6 +227,10 @@ Updated: 2026-10-01
 - repository: the demo repository
 """
 
+SOUND_MILESTONES = SOUND.replace("## Done", """## Milestones
+- [M1] 2026-10-01 the first run works end to end. includes: X1, D1. closes when: the doctor and the example pass on a fresh checkout
+## Done""")
+
 # a break -> (the planted text, a word its problem must hold)
 PLANTED = {
     "no title": (SOUND.replace("# Demo roadmap", "Demo roadmap"), "title"),
@@ -211,12 +254,31 @@ PLANTED = {
     "a decision with no quotation": (SOUND.replace('"skip the portfolio management"',
                                                    "skip the portfolio management"), "quotes"),
     "a link with no where": (SOUND.replace("repository: the demo repository", "repository"), "name: where"),
+    "milestones out of place": (SOUND_MILESTONES.replace("## Done", "## Zed", 1).replace("## Parked", "## Done")
+                                .replace("## Zed", "## Parked"), "sections"),
+    "a milestone with no items": (SOUND_MILESTONES.replace("includes: X1, D1. ", ""), "includes:"),
+    "a milestone with no proof": (SOUND_MILESTONES.replace("closes when: the doctor and the example pass on a fresh checkout",
+                                                           "closes when:"), "closes when"),
+    "a milestone item that is no row": (SOUND_MILESTONES.replace("X1, D1", "X1, X9"), "not a row of this file"),
+    "a milestone item in Parked": (SOUND_MILESTONES.replace("X1, D1", "X1, P1"), "holds Next and Done"),
+    "an item in two milestones": (SOUND_MILESTONES.replace("## Done", "- [M2] 2026-10-01 another. includes: X1. closes when: it runs\n## Done"),
+                                  "in two milestones"),
+    "four open milestones": (SOUND_MILESTONES
+                             .replace("- [X1] 2026-10-01 doctor as the first call",
+                                      "- [X1] 2026-10-01 doctor as the first call\n- [X2] 2026-10-01 b\n"
+                                      "- [X3] 2026-10-01 c\n- [X4] 2026-10-01 d")
+                             .replace("## Done", "- [M2] 2026-10-01 b. includes: X2. closes when: b\n"
+                                      "- [M3] 2026-10-01 c. includes: X3. closes when: c\n"
+                                      "- [M4] 2026-10-01 d. includes: X4. closes when: d\n## Done"), "at most"),
+    "a closed milestone left open": (SOUND_MILESTONES.replace("X1, D1", "D1"), "is closed"),
 }
 
 
 def self_test() -> list[str]:
     """[] when the sound roadmap passes and every planted break is caught."""
     out = [f"a sound roadmap is refused: {problems(SOUND)}"] if problems(SOUND) else []
+    if problems(SOUND_MILESTONES):
+        out.append(f"a sound roadmap with milestones is refused: {problems(SOUND_MILESTONES)}")
     for what, (text, needle) in PLANTED.items():
         got = problems(text)
         if text == SOUND or not any(needle in x for x in got):

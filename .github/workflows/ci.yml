@@ -1,9 +1,11 @@
-# Every suite of the playbook on every push and pull request: `python3 run_all.py`
+# Every suite of the playbook on every pull request and on every push to main (a push to a branch with an open
+# pull request would run the same suite a second time): `python3 run_all.py`
 # (see run_all.py). No secrets and no write access: the job only reads the checkout.
 name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:

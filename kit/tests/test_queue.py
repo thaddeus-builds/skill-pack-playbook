@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The approval queue (kit/queue.py) holds each of its guards, on the fake
-"shop" harness. Ported from the reference harness's queue tests; the
+"shop" skill pack. Ported from the reference skill pack's queue tests; the
 proposals are generic {kind, market, target_ref, payload, basis}.
 
   1. add: the same action twice is one row; --json is one document; the
@@ -516,7 +516,7 @@ def test_read_only_and_frozen() -> None:
 
 
 def test_no_snapshot() -> None:
-    print("[8b] no_snapshot: the hook of a harness with nothing proposing")
+    print("[8b] no_snapshot: the hook of a skill pack with nothing proposing")
     e = raises(lambda: q.no_snapshot("US"))
     check("queue add without --from is refused, coded, with the way that "
           "works", e is not None and e.message.code == "queue_no_snapshot"

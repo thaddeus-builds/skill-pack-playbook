@@ -5,7 +5,7 @@ The place where an agent and a business owner talk: the agent posts **asks**, th
 ```mermaid
 flowchart LR
     subgraph AGENT["Agent side"]
-      AG["ask.py<br/>add · say · withdraw · applied<br/>wait · answers · list · verify · digest"]
+      AG["ask.py<br/>add · say · withdraw · applied · chat<br/>wait · answers · list · verify · digest"]
     end
     LOG[("events.jsonl<br/>one append-only file<br/>the whole store")]
     subgraph HUMAN["Human side"]
@@ -13,8 +13,8 @@ flowchart LR
       BR["Browser<br/>one column, top down"]:::owner
       CON <-->|"page · click"| BR
     end
-    GATE["A harness<br/>its own human gate"]
-    AG -->|"writes ask · withdraw · applied · say"| LOG
+    GATE["A skill pack<br/>its own human gate"]
+    AG -->|"writes ask · withdraw · applied · say · chat"| LOG
     LOG -. "read by wait · answers" .-> AG
     CON -->|"writes answer · reopen · note, signed"| LOG
     LOG -. "read for every page" .-> CON
@@ -34,17 +34,20 @@ stateDiagram-v2
     answered --> open: owner reopens
     answered --> applied: agent applies
     open --> withdrawn: agent withdraws
+    open --> expired: nobody answers by its expires date
     applied --> [*]
     withdrawn --> [*]
+    expired --> [*]
 ```
 
 - An answer is bound to the ask as it was shown. To revise an open ask, post the same id again: a page still showing the old one is refused (`changed`), never answered wrongly.
-- The owner can reopen until the agent records `applied`, and not once a harness's gate has written the answer (`already_applied`: that is a new question). Each row of `answers` carries `apply` (`ID@SEQ`); `applied ID@SEQ` is refused (`changed`) if the owner answered again since the agent read it.
-- An id is never reused: once an ask is answered or withdrawn, `add` refuses it (`id_used`). A "no" is an answer too, and is recorded with `applied`. In JSON an applied ask is `status: answered` with `applied` set.
+- The owner can reopen until the agent records `applied`, and not once a skill pack's gate has written the answer (`already_applied`: that is a new question). Each row of `answers` carries `apply` (`ID@SEQ`); `applied ID@SEQ` is refused (`changed`) if the owner answered again since the agent read it.
+- An id is never reused: once an ask is answered, withdrawn or expired, `add` refuses it (`id_used`). A "no" is an answer too, and is recorded with `applied`. In JSON an applied ask is `status: answered` with `applied` set.
+- Every ask expires: `add` gives a new one `expires` 7 days ahead unless it names its own (a date, open through that day in UTC, or a UTC time); a revision keeps it. Past it the ask is `expired`, nothing changes, nobody can answer it, and `answers` lists it under `expired` until the agent records it with `applied ID` (as for a "no"). Its row in History says so. The owner may answer in chat: `ask.py chat ID --value=V --quote="their words" --source="chat 2026-10-22 14:03"` is the agent's record of it, `via: chat`, `by: agent:NAME`, unsigned, checked like a click and shown in History with the quote as "not clicked here". It is refused (`gate_needs_click`) for an ask with a gate, one that approves a change or one that takes a number: those need the owner on this page.
 
 ## A clear ask
 
-`add` refuses an ask that is not clear, and lists every problem at once. It checks that each part is there, not that it is true. At most 10 are open; an eleventh is refused (`--max-open N` can only lower that limit).
+`add` refuses an ask that is not clear, and lists every problem at once. It checks that each part is there, not that it is true. At most 10 are open; an eleventh is refused (`--max-open N` can only lower that limit; a skill pack's manifest can set a higher one, see [PAGES.md](PAGES.md)).
 
 | Field | What goes in it | Limit | Why the playbook wants it |
 | --- | --- | --- | --- |
@@ -56,7 +59,7 @@ stateDiagram-v2
 | `if_no` | What "no" would change | 200 | A yes is only real if a no is a safe answer |
 | by `step` | `choose`: `options` (2 to 8). `approve`: `effect`. `provide`: `input` (type, range, unit) | option label 60, `effect` 200 | Inputs are picked from a list; typing is the exception |
 
-`step` is `confirm`, `approve`, `choose` or `provide`. `kind`, `group` and `gate` are optional. All fields, limits and one example per step: `uv run console/ask.py schema` (needs no folder); the examples live in [`examples/`](examples/).
+`step` is `confirm`, `approve`, `choose` or `provide`. `kind`, `group`, `gate` and `expires` are optional. All fields, limits and one example per step: `uv run console/ask.py schema` (needs no folder); the examples live in [`examples/`](examples/).
 
 ## Quick start
 
@@ -106,15 +109,15 @@ flowchart LR
     D -. "next ask" .-> A
 ```
 
-## Gate: connect a harness
+## Gate: connect a skill pack
 
-An ask may carry a `gate`, so that a click also passes through the harness's **own** human gate (a one-time code bound to exactly what will be written). The console plays the human's side of it; the harness needs no change to its gate, only to speak this:
+An ask may carry a `gate`, so that a click also passes through the skill pack's **own** human gate (a one-time code bound to exactly what will be written). The console plays the human's side of it; the skill pack needs no change to its gate, only to speak this:
 
 ```mermaid
 sequenceDiagram
     participant H as Owner (browser)
     participant C as Console (serve.py, relay.py)
-    participant G as Harness command
+    participant G as Skill pack command
     H->>C: Answer
     C->>C: ask open and unchanged, value and comment valid
     C->>G: 1 the verb, value and reason, no terminal
@@ -122,11 +125,11 @@ sequenceDiagram
     C->>C: 3 subject matches what was shown, else stop
     C->>G: 4 the same call plus the code and who answers
     G-->>C: done (exit 0) or a refusal
-    C->>C: write the answer with the harness's words
+    C->>C: write the answer with the skill pack's words
     C-->>H: result page
 ```
 
-What a harness must meet:
+What a skill pack must meet:
 
 1. Called as `<cmd> <verb…> [--market=M] [--value=V] --reason=R --json`, stdin closed, in a session of its own with no terminal: a gate that reads `/dev/tty` can be satisfied only by a person at the operator's terminal, never by a click. It prints one JSON document.
 2. Without `--code` it answers `{"code": "confirm_code_required", "params": {"confirm_code": "…"}, "subject": {…}}`; `subject` is what the code is bound to.
@@ -134,7 +137,7 @@ What a harness must meet:
 4. Every value the console adds is one `--name=value` argument, so a value or code starting with `-` is never read as a flag.
 5. Its words come back in `message`, `error` or `result` (a string); the owner sees one clean line of at most 300 characters.
 6. A reply that is not a challenge ends the exchange at step 1 (exit 0 = fine, e.g. already confirmed).
-7. Each call gets 60 seconds, then the harness and its children are killed. After a timeout (`gate_timeout`), or a step-4 call that ends with no document carrying `error` or `message` (a crash, garbage, silence: `gate_unsure`), **the harness may have written**: the console records nothing, the ask stays open, and the owner is told to ask the agent to check first.
+7. Each call gets 60 seconds, then the skill pack and its children are killed. After a timeout (`gate_timeout`), or a step-4 call that ends with no document carrying `error` or `message` (a crash, garbage, silence: `gate_unsure`), **the skill pack may have written**: the console records nothing, the ask stays open, and the owner is told to ask the agent to check first.
 
 The ask names the verb and the payload; the operator names the command:
 
@@ -143,19 +146,23 @@ The ask names the verb and the payload; the operator names the command:
          "expect": {"items": {"unit_cost": "$value"}}}
 ```
 
-`expect` is what the owner is told will be written (`$value` = their answer). The console sends the code only if the harness's `subject` matches what `expect` names exactly: every key and value, a nested object key for key, so an extra item is refused. Only the top level of `subject` may say more (its envelope: verb, market, version). `expect` holds no empty `{}` or `[]`. `value_arg` adds `--value=<answer>`; a `choose` or `provide` gate must set it and put `"$value"` in `expect`, so the answer is what the code is bound to. `market` (optional, one plain word) adds `--market=<market>`, for a harness with several markets that cannot tell which one from the verb; put the same market in `expect` so the subject has to name it. A "no" never goes through the gate.
+`expect` is what the owner is told will be written (`$value` = their answer). The console sends the code only if the skill pack's `subject` matches what `expect` names exactly: every key and value, a nested object key for key, so an extra item is refused. Only the top level of `subject` may say more (its envelope: verb, market, version). `expect` holds no empty `{}` or `[]`. `value_arg` adds `--value=<answer>`; a `choose` or `provide` gate must set it and put `"$value"` in `expect`, so the answer is what the code is bound to. `market` (optional, one plain word) adds `--market=<market>`, for a skill pack with several markets that cannot tell which one from the verb; put the same market in `expect` so the subject has to name it. A "no" never goes through the gate.
 
 ```bash
-uv run console/serve.py --relay-cmd "uv run my_harness.py" --relay-verbs "facts confirm,queue approve"
+uv run console/serve.py --relay-cmd "uv run my_skill_pack.py" --relay-verbs "facts confirm,queue approve"
 ```
 
 | Flag | Meaning |
 | --- | --- |
-| `--relay-cmd` | The harness command. It is the operator's; an ask file cannot change it |
+| `--relay-cmd` | The skill pack command. It is the operator's; an ask file cannot change it |
 | `--relay-verbs` | Comma-separated verb prefixes that may run; anything else is refused. Both flags, or neither |
 | `--default-reason` | The `--reason` when the owner wrote no comment (default `console`) |
 
 An ask whose gate verb is not allowed, or any gated ask when there is no relay, draws no form: it tells the owner to confirm another way, before a click can fail. Such an ask also keeps its group from having an **Answer all as suggested** button, and that button is never drawn for a group holding an `approve` ask: approving is read one ask at a time.
+
+## Pages and buttons
+
+A skill pack registers its own pages in the same top bar, with buttons the console relays to its gate, and says in one manifest which verbs a click may run (`--manifest`); `ask.py add` refuses a gated ask whose verb is not among them. How to write one: [PAGES.md](PAGES.md).
 
 ## Safety
 
@@ -169,9 +176,9 @@ An ask whose gate verb is not allowed, or any gated ask when there is no relay, 
 | A saved note or reopen answers 303, so a reload cannot write twice; one click per ask at a time | `test_serve.py` |
 | No inline script or style; CSP, no-store, no framing; static files by exact name | `test_serve.py`, `test_pages.py` |
 | Everything the agent wrote is shown as text; only http(s) links | `test_pages.py` |
-| The harness call: no shell, no terminal, allowed verbs only, `=` arguments, code sent only for a subject that matches what was shown, never logged, console secret withheld, killed with its children on a timeout | `test_relay.py`, `test_serve.py` |
+| The skill pack call: no shell, no terminal, allowed verbs only, `=` arguments, code sent only for a subject that matches what was shown, never logged, console secret withheld, killed with its children on a timeout | `test_relay.py`, `test_serve.py` |
 | The log keeps every line: each write is flushed to disk, a torn write is cut off, a corrupt line refuses, writers queue on a lock | `test_core.py` |
-| Core and pages import no network or process code; only `relay.py` starts a process | `test_boundary.py` |
+| Core, pages, frame and manifest import no network or process code; only `relay.py` starts a process | `test_boundary.py` |
 | These docs name only real files, flags, verbs and diagrams; the quick start prints what is shown here; nothing that must not be public is in the files a commit would publish | `test_docs.py` |
 
 **What the gate is and is not.** The signature and the gate are an **accident guard**: an agent that edits the log or runs the wrong verb cannot pass for the owner. They are not a wall. **By default there is no login: anyone who can reach the port answers as `--user`** (default: the OS account `serve.py` runs as, never `$USER` or `$LOGNAME`), an agent on the same machine included, by opening the page and posting a form like a browser; that is why it binds to loopback. An agent that can read the folder's `secret` file can also sign. **The login is the boundary.** For more: put the console behind a login proxy (below), give only the console process `CONSOLE_SECRET` (16 or more characters; a shorter one is refused, and `serve.py` exits 2) so no `secret` file exists, and keep that and the port out of the agent's reach. The agent's `verified` then reads `null`, and the operator runs `ask.py verify` (refused, `no_secret`, where there is no secret to check with).
@@ -184,8 +191,7 @@ uv run console/serve.py --user-header X-Forwarded-User --allow-host console.exam
 
 - The proxy is the login. It sets the header itself (overwriting any copy from the browser) and passes the public `Host` through unchanged: `Origin` is compared with the `Host` the console sees, so a proxy that rewrites it gets every POST refused (403). A browser's `Origin: null` (a proxy adding `Referrer-Policy: no-referrer`) counts only with `Sec-Fetch-Site: same-origin`.
 - The header is believed only from a loopback peer and only if it is a plain name; otherwise nobody is logged in: read-only, every POST refused. A `--host` that is not loopback is refused without `--user-header` (exit 2); `--user` and `--user-header` exclude each other.
-- All links are relative, so it can sit under a path prefix (`/console/`, trailing slash; strip the prefix before forwarding). The language link (`?lang=zh`) is kept in a cookie named for the port, without a `Path`, so it stays under the prefix.
-- `serve.py` prints its own loopback address; the owner opens the proxy's.
+- All links are relative, so it can sit under a path prefix (`/console/`, trailing slash; strip the prefix before forwarding). The language link (`?lang=zh`) is kept in a cookie named for the port, without a `Path`, so it stays under the prefix. `serve.py` prints its own loopback address; the owner opens the proxy's.
 - **Decision record.** `ask.py digest` renders the record a team lead forwards (each ask, its evidence and suggestion, the answer with who and when, where it was applied): Markdown in `text`, or data with `--format json`.
 
 ## Tests
@@ -195,9 +201,7 @@ python3 console/tests/run.py          # every tests/test_*.py, 4 at a time
 python3 console/tests/run.py serve    # only the files with "serve" in the name
 ```
 
-A file passes only if it exits 0 and prints `RESULT: N passed`; a test file that never ran is a failure.
-
-**Not covered by the tests: a real browser.** They fetch the pages and read the HTML; none runs `console.js` or draws the CSS. Before a release, `add` two examples with the same `group`, start the console and open it 375 px wide:
+A file passes only if it exits 0 and prints `RESULT: N passed`; a test file that never ran is a failure. **Not covered by the tests: a real browser.** They fetch the pages and read the HTML; none runs `console.js` or draws the CSS. Before a release, `add` two examples with the same `group`, start the console and open it 375 px wide:
 
 1. One column, no sideways scroll, the first ask open; dark mode and `?lang=zh` both read well.
 2. `add` another ask: an untouched page reloads itself within 4 s and the tab title counts the open asks.
@@ -208,8 +212,8 @@ A file passes only if it exits 0 and prints `RESULT: N passed`; a test file that
 
 ## What this deliberately is not
 
-- **No domain pages.** The agent presents what is asked in its own words; a harness may keep its own pages beside this one.
+- **No domain pages of its own.** The agent presents what is asked in its own words; a skill pack adds its pages and buttons through its manifest ([PAGES.md](PAGES.md)), inside this frame.
 - **No chat app.** Nothing here knows any messenger; the agent tells the owner in chat that asks wait.
 - **No database.** One file you can read, back up and `grep`.
 - **No accounts, no login of its own.** One named user per console, or the login proxy's header.
-- **No widening.** A click confirms or approves inside what the harness already allows; typing is for a `provide` value the harness validates. An ask that would widen an allowlist, a cap or a write switch is answered in chat.
+- **No widening.** A click confirms or approves inside what the skill pack already allows; typing is for a `provide` value the skill pack validates. An ask that would widen an allowlist, a cap or a write switch is answered in chat.

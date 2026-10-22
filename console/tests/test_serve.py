@@ -6,7 +6,7 @@ Every safety item is a pair: the bad request is refused AND the good one is
 accepted, so a test cannot pass by refusing everything. The forms a person
 submits are read out of the HTML pages.py actually drew and sent the way a
 browser would, so a drift between pages.py and serve.py fails here. Gated
-answers go through tests/fake_harness.py.
+answers go through tests/fake_skill_pack.py.
 """
 
 from __future__ import annotations
@@ -42,13 +42,13 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, ROOT)
 import _t  # noqa: E402
 import core  # noqa: E402
-import fake_harness  # noqa: E402
+import fake_skill_pack  # noqa: E402
 import i18n  # noqa: E402
 import relay  # noqa: E402
 import serve  # noqa: E402
 
 SERVE = os.path.join(ROOT, "serve.py")
-FAKE = os.path.join(HERE, "fake_harness.py")
+FAKE = os.path.join(HERE, "fake_skill_pack.py")
 FORM = "application/x-www-form-urlencoded"
 CSP = ("default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; "
        "img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
@@ -309,7 +309,7 @@ def gated(id="k1", **over):
 
 
 def gate_on(id, verb, step="confirm", **over):
-    """A gated ask on `verb`, its payload the one fake_harness binds a code to (a word after the second is a
+    """A gated ask on `verb`, its payload the one fake_skill_pack binds a code to (a word after the second is a
     key; a payload may not be empty, so a verb of two words or fewer names itself)."""
     put = "$value" if step == "provide" else "yes"
     expect = {"verb": " ".join(verb[:2]), **({"items": {w: put for w in verb[2:]}} if verb[2:] else {})}
@@ -318,9 +318,9 @@ def gate_on(id, verb, step="confirm", **over):
 
 
 def gated_srv(root, mode="ok", verbs="facts confirm,queue approve", args=(), env=None, **kw):
-    """A console whose gates run tests/fake_harness.py; its calls are logged under `root`."""
-    e = {"FAKE_HARNESS_STATE": os.path.join(root, "fake-state.json"), "FAKE_HARNESS_LOG": os.path.join(root, "fake.log"),
-         "FAKE_HARNESS_MODE": mode, **(env or {})}
+    """A console whose gates run tests/fake_skill_pack.py; its calls are logged under `root`."""
+    e = {"FAKE_SKILL_PACK_STATE": os.path.join(root, "fake-state.json"), "FAKE_SKILL_PACK_LOG": os.path.join(root, "fake.log"),
+         "FAKE_SKILL_PACK_MODE": mode, **(env or {})}
     return Srv(root, "--relay-cmd", shlex.join([sys.executable, FAKE]), "--relay-verbs", verbs, *args, env=e, **kw)
 
 
@@ -332,12 +332,12 @@ def fake_calls(root):
         return []
 
 
-def harness_started(root, secs=5.0):
-    """Wait until the harness has been called (its log has a line), so a test acts while it runs."""
+def skill_pack_started(root, secs=5.0):
+    """Wait until the skill pack has been called (its log has a line), so a test acts while it runs."""
     end = time.monotonic() + secs
     while not fake_calls(root) and time.monotonic() < end:
         time.sleep(0.02)
-    assert fake_calls(root), "the harness was never started"
+    assert fake_calls(root), "the skill pack was never started"
 
 
 def refused(resp, status, key, **p):
@@ -364,9 +364,9 @@ def reopened(resp):
 
 @contextmanager
 def fake_env(root, **extra):
-    """The environment of a harness run by an in-process console (it inherits ours), restored afterwards."""
-    env = {"FAKE_HARNESS_MODE": "ok", "FAKE_HARNESS_STATE": os.path.join(root, "fake-state.json"),
-           "FAKE_HARNESS_LOG": os.path.join(root, "fake.log"), **extra}
+    """The environment of a skill pack run by an in-process console (it inherits ours), restored afterwards."""
+    env = {"FAKE_SKILL_PACK_MODE": "ok", "FAKE_SKILL_PACK_STATE": os.path.join(root, "fake-state.json"),
+           "FAKE_SKILL_PACK_LOG": os.path.join(root, "fake.log"), **extra}
     old = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
     try:
@@ -939,6 +939,30 @@ def test_a_corrupt_log_is_a_500_page_nothing_is_written_and_a_repaired_log_is_se
         noted(srv.post("note", {"text": "hello"}, token=tok))
 
 
+def test_an_ask_that_expires_leaves_the_page_without_a_write_and_cannot_be_answered():
+    """The cached state is folded again once an open ask's deadline passes, even
+    though the log did not change; the ask moves to History as expired."""
+    with _t.tmpdir() as root, inproc(root) as s:
+        s.store.post("bot", [raw_ask("confirm", "c1", expires="2099-01-01")])
+        first = s.app.state()
+        assert first["asks"]["c1"]["status"] == "open" and s.app.state() is first
+        page = urllib.request.urlopen(s.url).read().decode()
+        assert "Title of c1" in page and "Open until 2099-01-01" in page
+        real = core.now
+        core.now = lambda: "2099-01-02T00:00:00Z"
+        try:
+            st = s.app.state()
+            assert st is not first and st["asks"]["c1"]["status"] == "expired"
+            assert s.app.state() is st                                              # and then kept again
+            with s.app.lock, _t.assert_raises("not_open"):
+                s.store.answer("alice", "c1", "yes", shown=first["asks"]["c1"]["hash"])
+            hist = urllib.request.urlopen(s.url + "history").read().decode()
+            assert "Expired" in hist and "No answer by 2099-01-01, so nothing changes" in hist
+            assert "Title of c1" not in urllib.request.urlopen(s.url).read().decode()
+        finally:
+            core.now = real
+
+
 def test_the_log_is_read_again_only_when_its_size_or_time_changed():
     with _t.tmpdir() as root, inproc(root) as s:
         s.store.post("bot", [raw_ask("confirm", "c1")])
@@ -1166,7 +1190,7 @@ def test_a_refused_answer_gives_the_comment_back_and_a_saved_one_does_not():
         refusals = [                                                                   # (form, what is sent, status, words)
             (form_for(page, "answer", "p1"), {"value": "99"}, 400, "bad_value.range"),         # a bad value
             (form_for(page, "answer", "p1"), {"value": "abc"}, 400, "bad_value.number"),
-            (form_for(page, "answer", "k1"), {"value": "4.5"}, 409, "err.gate_refused")]       # the harness's refusal
+            (form_for(page, "answer", "k1"), {"value": "4.5"}, 409, "err.gate_refused")]       # the skill pack's refusal
         for form, over, status, key in refusals:
             r = srv.submit(form, comment=typed, **over)
             refused(r, status, key)
@@ -1277,7 +1301,7 @@ def test_two_answers_to_one_ask_at_once_one_wins_and_the_other_finds_it_not_open
 
 # ---------------------------------------------------------- answers with a gate --
 
-def test_a_gated_answer_goes_through_the_harness_and_its_word_is_recorded():
+def test_a_gated_answer_goes_through_the_skill_pack_and_its_word_is_recorded():
     with _t.tmpdir() as root:
         with gated_srv(root, args=("--default-reason", "from the console page"), env={"CONSOLE_SECRET": "g" * 32}) as srv:
             assert srv.relay_line == "Relay verbs: facts confirm, queue approve"
@@ -1305,7 +1329,7 @@ def test_a_gated_answer_goes_through_the_harness_and_its_word_is_recorded():
             assert "Confirmed unit_cost." in hist
 
 
-def test_the_example_gated_ask_is_answerable_through_the_fake_harness():
+def test_the_example_gated_ask_is_answerable_through_the_fake_skill_pack():
     with _t.tmpdir() as root, gated_srv(root) as srv:
         with open(os.path.join(ROOT, "examples", "provide-number.json")) as f:
             srv.agent(json.load(f))
@@ -1314,12 +1338,12 @@ def test_the_example_gated_ask_is_answerable_through_the_fake_harness():
         assert srv.events("answer")[0]["gate"]["ok"] is True and srv.events("answer")[0]["value"] == "4.20"
 
 
-def test_a_harness_refusal_writes_nothing_and_shows_the_harness_own_words():
+def test_a_skill_pack_refusal_writes_nothing_and_shows_the_skill_pack_own_words():
     with _t.tmpdir() as root, gated_srv(root, "fail") as srv:
         srv.agent(gated("k1"))
         r = srv.submit(form_for(srv.get().text, "answer", "k1"), value="4.5")
         refused(r, 409, "err.gate_refused")
-        assert say("result.refused", message=fake_harness.REFUSED) in flat(r.text)
+        assert say("result.refused", message=fake_skill_pack.REFUSED) in flat(r.text)
         assert srv.events("answer") == [] and srv.store.state()["asks"]["k1"]["status"] == "open"
         assert [c["run"] for c in fake_calls(root)] == [1, 2]
         refused(srv.submit(form_for(srv.get().text, "answer", "k1"), value="4.5"), 409, "err.gate_refused")   # not stuck as "taken"
@@ -1328,7 +1352,7 @@ def test_a_harness_refusal_writes_nothing_and_shows_the_harness_own_words():
         srv.agent(gated("k1"))
         r = srv.submit(form_for(srv.get().text, "answer", "k1"))
         refused(r, 409, "err.gate_refused")
-        assert say("result.refused", message=fake_harness.NO_SECRET) in flat(r.text) and srv.events("answer") == []
+        assert say("result.refused", message=fake_skill_pack.NO_SECRET) in flat(r.text) and srv.events("answer") == []
 
 
 def test_a_payload_that_is_not_what_was_shown_is_never_confirmed():
@@ -1354,8 +1378,8 @@ def test_the_pages_are_told_the_verbs_a_gate_may_run_or_that_there_is_no_relay()
         assert srv.relay_line == "Relay verbs: facts confirm, queue approve"                # the option, parsed as it is used
 
 
-def test_a_gate_the_console_cannot_run_draws_no_form_and_a_click_made_anyway_is_refused_before_any_harness():
-    with _t.tmpdir() as root, Srv(root, env={"FAKE_HARNESS_LOG": os.path.join(root, "fake.log")}) as srv:     # no relay at all
+def test_a_gate_the_console_cannot_run_draws_no_form_and_a_click_made_anyway_is_refused_before_any_skill_pack():
+    with _t.tmpdir() as root, Srv(root, env={"FAKE_SKILL_PACK_LOG": os.path.join(root, "fake.log")}) as srv:     # no relay at all
         srv.agent(gated("k1"), raw_ask("confirm", "c1"), raw_ask("confirm", "q1", gate={
             "verb": ["queue", "approve", "spend-1"], "expect": {"items": {"spend-1": "yes"}}}))
         page = srv.get().text
@@ -1366,7 +1390,7 @@ def test_a_gate_the_console_cannot_run_draws_no_form_and_a_click_made_anyway_is_
         r = srv.post("answer", {"id": "k1", "hash": srv.store.state()["asks"]["k1"]["hash"], "value": "4.5"})
         refused(r, 503, "err.gate_unavailable")
         assert srv.events("answer") == [] and fake_calls(root) == []
-        hash_q1 = srv.store.state()["asks"]["q1"]["hash"]                                 # a "no" confirms nothing: it needs no harness
+        hash_q1 = srv.store.state()["asks"]["q1"]["hash"]                                 # a "no" confirms nothing: it needs no skill pack
         refused(srv.post("answer", {"id": "q1", "hash": hash_q1, "value": "yes"}), 503, "err.gate_unavailable")
         saved(srv.post("answer", {"id": "q1", "hash": hash_q1, "value": "no"}))
         assert [e["value"] for e in srv.events("answer")] == ["no"] and fake_calls(root) == []
@@ -1395,7 +1419,7 @@ def test_a_gated_ask_has_its_form_only_for_a_verb_that_starts_with_an_allowed_pr
                     and ("id", "hidden", i, False) in map(tuple, f.items) for x in f.items if x[0] == "value"}
         drawn = {i for i in {**ok, **no} if "yes" in answers_of(i)}
         assert drawn == set(ok), drawn
-        assert all(answers_of(i) == {"no"} for i in no), {i: answers_of(i) for i in no}    # a refusal needs no harness
+        assert all(answers_of(i) == {"no"} for i in no), {i: answers_of(i) for i in no}    # a refusal needs no skill pack
         assert flat(page).count(say("gate.norelay")) == len(no)
         for id in no:                                                                # the relay agrees with the page: it runs none of these
             h = srv.store.state()["asks"][id]["hash"]
@@ -1404,7 +1428,7 @@ def test_a_gated_ask_has_its_form_only_for_a_verb_that_starts_with_an_allowed_pr
         for id in ok:
             saved(srv.submit(form_for(page, "answer", id)))
         assert [c["run"] for c in fake_calls(root)] == [1, 2, 1, 2] and len(srv.events("answer")) == 2
-        h = srv.store.state()["asks"]["k-other"]["hash"]                              # a "no" still goes through, with no harness
+        h = srv.store.state()["asks"]["k-other"]["hash"]                              # a "no" still goes through, with no skill pack
         saved(srv.post("answer", {"id": "k-other", "hash": h, "value": "no"}))
         assert [c["run"] for c in fake_calls(root)] == [1, 2, 1, 2] and srv.events("answer")[-1]["value"] == "no"
         assert "gate" not in srv.events("answer")[-1]
@@ -1419,14 +1443,14 @@ def test_the_group_button_is_not_drawn_for_an_approval_or_for_a_gate_that_cannot
         buttons = [f for f in forms_of(page) if f.action == "answer_all"]
         assert len(buttons) == 1, len(buttons)                                       # Spend has an approval, Stuck a gate that cannot run
         assert sorted(v.split(":")[0] for n, _k, v, _c in buttons[0].items if n == "pair") == ["g1", "g2"]
-        r = srv.submit(buttons[0])                                                   # the one that can: the gated ask goes through its harness
+        r = srv.submit(buttons[0])                                                   # the one that can: the gated ask goes through its skill pack
         saved(r)
         got = {e["id"]: e for e in srv.events("answer")}
         assert sorted(got) == ["g1", "g2"] and "gate" not in got["g1"] and got["g2"]["gate"]["ok"] is True
         assert [c["run"] for c in fake_calls(root)] == [1, 2]
 
 
-def test_a_no_a_bad_value_a_stale_page_or_a_long_comment_never_reach_the_harness():
+def test_a_no_a_bad_value_a_stale_page_or_a_long_comment_never_reach_the_skill_pack():
     with _t.tmpdir() as root, gated_srv(root) as srv:
         srv.agent(gated("k1"), raw_ask("confirm", "q1", gate={"verb": ["facts", "confirm", "flag"], "expect": {"items": {"flag": "yes"}}}))
         page = srv.get().text
@@ -1445,18 +1469,18 @@ def test_a_no_a_bad_value_a_stale_page_or_a_long_comment_never_reach_the_harness
         assert [c["run"] for c in fake_calls(root)] == [1, 2]
 
 
-def test_a_comment_is_checked_before_the_harness_runs_and_the_harness_gets_it_as_it_is_stored():
+def test_a_comment_is_checked_before_the_skill_pack_runs_and_the_skill_pack_gets_it_as_it_is_stored():
     with _t.tmpdir() as root, gated_srv(root) as srv:
         srv.agent(gated("k1"), gated("k2"), gated("k3"))
         page = srv.get().text
         refused(srv.submit(form_for(page, "answer", "k1"), value="4.5", comment="c" * 501), 400, "err.bad_request")
-        assert fake_calls(root) == [] and srv.events("answer") == []                    # the harness was never called
+        assert fake_calls(root) == [] and srv.events("answer") == []                    # the skill pack was never called
         refused(srv.submit(form_for(page, "answer", "k1"), value="4.5", comment="c" * 500 + "é" * 1), 400, "err.bad_request")
         assert fake_calls(root) == [] and srv.events("answer") == []
         # the limit is on the comment as core.check_comment cleans it: 30 control characters do not count
         saved(srv.submit(form_for(page, "answer", "k1"), value="4.5", comment="c" * 500 + "\x00" * 30))
         assert srv.events("answer")[0]["comment"] == "c" * 500
-        # what the harness is given as the reason is that stored text, not the raw one
+        # what the skill pack is given as the reason is that stored text, not the raw one
         saved(srv.submit(form_for(page, "answer", "k2"), value="4.5", comment="Invoice\x0017 ok\x07"))
         # a comment with nothing left after cleaning is no comment: the default reason
         saved(srv.submit(form_for(page, "answer", "k3"), value="4.5", comment="\x00\x07 \t"))
@@ -1466,7 +1490,7 @@ def test_a_comment_is_checked_before_the_harness_runs_and_the_harness_gets_it_as
         assert reasons == ["--reason=" + "c" * 200, "--reason=Invoice17 ok", "--reason=console"], reasons
 
 
-def test_an_answer_is_checked_in_order_and_the_harness_is_reached_only_after_every_check():
+def test_an_answer_is_checked_in_order_and_the_skill_pack_is_reached_only_after_every_check():
     """open, then the page's hash, then the value, then the comment, then the gate, then the write."""
     with _t.tmpdir() as root, gated_srv(root) as srv:
         srv.agent(gated("k1"), gated("k0"))
@@ -1487,7 +1511,7 @@ def test_an_answer_is_checked_in_order_and_the_harness_is_reached_only_after_eve
         untouched()
         refused(srv.submit(fresh, value=bad, comment=long), 400, "bad_value.range")                          # 3 value: before the comment
         untouched()
-        refused(srv.submit(fresh, value="4.5", comment=long), 400, "err.bad_request")                        # 4 comment: before the harness
+        refused(srv.submit(fresh, value="4.5", comment=long), 400, "err.bad_request")                        # 4 comment: before the skill pack
         untouched()
         saved(srv.submit(fresh, value="4.5", comment="ok"))                                                  # 5 gate, then 6 the write
         assert [c["run"] for c in fake_calls(root)] == [1, 2]
@@ -1495,23 +1519,23 @@ def test_an_answer_is_checked_in_order_and_the_harness_is_reached_only_after_eve
         assert ev["gate"]["ok"] is True and ev["value"] == "4.5" and ev["subject"] == fresh.value("hash")
 
 
-def test_a_refusal_after_the_harness_ran_is_reported_and_logged_not_hidden():
-    with _t.tmpdir() as root, gated_srv(root, "slow", env={"FAKE_HARNESS_SLOW_SECS": "1.5"}) as srv:
+def test_a_refusal_after_the_skill_pack_ran_is_reported_and_logged_not_hidden():
+    with _t.tmpdir() as root, gated_srv(root, "slow", env={"FAKE_SKILL_PACK_SLOW_SECS": "1.5"}) as srv:
         srv.agent(gated("k1"))
         form = form_for(srv.get().text, "answer", "k1")
         out = []
         click = threading.Thread(target=lambda: out.append(srv.submit(form, value="4.5")))
         click.start()
-        harness_started(root)                                                        # the harness is running now
+        skill_pack_started(root)                                                        # the skill pack is running now
         srv.store.withdraw("bot", ["k1"], "Not needed any more.")                    # and the ask goes while it does
         click.join(30)
         refused(out[0], 409, "err.not_recorded")                                     # the person is told to check, not "not saved"
         assert say("result.check") in flat(out[0].text) and say("result.none") not in flat(out[0].text)
         assert srv.events("answer") == [] and [c["run"] for c in fake_calls(root)] == [1, 2]
-        assert "the harness was written for ask k1" in srv.log()                     # and the operator can see that the harness ran
+        assert "the skill pack was written for ask k1" in srv.log()                     # and the operator can see that the skill pack ran
 
 
-def test_a_failure_to_record_after_the_harness_ran_says_check_before_you_go_on_whatever_the_failure_was():
+def test_a_failure_to_record_after_the_skill_pack_ran_says_check_before_you_go_on_whatever_the_failure_was():
     with _t.tmpdir() as root, fake_env(root), captured_log() as seen:
         with inproc(root, cmd=[sys.executable, FAKE], verbs=[["facts", "confirm"]]) as s:
             s.store.post("bot", [gated("k1"), gated("k2")])
@@ -1528,16 +1552,16 @@ def test_a_failure_to_record_after_the_harness_ran_says_check_before_you_go_on_w
             assert say("result.check") in flat(r.text) and say("err.server_error") not in flat(r.text)
             assert kept("mine") in flat(r.text)
             assert [e["type"] for e in s.store.events()] == ["ask", "ask"]              # no answer was recorded
-            assert [c["run"] for c in fake_calls(root)] == [1, 2]                       # the harness was written
+            assert [c["run"] for c in fake_calls(root)] == [1, 2]                       # the skill pack was written
             s.app.store.answer = real                                                   # the disk is back: the other ask is recorded
             saved(fetch(s.url + "answer", "POST", urllib.parse.urlencode(form_for(page, "answer", "k2").data()).encode(),
                         {"Content-Type": FORM}))
-    assert any(lvl == logging.WARNING and "the harness was written for ask k1" in msg and "PermissionError" in msg
+    assert any(lvl == logging.WARNING and "the skill pack was written for ask k1" in msg and "PermissionError" in msg
                for lvl, msg, _ in seen), seen
     assert not any("disk-detail" in msg for lvl, msg, _ in seen if lvl >= logging.INFO), seen
 
 
-def test_a_log_that_cannot_be_written_after_the_harness_ran_is_check_before_you_go_on():
+def test_a_log_that_cannot_be_written_after_the_skill_pack_ran_is_check_before_you_go_on():
     if not hasattr(os, "geteuid") or os.geteuid() == 0:
         print("SKIP the file mode does not stop this user")
         return
@@ -1552,7 +1576,7 @@ def test_a_log_that_cannot_be_written_after_the_harness_ran_is_check_before_you_
             os.chmod(srv.store.path, 0o600)
         refused(r, 409, "err.not_recorded")
         assert kept("kept") in flat(r.text) and [c["run"] for c in fake_calls(root)] == [1, 2]
-        assert srv.events("answer") == [] and "the harness was written for ask k1" in srv.log()
+        assert srv.events("answer") == [] and "the skill pack was written for ask k1" in srv.log()
         saved(srv.submit(form_for(page, "answer", "k2")))                               # writable again
 
 
@@ -1620,8 +1644,8 @@ def test_a_poll_is_not_an_access_log_line_at_info_but_is_at_debug():
         assert "GET /poll" in srv.log()
 
 
-def test_the_lock_is_not_held_while_the_harness_runs_and_a_second_click_finds_the_ask_taken():
-    with _t.tmpdir() as root, gated_srv(root, "slow", env={"FAKE_HARNESS_SLOW_SECS": "1.5"}) as srv:
+def test_the_lock_is_not_held_while_the_skill_pack_runs_and_a_second_click_finds_the_ask_taken():
+    with _t.tmpdir() as root, gated_srv(root, "slow", env={"FAKE_SKILL_PACK_SLOW_SECS": "1.5"}) as srv:
         srv.agent(gated("s1"), gated("s2"))
         page = srv.get().text
         out, t0 = {}, time.monotonic()
@@ -1630,52 +1654,52 @@ def test_the_lock_is_not_held_while_the_harness_runs_and_a_second_click_finds_th
             out[id] = srv.submit(form_for(page, "answer", id), value="4.5")
         a, b = threading.Thread(target=click, args=("s1",)), threading.Thread(target=click, args=("s2",))
         a.start()
-        time.sleep(0.4)                                                                  # s1 is now waiting on the harness
+        time.sleep(0.4)                                                                  # s1 is now waiting on the skill pack
         b.start()
 
         def quick(request):
             t = time.monotonic()
             r = request()
-            assert time.monotonic() - t < 0.6, "the harness's wait blocked another request"
+            assert time.monotonic() - t < 0.6, "the skill pack's wait blocked another request"
             return r
-        noted(quick(lambda: srv.post("note", {"text": "while the harness runs"})))
+        noted(quick(lambda: srv.post("note", {"text": "while the skill pack runs"})))
         assert quick(srv.get).status == 200 and quick(lambda: srv.get("poll")).status == 200
         refused(quick(lambda: srv.submit(form_for(page, "answer", "s1"), value="4.5")), 409, "err.not_open")
         a.join(30)
         b.join(30)
         saved(out["s1"])
         saved(out["s2"])
-        assert time.monotonic() - t0 < 2.9, "two asks waited on the harness one after the other"
+        assert time.monotonic() - t0 < 2.9, "two asks waited on the skill pack one after the other"
         assert sorted(e["id"] for e in srv.events("answer")) == ["s1", "s2"]
         assert [c["run"] for c in fake_calls(root)].count(1) == 2                          # the second click ran nothing
 
 
-def test_an_ask_revised_while_the_harness_runs_is_recorded_as_revised_for_what_was_shown():
-    with _t.tmpdir() as root, gated_srv(root, "slow", env={"FAKE_HARNESS_SLOW_SECS": "1.2"}) as srv:
+def test_an_ask_revised_while_the_skill_pack_runs_is_recorded_as_revised_for_what_was_shown():
+    with _t.tmpdir() as root, gated_srv(root, "slow", env={"FAKE_SKILL_PACK_SLOW_SECS": "1.2"}) as srv:
         srv.agent(gated("k1"))
         form = form_for(srv.get().text, "answer", "k1")
         out = []
         click = threading.Thread(target=lambda: out.append(srv.submit(form, value="4.5")))
         click.start()
-        time.sleep(0.5)                                                   # the harness is running now
+        time.sleep(0.5)                                                   # the skill pack is running now
         srv.agent(gated("k1", why="The agent found out more."))
         click.join(30)
         saved(out[0])
-        ev = srv.events("answer")[0]                                      # the harness was written, so the answer is kept
+        ev = srv.events("answer")[0]                                      # the skill pack was written, so the answer is kept
         assert ev["subject"] == form.value("hash") and ev["revised"] is True and ev["gate"]["ok"] is True
         assert say("history.revised") in flat(srv.get("history").text)
 
 
-def test_a_harness_that_does_not_answer_in_time_is_a_gate_timeout_the_console_records_nothing_and_says_what_it_can():
-    keys = ("FAKE_HARNESS_MODE", "FAKE_HARNESS_SLOW_SECS", "FAKE_HARNESS_SLOW_RUN", "FAKE_HARNESS_STATE")
+def test_a_skill_pack_that_does_not_answer_in_time_is_a_gate_timeout_the_console_records_nothing_and_says_what_it_can():
+    keys = ("FAKE_SKILL_PACK_MODE", "FAKE_SKILL_PACK_SLOW_SECS", "FAKE_SKILL_PACK_SLOW_RUN", "FAKE_SKILL_PACK_STATE")
     saved_env = {k: os.environ.get(k) for k in keys}
     old_timeout = serve.RELAY_TIMEOUT
     try:
-        # the first call hangs: nothing was asked yet; the second hangs: the harness may have written before it stopped
+        # the first call hangs: nothing was asked yet; the second hangs: the skill pack may have written before it stopped
         for which, words in (("1", core.CODES["gate_timeout"]), ("2", relay.LATE)):
             with _t.tmpdir() as root:
-                os.environ.update({"FAKE_HARNESS_MODE": "slow", "FAKE_HARNESS_SLOW_SECS": "30", "FAKE_HARNESS_SLOW_RUN": which,
-                                   "FAKE_HARNESS_STATE": os.path.join(root, "state.json")})
+                os.environ.update({"FAKE_SKILL_PACK_MODE": "slow", "FAKE_SKILL_PACK_SLOW_SECS": "30", "FAKE_SKILL_PACK_SLOW_RUN": which,
+                                   "FAKE_SKILL_PACK_STATE": os.path.join(root, "state.json")})
                 serve.RELAY_TIMEOUT = 1.0
                 with inproc(root, cmd=[sys.executable, FAKE], verbs=[["facts", "confirm"]]) as s:
                     s.store.post("bot", [gated("k1")])

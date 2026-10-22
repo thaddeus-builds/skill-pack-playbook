@@ -7,9 +7,9 @@ A banned-word list cannot do this: the words that go wrong are ordinary
 product. So the check runs the other way round: every claim the copy
 makes must be one the product's approved document names.
 
-Two inputs, both the harness's:
+Two inputs, both the skill pack's:
 
-  * The lexicon, a harness TSV (kit.registry.read_tsv reads it), one row
+  * The lexicon, a skill pack TSV (kit.registry.read_tsv reads it), one row
     per thing copy can claim:
         id         unique
         kind       `claim` (must be inside the scope: a symptom, a benefit,
@@ -23,7 +23,7 @@ Two inputs, both the harness's:
         note       why, in the owner's words (optional)
         law_ref    the clause it rests on (optional column)
         status     pending | confirmed | retired (blank = pending)
-    A harness with its own kind names maps them once, with `kinds`
+    A skill pack with its own kind names maps them once, with `kinds`
     ({its kind: "claim" | "always"}, e.g. {"symptom": "claim",
     "condition": "claim", "widener": "always", "scene": "always"}); the
     default maps `claim` and `always` to themselves. The row keeps its
@@ -31,9 +31,9 @@ Two inputs, both the harness's:
     any other row with a bad regex, an unknown kind, severity or status,
     or no id, canonical or pattern is refused (claimscope_row_invalid),
     never skipped.
-  * The claims record, a JSON file at a path the harness chooses:
+  * The claims record, a JSON file at a path the skill pack chooses:
         subject     the product, as the person retypes it at the gate
-        category    the harness's category word
+        category    the skill pack's category word
         scope_text  the approved document's wording, verbatim
         allowed     the canonical names that wording allows
         source      where the wording was read (a photo, a page, a filing)
@@ -68,11 +68,11 @@ What it guards:
     retypes the finding's words). It is stored keyed by a hash of (rule,
     where, term), so a changed line no longer matches it.
     open_errors(findings, waivers_path) -> (open, waived), errors only.
-  * required(record_path) is the finding a harness adds for a category
+  * required(record_path) is the finding a skill pack adds for a category
     that must have a record and has none: declare, never guess.
   * The learning loop: every platform rejection is a test case. quoted()
     takes the phrases a reviewer quoted inside “…” (not the ones holding
-    the harness's reviewer-paraphrase markers); recall(quotes, check_fn)
+    the skill pack's reviewer-paraphrase markers); recall(quotes, check_fn)
     says how many the checker catches and lists the misses, each one a
     lexicon row to add. false_alarms(texts, check_fn) is the other side:
     approved copy that the checker would refuse.
@@ -104,7 +104,7 @@ from typing import Callable, Iterable
 
 from kit import human
 from kit.atomic import write_json_atomic
-from kit.contract import HarnessError
+from kit.contract import SkillPackError
 from kit.messages import msg
 from kit.registry import read_tsv
 
@@ -120,8 +120,8 @@ VERB, WAIVE_VERB = "claims confirm", "claims waive"
 
 # ---- the lexicon -----------------------------------------------------------
 
-def _row_invalid(rule: str, detail: str) -> HarnessError:
-    return HarnessError(msg(
+def _row_invalid(rule: str, detail: str) -> SkillPackError:
+    return SkillPackError(msg(
         "claimscope_row_invalid",
         f"lexicon row {rule}: {detail}; fix the lexicon, nothing was checked",
         rule=rule, detail=detail))
@@ -130,7 +130,7 @@ def _row_invalid(rule: str, detail: str) -> HarnessError:
 def lexicon(rows: Iterable[dict], *, kinds: dict[str, str] | None = None
             ) -> list[dict]:
     """The live rows, checked and compiled: each row dict plus `kind`
-    (claim | always), `label` (the harness's own kind word), `names` (the
+    (claim | always), `label` (the skill pack's own kind word), `names` (the
     canonical split on `+`) and `re`. Retired rows are dropped."""
     kinds = dict(kinds) if kinds is not None else {k: k for k in KINDS}
     bad = {k: v for k, v in kinds.items() if v not in KINDS}
@@ -242,7 +242,7 @@ def load(path: Path | str) -> dict | None:
             and all(isinstance(x, str) for x in rec["allowed"])):
         rec, detail = None, "`allowed` is not a list of names"
     if not isinstance(rec, dict):
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "claimscope_record_invalid",
             f"{f} is not a claims record: {detail}", path=str(f),
             detail=detail))
@@ -283,20 +283,20 @@ def confirm(path: Path | str, *, reason: str | None, code: str | None = None,
             verb: str = VERB, market: str = "") -> dict:
     """A person confirms the claims record at `path`: they retype its
     subject at the terminal, or relay back a code bound to {subject:
-    content hash} and the file's sha. Raises HarnessError
+    content hash} and the file's sha. Raises SkillPackError
     (claimscope_record_missing, claimscope_incomplete: nothing written, no
     gate asked; claimscope_changed_meanwhile) or kit.human.Refused /
     CodeRequired (the gate)."""
     f = Path(path)
     rec = load(f)
     if rec is None:
-        raise HarnessError(msg("claimscope_record_missing",
+        raise SkillPackError(msg("claimscope_record_missing",
                                f"no claims record at {f}; write it from the "
                                f"approved document first", path=str(f)))
     gaps = _gaps(rec)
     if gaps:
         detail = "; ".join(gaps)
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "claimscope_incomplete",
             f"{f}: fill the record from the approved document before a "
             f"person confirms it: {detail}. Nothing was written.",
@@ -310,7 +310,7 @@ def confirm(path: Path | str, *, reason: str | None, code: str | None = None,
         subj=subj, code=code)
     why += human.relay_audit(channel, relay_user, relay_at)
     if _file_sha(f) != before:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "claimscope_changed_meanwhile",
             f"{f} changed while the person was being asked, so the "
             f"confirmation no longer matches it. Nothing was written.",
@@ -385,7 +385,7 @@ def check(texts: Iterable[tuple], record: dict | None,
 
 def required(record_path: Path | str, *, where: str = "record") -> list[dict]:
     """[] when the claims record exists; else the one error finding a
-    harness adds for a category that must have one (declare, never
+    skill pack adds for a category that must have one (declare, never
     guess)."""
     f = Path(record_path)
     if f.is_file():
@@ -425,7 +425,7 @@ def waivers(path: Path | str) -> dict[str, dict]:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
         w, detail = None, str(e)
     if not isinstance(w, dict):
-        raise HarnessError(msg("claimscope_waivers_unreadable",
+        raise SkillPackError(msg("claimscope_waivers_unreadable",
                                f"{f} is not a waivers file: {detail}",
                                path=str(f), detail=detail))
     return w
@@ -451,7 +451,7 @@ def waive(path: Path | str, *, rule: str, where: str, term: str,
         f"retype the words to confirm: ", term, subj=subj, code=code)
     why += human.relay_audit(channel, relay_user, relay_at)
     if _file_sha(f) != before:
-        raise HarnessError(msg(
+        raise SkillPackError(msg(
             "claimscope_changed_meanwhile",
             f"{f} changed while the person was being asked, so the waiver "
             f"no longer matches it. Nothing was written.", path=str(f)))

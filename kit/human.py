@@ -1,6 +1,6 @@
 """The human gate, and the attribution every human-table write shares.
 
-Ported from the reference harness's `_lib/human.py`; its protocol is
+Ported from the reference skill pack's `_lib/human.py`; its protocol is
 byte-compatible with the playbook console (console/relay.py). What this
 module guards:
 
@@ -71,7 +71,7 @@ a person counts as present. A regular file is read one answer per line,
 each answer consumed (the prompt goes to stderr); anything else (a
 device) is opened like /dev/tty. It exists so tests can drive the TTY
 path in-process and in a child; sandbox_env()/clean_env() strip it, and
-doctor should warn when it is set outside a test. A harness that honours
+doctor should warn when it is set outside a test. A skill pack that honours
 the seam only in a test (so an agent cannot use it in production) tells
 one by `KIT_TEST_RUN=1` (kit.config.TEST_RUN_ENV): the test runner
 exports it to every file, importing kit.testing.check sets it, and
@@ -109,7 +109,7 @@ from typing import Literal
 
 from kit import dates
 from kit.config import config
-from kit.contract import HarnessError, failure_doc
+from kit.contract import SkillPackError, failure_doc
 from kit.messages import Msg, msg
 
 TTY_DEVICE = "/dev/tty"
@@ -121,7 +121,7 @@ TTL_MINUTES = (1 + WINDOWS_BACK) * WINDOW_S // 60
 RELAY_USER = re.compile(r"[^\s\[\]]{1,120}")
 
 
-class Refused(HarnessError):
+class Refused(SkillPackError):
     """A human-data write refused at the boundary. Nothing was written."""
 
 
@@ -142,7 +142,7 @@ def now() -> str:
 
 
 def secret_env() -> str:
-    """The bound harness's secret variable: `<P>_CONFIRM_CODE_SECRET`."""
+    """The bound skill pack's secret variable: `<P>_CONFIRM_CODE_SECRET`."""
     return config().env("CONFIRM_CODE_SECRET")
 
 
@@ -343,7 +343,7 @@ def relay_audit(channel: str, relay_user: str | None,
     sent, whitespace collapsed; when given it is kept as ` [quote="…"]`.
     With `need_quote` a relay without it is refused
     (confirm_relay_quote_missing): pass it for a verb whose write leaves
-    the harness on a person's chat yes, so the record shows what was
+    the skill pack on a person's chat yes, so the record shows what was
     said, not only that a code came back. The console relays a click, not
     words: such a verb is confirmed in chat or at the terminal."""
     if channel != "relay":

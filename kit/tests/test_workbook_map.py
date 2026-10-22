@@ -5,9 +5,9 @@ the three rules, and the shape.
   1. Both maps (the influencer tracker and Lumi Haircare Nordics) hold, and
      load() reads one from a folder.
   2. Rule one: an outgoing column has one owner. A second row that writes
-     the same column (another harness, or the same one twice) is refused;
+     the same column (another skill pack, or the same one twice) is refused;
      the same header in another table, or read by many rows, is not.
-  3. Rule two: every field id is one of the harness's vocabulary (when it
+  3. Rule two: every field id is one of the skill pack's vocabulary (when it
      gives one).
   4. Rule three: what the owner has not confirmed is listed by pending()
      and never reaches a projection: confirmed() drops it, and a proposed
@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import _shop  # noqa: E402
 import _workbooks as X  # noqa: E402
 from kit import messages, workbook_map as WM  # noqa: E402
-from kit.contract import HarnessError  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 
 
@@ -62,15 +62,15 @@ def test_maps() -> None:
 def test_one_owner() -> None:
     print("\n[2] rule one: an outgoing column has one owner")
     other = X.IM_COLUMNS + \
-        "roster\tData Login\troster.flag.data_login\tout\tharness-b\tbool\t" \
+        "roster\tData Login\troster.flag.data_login\tout\tskill-pack-b\tbool\t" \
         "proposed\t\n"
-    check("a second harness writing the same column is refused",
+    check("a second skill pack writing the same column is refused",
           codes(X.IM_TABLES, other) == ["workbook_map_two_owners"],
           codes(X.IM_TABLES, other))
     twice = X.IM_COLUMNS + \
-        "roster\tdata  login\troster.flag.data_login\tboth\tharness-a\tbool" \
+        "roster\tdata  login\troster.flag.data_login\tboth\tskill-pack-a\tbool" \
         "\tconfirmed\t\n"
-    check("the same harness twice is refused too (headers compared "
+    check("the same skill pack twice is refused too (headers compared "
           "normalized)", codes(X.IM_TABLES, twice) ==
           ["workbook_map_two_owners"], codes(X.IM_TABLES, twice))
     alias = X.IM_TABLES + \
@@ -78,7 +78,7 @@ def test_one_owner() -> None:
         "-\tproposed\tthe same block under another id\n"
     cols = X.IM_COLUMNS + \
         "roster_again\tOriginal Code\t-\tin\t\tcode\tproposed\t\n" \
-        "roster_again\tData Login\troster.flag.data_login\tout\tharness-b\t" \
+        "roster_again\tData Login\troster.flag.data_login\tout\tskill-pack-b\t" \
         "bool\tproposed\t\n"
     check("the same block under another table id is the same column",
           codes(alias, cols) == ["workbook_map_two_owners"],
@@ -95,7 +95,7 @@ def test_one_owner() -> None:
 
 
 def test_fields() -> None:
-    print("\n[3] rule two: every field is the harness's")
+    print("\n[3] rule two: every field is the skill pack's")
     bad = X.IM_COLUMNS.replace("roster.ads_code", "roster.adds_code")
     check("an unknown field id is refused",
           codes(X.IM_TABLES, bad) == ["workbook_map_field_unknown"],
@@ -142,7 +142,7 @@ def test_shape() -> None:
          ["workbook_map_columns"]),
         ("an empty file", "", X.IM_COLUMNS, ["workbook_map_columns"]),
         ("a closed direction", X.IM_TABLES, X.IM_COLUMNS.replace(
-            "\tboth\tharness-b", "\tsideways\tharness-b"),
+            "\tboth\tskill-pack-b", "\tsideways\tskill-pack-b"),
          ["workbook_map_bad_value"]),
         ("a closed status", X.IM_TABLES.replace("\tconfirmed\tthe label",
                                                 "\tmaybe\tthe label"),
@@ -155,7 +155,7 @@ def test_shape() -> None:
          "ghost\tX\t-\tin\t\ttext\tproposed\t\n",
          ["workbook_map_table_unknown"]),
         ("an owner for out", X.IM_TABLES, X.IM_COLUMNS.replace(
-            "\tout\tharness-a", "\tout\t"), ["workbook_map_owner_missing"]),
+            "\tout\tskill-pack-a", "\tout\t"), ["workbook_map_owner_missing"]),
         ("a reason for no place", X.IM_TABLES, X.IM_COLUMNS.replace(
             "this workbook keeps no payments", ""),
          ["workbook_map_no_place_reason"]),
@@ -192,17 +192,17 @@ def test_shape() -> None:
     try:
         WM.load(d)
         code = None
-    except HarnessError as e:
+    except SkillPackError as e:
         code = e.message.code
     check("a missing file: workbook_map_missing",
           code == "workbook_map_missing", code)
     (d / "columns.tsv").write_text(X.IM_COLUMNS.replace(
-        "\tout\tharness-a", "\tout\t") + "ghost\tX\t-\tin\t\ttext\tproposed"
+        "\tout\tskill-pack-a", "\tout\t") + "ghost\tX\t-\tin\t\ttext\tproposed"
         "\t\n", encoding="utf-8")
     try:
         WM.load(d)
         e = None
-    except HarnessError as err:
+    except SkillPackError as err:
         e = err
     check("check() raises one coded refusal with the count and each problem",
           e is not None and e.message.code == "workbook_map_refused"

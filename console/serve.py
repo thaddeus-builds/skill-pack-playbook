@@ -12,7 +12,11 @@ applied, say), as ask.py never calls the human's (tests/test_boundary.py).
         [--user NAME | --user-header NAME] [--allow-host HOST[:PORT]]
         [--title TEXT] [--lang en|zh] [--relay-cmd "CMD ARGS"]
         [--relay-verbs "facts confirm,queue approve"] [--default-reason TEXT]
-        [--log-level debug|info|warning]
+        [--manifest FILE] [--log-level debug|info|warning]
+
+--manifest (or $CONSOLE_MANIFEST) is the skill pack's declaration (manifest.py):
+its pages, the verbs a click may run, the open-ask budget. It replaces
+--relay-cmd and --relay-verbs, which it excludes.
 
 There is no login. With --user, anyone who can reach the port is that person, so
 a --host that is not loopback (127.0.0.1, ::1, localhost) is refused unless
@@ -47,13 +51,13 @@ stderr and exits 2.
 A click writes one way. /answer checks, in this order and each before the next,
 that the ask is open, is still the one the page showed (`changed`), that the value
 is valid, that the comment is (core.check_comment), and only then, if the ask has a
-gate, sends it through the operator's harness (relay.py) and records the
-harness's word with the answer: nothing a harness must not see reaches it, and a
-failure to record it after the harness ran (a refusal, or the disk) is reported as
+gate, sends it through the operator's skill pack (relay.py) and records the
+skill pack's word with the answer: nothing a skill pack must not see reaches it, and a
+failure to record it after the skill pack ran (a refusal, or the disk) is reported as
 "check before you go on", never as "nothing was saved". A refused answer gives the
 typed comment back. One click per ask at a time (`Console.claim`), so a second click
-never runs the harness twice; the lock is held only for the write, never while the
-harness runs. A saved note or reopen answers 303 to the waiting page, which says so
+never runs the skill pack twice; the lock is held only for the write, never while the
+skill pack runs. A saved note or reopen answers 303 to the waiting page, which says so
 (`?done=`: only the known words are shown, nothing else), so a reload cannot
 write twice; the answer and answer-all results are pages of their own. console.js sends
 the forms itself and shows those same lines over the page it is on, so the person never
@@ -79,13 +83,16 @@ import shlex
 import socket
 import sys
 import threading
+import time
 from contextlib import contextmanager
 from urllib.parse import parse_qs, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import core  # noqa: E402
+import frame  # noqa: E402
 import i18n  # noqa: E402
+import manifest as manifest_mod  # noqa: E402
 import pages  # noqa: E402
 import relay  # noqa: E402
 
@@ -98,7 +105,8 @@ LANG_COOKIE = "console_lang"                               # + "_<port>": cookie
 TOKEN_KEY = b"console-page-token"
 HOST_RE = re.compile(r"(\[[0-9a-f:.]+\]|[a-z0-9._-]+)(?::([0-9]{1,5}))?")
 MAX_BODY, DRAIN = 64 * 1024, 1 << 20     # a bigger body is refused; up to DRAIN of it is read so the refusal reaches the client
-RELAY_TIMEOUT = 60.0                     # per call of the harness (relay makes two)
+RELAY_TIMEOUT = 60.0                     # per call of the skill pack (relay makes two)
+PAGE_TIMEOUT, COUNTS_TIMEOUT, COUNTS_TTL = 30.0, 10.0, 5.0     # drawing a page; the tab numbers, and how long they are kept
 FORM = "application/x-www-form-urlencoded"
 SECURITY = {
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; "
@@ -110,13 +118,14 @@ SECURITY = {
 # the HTTP status of a code; anything not here is a conflict with the current state
 STATUS = {"bad_request": 400, "bad_value": 400, "forbidden": 403, "forbidden_event": 403, "not_found": 404,
           "method_not_allowed": 405, "too_large": 413, "bad_host": 421, "corrupt_log": 500, "server_error": 500,
-          "gate_unavailable": 503, "gate_timeout": 504}
+          "gate_unavailable": 503, "gate_timeout": 504, "verb_not_allowed": 403, "page_unavailable": 502}
 STATIC = os.path.join(HERE, "static")
 TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}
 FILES = {f"/static/{n}": (os.path.join(STATIC, n), TYPES[os.path.splitext(n)[1]])
          for n in (sorted(os.listdir(STATIC)) if os.path.isdir(STATIC) else [])
          if os.path.splitext(n)[1] in TYPES}
 PAGES = ("/", "/history", "/poll")
+PAGE_PREFIX = "page-"                    # a skill pack's page `space` is GET /page-space (flat, so every link stays relative)
 # a saved note or reopen goes to the waiting page and says what happened (relative, so a proxy's prefix holds)
 AFTER = {"/note": "./?done=noted", "/reopen": "./?done=reopened"}
 
@@ -174,8 +183,13 @@ def token_ok(given, token: str) -> bool:
 class Console:
     """What one running console shares between requests."""
 
-    def __init__(self, store, secret, *, port, user, user_header, allow, title, lang, cmd, verbs, reason):
+    def __init__(self, store, secret, *, port, user, user_header, allow, title, lang, cmd, verbs, reason,
+                 manifest=None):
         self.store, self.secret, self.port = store, secret, port
+        self.manifest = manifest                     # manifest.parse()'s dict, or None
+        self.tabs = {p["name"]: p for p in (manifest or {}).get("pages", [])}
+        self._counts: tuple = (-1e9, {})             # (when, {page: n}) from the skill pack's counts verb
+        self.counts_lock = threading.Lock()
         self.user, self.user_header, self.allow = user, user_header, allow
         self.title, self.lang, self.cmd, self.verbs, self.reason = title, lang, cmd, verbs, reason
         self.token = hmac.new(secret, TOKEN_KEY, "sha256").hexdigest()[:32]
@@ -185,26 +199,57 @@ class Console:
         self._cache: tuple = (None, None)  # ((mtime_ns, size), state)
 
     def state(self) -> dict:
-        """The folded log, re-read only when the file changed. Raises Refused(corrupt_log)."""
+        """The folded log, re-read only when the file changed or an open ask's
+        `expires` has passed since. Raises Refused(corrupt_log)."""
         try:
             s = os.stat(self.store.path)
         except FileNotFoundError:
             return core.fold([])
         key = (s.st_mtime_ns, s.st_size)
-        if self._cache[0] != key:
+        due = core.next_expiry(self._cache[1]) if self._cache[1] else None
+        if self._cache[0] != key or (due is not None and core.now() >= due):
             self._cache = (key, self.store.state())
         return self._cache[1]
 
-    def ctx(self, lang: str, user) -> dict:
+    def ctx(self, lang: str, user, counts: dict | None = None) -> dict:
         """`relay` is the verb prefixes a gate may run here, or None: the page draws
-        a gated ask's form only for a verb that starts with one of them."""
+        a gated ask's form only for a verb that starts with one of them. `nav` is
+        the tabs; `counts` ({page: n}) overrides what the counts verb said."""
+        counts = {**self.counts(), **(counts or {})} if self.tabs else {}
+        nav = [{"name": x["name"], "href": {"waiting": "./", "history": "history"}.get(x["name"], PAGE_PREFIX + x["name"]),
+                "title": (x["title"] or {}).get(lang) if x["title"] else None, "count": counts.get(x["name"], 0)}
+               for x in manifest_mod.nav(self.manifest)]
+        blocking = sum(counts.get(x["name"], 0) for x in manifest_mod.nav(self.manifest) if x["blocking"])
         return {"lang": lang, "title": self.title, "user": user, "token": self.token,
                 "relay": self.verbs if self.cmd and self.verbs else None,
+                "nav": nav, "blocking": blocking, "max_open": manifest_mod.limit(self.manifest),
                 "now": core.now(), "secret": self.secret}
+
+    def counts(self) -> dict:
+        """The numbers on the skill pack's tabs, from its `counts` verb; kept
+        COUNTS_TTL seconds, failures included, so a slow or broken verb costs one
+        wait per interval, not one per request. {} when there is none."""
+        verb = (self.manifest or {}).get("counts")
+        if not verb:
+            return {}
+        with self.counts_lock:
+            when, got = self._counts
+            if time.monotonic() - when < COUNTS_TTL:
+                return got
+            r = relay.fetch(self.cmd, verb, timeout=COUNTS_TIMEOUT)
+            raw = r["doc"].get("counts") if r["ok"] else None
+            if r["ok"] and not isinstance(raw, dict):
+                log.warning("the counts verb answered without a `counts` object")
+            if not r["ok"]:
+                log.warning("the counts verb failed: %s", r["message"])
+            got = {k: v for k, v in (raw if isinstance(raw, dict) else {}).items()
+                   if k in self.tabs and isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 10 ** 6}
+            self._counts = (time.monotonic(), got)
+            return got
 
     @contextmanager
     def claim(self, id: str):
-        """One click per ask at a time: a second, while the first waits on the harness, finds it taken."""
+        """One click per ask at a time: a second, while the first waits on the skill pack, finds it taken."""
         with self.lock:
             if id in self.busy:
                 raise core.Refused("not_open", id=id, status="answering")
@@ -238,7 +283,7 @@ def _code(e) -> str:
 
 
 def _line(lang: str, cur=None, value=None, refused=None, message: str = "", comment: str = "") -> dict:
-    """One row of a result page. Only a harness's own words travel as `message`; the
+    """One row of a result page. Only a skill pack's own words travel as `message`; the
     comment a person typed comes back with a refusal, so nothing typed is lost."""
     ask = cur["ask"] if cur else None
     line = {"ok": refused is None, "id": cur["id"] if cur else None, "title": ask["title"] if ask else None,
@@ -263,7 +308,7 @@ def _through_gate(c: Console, user: str, ask: dict, value: str, comment: str) ->
 
 def _answer(c: Console, user: str, lang: str, id: str, shown: str, value, comment: str) -> dict:
     """One ask answered. `value` None means its suggestion. Everything that needs
-    no harness is checked first, so a stale page or a bad value never reaches one."""
+    no skill pack is checked first, so a stale page or a bad value never reaches one."""
     gate, typed = None, comment
     try:
         with c.claim(id):
@@ -276,7 +321,7 @@ def _answer(c: Console, user: str, lang: str, id: str, shown: str, value, commen
             value, err = core.check_value(ask, (ask.get("recommend") or {}).get("value") if value is None else value)
             if err:
                 raise core.Refused("bad_value", err["message"], reason=err["reason"])
-            comment = core.check_comment(comment)          # before the harness, not after; it gets the cleaned one
+            comment = core.check_comment(comment)          # before the skill pack, not after; it gets the cleaned one
             if core.gate_runs(ask, value):
                 gate = _through_gate(c, user, ask, value, comment)
             with c.lock:
@@ -284,11 +329,11 @@ def _answer(c: Console, user: str, lang: str, id: str, shown: str, value, commen
     except (core.Refused, OSError) as e:
         cause = getattr(e, "code", type(e).__name__)
         if gate:
-            log.warning("the harness was written for ask %s but the console could not record it (%s)", id, cause)
+            log.warning("the skill pack was written for ask %s but the console could not record it (%s)", id, cause)
             e = core.Refused("not_recorded", id=id, cause=cause)
         elif not isinstance(e, core.Refused):
             log.warning("the answer to ask %s could not be written (%s)", id, cause)
-        return _line(lang, _ask_of(c, id), refused=e, message=str(e) if _code(e) in pages.HARNESS_SAYS else "",
+        return _line(lang, _ask_of(c, id), refused=e, message=str(e) if _code(e) in pages.SKILL_PACK_SAYS else "",
                      comment=typed)
     return _line(lang, _ask_of(c, id), value, message=gate["message"] if gate else "")
 
@@ -324,7 +369,45 @@ def h_note(c, user, lang, form):
     return [_line(lang)]
 
 
-POSTS = {"/answer": h_answer, "/answer_all": h_answer_all, "/reopen": h_reopen, "/note": h_note}
+def _act(c: Console, user: str, lang: str, page: str, shown: str) -> dict:
+    """One page button clicked. The page is drawn again here, so the button must
+    still be on it, unchanged (`changed` otherwise), and its verb must be one the
+    manifest allows; the gate words are the console's, never the form's."""
+    label, gate = None, None
+    try:
+        tab = c.tabs.get(page)
+        if tab is None:
+            raise core.Refused("changed", page=page)
+        r = relay.fetch(c.cmd, tab["verb"], lang=lang, timeout=PAGE_TIMEOUT)
+        if not r["ok"]:
+            raise core.Refused("page_unavailable", r["message"])
+        button = frame.buttons(page, frame.clean(r["doc"])).get(shown)
+        if button is None:
+            raise core.Refused("changed", page=page)
+        label = button["label"]
+        if not core.verb_allowed(c.verbs, button["gate"]["verb"]):
+            raise core.Refused("verb_not_allowed", page=page)
+        with c.claim(f"{PAGE_PREFIX}{page}:{shown}"):
+            gate = _through_gate(c, user, frame.button_ask(page, button), "yes", "")
+            with c.lock:
+                c.store.act(user, page, label, shown, button["gate"]["verb"], gate)
+    except (core.Refused, OSError) as e:
+        cause = getattr(e, "code", type(e).__name__)
+        if gate:
+            log.warning("the skill pack was written for page %s but the console could not record it (%s)", page, cause)
+            e = core.Refused("not_recorded", page=page, cause=cause)
+        elif not isinstance(e, core.Refused):
+            log.warning("the click on page %s could not be written (%s)", page, cause)
+        return {"ok": False, "id": None, "title": label, "value": None, "code": _code(e),
+                "message": str(e) if _code(e) in pages.SKILL_PACK_SAYS else ""}
+    return {"ok": True, "id": None, "title": label, "value": None, "code": None, "message": gate["message"]}
+
+
+def h_act(c, user, lang, form):
+    return [_act(c, user, lang, _one(form, "page"), _one(form, "hash"))]
+
+
+POSTS = {"/answer": h_answer, "/answer_all": h_answer_all, "/reopen": h_reopen, "/note": h_note, "/act": h_act}
 
 
 # ------------------------------------------------------------- the server --
@@ -386,7 +469,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, f.read(), FILES[path][1], static=True)
         if path in POSTS:
             raise Reject("method_not_allowed")
-        if path not in PAGES:
+        tab = c.tabs.get(path[1 + len(PAGE_PREFIX):]) if path.startswith("/" + PAGE_PREFIX) else None
+        if path not in PAGES and tab is None:
             raise Reject("not_found")
         picked = parse_qs(query).get("lang", [""])[0]
         self._set_lang = picked if picked in i18n.LANGS else None
@@ -399,6 +483,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/poll":
             return self._send(200, json.dumps({"seq": st["seq"], "open": len(core.open_asks(st))}).encode(),
                               "application/json")
+        if tab is not None:
+            return self._page(c, tab, st)
         ctx = self._ctx(self._user())
         done = parse_qs(query).get("done", [""])[0]
         if path == "/":
@@ -407,12 +493,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ctx["flash"] = {"kind": "ok", "text": done}
         self._send(200, (pages.render_inbox if path == "/" else pages.render_history)(st, ctx).encode())
 
+    def _page(self, c: Console, tab: dict, st: dict):
+        """A page of the skill pack, inside the frame. The skill pack's command runs
+        with no lock held; a page it cannot draw is a page that says so (200: the
+        console is fine, the page is not)."""
+        lang = self._lang()
+        r = relay.fetch(c.cmd, tab["verb"], lang=lang, timeout=PAGE_TIMEOUT)
+        cleaned = frame.clean(r["doc"]) if r["ok"] else None
+        if not r["ok"]:
+            log.warning("page %s could not be drawn: %s", tab["name"], r["message"])
+        elif cleaned["bad"]:
+            log.warning("page %s: %d block(s) left out (%s)", tab["name"], len(cleaned["bad"]), ",".join(sorted(set(cleaned["bad"]))))
+        ctx = c.ctx(lang, self._user(), {tab["name"]: cleaned["count"]} if cleaned and cleaned["count"] is not None else None)
+        self._send(200, frame.render_page(st, ctx, {"name": tab["name"], "title": tab["title"]}, cleaned,
+                                          "" if r["ok"] else r["message"]).encode())
+
     def _post(self):
         c = self.server.app
         self._host()
         path = self.path.partition("?")[0]
         if path not in POSTS:
-            raise Reject("method_not_allowed" if path in FILES or path in PAGES else "not_found")
+            raise Reject("method_not_allowed" if path in FILES or path in PAGES or path[1:].startswith(PAGE_PREFIX)
+                         else "not_found")
         form = self._form()
         user = self._user()
         if user is None:
@@ -545,8 +647,10 @@ def _parser() -> argparse.ArgumentParser:
     add("--allow-host", action="append", default=[], metavar="HOST[:PORT]", help="another Host to answer to")
     add("--title", default="Console")
     add("--lang", choices=i18n.LANGS, default="en")
-    add("--relay-cmd", help="the harness command that answers a gate")
+    add("--relay-cmd", help="the skill pack command that answers a gate")
     add("--relay-verbs", help="comma-separated verb prefixes it may be asked to run, e.g. 'facts confirm,queue approve'")
+    add("--manifest", help="the skill pack's declaration (pages, relay verbs, open-ask budget; default $CONSOLE_MANIFEST); "
+        "replaces --relay-cmd and --relay-verbs")
     add("--default-reason", default="console", help="the reason given to a gate when the person wrote no comment")
     add("--log-level", choices=("debug", "info", "warning"), default="info")
     return p
@@ -581,6 +685,15 @@ def main(argv=None) -> int:
     verbs = [w.split() for w in (a.relay_verbs or "").split(",") if w.split()]
     if bool(cmd) != bool(verbs):
         die("--relay-cmd and --relay-verbs go together, and neither may be empty")
+    manifest = None
+    if a.manifest or os.environ.get("CONSOLE_MANIFEST"):
+        if cmd:
+            die("--manifest and --relay-cmd exclude each other: the manifest holds cmd and relay_verbs")
+        try:
+            manifest = manifest_mod.load(a.manifest or os.environ["CONSOLE_MANIFEST"])
+        except manifest_mod.ManifestError as e:
+            die(str(e))
+        cmd, verbs = manifest["cmd"], manifest["relay_verbs"]
     logging.basicConfig(level=a.log_level.upper(), stream=sys.stderr, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     store = core.Store(folder)
     try:                                   # the socket first: a start that fails leaves no folder or secret behind
@@ -594,10 +707,12 @@ def main(argv=None) -> int:
         srv.server_close()
         die(str(e))
     srv.app = Console(store, secret, port=srv.server_address[1], user=user, user_header=a.user_header, allow=allow,
-                      title=a.title, lang=a.lang, cmd=cmd, verbs=verbs, reason=a.default_reason)
+                      title=a.title, lang=a.lang, cmd=cmd, verbs=verbs, reason=a.default_reason, manifest=manifest)
     print(f"Console: http://{f'[{a.host}]' if ':' in a.host else a.host}:{srv.server_address[1]}/", flush=True)
-    if cmd:
+    if cmd and verbs:
         print("Relay verbs: " + ", ".join(" ".join(v) for v in verbs), flush=True)
+    if manifest and manifest["pages"]:
+        print("Pages: " + ", ".join(p["name"] for p in manifest["pages"]), flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

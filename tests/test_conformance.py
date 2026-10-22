@@ -1,6 +1,6 @@
-"""conformance/check.py passes a harness that keeps the rule and fails one that breaks it.
+"""conformance/check.py passes a skill pack that keeps the rule and fails one that breaks it.
 
-A fake harness (one script, a json file for state) runs in two modes. Each check
+A fake skill pack (one script, a json file for state) runs in two modes. Each check
 is tried on the broken mode first, so it cannot pass by looking at nothing; a
 missing adapter section is a SKIP, never a pass; nothing passing is a failure.
 """
@@ -45,7 +45,7 @@ elif verb == "doctor":
 
 def adapter(mode: str, facts: bool = True, doctor: bool = True) -> str:
     base = f'["python3", "{{root}}/fake.py", "{mode}"'
-    t = '[harness]\nname = "fake"\n[env]\nFAKE_DIR = "{tmp}"\n'
+    t = '[skill_pack]\nname = "fake"\n[env]\nFAKE_DIR = "{tmp}"\n'
     if facts:
         t += (f'[facts]\nhuman = [{base}, "set", "{{value}}", "human"]]\nagent = [{base}, "set", "{{value}}", "agent"]]\n'
               f'read = {base}, "get"]\n')
@@ -66,12 +66,12 @@ def run(mode: str, **kw) -> tuple[int, str]:
         return rc, buf.getvalue()
 
 
-def test_a_harness_that_breaks_the_rules_fails_both_checks():
+def test_a_skill_pack_that_breaks_the_rules_fails_both_checks():
     rc, out = run("bad")
     assert rc == 1 and "FAIL  C1" in out and "FAIL  C2" in out, out
 
 
-def test_a_harness_that_keeps_the_rules_passes():
+def test_a_skill_pack_that_keeps_the_rules_passes():
     rc, out = run("good")
     assert rc == 0 and "RESULT: 2 passed" in out and "FAIL" not in out, out
 
@@ -94,11 +94,11 @@ def test_the_shipped_adapters_parse_and_name_only_known_sections():
     d = os.path.join(REPO, "conformance/adapters")
     names = sorted(f for f in os.listdir(d) if f.endswith(".toml"))
     assert names, "no adapter shipped"
-    known = {"harness", "env", "facts", "doctor"}
+    known = {"skill_pack", "env", "facts", "doctor"}
     for n in names:
         cfg = tomllib.load(open(os.path.join(d, n), "rb"))
         assert set(cfg) <= known, (n, set(cfg) - known)
-        assert "harness" in cfg and "name" in cfg["harness"], n
+        assert "skill_pack" in cfg and "name" in cfg["skill_pack"], n
 
 
 TTY_FAKE = '''
@@ -124,9 +124,9 @@ json.dump(db, open(state, "w"))
 
 
 def test_typed_values_and_a_tty_confirm():
-    """A harness with numeric facts whose confirm reads /dev/tty passes through `values` and a `tty` step."""
+    """A skill pack with numeric facts whose confirm reads /dev/tty passes through `values` and a `tty` step."""
     base = '["python3", "{root}/fake.py"'
-    t = ('[harness]\nname = "fake"\n[env]\nFAKE_DIR = "{tmp}"\n[facts]\nvalues = ["0.31", "0.77"]\n'
+    t = ('[skill_pack]\nname = "fake"\n[env]\nFAKE_DIR = "{tmp}"\n[facts]\nvalues = ["0.31", "0.77"]\n'
          f'human = [{base}, "set", "{{value}}"], {{argv = {base}, "confirm"], tty = "{{value}}"}}]\n'
          f'agent = [{base}, "set", "{{value}}"]]\nread = {base}, "get"]\n')
     import contextlib

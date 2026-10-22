@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The guards (kit/guards/*), each on a temp copy of the fake "shop"
-harness (kit/tests/fake_harness) made whole: an ssot index with owner and
+skill pack (kit/tests/fake_skill_pack) made whole: an ssot index with owner and
 agent files, layered scripts, a stand-in CLI, a consumer console, the kit
 vendored into scripts/kit, a git repository with a generated
 .gitattributes.
@@ -12,7 +12,7 @@ vendored into scripts/kit, a git repository with a generated
       or test, a bad id column, a missing code symbol, a banned term, the
       held ratchet, a deleted id (vs git HEAD), a Chinese index header;
       an agent-only row proposed or asked is fine, accepted is not
-  [1c] ssot writes: a harness file writing ssot/ is reported by file and
+  [1c] ssot writes: a skill pack file writing ssot/ is reported by file and
       line (never what it writes), by every form and through a name another
       module binds; reading it, writing a row's file elsewhere, a test file
       and the vendored kit are not; a builder's tool in writers passes, and
@@ -86,7 +86,7 @@ table_prefixes = ["ext_"]
 banned_terms = {"variant group" = "product family"}
 """
 
-SHOP_CLI = '''"""A stand-in for the harness CLI (kit.cli) in the kit's guard tests:
+SHOP_CLI = '''"""A stand-in for the skill pack CLI (kit.cli) in the kit's guard tests:
 routes a verb's words to its script, strips the first literal `--`,
 forwards the rest."""
 import subprocess
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
 '''
 
-COMPUTE = '''"""A fixture compute of the shop harness."""
+COMPUTE = '''"""A fixture compute of the shop skill pack."""
 import sys
 
 from kit import contract
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 GOOD_WARN = 'warnings = coded("warnings", [low])'
 BAD_WARN = 'warnings = {"warnings": ["Price is missing for A1"]}'
 
-NOTES_LIST = '''"""A fixture read verb of the shop harness (no meta: not a compute)."""
+NOTES_LIST = '''"""A fixture read verb of the shop skill pack (no meta: not a compute)."""
 import sys
 
 from kit import contract
@@ -171,7 +171,7 @@ if __name__ == "__main__":
                                        cmd=["shop", "notes", "list"]))
 '''
 
-CONSOLE_RELAY = '''"""Relays a human's click through the harness's gate."""
+CONSOLE_RELAY = '''"""Relays a human's click through the skill pack's gate."""
 import subprocess
 
 
@@ -189,12 +189,12 @@ def report():
 
 FILES = {
     "CLAUDE.md": "# For people changing the code\n",
-    "README.md": "# The shop harness\n",
+    "README.md": "# The shop skill pack\n",
     "SKILL.md": "---\nname: shop-harness\n---\n",
     "CHANGELOG.md": "# Changelog\n\n## [Unreleased]\n",
     "evals/README.md": "# Agent-behaviour evals\n",
     ".claude/settings.json": "{}\n",
-    "tests/test_ssot.py": "# the harness's ssot test\n",
+    "tests/test_ssot.py": "# the skill pack's ssot test\n",
     "ssot/README.md": "Who writes which file.\n",
     "ssot/glossary.tsv": "term\tdefinition\n"
                          "product family\tA parent product and all its "
@@ -235,7 +235,7 @@ FILES = {
     "scripts/notes_list.py": NOTES_LIST,
     "scripts/shop.py": SHOP_CLI,
     "console/relay.py": CONSOLE_RELAY,
-    "console/README.md": "Relays answers; reads the harness's --json.\n",
+    "console/README.md": "Relays answers; reads the skill pack's --json.\n",
 }
 T = "tests/test_ssot.py"
 INDEX = [  # file, owner, reader, test, id, purpose
@@ -251,7 +251,7 @@ INDEX = [  # file, owner, reader, test, id, purpose
     ("ssot/constants.tsv", "registry", "scripts/compute_sales.py", T, "name",
      "threshold defaults"),
     ("ssot/message_codes.tsv", "registry", "scripts/notes.py", T, "code",
-     "the harness's message codes"),
+     "the skill pack's message codes"),
     ("ssot/story_checks.tsv", "registry", "scripts/compute_stories.py", T,
      "story", "one runnable check per story"),
     ("scripts/compute_sales.py:THRESHOLD_NAMES", "registry",
@@ -280,7 +280,7 @@ def unique_id(table: list[list[str]]) -> str:
 def index_text(root: Path, rows=None, header=HEADER) -> str:
     """The index: `rows` (default INDEX), plus a planning row for every
     ssot TSV INDEX does not know (another kit module's tests may add
-    registries to the fake harness)."""
+    registries to the fake skill pack)."""
     rows = list(INDEX if rows is None else rows)
     known = {r[0] for r in INDEX}
     for p in sorted((root / "ssot").rglob("*.tsv")):
@@ -302,7 +302,7 @@ def build() -> Path:
     root = Path(tmp_dir("guards-")) / "shop"
     shutil.copytree(_shop.SHOP, root, ignore=shutil.ignore_patterns(
         "__pycache__", "*.pyc", ".DS_Store"))
-    toml = root / "harness.toml"
+    toml = root / "skill-pack.toml"
     toml.write_text(toml.read_text(encoding="utf-8") + GUARDS_TOML,
                     encoding="utf-8")
     for rel, text in FILES.items():
@@ -315,7 +315,7 @@ def build() -> Path:
     if HAS_GIT:
         git(root, "init", "-q")
         git(root, "add", "-A")
-        git(root, "commit", "-qm", "the clean shop harness")
+        git(root, "commit", "-qm", "the clean shop skill pack")
     return root
 
 
@@ -362,7 +362,7 @@ def everything(root: Path, data: Path) -> dict[str, list[str]]:
             "layering": layering.check_layers(root),
             "clock": clock.check_reads(root),
             "boundary": boundary.check_boundaries(root, verbs=VERBS),
-            "drift": drift.check_harness(root),
+            "drift": drift.check_skill_pack(root),
             "json contract": json_contract.check_read_verbs(data,
                                                             verbs=READS)}
 
@@ -466,8 +466,8 @@ def test_ssot(root: Path) -> None:
         caught("a banned term", ssot.check_index(root),
                "ssot/glossary.tsv: says 'variant group'; the term is "
                "'product family'")
-    toml = (root / "harness.toml").read_text(encoding="utf-8")
-    with planted(root, "harness.toml", toml + 'held = [["' + us +
+    toml = (root / "skill-pack.toml").read_text(encoding="utf-8")
+    with planted(root, "skill-pack.toml", toml + 'held = [["' + us +
                  '", "S01", "done_when"]]\n'):
         caught("held: an entry that no longer fails is itself a problem",
                ssot.check_index(root), "held ['ssot/user-stories.tsv', "
@@ -476,7 +476,7 @@ def test_ssot(root: Path) -> None:
             clean("held: the held cell may still fail",
                   ssot.check_index(root))
     zh = ("文件", "主人", "读它的代码", "绑它的测试", "id列", "说明")
-    with planted(root, "harness.toml", toml + "index_columns = {"
+    with planted(root, "skill-pack.toml", toml + "index_columns = {"
                  + ", ".join(f'{k} = "{v}"' for k, v in zip(
                      ssot.ORDER, zh)) + "}\n"):
         caught("index_columns: the default header is now wrong",
@@ -562,7 +562,7 @@ def test_ssot_writes(root: Path) -> None:
     clean("the clean copy writes nothing under ssot/", ssot.check_writes(root))
     with planted(root, "scripts/space_set.py", SPACE_SET):
         got = ssot.check_writes(root)
-        caught("a harness file writing ssot/constants.tsv, by file and line",
+        caught("a skill pack file writing ssot/constants.tsv, by file and line",
                got, "scripts/space_set.py:10: .write_text() CONSTANTS "
                     "writes under ssot/", "a client's own value goes to its "
                                           "database")
@@ -582,12 +582,12 @@ def test_ssot_writes(root: Path) -> None:
     for rel in ("tests/test_space.py", "scripts/test_space.py",
                 "scripts/tests/space.py", "scripts/conftest.py"):
         with planted(root, rel, SPACE_SET):
-            clean(f"a test file is not harness code: {rel}",
+            clean(f"a test file is not skill pack code: {rel}",
                   ssot.check_writes(root))
     with planted(root, "scripts/kit/space.py", SPACE_SET):
         clean("the vendored kit is left out (its own tests and the drift "
               "guard hold it)", ssot.check_writes(root))
-    toml = (root / "harness.toml").read_text(encoding="utf-8")
+    toml = (root / "skill-pack.toml").read_text(encoding="utf-8")
     writers = toml + ('\n[guards.ssot.writers]\n"tools/edit_registry.py" = '
                       '"the builder\'s registry editor, run in the builder\'s '
                       'checkout"\n')
@@ -595,26 +595,26 @@ def test_ssot_writes(root: Path) -> None:
         caught("a builder's tool not in writers is reported",
                ssot.check_writes(root), "tools/edit_registry.py:8: "
                                         "os.replace os.path.join(SSOT_DIR")
-        with planted(root, "harness.toml", writers):
+        with planted(root, "skill-pack.toml", writers):
             clean("…and passes once writers names it with its reason",
                   ssot.check_writes(root))
-        with planted(root, "harness.toml", toml + '\n[guards.ssot.writers]'
+        with planted(root, "skill-pack.toml", toml + '\n[guards.ssot.writers]'
                      '\n"tools/" = "the builder\'s tools"\n'):
             clean("a writers row may name a folder", ssot.check_writes(root))
-        with planted(root, "harness.toml", toml + '\n[guards.ssot.writers]'
+        with planted(root, "skill-pack.toml", toml + '\n[guards.ssot.writers]'
                      '\n"tools/edit_registry.py" = " "\n'):
             caught("a writers row with no reason", ssot.check_writes(root),
                    "[guards.ssot].writers 'tools/edit_registry.py': give its "
                    "reason")
-    with planted(root, "harness.toml", writers):
+    with planted(root, "skill-pack.toml", writers):
         caught("a writers row whose file writes nothing (or is gone)",
                ssot.check_writes(root), "[guards.ssot].writers "
                "'tools/edit_registry.py': writes nothing under ssot/ any more")
     save = ("from pathlib import Path\nSSOT = Path('ssot')\n\n\ndef f(rows):\n"
             "    save_tsv(SSOT / 'x.tsv', rows)\n")
     with planted(root, "scripts/compute_x.py", save):
-        clean("a harness's own helper is not known…", ssot.check_writes(root))
-        with planted(root, "harness.toml", toml + 'write_calls = '
+        clean("a skill pack's own helper is not known…", ssot.check_writes(root))
+        with planted(root, "skill-pack.toml", toml + 'write_calls = '
                      '["save_tsv"]\n'):
             caught("…until write_calls names it", ssot.check_writes(root),
                    "scripts/compute_x.py:6: save_tsv SSOT / 'x.tsv'")
@@ -622,10 +622,10 @@ def test_ssot_writes(root: Path) -> None:
         caught("a file that does not parse is not a pass",
                ssot.check_writes(root), "scripts/compute_x.py:1: does not "
                                         "parse")
-    with planted(root, "harness.toml", toml + 'write_code = ["nowhere"]\n'):
+    with planted(root, "skill-pack.toml", toml + 'write_code = ["nowhere"]\n'):
         caught("a code path that finds nothing is not a pass",
                ssot.check_writes(root), "no code to read under nowhere")
-    with planted(root, "harness.toml", toml + 'write_code = ["scripts", '
+    with planted(root, "skill-pack.toml", toml + 'write_code = ["scripts", '
                  '"nowhere"]\n'):
         caught("…nor is one misspelled next to a good one",
                ssot.check_writes(root), "no code to read under nowhere")
@@ -644,7 +644,7 @@ def test_ssot_writes(root: Path) -> None:
     with planted(root, "scripts/venv/pyvenv.cfg", "home = /usr/bin\n"), \
             planted(root, "scripts/venv/lib/site.py", "def f(:\n"), \
             planted(root, "scripts/venv/lib/w.py", SPACE_SET):
-        clean("a virtualenv inside the harness is not its code",
+        clean("a virtualenv inside the skill pack is not its code",
               ssot.check_writes(root))
     with planted(root, "scripts/vendor/w.py", SPACE_SET):
         got = _with(root, toml + '\n[guards.ssot.write_skip]\n'
@@ -689,7 +689,7 @@ def test_ssot_writes(root: Path) -> None:
                    ssot.check_writes(root), "scripts/compute_v.py:5: "
                                             ".write_text() VALUES")
     with planted(root, "tools/edit_registry.py", EDITOR), \
-            planted(root, "harness.toml", toml + '\n[guards.ssot.writers]\n'
+            planted(root, "skill-pack.toml", toml + '\n[guards.ssot.writers]\n'
                     '"tools/" = "the builder\'s tools"\n'
                     '"tools/edit_registry.py" = "its registry editor"\n'):
         clean("a file row under a folder row is used too, not stale",
@@ -697,7 +697,7 @@ def test_ssot_writes(root: Path) -> None:
 
 
 def _with(root: Path, toml: str) -> list[str]:
-    with planted(root, "harness.toml", toml):
+    with planted(root, "skill-pack.toml", toml):
         return ssot.check_writes(root)
 
 
@@ -730,6 +730,16 @@ def test_release(root: Path) -> None:
                "[release].must_ship paths do not ship: ['SKILL.md']",
                "left out of the release but not internal: ['SKILL.md']",
                ".gitattributes: marks /SKILL.md export-ignore")
+    toml = "skill-pack.toml"
+    must = 'must_ship = ["SKILL.md", "README.md", "skill-pack.toml", "scripts/shop.py"]'
+    with planted(root, toml, replace=(must, must.replace('"scripts/shop.py"', '"scripts/kit"'))):
+        clean("a must_ship directory with files that ship", release.check_release(root))
+    with planted(root, toml, replace=(must, must.replace('"scripts/shop.py"', '"tests"'))):
+        caught("a must_ship directory that is internal", release.check_release(root),
+               "[release].must_ship paths do not ship: ['tests']")
+    with planted(root, toml, replace=(must, must.replace('"scripts/shop.py"', '"nowhere"'))):
+        caught("a must_ship path that is not tracked", release.check_release(root),
+               "[release].must_ship paths do not ship: ['nowhere']")
     with planted(root, ga, append="/ssot/constants.tsv export-ignore\n"):
         caught("a registry the index names a reader for, left out",
                release.check_release(root),
@@ -739,11 +749,11 @@ def test_release(root: Path) -> None:
         caught("a .tsv runtime code opens by name that does not ship",
                release.check_release(root),
                "runtime code opens by name do not ship: ['orders_map.tsv']")
-    with planted(root, "harness.toml", replace=(
+    with planted(root, "skill-pack.toml", replace=(
             'internal = ["CLAUDE.md"', 'internal = ["docs", "CLAUDE.md"')):
         caught("a stale internal entry", release.check_release(root),
                "does not track (a stale entry hides nothing): ['docs']")
-    with planted(root, "harness.toml", replace=(
+    with planted(root, "skill-pack.toml", replace=(
             'internal = ["CLAUDE.md"', 'internal = ["scripts/kit", '
                                        '"CLAUDE.md"')):
         caught("the vendored kit made internal", release.check_release(root),
@@ -820,16 +830,16 @@ def test_clock(root: Path) -> None:
                clock.check_reads(root), "must read the stdlib clock once")
     with planted(root, "scripts/compute_sales.py",
                  append="import datetime\nT = datetime.date.today()\n"), \
-            planted(root, "harness.toml", append=(
+            planted(root, "skill-pack.toml", append=(
                 '\n[guards.clock.allowed]\n"scripts/compute_sales.py::'
                 '<module>" = 1\n')):
         clean("an allowed read (a late adopter's row) passes",
               clock.check_reads(root))
-    with planted(root, "harness.toml", append=(
+    with planted(root, "skill-pack.toml", append=(
             '\n[guards.clock.allowed]\n"scripts/compute_sales.py::f" = 2\n')):
         caught("an allowed row for a read that has moved",
                clock.check_reads(root), "lists 2, 0 left")
-    with planted(root, "harness.toml", append=(
+    with planted(root, "skill-pack.toml", append=(
             '\n[guards.clock]\ncode = ["nowhere"]\n')):
         caught("a code path that finds nothing is not a pass",
                clock.check_reads(root), "no code to read")
@@ -882,7 +892,7 @@ def test_json_units() -> None:
           u({"x": "A1 low", "x_code": {"code": "shop_stock_low",
                                        "params": {}},
              "y_code": {"code": "nope", "params": {}}}))
-    e = contract.HarnessError(msg("no_db", "No database at /x", path="/x"),
+    e = contract.SkillPackError(msg("no_db", "No database at /x", path="/x"),
                               ["shop facts init"])
     fdoc = contract.failure_doc(e, ["shop", "compute", "sales"])
     check("uncoded: a failure document is coded at the top",
@@ -919,9 +929,9 @@ def test_json_units() -> None:
             ("assumed thresholds on a plain run",
              {"meta": {**m, "assumed_thresholds": {"x": {"value": 1}}}},
              "assumed_thresholds is not {}"),
-            ("another harness's name",
-             {"meta": {**m, "harness": {**m["harness"], "name": "other"}}},
-             "meta.harness")):
+            ("another skill pack's name",
+             {"meta": {**m, "skill_pack": {**m["skill_pack"], "name": "other"}}},
+             "meta.skill_pack")):
         caught(f"check_meta catches {label}",
                json_contract.check_meta(broken), needle)
 
@@ -1068,29 +1078,29 @@ def test_drift(root: Path) -> None:
     print("\n[6] drift: the vendored kit and console")
     kit = "scripts/kit/"
     with planted(root, kit + "dates.py", append="# a local edit\n"):
-        caught("a drifted vendored file", drift.check_harness(root),
+        caught("a drifted vendored file", drift.check_skill_pack(root),
                "kit/: changed: dates.py")
     with planted(root, kit + "extra.py", "X = 1\n"):
-        caught("a file added to the vendored kit", drift.check_harness(root),
+        caught("a file added to the vendored kit", drift.check_skill_pack(root),
                "kit/: not in MANIFEST.sha256: extra.py")
     with planted(root, kit + "atomic.py", remove=True):
         caught("a file removed from the vendored kit",
-               drift.check_harness(root), "kit/: missing: atomic.py")
+               drift.check_skill_pack(root), "kit/: missing: atomic.py")
     with planted(root, kit + "VERSION", "9.9.9\n"):
-        caught("the kit's VERSION edited", drift.check_harness(root),
+        caught("the kit's VERSION edited", drift.check_skill_pack(root),
                "kit/: changed: VERSION")
     with planted(root, "console/relay.py", append="# patched here\n"):
-        caught("a drifted vendored console file", drift.check_harness(root),
+        caught("a drifted vendored console file", drift.check_skill_pack(root),
                "console/: changed: relay.py")
     with planted(root, "console/VERSION", "0.0.9\n"), \
             planted(root, "console/MANIFEST.sha256", "x"):
         manifest.write(root / "console")
         caught("a console vendored from another kit version",
-               drift.check_harness(root), "console/VERSION '0.0.9' is not "
+               drift.check_skill_pack(root), "console/VERSION '0.0.9' is not "
                                           "the kit's")
     other = Path(tmp_dir("shop-bare-"))
-    write(other, "harness.toml", (_shop.SHOP / "harness.toml").read_text())
-    caught("a harness with no vendored kit", drift.check_harness(other),
+    write(other, "skill-pack.toml", (_shop.SHOP / "skill-pack.toml").read_text())
+    caught("a skill pack with no vendored kit", drift.check_skill_pack(other),
            "no vendored kit at scripts/kit/")
 
 
@@ -1101,7 +1111,7 @@ def main() -> int:
     data = Path(tmp_dir("shop-data-"))
     (data / "shop.db").write_bytes(b"")
 
-    print("[0] the clean copy of the fake harness passes every guard")
+    print("[0] the clean copy of the fake skill pack passes every guard")
     for name, problems in everything(root, data).items():
         clean(f"clean: {name}", problems)
     rc, out, _ = capture(lambda a: 0 if release.check_release_archive(root)
