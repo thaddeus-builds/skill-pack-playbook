@@ -45,3 +45,5 @@ fact_hub_definition_differs	key,hub,diff	{key} is defined differently here and a
 fact_hub_copy_stale	key,market,hub,hub_version,copied_version	{key} [{market}]: hub {hub} is at #{hub_version}, this skill pack copied #{copied_version}	{key}（{market}）：客户中心 {hub} 已到 #{hub_version}，本技能包复制的是 #{copied_version}
 fact_hub_current	hub,checked	Hub {hub}: every confirmed fact this skill pack declares is copied at its current version ({checked} checked)	客户中心 {hub}：本技能包声明的每项已确认事实都已按当前版本复制（检查了 {checked} 项）
 fact_hub_defs_unreadable	path,detail	The hub's definitions {path} cannot be read: {detail}	客户中心的定义 {path} 无法读取：{detail}
+fact_hub_market_partitioned	var,value	{var}={value}: this skill pack keeps its own markets and copies each hub market into its own; unset {var}	{var}={value}：本技能包有自己的市场，会把客户中心的每个市场复制到同名市场；请取消 {var}
+fact_hub_copy_missing	key,market	{key} [{market}]: confirmed at the hub, never copied here	{key}（{market}）：已在客户中心确认，但从未复制到这里

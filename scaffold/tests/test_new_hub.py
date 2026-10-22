@@ -61,7 +61,9 @@ if sys.argv[1:] == ["verbs", "--json"]:
 else:
     print(json.dumps({{"data_dir": os.environ.get(P + "_DATA_DIR"), "argv": sys.argv[1:],
                       "secret": os.environ.get(P + "_CONFIRM_CODE_SECRET"),
-                      "hub_dir": os.environ.get(P + "_HUB_DIR")}}))
+                      "hub_dir": os.environ.get(P + "_HUB_DIR"),
+                      "hub_market": os.environ.get(P + "_HUB_MARKET"),
+                      "hub_cli": os.environ.get(P + "_HUB_CLI")}}))
 """
 SERVE = """import json, os, sys
 print(json.dumps({"argv": sys.argv[1:], "console_dir": os.environ.get("CONSOLE_DIR"),
@@ -405,6 +407,61 @@ def main() -> int:
         if rc == 0 else None
     check("a second hub in the same root takes another port, not the per-pack 8799",
           rc == 0 and p2 not in (port, 8799) and p2 >= 8770, (rc, p2, port, err))
+
+    print("[9] a pack without markets, once per hub market")
+    mh = root / "teahouse"
+    rc, out, err = run(HUB_PY, "new", "--hub", str(mh), "--title", "Tea", "--markets", "DN,DS",
+                       "--console-home", str(home))
+    pm = fake_pack("demoa")
+    for argv, what in ((["--skill-pack", str(pm)], "--market"),
+                       (["--skill-pack", str(pm), "--market", "XX"], "not one of the hub's")):
+        rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), *argv)
+        check(f"refused, exit 2: {what}", rc == 2 and what in err, err)
+    own = fake_pack("demob")
+    (own / "skill-pack.toml").write_text(
+        (own / "skill-pack.toml").read_text(encoding="utf-8") + 'markets = ["DN"]\n',
+        encoding="utf-8")
+    rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(own),
+                       "--market", "DN")
+    check("refused, exit 2: --market for a pack with its own markets",
+          rc == 2 and "keeps its own markets" in err, err)
+    for m in ("DN", "DS"):
+        rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(pm),
+                           "--market", m)
+        check(f"add-pack --market {m}: a folder of its own", rc == 0
+              and (mh / f"demoa-{m.lower()}" / "bin" / "demoa").is_file(), out + err)
+    rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(pm),
+                       "--market", "DN", "--folder", "other")
+    check("refused, exit 2: the same pack for a market it already serves",
+          rc == 2 and "already" in err, err)
+    hj = json.loads((mh / "hub.json").read_text(encoding="utf-8"))
+    check("hub.json records each folder's market and dispatch name",
+          [(p_["folder"], p_["market"], p_["word"]) for p_ in hj["packs"]]
+          == [("demoa-dn", "DN", "demoa-dn"), ("demoa-ds", "DS", "demoa-ds")], hj["packs"])
+    for m in ("DN", "DS"):
+        r = subprocess.run([str(mh / "bin" / "hub"), f"demoa-{m.lower()}", "status"],
+                           capture_output=True, text=True, timeout=60, env=clean_env())
+        doc = json.loads(r.stdout or "{}")
+        check(f"bin/hub demoa-{m.lower()} runs that folder with DEMOA_HUB_MARKET={m} and "
+              f"DEMOA_HUB_CLI=demoa-{m.lower()}",
+              os.path.realpath(doc.get("data_dir") or "")
+              == str((mh / f"demoa-{m.lower()}" / "workspace").resolve())
+              and doc.get("hub_market") == m and doc.get("hub_cli") == f"demoa-{m.lower()}",
+              r.stdout + r.stderr)
+    t = texts(mh)
+    check("the console relays each folder's verbs under its name, one secret per prefix",
+          "demoa-dn facts confirm,demoa-dn decisions confirm" in t["bin/console"]
+          and "demoa-ds queue approve" in t["bin/console"]
+          and t["bin/console"].count("DEMOA_CONFIRM_CODE_SECRET=") == 1, t["bin/console"])
+    deny = json.loads(t[".claude/settings.json"])["permissions"]["deny"]
+    check("the deny list holds each folder's gate verbs through bin/hub and its wrapper",
+          {"Bash(./bin/hub demoa-dn facts confirm:*)", "Bash(bin/hub demoa-ds queue approve:*)",
+           "Bash(./demoa-ds/bin/demoa facts confirm:*)"} <= set(deny), deny)
+    check("the pack folder's brief runs its gate through ../bin/hub demoa-dn",
+          "`../bin/hub demoa-dn …`" in t["demoa-dn/CLAUDE.md"])
+    r = subprocess.run([str(mh / "bin" / "hub"), "demoa", "status"], capture_output=True,
+                       text=True, timeout=60, env=clean_env())
+    check("the bare cli word is no dispatch name then", r.returncode == 2, r.stderr)
     return finish()
 
 
