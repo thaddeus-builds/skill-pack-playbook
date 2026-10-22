@@ -5,12 +5,13 @@
 # ///
 """Check meeting-intake files before any item reaches the owner.
 
-    check_intake.py FILE...
+    check_intake.py [--packs CLI,CLI...] [--transcript FILE] FILE...
 
 Prints one JSON document, {ok, files, items, problems: [{iid, code, message,
 file, path}]}, and exits 0 when there is no problem, 2 when there is one.
 All files are checked together, because an iid is unique across all of them
-and a contradiction can span two meetings.
+and a contradiction can span two meetings: in a client hub, every file in
+<hub>/intake/*.json, whichever pack each meeting was for.
 
 What is checked (each rule is a test in build/tests/test_check_intake.py):
 - The shape: templates/intake.schema.json, read from disk, so the schema is
@@ -21,8 +22,17 @@ What is checked (each rule is a test in build/tests/test_check_intake.py):
   and carries no rounded or estimated marker (~, about, approx., 大概...).
 - A contradiction is a question: two numbers with one key and two values, or
   one word with two meanings, need a question whose `about` names both.
-- iids are unique across files; `about` names only iids that exist.
+- iids are unique: once in a file, and never reused by a later file
+  (iid_reused names the next free one); `about` names only iids that exist.
 - A question's suggestion is one of its options, and options differ.
+- packs (an item's own, or its meeting's default) are the client's: each one
+  is in --packs, and a file that names packs needs --packs, so a typo
+  surfaces. The hub's runner passes the client's CLI words.
+- With a transcript (--transcript FILE for one intake file, or the meeting's
+  `transcript` path, relative to the intake file), every quote whose source
+  is a time of that meeting is inside the speaker block at that time: a line
+  "<speaker> mm:ss" (or hh:mm:ss), then the text up to the next such line.
+  Spaces and line breaks are not compared, nor markdown's backslash escapes.
 """
 
 from __future__ import annotations
@@ -57,7 +67,11 @@ CODES = {
     "value_not_number": "A number's value is not digits or a range; the client's words go in the quote.",
     "estimate_marker": "A number carries a rounded or estimated marker; never estimate or round.",
     "bad_range": "A range runs backwards.",
-    "duplicate_iid": "The same iid twice, in one file or across files.",
+    "duplicate_iid": "The same iid twice in one file.",
+    "iid_reused": "An iid an earlier intake file already used; continue after the highest, never reuse one.",
+    "unknown_pack": "A pack that is not one of the client's (--packs), or packs named with no --packs list.",
+    "quote_not_at_source": "A quote is not in the transcript's speaker block at the time its source names.",
+    "no_transcript": "The transcript cannot be read, or has no speaker block.",
     "unknown_ref": "A question's `about` names an iid that does not exist.",
     "contradiction_not_asked": "Two items disagree and no question names both.",
     "bad_suggest": "A question's suggestion is not one of its options.",
@@ -72,6 +86,9 @@ ESTIMATE = re.compile(
 KEY_ESTIMATE = re.compile(r"(?:^|_)(?:est|estimate|estimated|approx|rounded|guess)(?:_|$)")
 TIMESTAMP = re.compile(r"^([0-9]{4}-[0-9]{2}-[0-9]{2}) [0-9]{2}:[0-5][0-9]:[0-5][0-9]$")
 RANGE = re.compile(r"^([0-9]+(?:\.[0-9]+)?) ?[-–] ?([0-9]+(?:\.[0-9]+)?)$")
+# a transcript's speaker line: "<speaker> mm:ss" or "<speaker> hh:mm:ss"
+SPEAKER = re.compile(r"^([^#>\s].{0,59}?)\s+((?:[0-9]{1,2}:[0-5][0-9]|[0-9]{1,3}):[0-5][0-9])\s*$")
+MD_ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
 KNOWN_KEYWORDS = {"$comment", "$id", "$ref", "$defs", "title", "description", "type",
                   "properties", "required", "additionalProperties", "items", "enum",
                   "pattern", "minLength", "maxLength", "minItems", "maxItems",
@@ -232,6 +249,15 @@ def value_range(v) -> tuple[str, str] | None:
     return None
 
 
+def item_packs(it: dict, meeting) -> list[str]:
+    """The packs an item is for: its own, else its meeting's default, else none."""
+    for src in (it, meeting if isinstance(meeting, dict) else {}):
+        v = src.get("packs")
+        if isinstance(v, list) and v:
+            return [x for x in v if isinstance(x, str)]
+    return []
+
+
 def _norm(text: str) -> str:
     return " ".join(str(text).split()).casefold()
 
@@ -276,14 +302,38 @@ def index(docs: list[tuple[str, dict]]) -> dict:
     return out
 
 
+def _seconds(clock: str) -> int:
+    parts = [int(x) for x in clock.split(":")]
+    return parts[-1] + 60 * parts[-2] + (3600 * parts[0] if len(parts) == 3 else 0)
+
+
+def parse_transcript(text: str) -> dict[int, list[str]]:
+    """{seconds: [the text of each speaker block at that time]}, escapes undone."""
+    blocks: dict[int, list[str]] = {}
+    cur = None
+    for line in text.splitlines():
+        line = MD_ESCAPE.sub(r"\1", line)
+        m = SPEAKER.match(line)
+        if m:
+            cur = blocks.setdefault(_seconds(m.group(2)), [])
+            cur.append("")
+        elif cur is not None:
+            cur[-1] += " " + line
+    return {s: [" ".join(t.split()) for t in ts] for s, ts in blocks.items()}
+
+
 # ------------------------------------------------------------- the checks --
 
-def check(paths: list[str], schema: dict | None = None) -> dict:
-    """The whole report for these files, as check_intake.py prints it."""
+def check(paths: list[str], schema: dict | None = None, packs: list[str] | None = None,
+          transcript: str | None = None, need_packs: bool = False) -> dict:
+    """The whole report for these files, as check_intake.py prints it. packs:
+    the client's packs (None: not checked, unless need_packs). transcript: the
+    transcript of the one file named."""
     schema = schema or load_schema()
     docs, problems = load(paths)
     seen: dict[str, str] = {}               # iid -> file of its first appearance
     count = 0
+    top = _highest(docs)
 
     def add(file, path, iid, code, message):
         problems.append({"iid": iid, "code": code, "message": message,
@@ -306,10 +356,15 @@ def check(paths: list[str], schema: dict | None = None) -> dict:
             path = f"{bucket}[{i}]"
             iid = it.get("iid") if isinstance(it.get("iid"), str) else None
             if iid:
-                if iid in seen:
-                    other = os.path.basename(seen[iid])
+                if iid in seen and seen[iid] == p:
                     add(p, path + ".iid", iid, "duplicate_iid",
-                        f"{name}: {iid} is used again (first in {other}); an iid is never reused")
+                        f"{name}: {iid} is used twice in this file; an iid is never reused")
+                elif iid in seen:
+                    other = os.path.basename(seen[iid])
+                    nxt = f"{iid[0]}{top.get(iid[0], 0) + 1}"
+                    add(p, path + ".iid", iid, "iid_reused",
+                        f"{name}: {iid} was already used in {other}; an iid is never reused: "
+                        f"the next free one is {nxt}")
                 else:
                     seen[iid] = p
             for ref in source_refs(it.get("source") if isinstance(it.get("source"), str) else ""):
@@ -333,9 +388,89 @@ def check(paths: list[str], schema: dict | None = None) -> dict:
                     f"{name}: {meeting['date']} is not a real date")
 
     _check_refs_and_contradictions(add, docs)
+    _check_packs(add, docs, packs, need_packs)
+    for p, doc in docs:
+        meeting = doc.get("meeting") if isinstance(doc, dict) else None
+        if transcript is not None:
+            _check_quotes(add, p, doc, transcript)
+        elif isinstance(meeting, dict) and isinstance(meeting.get("transcript"), str) \
+                and meeting["transcript"].strip():
+            _check_quotes(add, p, doc, os.path.join(os.path.dirname(p), meeting["transcript"]))
     problems.sort(key=lambda x: (paths.index(x["file"]) if x["file"] in paths else 0,
                                  x["path"], x["code"]))
     return {"ok": not problems, "files": len(paths), "items": count, "problems": problems}
+
+
+def _highest(docs) -> dict[str, int]:
+    """{bucket letter: the highest iid number any file uses}."""
+    top: dict[str, int] = {}
+    for _p, doc in docs:
+        for _b, _i, it in items(doc):
+            iid = it.get("iid")
+            if isinstance(iid, str) and re.fullmatch(r"[gwsnq][0-9]+", iid):
+                top[iid[0]] = max(top.get(iid[0], 0), int(iid[1:]))
+    return top
+
+
+def _check_packs(add, docs, allowed, need):
+    named = []
+    for p, doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        name = os.path.basename(p)
+        meeting = doc.get("meeting")
+        where = [("meeting.packs", None, meeting)] if isinstance(meeting, dict) else []
+        where += [(f"{b}[{i}].packs", it.get("iid") if isinstance(it.get("iid"), str) else None, it)
+                  for b, i, it in items(doc)]
+        for path, iid, src in where:
+            v = src.get("packs")
+            for pack in v if isinstance(v, list) else []:
+                if not isinstance(pack, str):
+                    continue
+                named.append((p, path, iid, pack))
+                if allowed is not None and pack not in allowed:
+                    add(p, path, iid, "unknown_pack",
+                        f"{name}: {pack!r} is not one of the client's packs ({', '.join(allowed)})")
+    if allowed is None and need and named:
+        p, path, iid, _ = named[0]
+        add(p, path, iid, "unknown_pack",
+            f"{os.path.basename(p)}: the files name packs ({', '.join(sorted({x[3] for x in named}))}) "
+            "and no --packs list was given: name the client's packs, so a typo surfaces")
+
+
+def _check_quotes(add, p, doc, transcript):
+    """Each quote is inside the speaker block at the time its source names."""
+    name = os.path.basename(p)
+    meeting = doc.get("meeting") if isinstance(doc.get("meeting"), dict) else {}
+    try:
+        with open(transcript, encoding="utf-8") as f:
+            blocks = parse_transcript(f.read())
+    except (OSError, ValueError) as e:
+        add(p, "meeting.transcript", None, "no_transcript",
+            f"{name}: cannot read the transcript {os.path.basename(transcript)}: {e}")
+        return
+    if not blocks:
+        add(p, "meeting.transcript", None, "no_transcript",
+            f"{name}: {os.path.basename(transcript)} has no speaker block ('<speaker> mm:ss', then the text)")
+        return
+    for bucket, i, it in items(doc):
+        quote = it.get("quote")
+        if not isinstance(quote, str) or not quote.strip() or not isinstance(it.get("source"), str):
+            continue
+        times = [r[11:] for r in source_refs(it["source"])
+                 if TIMESTAMP.match(r) and r[:10] == meeting.get("date")]
+        if not times:
+            continue                         # a document, or another meeting: not this transcript
+        said = " ".join(quote.split())
+        if any(said in text for t in times for text in blocks.get(_seconds(t), [])):
+            continue
+        iid = it.get("iid") if isinstance(it.get("iid"), str) else None
+        missing = [t for t in times if _seconds(t) not in blocks]
+        why = (f"no speaker block starts at {', '.join(missing)}" if len(missing) == len(times)
+               else f"the speaker block at {', '.join(times)} does not hold it")
+        add(p, f"{bucket}[{i}].quote", iid, "quote_not_at_source",
+            f"{name}: {iid}'s quote is not where its source says: {why} "
+            f"in {os.path.basename(transcript)}")
 
 
 def _check_number(add, p, name, path, iid, it):
@@ -411,15 +546,51 @@ def _check_refs_and_contradictions(add, docs):
     clash(words, "two meanings for one word")
 
 
+USAGE = "check_intake.py [--packs CLI,CLI...] [--transcript FILE] FILE..."
+
+
+def parse_args(argv: list[str]) -> tuple[list[str], list[str] | None, str | None]:
+    """(files, packs, transcript); a ValueError says what is wrong."""
+    files, packs, transcript = [], None, None
+    args = list(argv)
+    while args:
+        a = args.pop(0)
+        flag, eq, val = a.partition("=")
+        if flag in ("--packs", "--transcript"):
+            if not eq:
+                if not args:
+                    raise ValueError(f"{flag} needs a value")
+                val = args.pop(0)
+            if flag == "--packs":
+                packs = [x.strip() for x in val.split(",") if x.strip()]
+                if not packs:
+                    raise ValueError("--packs names no pack")
+            else:
+                transcript = val
+        elif a.startswith("--"):
+            raise ValueError(f"unknown flag {a}")
+        else:
+            files.append(a)
+    if not files:
+        raise ValueError("name at least one intake file")
+    if transcript is not None and len(files) != 1:
+        raise ValueError("--transcript is the transcript of one meeting: name one intake file "
+                         "with it, or write the path in each meeting's `transcript`")
+    return files, packs, transcript
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if not argv or argv[0] in ("-h", "--help"):
-        doc = {"ok": argv[:1] in (["-h"], ["--help"]), "usage": "check_intake.py FILE...",
-               "codes": CODES}
-        if not doc["ok"]:
-            doc.update(code="bad_request", message="name at least one intake file")
+    if argv[:1] in (["-h"], ["--help"]):
+        doc = {"ok": True, "usage": USAGE, "codes": CODES}
     else:
-        doc = check(argv)
+        try:
+            files, packs, transcript = parse_args(argv)
+        except ValueError as e:
+            doc = {"ok": False, "usage": USAGE, "codes": CODES, "code": "bad_request",
+                   "message": str(e)}
+        else:
+            doc = check(files, packs=packs, transcript=transcript, need_packs=True)
     sys.stdout.write(json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
     return 0 if doc["ok"] else 2
 
