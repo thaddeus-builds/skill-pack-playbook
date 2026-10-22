@@ -59,7 +59,6 @@ CODES = {
     "too_many": "A list has more items than the console can show.",
     "bad_date": "A date is not a real YYYY-MM-DD date.",
     "bad_iid": "An iid is not the bucket's letter and a number (g1, w3, s2, n7, q4).",
-    "no_consent": "The meeting has no consent line.",
     "no_source": "An item has no source; no source, no item.",
     "bad_source": "A source is neither 'YYYY-MM-DD hh:mm:ss' on a real date nor 'doc:<name>'.",
     "no_quote": "An item that is asked needs the client's exact words.",
