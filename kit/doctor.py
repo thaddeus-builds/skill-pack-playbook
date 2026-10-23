@@ -547,11 +547,48 @@ def check_hub(ctx: Context) -> None:
     facts.doctor_hub(ctx)
 
 
+def check_exchange(ctx: Context) -> None:
+    """The client hub's exchange folder (kit.raw.exchange_scan): there, and
+    every file in it where the layout puts it. Nothing unless `<P>_HUB_DIR`
+    names a hub (a bad value is check_hub's to report)."""
+    from kit import facts, raw
+    try:
+        hub = facts.hub_dir()
+    except SkillPackError:
+        return
+    if hub is None:
+        return
+    try:
+        docs, strays = raw.exchange_scan(hub)
+    except SkillPackError:
+        ctx.warn("exchange", msg(
+            "doctor_exchange_missing", f"hub {hub.name} has no exchange "
+            f"folder ({hub / raw.EXCHANGE}): a skill pack cannot hand a "
+            f"document to another through it", hub=hub.name,
+            folder=str(hub / raw.EXCHANGE)), [f"mkdir {hub / raw.EXCHANGE}"])
+        return
+    if strays:
+        shown = ", ".join(strays[:5]) + (" …" if len(strays) > 5 else "")
+        ctx.warn("exchange", msg(
+            "doctor_exchange_stray", f"hub {hub.name}: {len(strays)} "
+            f"path(s) in exchange/ not at "
+            f"<contract>/<producer>/<YYYY-MM-DD>.json: {shown}; a reader "
+            f"will not see them", hub=hub.name, count=len(strays),
+            paths=shown))
+        return
+    ctx.ok("exchange", msg(
+        "doctor_exchange_ok", f"hub {hub.name}: exchange has {len(docs)} "
+        f"document(s) of {len({d.contract for d in docs})} contract(s), "
+        f"every file where the layout puts it", hub=hub.name,
+        documents=len(docs), contracts=len({d.contract for d in docs})))
+
+
 BUILTIN: tuple[Check, ...] = (check_skill_pack, check_env_chain,
                               check_token_source, check_home_secrets,
                               check_env_files, check_console_secret,
                               check_data_dir, check_db,
-                              check_markets, check_hub, check_writes)
+                              check_markets, check_hub, check_exchange,
+                              check_writes)
 
 
 # ---- run --------------------------------------------------------------------
