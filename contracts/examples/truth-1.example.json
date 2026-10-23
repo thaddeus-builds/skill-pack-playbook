@@ -1,0 +1,24 @@
+# truth/1
+{
+  "produced_at": "2026-10-23T08:00:00+08:00",
+  "producer": "meas",
+  "truths": [
+    {
+      "basis_from": "2026-08-01",
+      "basis_to": "2026-09-30",
+      "break_even_roas": 2.4,
+      "campaign_type": "conversion",
+      "coefficient": 0.72,
+      "confirmed": true,
+      "fact_key": "meta_conversion_coefficient",
+      "platform": "meta",
+      "trust": "medium"
+    },
+    {
+      "campaign_type": "feed_video",
+      "confirmed": false,
+      "platform": "qianchuan",
+      "trust": "low"
+    }
+  ]
+}

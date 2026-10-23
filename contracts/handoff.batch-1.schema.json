@@ -1,0 +1,90 @@
+{
+  "$comment": "Draft from docs/portfolio.md, 'Contracts'. The fields follow what asset-handoff's read-only verbs print today (`handoff compute names`, `compute tags`, `compute form`, and the identity check across the media library and the form), read from its main branch; the pack aligns to this schema once it is agreed. The upload to a media library is the operator's own write, not part of this document.",
+  "$id": "handoff.batch-1.schema.json",
+  "title": "handoff.batch/1",
+  "description": "One batch of creatives ready to be handed to an operator: each creative's name across its sizes, its files, its UTM tags, its row in the client's form, and whether the names agree in the media library and the form. asset-handoff writes it; operators read it to upload and to name what they upload.",
+  "$defs": {
+    "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"},
+    "place": {"enum": ["ok", "drift", "missing", "not_given"]},
+    "finding": {
+      "type": "object",
+      "required": ["check", "severity"],
+      "properties": {
+        "check": {"description": "The producer's code for the finding.", "type": "string", "minLength": 1},
+        "severity": {"description": "block: the creative or family is not ready; warn: a person decides.", "enum": ["block", "warn"]},
+        "subject": {"description": "What the finding is about (a family, a file, a name), when it names one.", "type": "string", "minLength": 1},
+        "message": {"description": "The finding in words.", "type": "string", "minLength": 1}
+      }
+    }
+  },
+  "x-contract": "handoff.batch/1",
+  "x-status": "draft",
+  "x-format": "json",
+  "x-producer": "asset-handoff",
+  "x-consumers": "operators",
+  "x-rules": [
+    "A creative that is not ready (status blocked) is listed with its findings and carries no utm and no form_row: an operator uploads only ready creatives.",
+    "A name is the final name the file will carry in the library; an operator uploads under exactly that name.",
+    "An absent optional key means unknown, never null and never an empty string; places.library or places.form absent means that place was not checked."
+  ],
+  "type": "object",
+  "required": ["producer", "produced_at", "batch", "creatives"],
+  "properties": {
+    "producer": {"description": "The pack that wrote the document (its CLI word).", "type": "string", "minLength": 1},
+    "produced_at": {"description": "When the document was written: ISO 8601 with its zone.", "$ref": "#/$defs/time"},
+    "batch": {"description": "The batch's id, stable across the documents that repeat it.", "type": "string", "minLength": 1},
+    "creatives": {
+      "description": "One entry per creative family (all the sizes of one creative); empty when the batch has none.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["family", "status", "files"],
+        "properties": {
+          "family": {"description": "The creative's family id: what its sizes share.", "type": "string", "minLength": 1},
+          "status": {"description": "ready when every file has its final name and no required size is missing; blocked otherwise.", "enum": ["ready", "blocked"]},
+          "campaign": {"description": "The campaign value the tags carry, one the client allows.", "type": "string", "minLength": 1},
+          "missing_sizes": {"description": "The required sizes the family lacks.", "type": "array", "items": {"type": "string", "minLength": 1}},
+          "files": {
+            "description": "The family's files, one per size.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "size", "name", "sha256"],
+              "properties": {
+                "path": {"description": "The file's path in the batch.", "type": "string", "minLength": 1},
+                "size": {"description": "The size the file is for, in the client's words (for example 1080x1920).", "type": "string", "minLength": 1},
+                "name": {"description": "The final name from the client's naming template; empty only when the file is blocked.", "type": "string"},
+                "bytes": {"description": "The file's size in bytes.", "type": "integer", "minimum": 0},
+                "sha256": {"description": "The file's SHA-256, hex.", "type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "places": {
+                  "description": "Whether the name is in each place it should be, once those were given.",
+                  "type": "object",
+                  "properties": {
+                    "library": {"description": "In the media library: ok, drift (a nearly identical name is there instead), missing or not_given.", "$ref": "#/$defs/place"},
+                    "form": {"description": "In the client's form: ok, drift, missing or not_given.", "$ref": "#/$defs/place"}
+                  }
+                }
+              }
+            }
+          },
+          "utm": {
+            "description": "The family's tracking, present only when it is ready.",
+            "type": "object",
+            "required": ["tags", "url"],
+            "properties": {
+              "tags": {"description": "The UTM query string in the client's order, percent-encoded.", "type": "string", "minLength": 1},
+              "url": {"description": "The family's copy URL with the tags appended.", "type": "string", "minLength": 1},
+              "content": {"description": "The content value, from the client's table.", "type": "string", "minLength": 1}
+            }
+          },
+          "form_row": {
+            "description": "The family's row for the client's form, as {form column header: value}; a column the form fills by a formula is left out.",
+            "type": "object"
+          },
+          "findings": {"description": "Why the family is blocked, or what a person should look at.", "type": "array", "items": {"$ref": "#/$defs/finding"}}
+        }
+      }
+    },
+    "findings": {"description": "Findings about the batch as a whole (two files with one name, identical bytes under two files).", "type": "array", "items": {"$ref": "#/$defs/finding"}}
+  }
+}
