@@ -15,7 +15,7 @@ Updated: 2026-10-23
 - [X6] 2026-10-05 quality evals in every skill pack; SEO and outreach adoption (#26)
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
-- [X10] 2026-10-22 the first real client moves onto its hub (R5, step 5 of the client hub): re-vendor kit 0.35.0 into its packs (schema version bump, the `facts sync-hub` verb row, a test calling `kit.guards.hub_keys.check`), make its hub with `scaffold/new_hub.py`, move the shared facts there, put each disagreeing value to the owner once
+- [X10] 2026-10-22 the first real client moves onto its hub (R5, after the exchange folder, D22): re-vendor kit 0.35.0 into its packs (schema version bump, the `facts sync-hub` verb row, a test calling `kit.guards.hub_keys.check`), make its hub with `scaffold/new_hub.py`, move the shared facts there, put each disagreeing value to the owner once
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)
@@ -38,6 +38,7 @@ Updated: 2026-10-23
 - [D19] 2026-10-21 twelve stale issues closed: #19, #21, #24, #43, #45 as done or decided, #28 to #33 and #35 as not planned until a skill pack asks (no ref)
 - [D20] 2026-10-22 the client hub, steps 1 to 4 (R5): intake `packs` and quotes checked at their source (build/); `scaffold/new_hub.py` new and add-pack, one console per client; one inbox across packs with ask expiry and chat answers (kit 0.34.0); hub facts, `facts sync-hub`, `hub_copies`, a pack without markets serving one hub market (kit 0.35.0); end to end on a synthetic hub through real console clicks (branch client-hub-design)
 - [D21] 2026-10-23 the skill packs read once, read-only, on each main branch (`tools/consumers.py`, `tools/fleet.py`): the KOL skill pack (video-ads-skill-pack on GitLab, once kol-harness) imports 22 kit modules, adcut 24 (alone in `compliance`, `generation`, `learning`, `pages`, `autonomy`, so `kit.autonomy` stays), RedNote 18; the SEO skill pack vendors no kit (its adapter is 0.3.0); the `workbook` pack and `questions` have no importer (W6); the Amazon PPC skill pack none (R3) (no ref)
+- [D22] 2026-10-23 the client hub's exchange folder (R9, portfolio phase 2a): `kit.raw.exchange_write` (once, a taken name refused) and `exchange_list`, doctor check `exchange`, `new_hub.py` makes `exchange/`, kit 0.36.0; the client hub's steps 2 to 4 were already on main (PR #126 to #129, kit 0.35.0) (PR #139)
 ## Parked
 - [P1] 2026-10-23 the `workbook` pack (a client's Excel workbook read in, results written into a copy of it; five modules, 2.4k lines, built for the KOL skill pack's client) and `kit.questions`: no skill pack imports them (D21) and the owner has no use for them now. The code stays; the rule of kit/packs.tsv (no importer for two minor versions means deleted) is waived for them until the owner or a skill pack asks for them again
 ## Decisions
