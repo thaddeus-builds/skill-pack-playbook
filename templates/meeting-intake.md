@@ -4,7 +4,6 @@ Turn one recorded client meeting into drafts the owner can accept, change or dro
 
 ## Before the meeting
 
-- Ask for consent to record. Note who gave it and when. If it was not given or not recorded, `meeting.consent` says so in words (a blank line is refused by the check); the owner is asked about it as a question.
 - Store the recording and transcript in the client's own data folder (for example `$DATA_DIR/meetings/2026-09-27/`), never in the code repository.
 
 ## Organizer prompt
@@ -33,7 +32,7 @@ The shape is [intake.schema.json](intake.schema.json), which `build/check_intake
 
 ```json
 {
-  "meeting": {"date": "2026-09-27", "participants": ["client: …", "us: …"], "consent": "given by … at 00:00:12"},
+  "meeting": {"date": "2026-09-27", "participants": ["client: …", "us: …"]},
   "goals":     [{"iid": "g1", "audience": "client", "text": "…", "source": "2026-09-27 00:04:31"}],
   "words":     [{"iid": "w1", "audience": "client", "word": "…", "meaning": "…", "quote": "…", "source": "…"}],
   "stories":   [{"iid": "s1", "audience": "client", "want": "…", "so_that": "…", "done_when": ["…", "…"], "human_step": "confirm", "quote": "…", "source": "…"}],
