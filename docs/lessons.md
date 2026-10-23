@@ -277,6 +277,54 @@ The rules:
 
 *Seen once* (2026-10-22), in the video-ads skill pack (merge request 79); its CLAUDE.md "Tests" invariant carries the rule.
 
+## Ask another pack for nothing you can do with what it already has (from the video-ads skill pack, 2026-10-22)
+
+The video-ads skill pack needed a batch of new creatives to run together as one ad group, and its first design asked the producing pack (adcut) for a `move` column, a forced new batch code and an incomplete-handoff warning. The owner's reminder, 2026-10-22: the producer's core job is making videos, not managing ads; if the consumer can do it, the consumer does it. On a second look nothing was needed: the producer's `variants spawn` already took a test-group name, and `variants handoff` already listed what it had not exported, so the consuming pack's agent passes a name no group uses and builds the ad group only when that list is empty. The group is read from the ad set id of the platform's own export, so the contract file got no new column either.
+
+The rules:
+
+- Before asking another pack for a change, list what its CLI and its documents already give and what the consumer's agent can do with them. A change is asked only for what is left, and the ask says what was tried.
+- A unit the platform's export already names (here the ad set) is not added to a contract file: a column in the contract is a promise both packs keep.
+- When the producer's answer shows it cannot do a thing (here it could not copy a creative under a new code, and the report ledger refuses one code on the same days twice), the design changes on the consumer's side; the limit is recorded in `docs/research/` so the question is not asked again.
+
+*Seen once* (2026-10-22), in the video-ads skill pack (its ROADMAP R77, R78 and D96; `docs/research/adcut-creative-space.md`).
+
+## A rule that overrides another stage's state is tested at the override (from the video-ads skill pack, 2026-10-22)
+
+A new rule decided which wallet pays a creative from its ad group's state, and it overwrote the creative's own wallet. Its tests covered the group's judging function alone and one presence check on the report. Every green run was true and the bug was still there: a brand-new creative added to an old, judged ad group was paid from the performance wallet, so the exploration wallet read zero on the first client's data (3,819 and 2,116 under the old rule) and the count of performance creatives went from 24 to 134. Nobody saw it until a review of the whole milestone's diff, in one sitting, found ten issues, this one first.
+
+The rules:
+
+- When a rule replaces or overrides a value another stage owns, the combination is a pure function with its own cases (here `pay(own, group)`): no verdict yet in a judged group stays exploration, a parked creative is paid by nobody, a stopped group pays nobody. An override that can only hold money back is easier to believe than one that can also grant it.
+- A replay on real data before and after, with both numbers quoted, is what shows an override over-reaching; a unit test of the new rule alone cannot.
+- A milestone closes with a review of its whole diff against the base, not only of each item; each finding is fixed in a commit of its own with the replay quoted, and the cleanups run under the golden diff in strict mode.
+
+*Seen once* (2026-10-22), in the video-ads skill pack (its ROADMAP D97; commits "Ad group wallet can only hold money back" and the refactor after it).
+
+## A fact the client has not given is a typed optional field and a rule that says it does not know (from the video-ads skill pack, 2026-10-21)
+
+[rules.md](rules.md) says trust lives in the data: values are pending or confirmed, every rule reads confirmed first. Three times the video-ads skill pack was stopped by a number only the client knows: the rate between two currencies, the lowest daily budget an ad group may have, the target return. Each time the first move was a question to the owner, and the owner's answer was the same: build the field and let the client fill it; a number given now would not change the logic.
+
+The rules:
+
+- The fact gets a registry row (`ssot/fact_keys.tsv`): a type, a unit, bounds, optional, and a sentence for the person who fills it. Nothing reads a default for it.
+- The rule that needs it reads it and, when it is empty, says so in the output (`limits: {min: null, max: null}`, a coded warning), and does what it can without it: the request for creatives is bound by money alone, a sum across two currencies is refused (`report_currency_mix`) until a rate is confirmed.
+- A public lookup may suggest a value (`fx lookup`), never store it. The rate in force is what a person typed and confirmed.
+- The roadmap row is a waiting item that says "structure built; the client fills; nothing for the owner to decide", so the owner's list holds only decisions.
+
+*Seen once* (2026-10-21 and 22), in the video-ads skill pack (ROADMAP W34, W20 to W29, X120).
+
+## Reading a client's software by its screens: the CLI first, the browser for what it lacks, nothing saved (from the video-ads skill pack, 2026-10-14 and 23)
+
+[workbook-and-browser-ops.md](workbook-and-browser-ops.md) proposes a guarded browser for a platform with no API access. The video-ads skill pack's practice before that module exists, on Emma Sleep's Smartly:
+
+- Fresh numbers came from the pack's own pull (a saved report's read-only export), not from the screens. The browser was used for the one question the export could not answer: what the report builder offers (an hour dimension, a learning-phase column, an ad set's bid and targeting). The answer: an `Hour (S2S)` dimension of unknown meaning, bid and budget columns, no learning column, targeting only as an audience segment.
+- The session was the owner's, already signed in; the agent signed nothing in and entered no credential. Each picker was opened, read and closed with "discard changes"; the Save button stayed greyed out; nothing was downloaded. A control the session's guard refused (the access-tokens tab of an export dialog, 2026-10-14) was not gone around.
+- What was seen is written down the same day, with the date, in a research file, and the roadmap rows it answers are updated: a screen read that lives only in a chat is looked up again.
+- A search box in such a UI can answer late: an empty list straight after typing proves nothing; wait and look again before concluding something is absent.
+
+*Seen twice* (2026-10-14 and 23), in the video-ads skill pack: `workspace/intake/2026-10-14-smartly-inventory.md` in its client folder, and `docs/research/time-of-day-and-video-metrics.md` ("Smartly's report builder").
+
 ## Ecommerce SEO Skill Pack, first non-manufacturer client (2026-10)
 
 The SEO harness (renamed "skill pack": the repository `ecommerce-seo-skill-pack`, on the owner's GitLab;
