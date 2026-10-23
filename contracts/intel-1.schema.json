@@ -1,8 +1,8 @@
 {
-  "$comment": "Draft from docs/portfolio.md, 'Contracts'. Demand research exists three times in the portfolio today (seo, seoh, ppc); search-intel owns it and publishes this.",
+  "$comment": "Draft from docs/portfolio.md, 'Contracts'. Demand research exists three times in the portfolio today (docs/portfolio.md, conflict 3); search-intel owns it and publishes this.",
   "$id": "intel-1.schema.json",
   "title": "intel/1",
-  "description": "What people search and who else appears: keyword demand, its trend and the competitors seen, each with its source and date. search-intel writes it for paid and organic search; gads, ppc, seo and pseo read it.",
+  "description": "What people search and who else appears: keyword demand, its trend and the competitors seen, each with its source and date. search-intel writes it for paid and organic search; the paid and organic search packs read it.",
   "$defs": {
     "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
     "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"}
@@ -11,7 +11,7 @@
   "x-status": "draft",
   "x-format": "json",
   "x-producer": "search-intel",
-  "x-consumers": "gads, ppc, seo, pseo",
+  "x-consumers": "the paid and organic search packs",
   "x-rules": [
     "Every keyword and every competitor row has a source and a date: a number without them is not published.",
     "A keyword appears once per market and language.",
