@@ -862,7 +862,7 @@ def test_a_malformed_gate_never_runs():
                with_gate(verb=["facts", "confirm", "unit_cost\n"]),
                with_gate(verb=["facts", "confirm", "--code"]),
                with_gate(verb=["facts", "confirm", "a b"]),
-               with_gate(verb=["facts", "confirm", "a", "b", "c", "d", "e"]),
+               with_gate(verb=["facts", "confirm", "a", "b", "c", "d", "e", "f"]),      # one word over the limit
                with_gate(expect=KeyError), with_gate(expect={}), with_gate(expect="x"),
                with_gate(expect=[1]), with_gate(value_arg="yes"), with_gate(value_arg=1),
                None, [], "gate", 5]
