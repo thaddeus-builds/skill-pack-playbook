@@ -37,6 +37,7 @@ packs = ["compliance"]      # base and testkit always come; no [kit] packs = eve
 | `learning` | `patternstore`, `pathweights`, `questions` | a skill pack that learns from its outputs' outcomes, per client ([docs/pattern-store.md](../docs/pattern-store.md), [docs/path-weights.md](../docs/path-weights.md)) |
 | `pages` | `pagestyle` | a skill pack that writes pages a person reads to decide what to make next, and why ([docs/page-style.md](../docs/page-style.md)) |
 | `autonomy` | `autonomy` | a skill pack that writes into someone else's system with less than a code per write: a scoped approval or an owner-switched mode ([docs/autonomy.md](../docs/autonomy.md)) |
+| `exchange` | `contracts` | a skill pack that hands a document to another or takes one: the first line, the schema check, written once, read into raw ([contracts/README.md](../contracts/README.md)) |
 | `testkit` | `guards/`, `testing/`, `tools/` | every skill pack's own tests (keep it in `[release].internal`) |
 
 A module imports only `base` and its own pack, so any choice of packs imports cleanly (`tests/test_packs.py`). A module's message codes (`message_codes.d/<module>.tsv`) travel with it. `vendor.py` refuses to leave out a module the skill pack's own code imports: it names the file and the pack to add. `scaffold/new_skill_pack.py --packs data,compliance` writes the line for a new skill pack.

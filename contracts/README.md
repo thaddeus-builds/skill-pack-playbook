@@ -9,7 +9,7 @@ A contract is named `<name>/<version>`, for example `ads.results/1`. It has one 
 1. **The first line names the file.** `# <name>/<version>`, for example `# ads.results/1`. A reader refuses a file whose first line is not the mark it expects, and a version it does not know.
 2. **A consumer ignores fields it does not know.** A schema therefore never says `"additionalProperties": false`, and a producer may add a field to a version at any time. Adding is not a breaking change.
 3. **A breaking change is a new version.** Removing or renaming a field, changing its meaning or type, or adding a required field is. The producer writes the old and the new version side by side for one release, so a consumer has that long to move, then stops writing the old.
-4. **A file is written once.** Into the client hub's exchange folder, `exchange/<contract>/<producer>/<date>.<ext>`, or, without a hub, to the path a `--out` flag names. The same bytes written again are a no-op; different bytes under the same name are refused. A consumer saves what it reads into its own raw files as it was received, so raw only grows.
+4. **A file is written once.** Into the client hub's exchange folder, `exchange/<contract>/<producer>/<date>.<ext>`, or, without a hub, to the path a `--out` flag names. The same bytes written again are a no-op; different bytes under the same name are refused. A consumer saves what it reads into its own raw files as it was received, so raw only grows. The kit's `contracts` module (pack `exchange`, [kit/contracts.py](../kit/contracts.py)) does all four: it writes the first line, checks a document against its schema, writes once to `--out`, and saves a file it reads into the caller's raw as it came. A hub's exchange folder is added when the hub has one.
 
 ## Two formats
 
@@ -51,5 +51,5 @@ Every property has a `description` of one sentence.
 
 ## Changing a contract
 
-1. A change to a schema is a pull request here, with the example changed to match. `tests/test_contracts.py` holds the shape of every schema and that the table above, the files and [docs/portfolio.md](../docs/portfolio.md) list the same contracts.
+1. A change to a schema is a pull request here, with the example changed to match and the schema copied to `kit/contracts.d/` (a vendored byte: `kit/VERSION`, the manifest and `CHANGELOG.md` move with it). `kit/tests/test_contracts.py` fails when the two copies differ. `tests/test_contracts.py` holds the shape of every schema and that the table above, the files and [docs/portfolio.md](../docs/portfolio.md) list the same contracts.
 2. A new contract starts as `draft` with a row in the portfolio's table, which names its producer and its consumers.
