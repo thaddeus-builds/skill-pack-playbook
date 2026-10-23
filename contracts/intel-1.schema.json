@@ -1,0 +1,70 @@
+{
+  "$comment": "Draft from docs/portfolio.md, 'Contracts'. Demand research exists three times in the portfolio today (seo, seoh, ppc); search-intel owns it and publishes this.",
+  "$id": "intel-1.schema.json",
+  "title": "intel/1",
+  "description": "What people search and who else appears: keyword demand, its trend and the competitors seen, each with its source and date. search-intel writes it for paid and organic search; gads, ppc, seo and pseo read it.",
+  "$defs": {
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"}
+  },
+  "x-contract": "intel/1",
+  "x-status": "draft",
+  "x-format": "json",
+  "x-producer": "search-intel",
+  "x-consumers": "gads, ppc, seo, pseo",
+  "x-rules": [
+    "Every keyword and every competitor row has a source and a date: a number without them is not published.",
+    "A keyword appears once per market and language.",
+    "An absent optional key means unknown, never null and never an empty string, and a volume that was not measured is absent, not 0."
+  ],
+  "type": "object",
+  "required": ["producer", "produced_at", "keywords", "competitors"],
+  "properties": {
+    "producer": {"description": "The pack that wrote the document (its CLI word).", "type": "string", "minLength": 1},
+    "produced_at": {"description": "When the document was written: ISO 8601 with its zone.", "$ref": "#/$defs/time"},
+    "keywords": {
+      "description": "Keyword demand; empty when none was researched.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["keyword", "market", "language", "source", "as_of"],
+        "properties": {
+          "keyword": {"description": "The search phrase, as people type it.", "type": "string", "minLength": 1},
+          "market": {"description": "The market the demand is measured in (the hub's market word).", "type": "string", "minLength": 1},
+          "language": {"description": "The language of the phrase, an ISO 639-1 code.", "type": "string", "pattern": "^[a-z]{2}$"},
+          "monthly_volume": {"description": "Average monthly searches.", "type": "integer", "minimum": 0},
+          "trend": {
+            "description": "Monthly searches by month, oldest first.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["month", "volume"],
+              "properties": {
+                "month": {"description": "The month, YYYY-MM.", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"},
+                "volume": {"description": "Searches in that month.", "type": "integer", "minimum": 0}
+              }
+            }
+          },
+          "source": {"description": "Where the number comes from (the tool or dataset).", "type": "string", "minLength": 1},
+          "as_of": {"description": "The day the number was read, YYYY-MM-DD.", "$ref": "#/$defs/date"}
+        }
+      }
+    },
+    "competitors": {
+      "description": "Competitors seen; empty when none was looked for.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["domain", "market", "source", "seen_on"],
+        "properties": {
+          "domain": {"description": "The competitor's domain, without a scheme.", "type": "string", "minLength": 1},
+          "name": {"description": "The competitor's name.", "type": "string", "minLength": 1},
+          "market": {"description": "The market it was seen in.", "type": "string", "minLength": 1},
+          "seen_for": {"description": "The keyword it was seen for, when it was seen for one.", "type": "string", "minLength": 1},
+          "source": {"description": "Where it was seen (the tool or dataset).", "type": "string", "minLength": 1},
+          "seen_on": {"description": "The day it was seen, YYYY-MM-DD.", "$ref": "#/$defs/date"}
+        }
+      }
+    }
+  }
+}

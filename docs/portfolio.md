@@ -96,7 +96,7 @@ The pack that runs the ads still owns the delivery spec (vads R43); `handoff.bat
 
 ## Contracts
 
-A contract is a versioned `--json` document. Its first line names it (`# ads.results/1`). Its schema lives in the playbook (`contracts/`). Rules:
+A contract is a versioned `--json` document. Its first line names it (`# ads.results/1`). Its schema lives in the playbook, in [`contracts/`](../contracts/README.md), one JSON schema and one example per contract. Rules:
 - A consumer ignores fields it does not know.
 - A breaking change is a new version, and the producer emits both versions for one release.
 - Documents are written once into the client hub's exchange folder, `exchange/<contract>/<producer>/<date>.json`. Without a hub, a path flag does the same.
