@@ -1,0 +1,36 @@
+# copy.proposals/1
+{
+  "market": "US-en",
+  "produced_at": "2026-10-23T08:00:00+08:00",
+  "producer": "adcopy",
+  "proposals": [
+    {
+      "ad": "rsa-1",
+      "direction": "dimming",
+      "field": "headline",
+      "findings": [],
+      "id": "cp-001",
+      "length": 18,
+      "placement": "google_rsa",
+      "status": "clean",
+      "text": "Dimmable desk lamp"
+    },
+    {
+      "ad": "rsa-1",
+      "direction": "night light",
+      "field": "headline",
+      "findings": [
+        {
+          "check": "limit_hard_passed",
+          "message": "30 is the most a headline may have",
+          "severity": "block"
+        }
+      ],
+      "id": "cp-002",
+      "length": 55,
+      "placement": "google_rsa",
+      "status": "blocked",
+      "text": "Warm light that dims to a glow at night, for small flats"
+    }
+  ]
+}
