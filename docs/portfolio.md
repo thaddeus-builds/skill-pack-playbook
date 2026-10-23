@@ -2,7 +2,7 @@
 
 Status: design. The owner adopted the structure on 2026-10-23. Three decisions are still open (at the end). This page is the map every acquisition and growth skill pack is checked against; a pack's own `SKILL.md` names its neighbours from here.
 
-It was drawn from a survey of the owner's repositories on 2026-10-23: about thirty, of which fifteen are live skill packs, four are new scaffolds, and the rest are superseded, client cases or data.
+It was drawn from a survey of the owner's repositories on 2026-10-23: about thirty, of which fifteen are live skill packs, four are new scaffolds, and the rest are superseded, client cases or data. Two more packs built the same week, `asset-handoff` and `ad-copy`, were placed on 2026-10-23.
 
 ## Two axes, and why neither alone is a pack boundary
 
@@ -30,8 +30,8 @@ Two packs on one account would share a credential, a change log and a write path
 | --- | --- | --- |
 | **1. Platform** | What every pack shares | the kit, the client hub (one facts store, one tagged intake, one inbox per owner, the exchange folder), `cloud-gpu` (a compute library, not a skill pack) |
 | **2. Operators** | One pack per platform account. It holds the credential, the pulls, the ledger, the change log, the proposals and the guarded writer | see the table below |
-| **3. Truth** | Facts several packs need. One owner each; everyone else reads the owner's documents | `product-feed` (catalog, prices, stock, promotion windows), `measurement` (internal attribution, coefficients, break-even ROAS, incrementality), `search-intel` (demand and competitors for paid *and* organic search), messaging (the insight matrix and the claims scope; today inside adcut) |
-| **4. Makers** | Make assets to a spec and hand them over with a manifest. They know no platform's API | `adcut` (video), `product-keyframe-video` (product images), `ad-copy` (text: search ad assets, feed ad copy, creator briefs' copy; planned) |
+| **3. Truth** | Facts several packs need. One owner each; everyone else reads the owner's documents | `product-feed` (catalog, prices, stock, promotion windows), `measurement` (internal attribution, coefficients, break-even ROAS, incrementality), `search-intel` (demand and competitors for paid *and* organic search), `asset-handoff` (a creative's identity and tags: one name across its sizes, the UTM tags from the client's table, the rows for the client's intake form), messaging (the insight matrix and the claims scope; today inside adcut) |
+| **4. Makers** | Make assets to a spec and hand them over with a manifest. They know no platform's API | `adcut` (video), `product-keyframe-video` (product images), `ad-copy` (text: what each placement allows, the check of candidate text against it, and the proposals) |
 | **5. Engines** | Logic that two or more packs use, in the kit | `ads-core`, `intent`, `creative`, `compliance`, `generation` (below) |
 
 Operators by axis:
@@ -60,9 +60,11 @@ Operators by axis:
 | outbound-skill-pack | `obd` | Operator, sales-led, sourcing | 0.1.0, untagged | Hands `leads/1` to `sdr` (open decision 2) |
 | sdr-skill-pack | `sdr` | Operator, sales-led, pipeline | 0.1.0, installed | Reads `leads/1` through its provider contract (P10) |
 | product-feed-skill-pack | `feed` | Truth: catalog | Scaffold | Publishes `catalog/1`; owns the merchant-feed override fields |
-| measurement-skill-pack | `meas` | Truth: outcomes | Scaffold | Publishes `truth/1`; reads `ads.results/1` and `ads.changes/1` |
+| measurement-skill-pack | `meas` | Truth: outcomes | M1 on local main (ROAS maturity, conversion-rate basis), no remote | Publishes `truth/1`; reads `ads.results/1` and `ads.changes/1` |
+| asset-handoff-skill-pack | `handoff` | Truth: a creative's identity and tags | M1 on local main, read-only, no remote | Publishes `handoff.batch/1`; writes nothing outside: the upload to a media library is the platform operator's write |
 | search-intel-skill-pack | `intel` | Truth: demand and competitors | Scaffold | Publishes `intel/1` for paid and organic search |
 | adcut-skill-pack | `adcut` | Maker, video | 0.4.1, kit 0.33 | Writes `ads.creatives/1`, reads `ads.results/1` from any operator; the insight matrix is the messaging source (open decision 3) |
+| ad-copy-skill-pack | `adcopy` | Maker, text | M1 on local main (placement specs and the check), no remote | Publishes `copy.proposals/1`; `gads` and `vads` read its placement checks instead of building their own |
 | product-keyframe-video | `keyframe` | Maker, product images | 0.1.0, frozen until its first demo | Hands frames with `ads.creatives/1` when it has a consumer |
 | cloud-gpu-skill-pack | `cloudgpu` | Platform, GPU jobs | 0.2.0, not on the kit | The one provider behind the kit's `generation` for self-hosted runs |
 | skill-pack-playbook | — | Platform | kit 0.33.1; client hub on a branch | Holds the contract schemas, the exchange folder and the engines |
@@ -78,13 +80,17 @@ Not skill packs, or superseded (archive or leave):
 - `seo-tools-ecommerce`: a case of `seoh`.
 - `*-workspaces` repositories: client workspaces.
 
-Planned and **not** packs: `asset-handoff`. File naming and UTM are a hub contract, and uploading is each operator's own write. The pack that runs the ads already owns the delivery spec (vads R43).
+`asset-handoff` was first planned as no pack and was then built. It holds a fact several packs need, a creative's identity and tags, so it sits in the truth layer and stays read-only. Its planned writes do not stay with it:
+- uploading to a media library (Smartly, for Meta) is the Meta operator's write, in `video-ads`;
+- appending rows to the client's intake form is a person's step in v1.
+
+The pack that runs the ads still owns the delivery spec (vads R43); `handoff.batch/1` carries the names and tags it reads.
 
 ## Ownership rules
 
 1. **One operator per platform account.** Nobody else holds that platform's credential or writes to it.
 2. **One owner per fact.** A fact several packs need (a price, a break-even ROAS, a coefficient, a promotion window) is published by its owner and read by the rest. A confirmed value lives in the client hub's facts store.
-3. **One writer per external field.** For example: website product content belongs to `seo`; merchant-feed overrides belong to `feed`; campaign settings belong to that platform's operator.
+3. **One writer per external field.** For example: website product content belongs to `seo`; merchant-feed overrides belong to `feed`; campaign settings belong to that platform's operator; uploads to a platform's media library (Smartly included) belong to that platform's operator alone.
 4. **Within a platform vs across sources.** Comparing two routes of the *same* platform's data (an export against the API) is plumbing in `ads-core`. Comparing a platform with the company's own numbers is `measurement`.
 5. **A pack never opens another pack's database.** It reads the documents below.
 
@@ -101,6 +107,8 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `ads.creatives/1` (exists) | a maker | operators | creative id, files, the insight row it serves, the compliance state |
 | `ads.results/1` (exists) | an operator | makers, `measurement`, `creator-program` | per creative or entity: spend, outcomes, stage, whether the day is settled |
 | `ads.demand/1` | an operator | makers | how many creatives, of which format and slot, by when |
+| `handoff.batch/1` | `asset-handoff` | operators | each creative's name across its sizes, its files, its UTM tags, its form rows, and whether the names match in the media library and the form |
+| `copy.proposals/1` | `ad-copy` | operators | candidate text per placement, its check result, the selling-point direction it tests |
 | `ads.changes/1` | an operator | `measurement` | each change: when, what, who or which client type |
 | `catalog/1` | `product-feed` | operators, makers, `seo` | SKU, price, availability, promotion windows |
 | `messages/1` | the messaging owner | makers, `ad-copy`, `gads` (search ad assets), `kos` (briefs) | segment, pain, objection, sayable facts, the claims scope |
@@ -137,7 +145,8 @@ The kit's admission rule holds: a module joins when a second pack uses it.
 5. `outbound` and `sdr` repeat discovery, enrichment and registries without knowing each other. `leads/1` joins them.
 6. The claims check exists three times (adcut, kos, geo). It merges into the kit's `compliance`.
 7. Three autodl clients. One provider behind `generation`.
-8. Archive the five superseded repositories.
+8. Three upload paths to Smartly (adcut's person-run `tools/smartly_upload.py`, asset-handoff's planned upload, video-ads' upload contract). Only `video-ads` writes to Smartly; the other two hand it files.
+9. Archive the five superseded repositories.
 
 ## Rollout
 
