@@ -193,6 +193,90 @@ What it showed: 36 of 45 mutants were caught (80%), including 8 of 8 in the huma
 
 *Seen once* (2026-10-15), in the SEO skill pack: the rebuild trial is in its blueprint (`ssot/intent/blueprint.md`, section 15) and story S173; the mutation sample was run from a scratch script that is not kept, because the method is five steps and the sample must be redrawn each time.
 
+## Research is kept, not repeated (from the video-ads skill pack, 2026-10-22)
+
+[design-first.md](../templates/design-first.md) says to research before a feature an owner steers. It does not say where the research lives afterwards, and in a long project the same question gets looked up twice. The owner asked whether the authoritative documents had been searched, and remembered a local document that recorded their own idea.
+
+*Paid for:* the video-ads skill pack researched budget methods, platform learning signals, fatigue and decline, hourly data and a platform's hard limits across several sessions. Until the findings had a home, each session started from the search engine, and options already looked at and rejected came back on a page the owner was asked to decide.
+
+The rules:
+
+- A question looked up (a platform's documents, papers, vendors) is a file in `docs/research/`, and its row in `docs/research/README.md` says the question, the date, the answer in one line and where it is used. A test fails on a file with no row and a row with no file (`tests/test_research_index.py` there).
+- Every file says when it was researched, tags each claim *documented*, *vendor*, *academic*, *ours* (measured on a client's data) or *inference*, and says what it could not read (a page that did not render, a figure two official pages give differently, and which one was used).
+- The index is read before anything is researched; a new finding extends the file that holds the topic.
+- What the research changed lands in the design page, and the page cites the file. The page never carries the search.
+
+*Seen once* (2026-10-22), in the video-ads skill pack: `docs/research/` has seven files and an index; its CLAUDE.md states the rule.
+
+## The overview shows only what is decided (from the video-ads skill pack, 2026-10-22)
+
+[system-overview.md](../templates/system-overview.md) makes the page generated, committed and checked. A generated page can still carry the wrong things: the video-ads one first listed the algorithms that had been looked at and rejected, a table of options, "can the platform tell us this?" and questions to the owner, because the registries it was drawn from held the working. The owner's instruction: the overview gives the final plan, what is not certain does not go on it, and the research goes in a folder of its own.
+
+The rules:
+
+- The page draws the decided plan: states, thresholds with whether the owner confirmed each, what is built and what is next. A registry row is written for the page's reader, never as notes to self.
+- A test fails on a rejected option, a table of alternatives or a question to the owner appearing on the page. The test is the rule: without it the working came back within a day.
+- Alternatives and open questions live in the research files and the roadmap's waiting list, each with its one home. When the page can draw something, the hand-written copy of it is deleted.
+- A client's own data (its campaigns, its audit) is drawn only on request (`--market M`) and is never part of the committed copy.
+
+*Seen once* (2026-10-22), in the video-ads skill pack (`tests/test_overview.py`).
+
+## Advice is recorded, then read back (from the video-ads skill pack, 2026-10-22)
+
+A skill pack that writes nothing to a platform still gives advice: a budget move, a number of creatives to ask a producer for. Advice with no memory repeats itself and cannot be judged. Two pieces were added to the video-ads skill pack, one for each kind.
+
+- **A request is a record.** After the agent asks the producing pack for N creatives it runs one verb that lands a raw record (`import request`, never edited). The next report counts what was asked and has not started as *in production*, so the same creatives are not asked for twice; a request is matched to the first start on or after it, which also measures the lead time (the median of the requests seen, a draft until one has been seen), and a request with no start after two lead times is taken as lost and asked for again.
+- **A proposal is a record, once a day.** `export allocation` lands the day's proposed moves; the next report says, for each move, `open` before seven days, then `taken` when the budget moved the proposed way by at least half the distance, else `not_taken`.
+
+The rules:
+
+- The record is raw, written by a verb a person or the agent runs, never by a report: reports stay read-only.
+- What is read back is what was done, not what it earned. The data has no counterfactual, so "taken" is the whole claim, and every proposal carries `no_counterfactual` among its doubts.
+- Every window in the matching (seven days, two lead times) is a registered draft the owner confirms, not a literal.
+
+*Seen once* (2026-10-22), in the video-ads skill pack (`scripts/_lib/demand_log.py`, `allocation_log.py`).
+
+## A rate learned from a stream is a flow; a threshold with no right answer is picked by a rule on a replay (from the video-ads skill pack, 2026-10-22)
+
+Two numbers the budget logic rests on looked like constants and were not.
+
+*The cost of a verdict.* The obvious estimate is the mean spend of the creatives that have finished. That drops the ones still running and the ones starved, so it is the cost of the winners and the fast losers: survivorship. The measured quantity is a flow: the money spent on creatives while they were still in the exploration states over the last eight weeks, divided by the verdicts reached in the same weeks, shrunk toward the lifecycle's own doubt line by `n / (n + k)` while verdicts are few. On the first client's data this gave 540 per verdict in one market and 154 in the other, from 136 and 368 verdicts; nothing was typed.
+
+*The evidence bar of a move.* The bar a campaign's marginal return must clear before money moves has no known right value, and the owner could not judge "1.64". The rule: base value 1.0; the replay is run at each bar of a fixed grid, and the bar used is the lowest at which at most a registered share of the moves is undone within a week and enough moves were made to believe it; with no bar that qualifies, the base value stands and the report says so. It is recomputed on every run, so it follows the data. It picked 1.5 in one market and left the base in the other, where about a fifth of the moves still flipped; that is shown as it is, not tuned.
+
+The rules:
+
+- A quantity estimated from outcomes that arrive over time counts the money still in flight; a mean of the finished is named for what it is.
+- A threshold nobody can state is not guessed and not asked of the owner: a fixed rule over a replay of the real data picks it, the base value is the fallback, and the choice's source (`calibrated` or `base`) is in the output.
+- A replay shows what a rule does (how often it moves, whether it flips), never what it would have earned.
+
+*Seen once* (2026-10-22), in the video-ads skill pack (`docs/creative-demand.md`, `docs/allocation.md`).
+
+## Retiring a subsystem: map it, prove only it went, keep what another pack reads (from the video-ads skill pack, 2026-10-23)
+
+The video-ads skill pack carried a Meta-era loop (a staged read, a launch sheet, a steering queue, a script pre-check) that its newer layers had replaced. The owner decided to retire it after the agent ran each of its verbs on a copy of the client's real data: two refused (no deliveries), one had no scripts, two were empty, the queue held nothing, and four ran but said their money needs inputs the client does not give. The removal was one merge request, about 10,000 lines out.
+
+The steps that held:
+
+- **Ask with evidence.** Run every verb of the old loop on a copy of real data and show which return anything.
+- **Map before deleting.** Build the import graph from the verbs that stay; a module reachable only from the retired verbs goes. One did not: the new audit page took its page helpers from the retired page module, so they were moved to a small shared module first.
+- **Let the guards list the rest, in this order:** the verb table and its help, the forwarding lists in the CLI test, the registries (index rows, story checks, stage rows), the message codes nothing emits any more (delete them with a script, not by hand), the rendered `.gitattributes`, and the README and SKILL text that tests pin by wording. Owner files are not edited by the agent: their `.agent.tsv` siblings say *retired* with the owner's answer, and an owner row that points at deleted code is named as a question.
+- **The golden diff proves "only this went".** Removed cases are failures by design, so the merge request quotes the list: the removed cases, the verb table, the stage checks (10 to 2), nothing else.
+- **Keep what another pack reads, and say so.** The generic outside-orders documents stayed, and what only the retired code used (a roster import, five cache tables, a schema change) became its own roadmap row rather than widening the merge request.
+
+*Seen once* (2026-10-23), in the video-ads skill pack (its ROADMAP D102 and X124).
+
+## The interpreter on the machine is not CI's (from the video-ads skill pack, 2026-10-22)
+
+A pipeline failed on the first merge request of a milestone with every test green locally: `skill-pack.toml` held an inline table across several lines, which is TOML 1.1; the developer's Python 3.15 reads it, CI's 3.12 refuses it.
+
+The rules:
+
+- Run the whole suite on the interpreter CI uses before pushing (`python3.12 tests/run.py`), and say it in the agent instructions; "tests pass" with a newer local Python proves less than it appears to.
+- A change that depends on the interpreter, the OS or a schema waits for its own merge request's pipeline before the agent merges, even when the rest of the project's merges need none.
+
+*Seen once* (2026-10-22), in the video-ads skill pack (merge request 79); its CLAUDE.md "Tests" invariant carries the rule.
+
 ## Ecommerce SEO Skill Pack, first non-manufacturer client (2026-10)
 
 The SEO harness (renamed "skill pack": the repository `ecommerce-seo-skill-pack`, on the owner's GitLab;
