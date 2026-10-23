@@ -17,6 +17,10 @@ owner console, and one folder per pack. What `new` writes, under <hub>/:
     with the title;
   * intake/README.md, intake/INDEX.tsv (its header) and intake/inbox/: the
     one intake every pack reads;
+  * exchange/README.md and exchange/.gitkeep: the folder where packs hand
+    each other versioned --json documents, one file per contract, producer
+    and day (`exchange/<contract>/<producer>/<date>.json`, written by
+    kit.raw.exchange_write, listed by exchange_list; content git-ignored);
   * hub.json: what the generated files are made from (title, port, the
     console's code, the hub program, the markets, each pack's CLI word,
     env prefix, folder, gate verbs);
@@ -324,6 +328,12 @@ New material lands in `intake/inbox/<YYYY-MM-DD>-<source>/` and gets its
 `python3 {PLAYBOOK / 'build' / 'check_intake.py'} intake/*.json --packs {packs_arg}
 --transcript FILE`.
 
+## Exchange
+
+Packs hand each other versioned `--json` files through `exchange/<contract>/<producer>/<date>.json`
+(`exchange/README.md`): a producer writes a file once, a reader imports it into its own `raw/`. Never write,
+edit or delete a file there by hand.
+
 ## Never
 
 Never run a gate verb yourself: {gates}. They are the owner's, through the console.
@@ -414,7 +424,8 @@ def client_md(h: dict) -> str:
 | Decision rule | {fill("in the client's words")} |
 
 This folder is the client's hub: one console for the asks of every pack
-(`bin/console`, one cap of 10 open), one intake (`intake/`), and one folder
+(`bin/console`, one cap of 10 open), one intake (`intake/`), one exchange
+folder (`exchange/`, the versioned files packs hand each other), and one folder
 per pack. `bin/hub <cli> <args…>` runs that pack's own wrapper. Packs are
 added with the playbook's `scaffold/new_hub.py add-pack`, never by hand.
 The client's own details (roster, fees, codes) stay in the pack folders and
@@ -447,6 +458,20 @@ Rules:
 3. Intake content is never in git; only this README and `INDEX.tsv` are (and the hub's `CLIENT.md`).
 """
 
+EXCHANGE_README = """# exchange: the documents the packs of this client hand to each other
+
+One file per contract, producer and day: `<contract>/<producer>/<YYYY-MM-DD>.json`, with the contract's version as
+its own folder (`ads.results/1/vads/2026-10-23.json`). The playbook's `contracts/` says what each contract carries.
+
+Rules:
+1. **A producer writes a file once** (`kit.raw.exchange_write`). A name that is taken is refused, with the same bytes
+   or others: raw only grows. A file is never edited, renamed or removed here; a correction is a later day's file.
+2. **A reader lists and reads** (`kit.raw.exchange_list`) and **imports what it reads into its own `raw/`**; it never
+   rebuilds from this folder and never writes here under another pack's name.
+3. **A pack never opens another pack's database.** This folder is the only thing they share besides the hub's facts.
+4. Content is never in git; only this README is. `bin/hub <cli> doctor` names any path that is out of place.
+"""
+
 GITIGNORE = """# The client's content, the console log and the hub's data: never versioned.
 # new_hub.py add-pack appends each pack folder (a local folder or link).
 /client_terms.txt
@@ -454,6 +479,9 @@ GITIGNORE = """# The client's content, the console log and the hub's data: never
 /hub/*
 !/hub/bin/
 !/hub/defs/
+/exchange/*
+!/exchange/README.md
+!/exchange/.gitkeep
 /intake/*
 !/intake/README.md
 !/intake/INDEX.tsv
@@ -576,6 +604,8 @@ def cmd_new(a) -> int:
             "intake/README.md": (INTAKE_README, 0o644),
             "intake/INDEX.tsv": (INDEX_HEADER, 0o644),
             "intake/inbox/.gitkeep": ("", 0o644),
+            "exchange/README.md": (EXCHANGE_README, 0o644),
+            "exchange/.gitkeep": ("", 0o644),
             ".gitignore": (GITIGNORE, 0o644),
             ".claude/settings.json": (settings(h, hub, None), 0o644)}
     for rel in sorted(out):
