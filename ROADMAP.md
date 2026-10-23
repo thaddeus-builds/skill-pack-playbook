@@ -17,7 +17,7 @@ Updated: 2026-10-23
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
 - [X10] 2026-10-22 the first real client moves onto its hub (R5, after the exchange folder, D22): re-vendor kit 0.35.0 into its packs (schema version bump, the `facts sync-hub` verb row, a test calling `kit.guards.hub_keys.check`), make its hub with `scaffold/new_hub.py`, move the shared facts there, put each disagreeing value to the owner once
-- [X11] 2026-10-23 portfolio phase 3: each producer and consumer pair emits and reads its contract through `kit.contracts` (kit 0.37.0), one session per pair, touching disjoint repositories; `ads.demand`, `ads.changes`, `catalog`, `messages`, `truth`, `intel`, `leads` are drafts a first producer and consumer settle
+- [X11] 2026-10-23 portfolio phase 3: each producer and consumer pair emits and reads its contract through `kit.contracts` (kit 0.36.0), one session per pair, touching disjoint repositories; `ads.demand`, `ads.changes`, `catalog`, `messages`, `truth`, `intel`, `leads`, `handoff.batch`, `copy.proposals` are drafts a first producer and consumer settle
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)
