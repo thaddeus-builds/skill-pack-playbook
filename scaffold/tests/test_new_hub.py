@@ -7,6 +7,8 @@
       0600, hub.json; bin/hub, bin/console, bin/ask executable and parsing;
       no `{{`; launch.json and bin/console on the chosen port; a console
       with no pack yet relays only the hub's own `hub facts confirm`
+      exchange/README.md and exchange/.gitkeep; a document written there by
+      kit.raw.exchange_write is listed, and the folder has no stray
   [3] `add-pack` writes a pack folder from new_client.py's files() with no
       console of its own (no bin/console, bin/ask, launch.json), its brief
       pointing at the hub's console, ask and intake; `bin/hub <cli> …`
@@ -20,8 +22,9 @@
       stays; each console start puts a fresh secret per pack in the
       console's env only, written to no file
   [6] .gitignore: content, console log, hub data, client terms and every
-      pack folder ignored; CLIENT.md, intake README/INDEX, bin/, hub.json
-      and .claude/ are not
+      pack folder ignored; CLIENT.md, intake README/INDEX, exchange README
+      and .gitkeep, bin/, hub.json and .claude/ are not; an exchange
+      document is
   [7] refusals, exit 2 with one line, the hub untouched: `new` on a
       non-empty folder, a bad id, a path the relay cannot carry; `add-pack`
       of a pack already present, to a non-hub, onto an existing folder, a
@@ -46,6 +49,7 @@ sys.path.insert(0, str(PLAYBOOK / "scaffold"))
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 os.environ["GIT_CONFIG_GLOBAL"] = os.devnull
 
+from kit import config, raw  # noqa: E402
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
 import new_hub  # noqa: E402
 
@@ -148,6 +152,16 @@ def main() -> int:
           "inbox/<YYYY-MM-DD>-<source>/" in t["intake/README.md"]
           and t["intake/INDEX.tsv"].startswith("id\tdate\tsource\t")
           and (hub / "intake" / "inbox" / ".gitkeep").is_file())
+    check("exchange: a README that says write once, and a .gitkeep",
+          "A producer writes a file once" in t["exchange/README.md"]
+          and "exchange_write" in t["exchange/README.md"]
+          and (hub / "exchange" / ".gitkeep").is_file())
+    config.use(PLAYBOOK / "kit" / "tests" / "fake_skill_pack")     # a pack binds the kit like this
+    doc = raw.exchange_write(hub, "ads.results/1", "demoa", "2026-10-23", b"{}")
+    check("a pack writes there with the kit; the folder lists it and has no stray",
+          raw.exchange_scan(hub)[0] == raw.exchange_list(hub, "ads.results/1")
+          and [d.path for d in raw.exchange_list(hub, "ads.results/1")] == [doc]
+          and raw.exchange_scan(hub)[1] == [])
     check("client_terms.txt is 0600 and names the client",
           stat.S_IMODE((hub / "client_terms.txt").stat().st_mode) == 0o600
           and "Northwind Tea" in t["client_terms.txt"])
@@ -303,13 +317,14 @@ def main() -> int:
                               capture_output=True).returncode == 0
     yes = ["client_terms.txt", "console/events.jsonl", "hub/hub.db", "demoa", "demob",
            "demoa/workspace/x.db", "intake/inbox/2026-10-22-client/brief.pdf",
-           "intake/2026-10-22.json", "intake/numbers.tsv", "intake/questions.tsv"]
+           "intake/2026-10-22.json", "intake/numbers.tsv", "intake/questions.tsv",
+           "exchange/ads.results/1/demoa/2026-10-23.json"]
     no = ["CLIENT.md", "hub.json", "bin/hub", "bin/console", ".claude/settings.json",
           ".claude/launch.json", "intake/README.md", "intake/INDEX.tsv",
-          "intake/inbox/.gitkeep", ".gitignore"]
+          "intake/inbox/.gitkeep", "exchange/README.md", "exchange/.gitkeep", ".gitignore"]
     check("content, console log, hub data, terms and pack folders are ignored",
           all(ignored(x) for x in yes), [x for x in yes if not ignored(x)])
-    check("CLIENT.md, intake README / INDEX, bin/, hub.json, .claude/ are tracked",
+    check("CLIENT.md, intake and exchange README, bin/, hub.json, .claude/ are tracked",
           not any(ignored(x) for x in no), [x for x in no if ignored(x)])
 
     print("[7] refusals")
