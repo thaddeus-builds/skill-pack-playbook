@@ -7,6 +7,7 @@ Updated: 2026-10-23
 - [W1] 2026-10-05 Anthropic source links in the README (#23): allow-list `www.anthropic.com` in the console leak scan and restore the three links (recommended); "no" leaves sources named by title only. unblocks: X4
 - [W2] 2026-10-05 does the SEO skill pack migrate onto the kit; does the outreach scraper take only the guide (#26)? Recommended: migrate SEO after selective vendoring; outreach takes the guide only. unblocks: X6
 - [W3] 2026-10-23 each skill pack owner's review of its re-vendor, and a GitLab token that can push to the skill pack repositories (the one held today only reads, and only a project whose path is named: it cannot list projects or groups, which need User and Group read). unblocks: N2
+- [W4] 2026-10-23 merge the contracts: #140 (`contracts/`, schemas and rules, docs only), then #141 (kit 0.37.0, `kit/contracts.py` in the new `exchange` pack, stacked on it; retarget to main after #140). Phase 3 of docs/portfolio.md (one session per producer and consumer pair) waits for kit 0.37.0. Also settle `creators.roster/1`'s creator key between creator-program (`creator`) and video-ads K5 (`creator_ref`), and keep or drop the channel words in the schemas the kit vendors. unblocks: X11
 ## Next
 - [X2] 2026-10-05 turn 3 (#19): selective vendoring, a skill pack takes only the packs it needs (breaking). Needs turn 2 done (N2), the owner's go-ahead (R2) and a quiet week for the short-video skill pack. Packs and the vendor side are built (D3); what is left is moving each skill pack onto them
 - [X3] 2026-10-05 the scaffold sets up Zylos itself: vendors the adapter, writes the manifest, passes `node zylos/lib.js check` (#25)
@@ -16,6 +17,7 @@ Updated: 2026-10-23
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
 - [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
 - [X10] 2026-10-22 the first real client moves onto its hub (R5, after the exchange folder, D22): re-vendor kit 0.35.0 into its packs (schema version bump, the `facts sync-hub` verb row, a test calling `kit.guards.hub_keys.check`), make its hub with `scaffold/new_hub.py`, move the shared facts there, put each disagreeing value to the owner once
+- [X11] 2026-10-23 portfolio phase 3: each producer and consumer pair emits and reads its contract through `kit.contracts` (kit 0.37.0), one session per pair, touching disjoint repositories; `ads.demand`, `ads.changes`, `catalog`, `messages`, `truth`, `intel`, `leads`, `handoff.batch`, `copy.proposals` are drafts a first producer and consumer settle
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)

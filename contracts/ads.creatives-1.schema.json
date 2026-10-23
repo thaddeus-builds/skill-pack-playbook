@@ -1,0 +1,52 @@
+{
+  "$comment": "States a format that is already in use; changes nothing in it. Source: adcut's adcut/contracts.py (contract A) and the video-ads skill pack's docs/contract.md. A TSV contract: the schema describes one row, each cell is text (README, 'Two formats').",
+  "$id": "ads.creatives-1.schema.json",
+  "title": "ads.creatives/1",
+  "description": "A creatives manifest: one row per exported creative file. A maker writes it beside its upload sheet; an operator reads it to find a report row's creative by the code in the material's name.",
+  "x-contract": "ads.creatives/1",
+  "x-status": "in-use",
+  "x-format": "tsv",
+  "x-producer": "a maker (adcut)",
+  "x-consumers": "operators (video-ads)",
+  "x-columns": ["code", "md5", "file", "platform", "exported_at", "product"],
+  "x-rules": [
+    "The first line is '# ads.creatives/1'; the old mark '# cads.creatives/1' is refused by adcut's reader and still read by the video-ads skill pack's.",
+    "No cell of the six columns is blank, and no cell holds a tab or a line break.",
+    "A code is on one row only.",
+    "A code's md5 never changes: the reader refuses a later manifest that moves it.",
+    "A material id is on one row only, per platform.",
+    "A later version only adds columns at the end."
+  ],
+  "type": "object",
+  "required": ["code", "md5", "file", "platform", "exported_at", "product"],
+  "properties": {
+    "code": {
+      "description": "The creative's code with its check digit (for example DEMO-0007-6): the token the material's name carries, so the reader finds codes in names by these strings alone and knows nothing of their format.",
+      "type": "string", "minLength": 1
+    },
+    "md5": {
+      "description": "The exported file's MD5, 32 lowercase hex digits.",
+      "type": "string", "pattern": "^[0-9a-f]{32}$"
+    },
+    "file": {
+      "description": "The exported file's name.",
+      "type": "string", "minLength": 1
+    },
+    "platform": {
+      "description": "The reader's platform id for where the file goes (for example qianchuan for douyin).",
+      "type": "string", "minLength": 1
+    },
+    "exported_at": {
+      "description": "When the file was exported: ISO 8601 with its zone.",
+      "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"
+    },
+    "product": {
+      "description": "The product the creative is for.",
+      "type": "string", "minLength": 1
+    },
+    "material_ids": {
+      "description": "Optional, last. The ids the platform gave the file once it was uploaded (千川's 素材ID): digits, separated by ';'. Written only when a row has one; blank on a row without. The reader maps report rows filed under these ids to the code.",
+      "type": "string", "pattern": "^[0-9]+(;[0-9]+)*$"
+    }
+  }
+}
