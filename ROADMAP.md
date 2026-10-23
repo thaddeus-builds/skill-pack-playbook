@@ -49,6 +49,7 @@ Updated: 2026-10-23
 - [R6] 2026-10-22 recording consent is no longer asked or checked at B0: the meeting tool asks every participant before it records, so the rule only repeated it: "删除这个playbook 规定" (chat 2026-10-22)
 - [R7] 2026-10-23 the kit supports English and Simplified Chinese only; the Traditional Chinese design (pull request #116, closed) is not built: "只有英文和简体中文" (the one client who writes Traditional is an exception, and Simplified is enough for them)
 - [R8] 2026-10-23 the RedNote skill pack is left as it is and kept out of turn 2: "小红书那个暂时没有人用"
+- [R9] 2026-10-23 the growth portfolio (docs/portfolio.md) is the map for every acquisition and growth skill pack: packs cut by platform account, pull and push as kit engine families, truth packs with one owner per fact, makers, typed contracts through the client hub; three decisions stay open on that page: "我觉得你上面论述的层次结构已经非常清晰了 我可以按照你的这个结构重新设计" (chat 2026-10-23)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`
