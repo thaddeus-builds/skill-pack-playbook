@@ -54,6 +54,10 @@ alerts	ads-core	an entity against the mean of its own last 7 settled days; the c
 changes	ads-core	the change record: own writes against the platform's, before and after windows
 reconcile	ads-core	two routes of one platform's numbers, side by side
 lifecycle	ads-core	a campaign's state machine and its hold
+creative_life	creative	a creative's state machine: testing, learning, doubt, mature, declining, parked, ended; the wallet it spends from
+creative_portfolio	creative	a portfolio of creatives over time: trend, projection, half-life, yield, what closing a gap takes
+fission	creative	a creative's fission score against the account's proven creatives
+creative_demand	creative	how many creatives to ask for: cost per verdict, lead time, whole batches, the money limit
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	
