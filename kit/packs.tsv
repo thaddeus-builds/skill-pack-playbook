@@ -45,6 +45,15 @@ questions	learning	open questions that name the data which can answer them and w
 pagestyle	pages	one look for pages that guide making: states as colour, word and icon; one decision; the check
 autonomy	autonomy	the autonomy levels: the tier registry, the owner's switch, scoped approvals, caps from the archive, code-free undo, the digest
 contracts	exchange	a contract file: the mark, the schema check, written once, read into raw
+ledger	ads-core	the report ledger: settled days, restatement, one currency
+pacing	ads-core	a month's budget over its days, two wallets, a monthly cap against the run-rate
+wallets	ads-core	the ad group's wallet: perform, explore or none
+allocation	ads-core	the perform wallet across campaigns, equal marginal return in bounded steps
+proof	ads-core	proven and unproven: orders on days, the loss verdict, the wallet move
+alerts	ads-core	an entity against the mean of its own last 7 settled days; the cooldown
+changes	ads-core	the change record: own writes against the platform's, before and after windows
+reconcile	ads-core	two routes of one platform's numbers, side by side
+lifecycle	ads-core	a campaign's state machine and its hold
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	
