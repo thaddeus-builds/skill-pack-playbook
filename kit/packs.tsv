@@ -58,6 +58,10 @@ creative_life	creative	a creative's state machine: testing, learning, doubt, mat
 creative_portfolio	creative	a portfolio of creatives over time: trend, projection, half-life, yield, what closing a gap takes
 fission	creative	a creative's fission score against the account's proven creatives
 creative_demand	creative	how many creatives to ask for: cost per verdict, lead time, whole batches, the money limit
+search_terms	intent	search-term triage into six buckets, harvest, negatives, negative root phrases
+auction_pressure	intent	a keyword's weekly share, cost per click and bid, and the verdict: heating, bought, cooling, flat
+keyword_leaders	intent	the top 3 holders of a keyword week by week, who entered and left
+impression_share	intent	an impression share with its clamped ends shown as <10% and >90%
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	
