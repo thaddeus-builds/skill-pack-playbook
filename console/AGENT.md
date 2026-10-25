@@ -27,6 +27,7 @@ The owner answers you on a web page. You reach it only through `console/ask.py` 
 - `recommend`: your answer and `because` (always, even where `provide` would let you skip it). `if_no`: what "no" changes. An `approve` also needs `effect`.
 - Let them pick: `confirm`, `approve` or `choose` with options. `provide` only for a value, with its type, range and unit.
 - Plain words the owner would use: no ids, flags or file names. Copy a file from `console/examples/`.
+- `source` (optional): your name, a short token. `list` and `digest` return it and the console reads nothing into it: a pack that posts with its own name can tell its open asks from the rest, whatever folder or host its own records are on. An ask without it is nobody's; leave those alone.
 - Revise an open ask by posting the same id again. An answered, withdrawn or expired id is never reused.
 - Every ask expires: `add` sets `expires` 7 days ahead unless you name one (`YYYY-MM-DD`, open through that day UTC). An expired ask changes nothing; ask again with a new id if it still matters.
 
