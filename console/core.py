@@ -77,7 +77,10 @@ LIMITS = {"id": 64, "kind": 40, "group": 60, "title": 120, "why": 400,
           "cell": 80, "option_label": 60, "option_note": 120, "unit": 12,
           "answer": 500, "comment": 500, "note": 1000, "say": 400,
           "where": 200, "reason": 200, "evidence": 12, "options": 8,
-          "columns": 6, "rows": 30, "verb": 7, "expect": 2000}
+          "columns": 6, "rows": 30, "verb": 7, "expect": 2000,
+          "ask_source": 40}
+# the limit of an ask field whose name another part of an ask also uses
+FIELD_LIMIT = {"source": "ask_source"}
 
 # every failure a verb can return: {ok: false, code, message, params}. The
 # console words them for the human by `err.<code>` in i18n.json.
@@ -151,6 +154,7 @@ ASK_FIELDS = {
     "step":      ("all", "all"),
     "kind":      (None, "all"),        # what it is about: word, merge, value…
     "group":     (None, "all"),        # the section it sits in
+    "source":    (None, "all"),        # who posted it: a short name, kept and returned, never read
     "title":     ("all", "all"),
     "why":       ("all", "all"),
     "evidence":  ("all", "all"),
@@ -385,6 +389,16 @@ def _gate(errors, g, step):
     return out
 
 
+def _source(errors, v):
+    """The poster's name as a token (to compare, not to read), or None."""
+    v = _text(errors, "source", v, LIMITS["ask_source"], required=False)
+    if v is not None and not TOKEN_RE.match(v):
+        errors.append({"field": "source", "code": "bad_value",
+                       "message": "source: a name of letters, digits, . _ : @ / -, starting with a letter or digit"})
+        return None
+    return v
+
+
 def validate_ask(raw) -> tuple[dict | None, list[dict]]:
     """(the ask as stored, []) or (None, every problem at once). Unknown fields
     are errors: a typo must surface, not vanish."""
@@ -417,6 +431,9 @@ def validate_ask(raw) -> tuple[dict | None, list[dict]]:
                         required=False) or "general"
     ask["group"] = _text(errors, "group", raw.get("group"), LIMITS["group"],
                          required=False) or ""
+    src = _source(errors, raw.get("source"))
+    if src:
+        ask["source"] = src          # only when named: an ask without it keeps its hash
     ask["title"] = _text(errors, "title", raw.get("title"), LIMITS["title"])
     ask["why"] = _text(errors, "why", raw.get("why"), LIMITS["why"],
                        multiline=True)
@@ -877,7 +894,7 @@ def _well_formed(e) -> bool:
 def _ask_shape_ok(a: dict) -> bool:
     """What the pages and `check_value` index into, when present."""
     rec, opts = a.get("recommend"), a.get("options")
-    return (isinstance(a.get("group", ""), str)
+    return (isinstance(a.get("group", ""), str) and isinstance(a.get("source", ""), str)
             and (rec is None or (isinstance(rec, dict) and isinstance(rec.get("value"), str)))
             and (opts is None if a["step"] != "choose" else
                  isinstance(opts, list) and all(isinstance(o, dict) and isinstance(o.get("value"), str)

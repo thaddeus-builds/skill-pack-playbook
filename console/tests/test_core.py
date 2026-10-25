@@ -210,6 +210,21 @@ def test_valid_ask_each_step():
         assert core.validate_ask(a) == (a, []), "a stored ask re-validates to itself"
 
 
+def test_source_is_a_kept_token_and_only_when_named():
+    named = ok(ask(source="gads-tw"))
+    assert named["source"] == "gads-tw"
+    assert core.validate_ask(named) == (named, []), "a stored ask re-validates to itself"
+    plain = ok(ask())
+    assert "source" not in plain and ok(ask(source="")) == plain and ok(ask(source=None)) == plain
+    # an ask that does not name a source keeps the hash it had before the field existed
+    assert core.subject_hash(plain) == core.subject_hash({k: v for k, v in plain.items() if k != "source"})
+    assert core.subject_hash(named) != core.subject_hash(plain)
+    for bad in ("two words", "-lead", "a" * 41, 7):
+        assert errs(ask(source=bad)), bad
+    assert has(errs(ask(source="two words")), "source", "bad_value")
+    assert has(errs(ask(source=7)), "source", "bad_type")
+
+
 def test_required_fields():
     for step in core.STEPS:
         need = ["id", "title", "why", "evidence", "if_no"]
@@ -235,10 +250,11 @@ def test_limits():
     assert set(L) == {"id", "kind", "group", "title", "why", "if_no", "because", "effect", "label", "value",
                       "source", "quote", "caption", "cell", "option_label", "option_note", "unit", "answer",
                       "comment", "note", "say", "where", "reason", "evidence", "options", "columns", "rows",
-                      "verb", "expect"}, "a limit was added or removed: give it a test below"
+                      "verb", "expect", "ask_source"}, "a limit was added or removed: give it a test below"
     table = [   # (limit, builder, field)
         (L["id"], lambda s: ask(id=s), "id"),
         (L["kind"], lambda s: ask(kind=s), "kind"),
+        (L["ask_source"], lambda s: ask(source=s), "source"),
         (L["group"], lambda s: ask(group=s), "group"),
         (L["title"], lambda s: ask(title=s), "title"),
         (L["why"], lambda s: ask(why=s), "why"),

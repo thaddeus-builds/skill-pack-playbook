@@ -81,6 +81,7 @@ ABOUT = {
     "step": "What the human does: confirm (yes or no), approve (yes or no to something that changes things), choose (one option), provide (type a value).",
     "kind": "What it is about, in a word (word, merge, value...). Free text.",
     "group": "The section of the page it sits in; asks with the same group are shown together.",
+    "source": "Who posted it: a short name of letters, digits and . _ : @ / -. Kept and returned by list and digest; the console never reads it. A pack names itself here so it can tell its own open asks from the rest. Optional: an ask without it is as before.",
     "title": "The question, on one line.",
     "why": "Why it is asked now, in plain facts.",
     "evidence": "One or more of: {label, value, source?, url?}, {quote, source?, url?}, {table: {caption?, columns, rows}}.",
@@ -275,7 +276,8 @@ def cmd_list(a):
         if a.status not in ("all", x["status"]):
             continue
         rows.append({"id": i, "step": x["ask"]["step"], "kind": x["ask"]["kind"],
-                     "group": x["ask"]["group"], "title": x["ask"]["title"],
+                     "group": x["ask"]["group"], "source": x["ask"].get("source"),
+                     "title": x["ask"]["title"],
                      "status": x["status"], "rev": x["rev"], "opened_at": x["opened_at"],
                      "expires": x["ask"].get("expires"),
                      "answer": _brief_event(x["answer"], "value", "suggested", "via"),
@@ -417,8 +419,8 @@ def cmd_schema(a):
     for f, (required, allowed) in core.ASK_FIELDS.items():
         fields[f] = {"required_for": _steps(required), "allowed_for": _steps(allowed),
                      "about": ABOUT[f]}
-        if f in core.LIMITS:
-            fields[f]["limit"] = core.LIMITS[f]
+        if core.FIELD_LIMIT.get(f, f) in core.LIMITS:
+            fields[f]["limit"] = core.LIMITS[core.FIELD_LIMIT.get(f, f)]
     return {"ok": True, "steps": list(core.STEPS), "fields": fields,
             "limits": dict(core.LIMITS), "max_open": manifest_mod.limit(_manifest(a)),
             "answer_values": ANSWER_VALUES, "flow": FLOW, "examples": _examples()}
@@ -492,7 +494,7 @@ def _record(x, secret) -> dict:
     state = ("expired" if x["status"] == "expired" else "applied" if x["applied"]
              else "waiting" if x["status"] == "answered" else x["status"])
     return {"id": x["id"], "title": shown["title"], "kind": shown.get("kind", "general"),
-            "group": shown.get("group", ""), "step": shown["step"], "status": x["status"], "state": state,
+            "group": shown.get("group", ""), "source": shown.get("source"), "step": shown["step"], "status": x["status"], "state": state,
             "asked": {"seq": x["opened_seq"], "at": x["opened_at"], "by": x["by"]},
             "why": shown["why"], "evidence": shown["evidence"], "options": shown.get("options"),
             "effect": shown.get("effect"), "if_no": shown["if_no"],
