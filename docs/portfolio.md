@@ -88,6 +88,22 @@ Not skill packs, or superseded (archive or leave):
 
 The pack that runs the ads still owns the delivery spec (vads R43); `handoff.batch/1` carries the names and tags it reads.
 
+## How the Google Ads work was cut (2026-10-22)
+
+A client meeting on Google Ads on 2026-10-22 gave the cut the table above shows for `gads`, `feed`, `meas` and `intel`. The owner agreed to it then; open decision 1 below is the one part still undecided. The cut follows the external system and the write risk, keeps work that has no channel out of the channel packs, and names no client in a pack.
+
+| Pack | What it owns | Writes to an external system |
+| --- | --- | --- |
+| `google-ads` (`gads`) | One Google Ads account: pacing and KPI, search terms turned into keyword proposals, responsive search ad copy per promotion period, impression share, the Shopping split between new and proven budget, the change history | Yes, guarded. It is the only pack that writes to the account |
+| `product-feed` (`feed`) | The website against the merchant feed: price, stock, errors | Its own override fields only |
+| `measurement` (`meas`) | The company's own attribution exports against the platforms' numbers, trust per campaign type, the coefficient, the change and incrementality ledger. Channel-neutral | No. It reads other packs' saved `--json` documents and never their databases |
+| `search-intel` (`intel`) | Trends, competitors' public ads, brand-term poaching | No |
+
+- **Affiliate commission reconciliation** goes into the existing `creator-program`, not into a new pack.
+- **Headline and ad copy** read the messaging source (the insight matrix, today inside `adcut`) and do not own it (open decision 3).
+- **Display and YouTube** become `gads` modules if open decision 1 is settled as recommended.
+- **No market is written into any pack's `skill-pack.toml`.** A client's markets are separate accounts, so each gets its own data folder in the client's workspace. A pack without markets serves one hub market: `new_hub.py add-pack --market M` adds the folder, and the hub runs it as `<cli>-<m>` (for example `gads-tw`).
+
 ## Ownership rules
 
 1. **One operator per platform account.** Nobody else holds that platform's credential or writes to it.
