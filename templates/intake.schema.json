@@ -9,7 +9,7 @@
   "properties": {
     "meeting": {
       "type": "object",
-      "required": ["date", "participants", "consent"],
+      "required": ["date", "participants"],
       "additionalProperties": false,
       "properties": {
         "date": {"$ref": "#/$defs/date"},
@@ -18,8 +18,8 @@
           "items": {"type": "string", "minLength": 1, "maxLength": 120}
         },
         "consent": {
-          "description": "Who gave consent to record, and when. A blank line is refused. If it was not given or not recorded, say so in words: that passes the check, and must then be raised to the owner as a question.",
-          "type": "string", "minLength": 1, "maxLength": 200, "x-missing": "no_consent"
+          "description": "Optional, kept so older intakes still pass: who agreed to the recording. Not checked: the meeting tool asks every participant before it records.",
+          "type": "string", "maxLength": 200
         },
         "packs": {"description": "In a client hub: the packs every item of this meeting is for, unless the item names its own.", "$ref": "#/$defs/packs"},
         "transcript": {

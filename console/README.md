@@ -5,7 +5,7 @@ The place where an agent and a business owner talk: the agent posts **asks**, th
 ```mermaid
 flowchart LR
     subgraph AGENT["Agent side"]
-      AG["ask.py<br/>add · say · withdraw · applied<br/>wait · answers · list · verify · digest"]
+      AG["ask.py<br/>add · say · withdraw · applied · chat<br/>wait · answers · list · verify · digest"]
     end
     LOG[("events.jsonl<br/>one append-only file<br/>the whole store")]
     subgraph HUMAN["Human side"]
@@ -14,7 +14,7 @@ flowchart LR
       CON <-->|"page · click"| BR
     end
     GATE["A skill pack<br/>its own human gate"]
-    AG -->|"writes ask · withdraw · applied · say"| LOG
+    AG -->|"writes ask · withdraw · applied · say · chat"| LOG
     LOG -. "read by wait · answers" .-> AG
     CON -->|"writes answer · reopen · note, signed"| LOG
     LOG -. "read for every page" .-> CON
@@ -34,13 +34,16 @@ stateDiagram-v2
     answered --> open: owner reopens
     answered --> applied: agent applies
     open --> withdrawn: agent withdraws
+    open --> expired: nobody answers by its expires date
     applied --> [*]
     withdrawn --> [*]
+    expired --> [*]
 ```
 
 - An answer is bound to the ask as it was shown. To revise an open ask, post the same id again: a page still showing the old one is refused (`changed`), never answered wrongly.
 - The owner can reopen until the agent records `applied`, and not once a skill pack's gate has written the answer (`already_applied`: that is a new question). Each row of `answers` carries `apply` (`ID@SEQ`); `applied ID@SEQ` is refused (`changed`) if the owner answered again since the agent read it.
-- An id is never reused: once an ask is answered or withdrawn, `add` refuses it (`id_used`). A "no" is an answer too, and is recorded with `applied`. In JSON an applied ask is `status: answered` with `applied` set.
+- An id is never reused: once an ask is answered, withdrawn or expired, `add` refuses it (`id_used`). A "no" is an answer too, and is recorded with `applied`. In JSON an applied ask is `status: answered` with `applied` set.
+- Every ask expires: `add` gives a new one `expires` 7 days ahead unless it names its own (a date, open through that day in UTC, or a UTC time); a revision keeps it. Past it the ask is `expired`, nothing changes, nobody can answer it, and `answers` lists it under `expired` until the agent records it with `applied ID` (as for a "no"). Its row in History says so. The owner may answer in chat: `ask.py chat ID --value=V --quote="their words" --source="chat 2026-10-22 14:03"` is the agent's record of it, `via: chat`, `by: agent:NAME`, unsigned, checked like a click and shown in History with the quote as "not clicked here". It is refused (`gate_needs_click`) for an ask with a gate, one that approves a change or one that takes a number: those need the owner on this page.
 
 ## A clear ask
 
@@ -56,7 +59,7 @@ stateDiagram-v2
 | `if_no` | What "no" would change | 200 | A yes is only real if a no is a safe answer |
 | by `step` | `choose`: `options` (2 to 8). `approve`: `effect`. `provide`: `input` (type, range, unit) | option label 60, `effect` 200 | Inputs are picked from a list; typing is the exception |
 
-`step` is `confirm`, `approve`, `choose` or `provide`. `kind`, `group` and `gate` are optional. All fields, limits and one example per step: `uv run console/ask.py schema` (needs no folder); the examples live in [`examples/`](examples/).
+`step` is `confirm`, `approve`, `choose` or `provide`. `kind`, `group`, `source`, `gate` and `expires` are optional. All fields, limits and one example per step: `uv run console/ask.py schema` (needs no folder); the examples live in [`examples/`](examples/).
 
 ## Quick start
 
@@ -188,8 +191,7 @@ uv run console/serve.py --user-header X-Forwarded-User --allow-host console.exam
 
 - The proxy is the login. It sets the header itself (overwriting any copy from the browser) and passes the public `Host` through unchanged: `Origin` is compared with the `Host` the console sees, so a proxy that rewrites it gets every POST refused (403). A browser's `Origin: null` (a proxy adding `Referrer-Policy: no-referrer`) counts only with `Sec-Fetch-Site: same-origin`.
 - The header is believed only from a loopback peer and only if it is a plain name; otherwise nobody is logged in: read-only, every POST refused. A `--host` that is not loopback is refused without `--user-header` (exit 2); `--user` and `--user-header` exclude each other.
-- All links are relative, so it can sit under a path prefix (`/console/`, trailing slash; strip the prefix before forwarding). The language link (`?lang=zh`) is kept in a cookie named for the port, without a `Path`, so it stays under the prefix.
-- `serve.py` prints its own loopback address; the owner opens the proxy's.
+- All links are relative, so it can sit under a path prefix (`/console/`, trailing slash; strip the prefix before forwarding). The language link (`?lang=zh`) is kept in a cookie named for the port, without a `Path`, so it stays under the prefix. `serve.py` prints its own loopback address; the owner opens the proxy's.
 - **Decision record.** `ask.py digest` renders the record a team lead forwards (each ask, its evidence and suggestion, the answer with who and when, where it was applied): Markdown in `text`, or data with `--format json`.
 
 ## Tests
@@ -199,9 +201,7 @@ python3 console/tests/run.py          # every tests/test_*.py, 4 at a time
 python3 console/tests/run.py serve    # only the files with "serve" in the name
 ```
 
-A file passes only if it exits 0 and prints `RESULT: N passed`; a test file that never ran is a failure.
-
-**Not covered by the tests: a real browser.** They fetch the pages and read the HTML; none runs `console.js` or draws the CSS. Before a release, `add` two examples with the same `group`, start the console and open it 375 px wide:
+A file passes only if it exits 0 and prints `RESULT: N passed`; a test file that never ran is a failure. **Not covered by the tests: a real browser.** They fetch the pages and read the HTML; none runs `console.js` or draws the CSS. Before a release, `add` two examples with the same `group`, start the console and open it 375 px wide:
 
 1. One column, no sideways scroll, the first ask open; dark mode and `?lang=zh` both read well.
 2. `add` another ask: an untouched page reloads itself within 4 s and the tab title counts the open asks.

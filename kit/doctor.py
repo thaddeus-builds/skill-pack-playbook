@@ -29,6 +29,13 @@ names its fix in `next`):
                  table drift, an unreadable file, stale or unknown tables warn
   markets        a declared market (confirmed); pending-only or none warns;
                  `markets = []` needs none
+  hub            with a client hub named (`<P>_HUB_DIR`, set by the hub's
+                 bin/hub): a hub fact this skill pack declares that its
+                 hub_copies has not seen at the hub's current version warns
+                 (fact_hub_copy_stale: the key and both versions; the fix is
+                 `facts sync-hub`), so do a hub fact that did not come from
+                 the hub's gate and a key defined otherwise at the hub; all
+                 current is ok. No hub named: no line (kit.facts.doctor_hub)
   writes         "writes: off" is the healthy default (ok); the kill switch or
                  STOP file is ok too; writes ON is info; a
                  `<P>_ALLOW_WRITES` value that is not 1 warns (it enables
@@ -533,11 +540,55 @@ def check_checkout(ctx: Context) -> None:
         runs_head=runs_head, runs_dirty=runs_dirty))
 
 
+def check_hub(ctx: Context) -> None:
+    """The client hub's facts this skill pack copies (kit.facts.doctor_hub):
+    nothing unless `<P>_HUB_DIR` names a hub."""
+    from kit import facts
+    facts.doctor_hub(ctx)
+
+
+def check_exchange(ctx: Context) -> None:
+    """The client hub's exchange folder (kit.raw.exchange_scan): there, and
+    every file in it where the layout puts it. Nothing unless `<P>_HUB_DIR`
+    names a hub (a bad value is check_hub's to report)."""
+    from kit import facts, raw
+    try:
+        hub = facts.hub_dir()
+    except SkillPackError:
+        return
+    if hub is None:
+        return
+    try:
+        docs, strays = raw.exchange_scan(hub)
+    except SkillPackError:
+        ctx.warn("exchange", msg(
+            "doctor_exchange_missing", f"hub {hub.name} has no exchange "
+            f"folder ({hub / raw.EXCHANGE}): a skill pack cannot hand a "
+            f"document to another through it", hub=hub.name,
+            folder=str(hub / raw.EXCHANGE)), [f"mkdir {hub / raw.EXCHANGE}"])
+        return
+    if strays:
+        shown = ", ".join(strays[:5]) + (" …" if len(strays) > 5 else "")
+        ctx.warn("exchange", msg(
+            "doctor_exchange_stray", f"hub {hub.name}: {len(strays)} "
+            f"path(s) in exchange/ not at "
+            f"<contract>/<producer>/<YYYY-MM-DD>.json: {shown}; a reader "
+            f"will not see them", hub=hub.name, count=len(strays),
+            paths=shown))
+        return
+    ctx.ok("exchange", msg(
+        "doctor_exchange_ok", f"hub {hub.name}: exchange has {len(docs)} "
+        f"document(s) of {len({d.contract for d in docs})} contract(s), "
+        f"every file where the layout puts it", hub=hub.name,
+        documents=len(docs), contracts=len({d.contract for d in docs})))
+
+
 BUILTIN: tuple[Check, ...] = (check_skill_pack, check_env_chain,
                               check_token_source, check_home_secrets,
                               check_env_files, check_console_secret,
                               check_data_dir, check_db,
-                              check_markets, check_writes)
+                              check_markets, check_hub, check_exchange,
+                              check_writes)
 
 
 # ---- run --------------------------------------------------------------------

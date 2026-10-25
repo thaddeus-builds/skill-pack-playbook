@@ -29,6 +29,8 @@ VERBS = [
          answers="A person confirms a pending value"),
     Verb(("facts", "restore"), "facts.py", "gated", False,
          answers="Replay a backup (a person at the terminal)"),
+    Verb(("facts", "sync-hub"), "facts.py", "human",
+         answers="Copy the facts the client's hub confirmed (no hub: nothing to do)"),
     Verb(("decisions", "list"), "decisions.py", "read",
          answers="Every decision (* = pending)"),
     Verb(("decisions", "get"), "decisions.py", "read",

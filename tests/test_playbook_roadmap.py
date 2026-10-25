@@ -22,7 +22,7 @@ TEXT = open(PATH, encoding="utf-8").read()
 
 def test_the_check_refuses_this_roadmap_broken():
     for old, new in (("## Next\n", "## Soon\n"),                 # a section renamed
-                     ("unblocks: X1", "unblocks: X99"),           # a wait that unblocks no row
+                     ("unblocks: N2", "unblocks: X99"),           # a wait that unblocks no row
                      (" (commit 8e13e16)", ""),                   # a Done row with no reference
                      ('"yes, after turn 2"', "yes, after turn 2")):   # a decision not quoted
         broken = TEXT.replace(old, new, 1)
