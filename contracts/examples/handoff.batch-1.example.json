@@ -1,0 +1,78 @@
+# handoff.batch/1
+{
+  "batch": "demo-batch-1",
+  "creatives": [
+    {
+      "campaign": "autumn-lamps",
+      "family": "DEMO-0007",
+      "files": [
+        {
+          "bytes": 5242880,
+          "name": "autumn-lamps_demo-0007_1080x1920",
+          "path": "DEMO-0007_1080x1920.mp4",
+          "places": {
+            "form": "ok",
+            "library": "ok"
+          },
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": "1080x1920"
+        },
+        {
+          "bytes": 4194304,
+          "name": "autumn-lamps_demo-0007_1080x1080",
+          "path": "DEMO-0007_1080x1080.mp4",
+          "places": {
+            "form": "ok",
+            "library": "drift"
+          },
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "size": "1080x1080"
+        }
+      ],
+      "findings": [
+        {
+          "check": "identity_drift",
+          "message": "the library has a nearly identical name where this one is expected",
+          "severity": "block",
+          "subject": "autumn-lamps_demo-0007_1080x1080"
+        }
+      ],
+      "form_row": {
+        "Creative": "autumn-lamps_demo-0007",
+        "Landing page": "https://shop.example.com/demo-lamp"
+      },
+      "status": "ready",
+      "utm": {
+        "content": "demo-0007",
+        "tags": "utm_source=demo&utm_medium=paid&utm_campaign=autumn-lamps&utm_content=demo-0007",
+        "url": "https://shop.example.com/demo-lamp?utm_source=demo&utm_medium=paid&utm_campaign=autumn-lamps&utm_content=demo-0007"
+      }
+    },
+    {
+      "family": "DEMO-0008",
+      "files": [
+        {
+          "name": "",
+          "path": "DEMO-0008_1080x1080.mp4",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size": "1080x1080"
+        }
+      ],
+      "findings": [
+        {
+          "check": "size_missing",
+          "message": "a required size is missing",
+          "severity": "block",
+          "subject": "DEMO-0008"
+        }
+      ],
+      "missing_sizes": [
+        "1080x1920"
+      ],
+      "status": "blocked"
+    }
+  ],
+  "findings": [],
+  "produced_at": "2026-10-23T08:00:00+08:00",
+  "producer": "handoff"
+}

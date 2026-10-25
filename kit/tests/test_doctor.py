@@ -26,6 +26,9 @@ on the fake "shop" skill pack.
       another HEAD, or with docs changed and not committed, warns; the same
       HEAD, the bound checkout itself, a copy outside git and a checkout of
       another skill pack are silent
+  [10] the hub's exchange folder: no hub named, no line; a hub without
+      exchange/ warns with the mkdir; a stray path warns and names it; a
+      tidy folder is ok with its counts
 """
 
 import os
@@ -41,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 import _shop  # noqa: E402
-from kit import config, db, doctor, facts  # noqa: E402
+from kit import config, db, doctor, facts, raw  # noqa: E402
 from kit.guards import json_contract  # noqa: E402
 from kit.messages import msg  # noqa: E402
 from kit.registry import FactKeys, Thresholds  # noqa: E402
@@ -603,6 +606,49 @@ def test_checkout() -> None:
     check("git_head: None outside git", doctor.git_head(plain) is None)
 
 
+def test_exchange() -> None:
+    print("\n[10] the hub's exchange folder")
+    data = Path(tmp_dir("doc-exchange-"))
+    hub = Path(tmp_dir("doc-exchange-hub-"))
+    hub_env = {CFG.env("HUB_DIR"): str(hub)}
+    rc, out, err, doc = run(data, "--json")
+    check("no hub named: no exchange line", found(doc, "exchange") == [])
+    rc, out, err, doc = run(data, "--json", **hub_env)
+    line = found(doc, "exchange", "warn")
+    check("a hub without exchange/: a warning with the mkdir, nothing made",
+          codes(doc, "exchange") == ["doctor_exchange_missing"] and line
+          and line[0]["next"] == [f"mkdir {hub / 'exchange'}"]
+          and not (hub / "exchange").exists() and rc == 0, line)
+    (hub / "exchange").mkdir()
+    rc, out, err, doc = run(data, "--json", **hub_env)
+    c = found(doc, "exchange", "ok")
+    check("an empty exchange/: ok, 0 documents of 0 contracts",
+          codes(doc, "exchange") == ["doctor_exchange_ok"] and c
+          and c[0]["message_code"]["params"]["documents"] == 0
+          and c[0]["message_code"]["params"]["contracts"] == 0, c)
+    for contract, prod, day in (("ads.results/1", "vads", "2026-10-23"),
+                                ("ads.results/1", "ppc", "2026-10-23"),
+                                ("catalog/1", "feed", "2026-10-23")):
+        raw.exchange_write(hub, contract, prod, day, b"{}")
+    rc, out, err, doc = run(data, "--json", **hub_env)
+    c = found(doc, "exchange", "ok")
+    check("three documents of two contracts: ok with the counts",
+          c and c[0]["message_code"]["params"]["documents"] == 3
+          and c[0]["message_code"]["params"]["contracts"] == 2, c)
+    (hub / "exchange" / "ads.results" / "1" / "vads" / "notes.txt").write_text("x")
+    rc, out, err, doc = run(data, "--json", **hub_env)
+    c = found(doc, "exchange", "warn")
+    check("a file out of place: a warning that names it, exit 0",
+          codes(doc, "exchange") == ["doctor_exchange_stray"] and c
+          and "ads.results/1/vads/notes.txt" in c[0]["message"] and rc == 0, c)
+    rc, out, err, doc = run(data, "--json", "--strict", **hub_env)
+    check("… and --strict makes it exit 1", rc == 1, rc)
+    rc, out, err, doc = run(data, "--json",
+                            **{CFG.env("HUB_DIR"): "relative/hub"})
+    check("a relative hub path is check_hub's to report: no exchange line",
+          found(doc, "exchange") == [])
+
+
 def main() -> int:
     test_fresh()
     test_writes()
@@ -613,6 +659,7 @@ def main() -> int:
     test_hooks()
     test_exit()
     test_checkout()
+    test_exchange()
     return finish()
 
 

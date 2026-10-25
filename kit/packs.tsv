@@ -6,7 +6,7 @@ dates	base	the one clock
 messages	base	coded messages
 paths	base	data dir and DB path
 db	base	database with protected human tables
-schema_base	base	the six human tables
+schema_base	base	the seven human tables
 human	base	the gate
 market	base	the scope partition
 registry	base	closed fact/decision keys and thresholds
@@ -44,12 +44,27 @@ pathweights	learning	path weights for variants: posteriors down a partition, sta
 questions	learning	open questions that name the data which can answer them and what the plan does meanwhile
 pagestyle	pages	one look for pages that guide making: states as colour, word and icon; one decision; the check
 autonomy	autonomy	the autonomy levels: the tier registry, the owner's switch, scoped approvals, caps from the archive, code-free undo, the digest
+contracts	exchange	a contract file: the mark, the schema check, written once, read into raw
+ledger	ads-core	the report ledger: settled days, restatement, one currency
+pacing	ads-core	a month's budget over its days, two wallets, a monthly cap against the run-rate
+wallets	ads-core	the ad group's wallet: perform, explore or none
+allocation	ads-core	the perform wallet across campaigns, equal marginal return in bounded steps
+proof	ads-core	proven and unproven: orders on days, the loss verdict, the wallet move
+alerts	ads-core	an entity against the mean of its own last 7 settled days; the cooldown
+changes	ads-core	the change record: own writes against the platform's, before and after windows
+reconcile	ads-core	two routes of one platform's numbers, side by side
+lifecycle	ads-core	a campaign's state machine and its hold
+creative_life	creative	a creative's state machine: testing, learning, doubt, mature, declining, parked, ended; the wallet it spends from
+creative_portfolio	creative	a portfolio of creatives over time: trend, projection, half-life, yield, what closing a gap takes
+fission	creative	a creative's fission score against the account's proven creatives
+creative_demand	creative	how many creatives to ask for: cost per verdict, lead time, whole batches, the money limit
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	
 guards.clock	testkit	
 guards.drift	testkit	
 guards.evals	testkit	eval cases: no consumer yet; the Never table: suites.never_table
+guards.hub_keys	testkit	a client hub's shared fact keys defined alike in the skill pack
 guards.json_contract	testkit	
 guards.layering	testkit	
 guards.pages	testkit	no shipped file links to a hosted artifact: a page is drawn by a verb

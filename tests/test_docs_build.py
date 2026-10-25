@@ -1179,6 +1179,28 @@ def test_the_lessons_on_closing_the_loop_are_whole():
     assert loop_problems("# t\n", "# t\n", "# t\n") == [DONE, OTHER_WAY, COPIES]
 
 
+GATEWAY = "A page behind a gateway answers within its limit, whatever the read costs."
+GATEWAY_WORDS = ("Profile the read first", "mtime and size", "background thread", "previous result", "Never cache a failed read",
+                 "timeout must exceed the slowest page", "`Cached` in `webconsole/serve.py`", "*Seen once:*")
+
+
+def gateway_problems(consoles: str) -> list[str]:
+    """What the client-console lesson on slow reads fails to say: a numbered bold item of the client console section
+    (profile first, cache per data state, background, bounded wait, previous result, no failed read cached, the probe's
+    timeout) with where it was seen."""
+    items = re.split(r"^\d+\. ", section(consoles, "The client console is where clients answer"), flags=re.M)
+    item = next((i for i in items if i.startswith(f"**{GATEWAY}**")), None)
+    return [GATEWAY] if item is None else [w for w in GATEWAY_WORDS if w not in item]
+
+
+def test_the_lesson_on_pages_behind_a_gateway_is_whole():
+    consoles = doc("docs/consoles.md")
+    assert gateway_problems(consoles) == [], gateway_problems(consoles)
+    assert gateway_problems(consoles.replace(f"**{GATEWAY}**", "**x**")) == [GATEWAY]
+    assert gateway_problems(consoles.replace("Never cache a failed read", "x")) == ["Never cache a failed read"]
+    assert gateway_problems("# t\n") == [GATEWAY]
+
+
 MECHANISM = "A past winner the skill pack cannot say is studied for its mechanism, never copied"
 MECHANISM_WORDS = ("*Why:*", "not a template and not a move", "a proposal for a person to confirm", "the skill pack's own words",
                    "who the ad reached", "how it opened", "its timing", "why people converted", "is the other case",
@@ -1385,6 +1407,33 @@ def test_the_owner_files_and_append_only_rules_are_whole():
     assert registry_rule_problems(rules.replace("conformance I5 holds", "x")) == ["10. conformance I5 holds"]
     assert registry_rule_problems(rules.replace("the last row is in effect", "x")) == ["11. the last row is in effect"]
     assert registry_rule_problems(rules.replace("**A table many branches add to is append-only", "**x")) == ["11. missing"]
+
+
+PARALLEL = "Parallel sessions append to the story files: merge them by union, take the next id from a command, generate the roadmap page instead of committing it."
+PARALLEL_WORDS = ("`merge=union`", "the next", "built on demand", "*Paid for:*", "*Built*")
+STORIES_PRIVATE = "stories are the builder's record; they do not belong in anything a client can read."
+STORIES_PRIVATE_WORDS = ("*Seen once:*", "name clients", "the owner accepted that risk", "The way out", "its own repository")
+
+
+def story_files_problems(rules: str) -> list[str]:
+    """What the two story-file rules of docs/rules.md fail to say: rule 8 (union merge of the append-only story
+    files, the next id from a command over every branch, the roadmap page generated not committed) and rule 9
+    (the story tables name clients, so they stay out of what a client reads; the accepted risk and the way out)."""
+    items = re.split(r"^\d+\. ", section(rules, "Stories that prove themselves"), flags=re.M)
+    out = []
+    for title, words in ((PARALLEL, PARALLEL_WORDS), (STORIES_PRIVATE, STORIES_PRIVATE_WORDS)):
+        item = next((i for i in items if title in i[:len(title) + 40]), None)
+        out += [title] if item is None else [w for w in words if w not in item]
+    return out
+
+
+def test_the_story_file_rules_are_whole():
+    rules = doc("docs/rules.md")
+    assert story_files_problems(rules) == [], story_files_problems(rules)
+    assert story_files_problems(rules.replace("`merge=union`", "x")) == ["`merge=union`"]
+    assert story_files_problems(rules.replace("The way out", "x")) == ["The way out"]
+    assert story_files_problems(rules.replace(PARALLEL, "x")) == [PARALLEL]
+    assert story_files_problems("# t\n") == [PARALLEL, STORIES_PRIVATE]
 
 
 ALL_RAW = "A datum a later decision needs is built from all of raw, never from the newest snapshot alone."

@@ -35,3 +35,6 @@ doctor_checkout_differs	docs,docs_head,docs_dirty,runs,runs_head,runs_dirty	the 
 doctor_check_crashed	check,detail	the check {check} crashed: {detail}	检查 {check} 出错：{detail}
 doctor_summary_warnings	warnings,failures	{warnings} warning(s), {failures} failure(s) — each names its fix above	{warnings} 个警告，{failures} 个失败——每项上面都写了修复方法
 doctor_summary_ok		OK — no warnings	正常——没有警告
+doctor_exchange_missing	hub,folder	hub {hub} has no exchange folder ({folder}): a skill pack cannot hand a document to another through it	客户中心 {hub} 没有交换文件夹（{folder}）：技能包之间无法通过它交换文件
+doctor_exchange_stray	hub,count,paths	hub {hub}: {count} path(s) in exchange/ not at <contract>/<producer>/<YYYY-MM-DD>.json: {paths}; a reader will not see them	客户中心 {hub}：exchange/ 里有 {count} 个路径不在 <contract>/<producer>/<YYYY-MM-DD>.json 的位置：{paths}；读取方看不到它们
+doctor_exchange_ok	hub,documents,contracts	hub {hub}: exchange has {documents} document(s) of {contracts} contract(s), every file where the layout puts it	客户中心 {hub}：交换文件夹有 {documents} 份文件，涉及 {contracts} 种契约，每个文件都在规定的位置

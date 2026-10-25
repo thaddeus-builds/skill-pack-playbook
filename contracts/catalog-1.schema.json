@@ -1,0 +1,60 @@
+{
+  "$comment": "Draft from docs/portfolio.md, 'Contracts'. Product data has one owner per field (ownership rule 3): this document carries the fields product-feed owns; website content fields stay with seo.",
+  "$id": "catalog-1.schema.json",
+  "title": "catalog/1",
+  "description": "What is for sale: SKU, price, availability and promotion windows, per market. product-feed writes it; operators read prices and promotion windows, makers read what a creative may show, seo reads what a page may say.",
+  "$defs": {
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"}
+  },
+  "x-contract": "catalog/1",
+  "x-status": "draft",
+  "x-format": "json",
+  "x-producer": "product-feed",
+  "x-consumers": "operators, makers, seo",
+  "x-rules": [
+    "A sku appears once per market.",
+    "A price is in the market's currency and is what the shopper pays before any promotion; a promotion's sale_price is what they pay inside its window.",
+    "A promotion window is from starts_on to ends_on, both included.",
+    "An absent optional key means unknown, never null and never an empty string."
+  ],
+  "type": "object",
+  "required": ["producer", "produced_at", "products"],
+  "properties": {
+    "producer": {"description": "The pack that wrote the document (its CLI word).", "type": "string", "minLength": 1},
+    "produced_at": {"description": "When the document was written: ISO 8601 with its zone.", "$ref": "#/$defs/time"},
+    "products": {
+      "description": "The products; empty when there are none.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sku", "market", "currency", "price", "availability"],
+        "properties": {
+          "sku": {"description": "The product's SKU, the key every other pack uses for it.", "type": "string", "minLength": 1},
+          "market": {"description": "The market the row is for (the hub's market word).", "type": "string", "minLength": 1},
+          "title": {"description": "The product's name as the shopper sees it.", "type": "string", "minLength": 1},
+          "url": {"description": "The product's page, when it has one.", "type": "string", "minLength": 1},
+          "currency": {"description": "ISO 4217 currency code of price and sale_price.", "type": "string", "pattern": "^[A-Z]{3}$"},
+          "price": {"description": "The price before any promotion.", "type": "number", "minimum": 0},
+          "availability": {"description": "Whether it can be bought now.", "enum": ["in_stock", "out_of_stock", "preorder", "discontinued"]},
+          "stock": {"description": "Units on hand, when the feed knows.", "type": "integer", "minimum": 0},
+          "promotions": {
+            "description": "The promotion windows, past, current and announced; empty when none.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["promotion_id", "starts_on", "ends_on"],
+              "properties": {
+                "promotion_id": {"description": "Unique for the sku and stable across documents.", "type": "string", "minLength": 1},
+                "starts_on": {"description": "First day of the window, YYYY-MM-DD.", "$ref": "#/$defs/date"},
+                "ends_on": {"description": "Last day of the window, YYYY-MM-DD.", "$ref": "#/$defs/date"},
+                "sale_price": {"description": "The price inside the window, when the promotion sets one.", "type": "number", "minimum": 0},
+                "label": {"description": "The promotion's name as the shopper sees it.", "type": "string", "minLength": 1}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

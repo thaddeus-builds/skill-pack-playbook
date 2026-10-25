@@ -1,0 +1,35 @@
+# intel/1
+{
+  "competitors": [
+    {
+      "domain": "lamps.example.com",
+      "market": "US",
+      "name": "Example Lamps",
+      "seen_for": "dimmable desk lamp",
+      "seen_on": "2026-10-21",
+      "source": "demo-serp-tool"
+    }
+  ],
+  "keywords": [
+    {
+      "as_of": "2026-10-21",
+      "keyword": "dimmable desk lamp",
+      "language": "en",
+      "market": "US",
+      "monthly_volume": 8100,
+      "source": "demo-keyword-tool",
+      "trend": [
+        {
+          "month": "2026-08",
+          "volume": 7400
+        },
+        {
+          "month": "2026-09",
+          "volume": 8100
+        }
+      ]
+    }
+  ],
+  "produced_at": "2026-10-23T08:00:00+08:00",
+  "producer": "intel"
+}
