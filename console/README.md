@@ -59,7 +59,7 @@ stateDiagram-v2
 | `if_no` | What "no" would change | 200 | A yes is only real if a no is a safe answer |
 | by `step` | `choose`: `options` (2 to 8). `approve`: `effect`. `provide`: `input` (type, range, unit) | option label 60, `effect` 200 | Inputs are picked from a list; typing is the exception |
 
-`step` is `confirm`, `approve`, `choose` or `provide`. `kind`, `group`, `gate` and `expires` are optional. All fields, limits and one example per step: `uv run console/ask.py schema` (needs no folder); the examples live in [`examples/`](examples/).
+`step` is `confirm`, `approve`, `choose` or `provide`. `kind`, `group`, `source`, `gate` and `expires` are optional. All fields, limits and one example per step: `uv run console/ask.py schema` (needs no folder); the examples live in [`examples/`](examples/).
 
 ## Quick start
 

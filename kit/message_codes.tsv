@@ -9,6 +9,9 @@ env_required	name,searched	{name} is required — set it in the process environm
 raw_would_overwrite	source,name	raw/{source}/{name} already holds different bytes; a raw file is written once and never replaced — save the new data under a new name. Nothing was written	原始数据 raw/{source}/{name} 已存在且内容不同；原始数据只写一次、从不覆盖，请用新名字保存。未写入任何内容
 raw_bad_name	name	{name} is not a plain file or folder name (no path separator, no leading dot, not empty)	{name} 不是合法的文件名或目录名（不能含路径分隔符、不能以点开头、不能为空）
 raw_import_missing	path	Nothing to import: {path} is not a readable file	无法导入：{path} 不是可读取的文件
+exchange_no_folder	folder	{folder} is not there: this hub was made before the exchange folder. Make it (mkdir) in the hub, then write again. Nothing was written	{folder} 不存在：这个客户中心是在有交换文件夹之前建的。请在客户中心里创建它（mkdir）后再写。未写入任何内容
+exchange_bad_name	what,value,shape	{what} `{value}` is not {shape}. Nothing was written	{what} `{value}` 不符合要求：{shape}。未写入任何内容
+exchange_exists	contract,producer,date,path	exchange/{contract}/{producer}/{date}.json is already there; an exchange document is written once and never replaced. Nothing was written	交换文件 exchange/{contract}/{producer}/{date}.json 已存在；交换文件只写一次、从不覆盖。未写入任何内容
 contract_stale_data	stale	STALE DATA — {stale} (each: table, last day, days behind, most days allowed) — refresh the data before acting on this	数据过期：{stale}（每项：表、最后一天、落后天数、允许的最多天数）——请先更新数据再据此行动
 contract_assumed_thresholds	assumed	ASSUMED (not stored): this run uses {assumed} instead of the values in effect	假设值（未保存）：本次运行使用 {assumed}，而不是当前生效的值
 contract_short_window	days_found,days_requested,start,end,missing,gaps,next	SHORT WINDOW — only {days_found} of {days_requested} requested days ({start}..{end}) have data, so results rest on {days_found} day(s); no rows for {missing}; per source: {gaps}; backfill: {next}	数据天数不足：请求的 {days_requested} 天（{start} 至 {end}）里只有 {days_found} 天有数据，结果只基于这 {days_found} 天；缺少：{missing}；各数据源缺少：{gaps}；补数据命令：{next}

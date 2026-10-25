@@ -1,0 +1,4 @@
+# ads.results/1
+creative_code	platform	account	ref_kind	ref_value	unit_id	placement	date_from	date_to	nk	exported_at	complete	settled	restated	spend_cny	impressions	clicks	plays	plays_3s	plays_complete	conversions	gmv_cny	net_conversions	net_gmv_cny	ctr	play_3s_rate	completion_rate	cpa_cny	roi	stage	verdict	verdict_reason	fission	scored_at	stage_reason
+DEMO-0007-6	qianchuan	demo-account	material_id	7000000000000001	plan-1	feed	2026-10-13	2026-10-19	a1b2c3d4	2026-10-20T06:00:00+08:00	1	1	0	1200.50	150000	3000	90000	60000	9000	42	5200			0.02	0.6667	0.1	28.58	4.33	mature			0.72	2026-10-20T06:05:00+08:00	converted
+DEMO-0008-4	qianchuan	demo-account	material_id	7000000000000003	plan-1	feed	2026-10-18	2026-10-19	e5f6a7b8	2026-10-20T06:00:00+08:00	1	0	0	80	2000	10	1500	300	20					0.005	0.2	0.0133			testing					

@@ -129,6 +129,8 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a skill pack small, hosting |
 | [docs/maintaining.md](docs/maintaining.md) | For the owner: how the playbook itself changes (issue, small pull request, merge, re-vendor when needed), what the agent checks, and the access token it needs |
 | [docs/roadmap.md](docs/roadmap.md) | Planning a running skill pack: vision to pillars to story rows and milestones, owner questions with defaults, one story per session, feedback from testers; the SEO skill pack's roadmap as the example |
+| [docs/portfolio.md](docs/portfolio.md) | The growth portfolio: which skill pack owns which platform, fact and engine, and the contracts between them |
+| [docs/solutions.md](docs/solutions.md) | Which skill packs serve which kind of client (five solutions), how they work together, and how to start a client on them |
 | [docs/channels.md](docs/channels.md) | Reusing a skill pack for other channels; generated creative and real people |
 | [docs/kit-and-tools.md](docs/kit-and-tools.md) | What this repository holds, the kit's admission rule, every template |
 | [docs/lessons.md](docs/lessons.md) | Lessons kept after their code was removed |
@@ -143,6 +145,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | --- | --- |
 | [`kit/`](kit/) | The shared modules a skill pack vendors, in packs |
 | [`console/`](console/) | The owner console: where the asks go |
+| [`contracts/`](contracts/README.md) | The files skill packs exchange: one schema and one example per contract |
 | [`hosts/zylos/`](hosts/zylos/) | The host adapter, the worked example for any other host |
 | [`scaffold/`](scaffold/), [`build/`](build/), [`templates/`](templates/) | The generator, the build-time tools, the templates |
 | [`conformance/`](conformance/INVARIANTS.md) | The invariants every skill pack keeps, and a black-box check that drives a skill pack's CLI from an adapter kept here |

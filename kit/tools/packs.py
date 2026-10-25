@@ -57,12 +57,15 @@ def modules(kit_dir: Path) -> list[str]:
 
 def module_of(rel: str, known: set[str]) -> str | None:
     """The module a kit file belongs to (None: the package's own files, always vendored).
-    `facts.py` -> facts, `guards/ssot.py` -> guards.ssot, `message_codes.d/facts.tsv` -> facts."""
+    `facts.py` -> facts, `guards/ssot.py` -> guards.ssot, `message_codes.d/facts.tsv` -> facts,
+    `contracts.d/<contract>.schema.json` -> contracts."""
     p = Path(rel)
     if p.suffix == ".py":
         return ".".join(p.with_suffix("").parts)
     if p.parent.as_posix() == "message_codes.d" and p.stem in known:
         return p.stem
+    if p.parent.as_posix() == "contracts.d" and "contracts" in known:
+        return "contracts"
     return None
 
 
