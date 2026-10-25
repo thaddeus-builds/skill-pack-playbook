@@ -1,5 +1,5 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-23
+Updated: 2026-10-24
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
 - [N2] 2026-10-23 turn 2 (#20), now that the checkouts are read: bring the two skill packs in use to one kit version (the RedNote skill pack is out of it, R8). Where they stand (D21): the KOL skill pack 0.32.0 and adcut 0.33.0 (RedNote 0.5.0 with local changes in 15 kit files, unused); playbook 0.35.0. Start with `python3 tools/fleet.py status` on full clones (a shallow clone cannot tell an older file from a local one), upstream or drop each local change, then re-vendor one skill pack per merge request
@@ -9,6 +9,7 @@ Updated: 2026-10-23
 - [W3] 2026-10-23 each skill pack owner's review of its re-vendor, and a GitLab token that can push to the skill pack repositories (the one held today only reads, and only a project whose path is named: it cannot list projects or groups, which need User and Group read). unblocks: N2
 - [W4] 2026-10-23 merge the contracts: #140 (`contracts/`, schemas and rules, docs only), then #141 (kit 0.37.0, `kit/contracts.py` in the new `exchange` pack, stacked on it; retarget to main after #140). Phase 3 of docs/portfolio.md (one session per producer and consumer pair) waits for kit 0.37.0. Also settle `creators.roster/1`'s creator key between creator-program (`creator`) and video-ads K5 (`creator_ref`), and keep or drop the channel words in the schemas the kit vendors. unblocks: X11
 ## Next
+- [X12] 2026-10-23 portfolio phase 4: the `ads-core`, `creative` and `intent` kit packs (W5), then the video-ads session re-vendors, deletes its own copies and shows golden diff 0 differences; the google-ads session takes `intent` and `creative` at its B3
 - [X2] 2026-10-05 turn 3 (#19): selective vendoring, a skill pack takes only the packs it needs (breaking). Needs turn 2 done (N2), the owner's go-ahead (R2) and a quiet week for the short-video skill pack. Packs and the vendor side are built (D3); what is left is moving each skill pack onto them
 - [X3] 2026-10-05 the scaffold sets up Zylos itself: vendors the adapter, writes the manifest, passes `node zylos/lib.js check` (#25)
 - [X4] 2026-10-05 restore the three Anthropic source links in the README once the leak scan allows them (#23, W1)
@@ -53,6 +54,7 @@ Updated: 2026-10-23
 - [R7] 2026-10-23 the kit supports English and Simplified Chinese only; the Traditional Chinese design (pull request #116, closed) is not built: "只有英文和简体中文" (the one client who writes Traditional is an exception, and Simplified is enough for them)
 - [R8] 2026-10-23 the RedNote skill pack is left as it is and kept out of turn 2: "小红书那个暂时没有人用"
 - [R9] 2026-10-23 the growth portfolio (docs/portfolio.md) is the map for every acquisition and growth skill pack: packs cut by platform account, pull and push as kit engine families, truth packs with one owner per fact, makers, typed contracts through the client hub; three decisions stay open on that page: "我觉得你上面论述的层次结构已经非常清晰了 我可以按照你的这个结构重新设计" (chat 2026-10-23)
+- [R10] 2026-10-24 three kit packs for the ad engines (W5): `ads-core` (nine modules), `creative` (four), `intent` (four), each its own pull request, kit 0.38.0 to 0.40.0; the creative's own state machine (`life`) goes to `creative` and a campaign's (`campaign`) to `ads-core`; the paid-search skill pack keeps its copies (R3) and its month cap and wallet moves stay there, only rules with a test here move: "同意，按 W5 开 PR" (the owner's choice in the session)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`
