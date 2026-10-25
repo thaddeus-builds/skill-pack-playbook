@@ -141,7 +141,7 @@ The kit's admission rule holds: a module joins when a second pack uses it.
 
 | Kit pack | What | From | Consumers |
 | --- | --- | --- | --- |
-| `ads-core` | the report ledger (settled days, restatement, currency), pacing and the two wallets, alerts against an entity's own baseline, the change log, two-route reconcile, the lifecycle state machine, the proven/unproven rule | `video-ads` (`perfledger`, `pacing`, `reconcile`, `life`) and `amazon-ppc` (`compute_budget`, `certainty`, `alerts`, `compute_changes`) | `vads`, `gads`, `ppc` |
+| `ads-core` (kit 0.38.0) | the report ledger (settled days, restatement, currency), pacing and the two wallets, alerts against an entity's own baseline, the change log, two-route reconcile, a campaign's lifecycle state machine, the proven/unproven rule | `video-ads` (`perfledger`, `pacing`, `adgroup`, `allocation`, `reconcile`, `campaign`) and `amazon-ppc` (`compute_budget`, `certainty`, `compute_alerts`, `compute_changes`) | `vads`, `gads`, `ppc` |
 | `intent` | search-term triage, harvest and negatives; auction pressure; impression share with its clamped values | `amazon-ppc` (`compute_triage`, `auction_pressure`, `keyword_leaders`) | `ppc`, `gads` |
 | `creative` | creative lifecycle and fission score, creative demand, portfolio life | `video-ads` (`life`, `fission`, `demand`, `portfolio`) | `vads`, `gads` (YouTube), `ppc` (Sponsored Brands video) |
 | `compliance` (exists) | one claims and copy check, rules per jurisdiction | merges adcut's lint and claim scope, kos's `claim_rules`, geo's draft rules | every maker and `kos` |
