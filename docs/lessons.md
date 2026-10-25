@@ -316,7 +316,7 @@ The rules:
 
 ## Reading a client's software by its screens: the CLI first, the browser for what it lacks, nothing saved (from the video-ads skill pack, 2026-10-14 and 23)
 
-[workbook-and-browser-ops.md](workbook-and-browser-ops.md) proposes a guarded browser for a platform with no API access. The video-ads skill pack's practice before that module exists, on Emma Sleep's Smartly:
+[workbook-and-browser-ops.md](workbook-and-browser-ops.md) proposes a guarded browser for a platform with no API access. The video-ads skill pack's practice before that module exists, on a client's media-library tool:
 
 - Fresh numbers came from the pack's own pull (a saved report's read-only export), not from the screens. The browser was used for the one question the export could not answer: what the report builder offers (an hour dimension, a learning-phase column, an ad set's bid and targeting). The answer: an `Hour (S2S)` dimension of unknown meaning, bid and budget columns, no learning column, targeting only as an audience segment.
 - The session was the owner's, already signed in; the agent signed nothing in and entered no credential. Each picker was opened, read and closed with "discard changes"; the Save button stayed greyed out; nothing was downloaded. A control the session's guard refused (the access-tokens tab of an export dialog, 2026-10-14) was not gone around.
