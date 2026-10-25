@@ -10,6 +10,7 @@ Context windows end mid-project. Each session closes one turn of the build loop 
 | `<project>/CHANGELOG.md` | Each plan revision: what changed and which owner note or decision asked for it | the session, as it applies feedback |
 | `<project>/feedback/<date>.json` | A dated copy of the owner's decisions read from the review page | the session, at its start |
 | The agent's memory notes | Only what isn't in the repo: the owner's preferences, account facts (which token is which group), links (review page URL) | the session, when learned |
+| `<client workspace>/reports/handoff-<date>.md` | What git cannot hold while work is in flight: a running or rented resource and whose it is, tunnels, group and conversation ids, who answers what, what must not be touched. The roadmap stays the plan; this is the state around it. A memory note points to the newest one | the session, at its end |
 | `SKILL.md` | How an agent operates the skill pack: the loop, the verbs, the rules | when a verb or rule changes |
 
 ## Start on a new machine
