@@ -1,0 +1,26 @@
+# leads/1
+{
+  "leads": [
+    {
+      "company": {
+        "country": "HK",
+        "domain": "retail.example.com",
+        "name": "Example Retail Ltd"
+      },
+      "contacts": [
+        {
+          "name": "A. Demo",
+          "profile_url": "https://profiles.example.com/a-demo",
+          "role": "Head of Buying"
+        }
+      ],
+      "evidence": "Lists home lighting among its categories and buys from overseas suppliers.",
+      "found_on": "2026-10-21",
+      "lead_id": "lead-0001",
+      "source": "demo-trade-directory",
+      "source_url": "https://directory.example.com/retail-ltd"
+    }
+  ],
+  "produced_at": "2026-10-23T08:00:00+08:00",
+  "producer": "obd"
+}

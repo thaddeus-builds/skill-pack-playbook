@@ -453,6 +453,20 @@ def test_list_shows_open_by_default_and_what_became_of_the_others():
         assert ok("list", "--status", "open", d=d)["open"] == 1
 
 
+def test_list_and_digest_return_who_posted_an_ask_and_null_when_nobody_named_it():
+    with _t.tmpdir() as d:
+        ok("add", put(d, "a.json", [mk_ask("mine", source="adcut"), mk_ask("theirs", source="gads-tw"),
+                                    mk_ask("nobody")]), d=d, name="main")
+        rows = {r["id"]: r for r in ok("list", d=d)["asks"]}
+        assert {i: r["source"] for i, r in rows.items()} == {"mine": "adcut", "theirs": "gads-tw", "nobody": None}
+        mine = [r for r in rows.values() if r["source"] == "adcut"]
+        assert ids(mine) == ["mine"]
+        by_id = {r["id"]: r for r in ok("digest", "--format", "json", d=d)["asks"]}
+        assert by_id["mine"]["source"] == "adcut" and by_id["nobody"]["source"] is None
+        code, doc = run("add", put(d, "b.json", mk_ask("bad", source="two words")), d=d)
+        assert code == 2 and doc["code"] == "invalid_ask"
+
+
 def test_list_of_an_empty_folder_is_empty_not_an_error():
     with _t.tmpdir() as d:
         assert ok("list", "--status", "all", d=d) == {"ok": True, "seq": 0, "open": 0, "asks": [], "dir": d}
@@ -1073,7 +1087,7 @@ def test_schema_is_cores_tables_plus_the_examples():
             assert row["required_for"] == steps(required), f
             assert row["allowed_for"] == steps(allowed), f
             assert row["about"].strip(), f
-            assert row.get("limit") == core.LIMITS.get(f), f
+            assert row.get("limit") == core.LIMITS.get(core.FIELD_LIMIT.get(f, f)), f
         assert doc["flow"] == "add -> answers -> apply -> applied -> wait --since <the seq answers returned>"
         assert doc["flow"] == cli.FLOW
         assert doc["answer_values"]
