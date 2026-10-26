@@ -53,6 +53,38 @@ The scan above runs before a build. A skill pack that is already built needs the
 
 *Seen once, in the Amazon PPC skill pack (2026-10-26):* five agents, 97 to 132 tool calls each, 254 sources and 47 verdicts (31 keep-own, 13 borrow-idea, 3 watch, none adopt). It found no mature open-source Amazon PPC optimiser, and 12 ideas worth borrowing, two of them about Amazon's own platform (the stream it reads is marked outdated; a published migration kit) rather than about any library. Every agent hit pages it could not read (script-rendered, 403, 503, certificate errors); each said so in its row instead of filling the gap from memory. The first brief named `docs/research/`, the template said `docs/prior-art/`; the files were moved.
 
+## A name or a link from the owner (a quick scan)
+
+The owner pastes a repository or a product and asks "did we already look at this, and is there more like it?". That is a lookup with a short tail, not a scan: about 30 tool calls in all, one agent, no fan-out.
+
+1. **Read what is kept first.** Open `docs/prior-art/README.md` and `sources.tsv` (or `docs/research/README.md`), then search the whole repository for the project's name, its owner and its URL. Answer "yes, on this date, with this verdict, here" or "no" before any search; the owner is asking exactly this.
+2. **Facts before words, per project.** `gh api` for stars, licence, push date, archived and renamed; then the LICENSE file itself; then the README and the one page that shows the interface (an API reference, a schema, an MCP tool list), not the marketing page. A rewrite in progress, a repository closed to contributions, or a licence that forbids linking is a finding: put it in the verdict.
+3. **Find the neighbours in three searches at most:** the project's own "alternatives" or "similar" list, one search for the job in plain words ("open source X for agents"), and one in the client's market language when it is not English. Merge the hits into one table: name, licence, size, last push, verdict. Stop when two searches in a row add nothing.
+4. **One verdict per project**, the four words of the audit below, each naming the module it would change or the reason it changes none. What only running can answer (fonts, speed, whether two runs give the same bytes) goes on a **spike list** as questions. It is neither guessed nor run unasked.
+5. **Write it down in the same turn,** in the repository: rows in the sources registry, the table in the dated file, the front page updated so that step 1 finds it next time. A scan left in a reply is done twice.
+6. **Ask the owner after, not before:** which module they hope to improve, and which regions or tool families are not covered yet. Keep the answers as dated "deferred" lines, so a skipped lens reads as a decision, not a hole.
+
+*Seen once, in a video-ad skill pack (2026-10-26):* the owner pasted two open-source editors and asked whether the market had been looked at. Earlier research held licences and schema patterns but nothing on editors, and was spread over one long page. The quick scan found that one editor is under AGPL (a separate process at most), the other is mid-rewrite with its headless mode only promised, and a third project (an HTML-to-video engine with agent skills) was the one worth a spike. The answers went into `docs/prior-art-editors.md`, linked from `docs/prior-art.md`.
+
+## Do you need a deep-research tool?
+
+Default no. A scan's claims are mostly mechanical (a licence, a star count, a push date, an endpoint) and rest on a handful of pages; the lens-per-agent split above is already an orchestrator with workers. A hosted agent or an open-source clone adds a long report whose claims need the same spot-check, and a multi-agent run costs about fifteen times the tokens of a chat.
+
+One earns its keep for a lens that is wide reading rather than verification (a body of regulator guidance, a literature of thirty papers). Treat its output as a lead list: open the sources it cites ourselves, fetch the three heaviest claims, and write nothing as a fact without a URL and a date.
+
+What the tools are (read 2026-10-26; stars and licences from `gh api` that day):
+
+- **Gemini Deep Research** is a hosted agent behind Google's Interactions API; what Google open-sourced is a benchmark (DeepSearchQA, about 900 tasks), not the agent. The `gemini-fullstack-langgraph-quickstart` repository (Apache-2.0, 18k stars, last push 2026-06) is a reference app on Gemini 2.5.
+- **Open-source clones:** GPT Researcher (Apache-2.0, 30k stars, active), dzhng/deep-research (MIT, 20k, last push 2026-04), LangChain open_deep_research (MIT, archived), Stanford STORM (MIT, 32k, last push 2025-09). None adopted here.
+
+What the people who run research at scale do, and where it lands in this template:
+
+| Source | What to take | Lands in |
+| --- | --- | --- |
+| "How we built our multi-agent research system" (Anthropic Engineering, 2025) | Brief each worker with an objective, an output format, the tools to use and the boundaries; scale effort with the question (a lookup is one agent and a few calls, a comparison a handful, more only for a whole-pack audit); say which sources count, because agents drifted to search-optimised pages until told to prefer primary ones; about 20 realistic cases show big effects early; judge the outcome, not the path; poor fit when the workers share one context | the lens briefs, the stop rule, the registry's `kind` |
+| Simon Willison, "Code research projects with async coding agents" (2025-11-06) and his public `research` repository | A question about code is settled by running code in a throwaway repository, one folder per question with its README; the prompt (and transcript) are linked from the commit; an agent can show that something is possible, never that it is impossible; an unreviewed report is not published | the spike list, and "could not find" is never "does not exist" |
+| Andrej Karpathy, the "LLM Wiki" idea file (a public gist, 2026-04) | Sources stay as they were; a maintained layer of linked notes on top; a schema file that tells the agent how; an index read first, an append-only log, periodic lint; good answers are filed back; an index is enough up to about a hundred sources | `sources.tsv`, the front page, the coverage test; the agent's rule file says "read the front page first" |
+
 ## Output
 
 A folder in the skill pack repository, `docs/prior-art/`:
