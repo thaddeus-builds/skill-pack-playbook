@@ -10,6 +10,7 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/overview.md`: the autonomy levels L0 to L5 on the overview, one row each with who decides the write, an example and whether it is built (L4 and L5 are not), linked to `docs/autonomy.md`. No kit change.
 - `docs/overview.md`, "How the work moves": the diagram now follows one example (a promotion on two platforms), names what each arrow carries (the contract) and says in words what each of the four steps does; before, it drew four abstract boxes. No kit change.
 - `docs/overview.md` (new): the framework on one page, in two parts: who owns what in growth operations (operator, truth, maker, owner; the five ownership rules; the five solutions), and what the playbook unifies and saves each skill pack (the gate, the money path, the build, the kit's packs); a dated state table that points to `tools/fleet.py` and `tools/consumers.py` for live counts. The README's map links to it. No kit change.
 - `docs/operating.md`, "Long or paid runs, and the rehearsal before a demo": a many-item or paid tool records per item and exits non-zero on failure, a rehearsal on the real stack includes failures on purpose, a demo freeze names its exceptions; `templates/session-handoff.md` gets the dated handoff file for the in-flight state the roadmap cannot hold (seen in product-keyframe-video).
