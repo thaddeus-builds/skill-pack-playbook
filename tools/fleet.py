@@ -23,7 +23,8 @@ each file with the playbook's current copy (kit/, console/, hosts/zylos/):
 `edited` lists the files that differ from the copy's own MANIFEST.sha256
 (an edit made after vendoring). The verdict per copy is `in sync`,
 `behind` (re-vendor) or `local changes` (decide each file first). Phase 1 of
-RESTRUCTURE.md: bring every skill pack to one kit version.
+the 2026-10 restructure (docs/history/restructure-2026-10.md, now ROADMAP.md N2):
+bring every skill pack to one kit version.
 
 `diff` prints a unified diff, skill pack copy against the playbook's current
 file, for each file that is not the same (or only the FILEs named, as
