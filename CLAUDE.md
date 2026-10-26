@@ -1,11 +1,12 @@
 # Working in the playbook
 
-This repository is the **parent of every growth-marketing skill pack** (KOL, Amazon Ads, Meta ads, SEO, ...). A skill pack adds only its channel: its pulls, reports, registries and the hooks the kit calls. Everything here exists because two or more skill packs need it. Why it is shaped this way: [RESTRUCTURE.md](RESTRUCTURE.md). Read [ROADMAP.md](ROADMAP.md) before you start.
+This repository is the **parent of every growth-marketing skill pack** (KOL, Amazon Ads, Meta ads, SEO, ...). A skill pack adds only its channel: its pulls, reports, registries and the hooks the kit calls. Everything here exists because two or more skill packs need it. Why it is shaped this way: [docs/history/restructure-2026-10.md](docs/history/restructure-2026-10.md). Read [ROADMAP.md](ROADMAP.md) before you start.
 
 ## Keep it small
 
 - **Channel code stays in the skill pack.** A platform's API, fields and vocabulary do not enter `kit/`, `console/`, `build/` or `scaffold/`. If only one skill pack needs it, it lives there.
 - **A new kit module goes in the pack named for its concern, never in `base`.** It moves to `base` once two skill packs import it from code merged to their main branches. A module no skill pack imports for two minor versions is deleted ([kit/packs.tsv](kit/packs.tsv)).
+- **A pack may be born before its second importer, but not for good.** An engine lifted out of one skill pack so the next one starts from it is `incubating` in [tools/pack_status.tsv](tools/pack_status.tsv), with the day by which two skill packs must import it from their main branches; `tests/test_pack_status.py` fails the day after. On that day the owner extends the date with a reason, marks the pack `shared` with the importers `tools/consumers.py` counted, or moves it back into the skill pack it came from. `base` and `testkit` are never incubating.
 - **Packs stay decoupled.** A pack imports only `base` and itself, and a test enforces it. The kit is stdlib only, and `from kit import X` paths do not move.
 - **A lesson arrives as a small change with a test,** from a skill pack that paid for it. Say where it was seen; if once, say once. No new rule without a check that fails when the rule is broken: a rule nothing enforces is deleted, not kept.
 
