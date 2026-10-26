@@ -1104,6 +1104,40 @@ def test_drift(root: Path) -> None:
            "no vendored kit at scripts/kit/")
 
 
+def test_drift_behind(root: Path) -> None:
+    print("\n[6b] drift: a hint when the named playbook is far ahead, never a failure")
+    from kit.testing import suites
+    a, b, c = (int(x) for x in (root / "scripts/kit/VERSION").read_text().split("."))
+    playbook = Path(tmp_dir("playbook-"))
+
+    def named(version: str | None, key: str = "playbook"):
+        if version is not None:
+            write(playbook, "kit/VERSION", version + "\n")
+        return planted(root, "skill-pack.toml", append=f'\n[kit]\n{key} = "{playbook}"\n')
+
+    check("no [kit] playbook: no hint", drift.behind(root) is None)
+    with named(f"{a}.{b + 2}.9"):
+        check("two minor versions ahead: no hint", drift.behind(root) is None)
+    with named(f"{a}.{b + 3}.0"):
+        want = f"behind: kit {a}.{b}.{c}, playbook {a}.{b + 3}.0"
+        check("three minor versions ahead: the hint", drift.behind(root) == want,
+              drift.behind(root))
+        rc, out, _ = capture(lambda _: 0 if drift.check_drift(root) else 1, [])
+        check("check_drift prints it and still passes", rc == 0 and want in out, out)
+        rc, out, _ = capture(lambda _: suites.run(suites.kit_drift(root)), [])
+        check("the generated test_kit_drift prints it", want in out and "FAIL" not in out, out)
+    with named(f"{a + 1}.0.0"):
+        check("a major ahead: the hint", (drift.behind(root) or "").endswith(f"playbook {a + 1}.0.0"))
+    with named(f"{a}.{b + 9}.0", key="elsewhere"):
+        check("another key: no hint", drift.behind(root) is None)
+    with named("not a version"):
+        check("a version that does not parse: no hint", drift.behind(root) is None)
+    with planted(root, "skill-pack.toml", append='\n[kit]\nplaybook = "/nowhere/at/all"\n'):
+        check("a missing playbook: no hint, no error", drift.behind(root) is None)
+    with named(f"{a}.{b + 3}.0"):
+        clean("the hint is not a drift problem", drift.check_skill_pack(root))
+
+
 def main() -> int:
     _shop.use()
     root = build()
@@ -1131,6 +1165,7 @@ def main() -> int:
     test_json_verbs(root, data)
     test_boundary(root)
     test_drift(root)
+    test_drift_behind(root)
 
     print("\n[7] every plant undone: the copy is clean again")
     for name, problems in everything(root, data).items():

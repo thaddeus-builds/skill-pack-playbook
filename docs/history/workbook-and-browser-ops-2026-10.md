@@ -1,5 +1,7 @@
 # Two proposed kit modules: `workbook` and `browser-ops`
 
+> **Archived 2026-10-26.** The workbook half was built as the kit's `workbook` pack (kit 0.11.0 to 0.12.0; `kit/workbook.py`, `workbook_map`, `workbook_store`, `file_gate`, `workbook_patch`; two skill packs import it). The browser half, `browser-ops`, is not built and stays a ROADMAP row (X8). Kept as written; links point at the tree as it was.
+
 Status: `workbook` slice 1 (read, the map, the store) is **kit 0.11.0**; the rest is design (proposed 2026-10-10 from the KOL skill pack's client Emma; the owner agreed to write it into the playbook). The modules are added as `extra` in their own packs and become more only when two independent skill packs use them in merged code ([the admission rule](kit-and-tools.md#the-admission-rule)).
 
 ## Why now

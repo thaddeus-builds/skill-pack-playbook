@@ -10,7 +10,7 @@ they import, lazy imports included. A module nobody imports directly but
 another module that is imported pulls in is `via` that module. Modules of the
 `testkit` pack are left out: every skill pack's tests reach them.
 
-Only merged code counts (RESTRUCTURE.md, decision 4): point it at a checkout of
+Only merged code counts (docs/history/restructure-2026-10.md, decision 4): point it at a checkout of
 the skill pack's main branch, not a feature branch. A skill pack that does not
 vendor the kit has no imports to count and says so.
 
