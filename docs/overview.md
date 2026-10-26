@@ -10,7 +10,7 @@ Each skill pack is one specialist on a client's team. A client's growth work is 
 
 | Role | Does | Never does | Examples |
 | --- | --- | --- | --- |
-| **Operator** | Holds one platform account: pulls its data, reports, proposes actions, and writes to the account once approved | Touches another platform; invents its own number for a shared fact | `video-ads` (Meta, 千川, 腾讯), `google-ads`, `amazon-ppc`, `ecommerce-seo` |
+| **Operator** | Holds one platform account: pulls its data, reports, proposes actions, and writes to the account once approved | Touches another platform; invents its own number for a shared fact | `meta-ads` (Meta), `video-ads` (千川, 腾讯), `google-ads`, `amazon-ppc`, `ecommerce-seo` |
 | **Truth** | Owns one kind of number the others need and publishes it | Runs ads; writes to any account | `product-feed` (price, stock), `measurement` (attribution, break-even ROAS), `search-intel` (demand, competitors) |
 | **Maker** | Makes assets to a spec and hands them over with a manifest | Knows a platform's API; uploads | `adcut` (video), `ad-copy` (text), `product-keyframe-video` (images) |
 | **Owner** | Signs five things: meaning, stories, numbers, money, release | | |
@@ -39,7 +39,7 @@ flowchart LR
     end
     subgraph OP["3 · Operators"]
       direction TB
-      VADS["video-ads<br/>Meta, 千川, 腾讯"]
+      META["meta-ads<br/>Meta, through Smartly or its API"]
       GADS["google-ads<br/>Search, Shopping, YouTube"]
     end
     MEAS["4 · measurement<br/>platform results against the company's own numbers"]
@@ -49,14 +49,14 @@ flowchart LR
     FEED -- "catalog/1" --> GADS
     MSG -- "messages/1" --> ADCUT
     MSG -- "messages/1" --> COPY
-    ADCUT -- "ads.creatives/1" --> VADS
+    ADCUT -- "ads.creatives/1" --> META
     ADCUT -- "ads.creatives/1" --> GADS
-    COPY -- "copy.proposals/1" --> VADS
+    COPY -- "copy.proposals/1" --> META
     COPY -- "copy.proposals/1" --> GADS
-    VADS -- "ads.results/1" --> MEAS
+    META -- "ads.results/1" --> MEAS
     GADS -- "ads.results/1" --> MEAS
-    VADS -- "ads.demand/1: how many creatives" --> ADCUT
-    MEAS -- "truth/1: break-even ROAS" --> VADS
+    META -- "ads.demand/1: how many creatives" --> ADCUT
+    MEAS -- "truth/1: break-even ROAS" --> META
     MEAS -- "truth/1: break-even ROAS" --> GADS
 ```
 
@@ -72,7 +72,7 @@ Which packs a client needs depends on the business ([solutions.md](solutions.md)
 
 | Solution | For | Operators |
 | --- | --- | --- |
-| A. Brand, paid growth on several channels | a direct-to-consumer brand with a site, ads and creators | `video-ads`, `google-ads`; creators' packs |
+| A. Brand, paid growth on several channels | a direct-to-consumer brand with a site, ads and creators | `meta-ads`, `google-ads`; creators' packs |
 | B. Short-video commerce, regulated category | feed video on Chinese platforms, claims a regulator limits | `video-ads` with `compliance` |
 | C. Marketplace seller | sales on Amazon | `amazon-ppc` |
 | D. B2B, organic and sales-led | buyers won by search, AI answers and outreach | `ecommerce-seo`, `geo-china`, `outbound`, `sdr` |
