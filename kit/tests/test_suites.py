@@ -21,6 +21,7 @@ each on a planted violation, so no suite can pass by looking at nothing.
   [10] kit_drift: a local edit to the vendored kit
   [10b] roadmap: a Waiting row that names no row it unblocks; a second
       roadmap at the root
+  [10c] research: a file in docs/research/ with no row in its README
   [11] a skill pack without markets: the gate and the json contract hold
   [12] never_table: a gated verb added to the table with no row in SKILL.md's
       Never table; the table moved below the rules
@@ -116,7 +117,7 @@ def spec_of(root: Path):
 
 ALL = ("run_tests", "ssot", "layering", "clock", "boundary", "json_contract",
        "human_tables", "gate", "release", "kit_drift", "roadmap",
-       "never_table")
+       "research", "never_table")
 
 
 def every(root: Path) -> dict:
@@ -306,6 +307,18 @@ def main() -> int:
     caught("a second roadmap at the root", suites.roadmap(root), "keeps the one format")
     undo()
     check("…and green again once it is undone", not failing(suites.roadmap(root)))
+
+    print("\n[10c] research")
+    docs = root / "docs" / "research"
+    undo_index = planted(root, "docs/research/README.md", "# Research\n\n| File | Question | Date | Answer | Used by |\n| --- | --- | --- | --- | --- |\n")
+    check("an empty research index is green", not failing(suites.research(root)), failing(suites.research(root)))
+    undo = planted(root, "docs/research/stray.md", "# Stray\n")
+    caught("a research file with no row in the README", suites.research(root), "list every file in their README")
+    undo()
+    undo_index()
+    if docs.is_dir() and not any(docs.iterdir()):
+        docs.rmdir()
+    check("…and green again once it is undone", not failing(suites.research(root)))
 
     print("\n[11] a skill pack without markets")
     flat = generate()
