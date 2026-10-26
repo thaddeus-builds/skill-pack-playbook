@@ -16,6 +16,8 @@ list, or a list with a step too many is refused with the line named, never drawn
 The diagram's grammar is the overview's: `subgraph ID["N · title"]` ... `end`, a pack as
 `ID["name<br/>what it does"]`, an arrow as `A -- "document/1: why" --> B`, and a pack outside
 every subgraph as `ID["N · name<br/>what it does"]`, which is a column of its own.
+`parse_diagram` is the part any page of packs shares (tools/solutions_page.py reads a diagram
+whose columns carry no number), and `render` is the one page template, tools/overview_page.html.
 
 The page builds its columns when it opens, and a browser's "save page" keeps what it built:
 the script clears them first, so a saved copy shows one set, not two (seen once, 2026-10-26).
@@ -39,6 +41,12 @@ NODE = re.compile(r'(\w+)\["(.*)"\]$')
 EDGE = re.compile(r'(\w+) -- "(.*)" --> (\w+)$|(\w+) --> (\w+)$')
 NUMBERED = re.compile(r"(\d+)\. (.*)$")
 SKIP = re.compile(r"(flowchart\b.*|graph\b.*|direction\b.*|%%.*)$")
+
+HEADING = "How the packs work together"
+SUB = ("Each pack does one job and hands the next a named document. Nothing else passes between them. "
+       "Pick a step, or pick any pack, to see what it reads and what it hands on.")
+FOOTER = ("Drawn from the diagram in docs/overview.md by tools/overview_page.py, so the page and the diagram cannot "
+          "disagree. The rules that keep the roles apart are in docs/portfolio.md, “Ownership rules”.")
 
 
 class Refused(Exception):
@@ -84,26 +92,25 @@ def steps_above(before: str) -> tuple[list[tuple[str, str]], str]:
     return items, example
 
 
-def parse(text: str) -> dict:
-    """{title, lanes: [{id, n, title, step, text}], nodes: [{id, name, desc, lane}], edges: [...]}."""
-    m = FENCE.search(text)
-    if not m:
-        raise Refused("no mermaid diagram in the document")
-    steps, example = steps_above(text[:m.start()])
+def parse_diagram(block: str, first_line: int = 1, numbered: bool = True) -> tuple[dict, dict, list]:
+    """(columns {n: {id, n, title}}, packs {id: {id, name, desc, lane: n}}, arrows [{from, to, contract, why}]).
+
+    `numbered`: a column's title (and a pack outside every column) starts "N · ", the number being the column.
+    Not numbered: columns are numbered by their order and a pack outside every column is refused.
+    `first_line` is the document's line of the block's first line, for the messages."""
     nodes: dict[str, dict] = {}
     lanes: dict[int, dict] = {}
     edges: list[dict] = []
     cur = None
-    first = text[:m.start()].count("\n") + 2          # the diagram's first line, for messages
-    for off, raw in enumerate(m.group(1).split("\n")):
-        line, where = raw.strip(), first + off
+    for off, raw in enumerate(block.split("\n")):
+        line, where = raw.strip(), first_line + off
         if not line or SKIP.match(line):
             continue
         if line == "end":
             cur = None
             continue
         if (g := SUBGRAPH.match(line)):
-            n, title = numbered_title(g.group(2), "column")
+            n, title = numbered_title(g.group(2), "column") if numbered else (len(lanes) + 1, g.group(2))
             if n in lanes:
                 raise Refused(f"line {where}: column {n} is drawn twice")
             lanes[n] = {"id": g.group(1), "n": n, "title": title}
@@ -113,7 +120,9 @@ def parse(text: str) -> dict:
             name, _, desc = g.group(2).partition("<br/>")
             lane = cur
             if lane is None:                           # outside every subgraph: a column of its own
-                lane, name = numbered_title(name, f'pack {g.group(1)}')
+                if not numbered:
+                    raise Refused(f"line {where}: pack {g.group(1)} is outside every column")
+                lane, name = numbered_title(name, f"pack {g.group(1)}")
                 if lane in lanes:
                     raise Refused(f"line {where}: column {lane} is drawn twice")
                 lanes[lane] = {"id": g.group(1) + "_col", "n": lane, "title": ""}
@@ -133,20 +142,33 @@ def parse(text: str) -> dict:
                 raise Refused(f"line {e['line']}: the arrow names {end}, which no pack in the diagram is")
         del e["line"]
     order = sorted(lanes)
-    if order != list(range(1, len(order) + 1)) or not order:
+    if not order or order != list(range(1, len(order) + 1)):
         raise Refused(f"the columns are numbered {order}: they must run 1, 2, 3 ... with none missing")
-    if len(steps) != len(order):
-        raise Refused(f"the list above the diagram has {len(steps)} steps and the diagram {len(order)} columns")
     empty = [n for n in order if not any(v["lane"] == n for v in nodes.values())]
     if empty:
         raise Refused(f"column {empty[0]} has no pack")
+    return lanes, nodes, edges
+
+
+def parse(text: str) -> dict:
+    """The page's data: heading, sub, footer, start (what shows before a pick), lanes, nodes, edges."""
+    m = FENCE.search(text)
+    if not m:
+        raise Refused("no mermaid diagram in the document")
+    steps, example = steps_above(text[:m.start()])
+    lanes, nodes, edges = parse_diagram(m.group(1), text[:m.start()].count("\n") + 2)
+    if len(steps) != len(lanes):
+        raise Refused(f"the list above the diagram has {len(steps)} steps and the diagram {len(lanes)} columns")
     out_lanes = []
-    for n in order:
+    for n in sorted(lanes):
         short, sentence = steps[n - 1]
         out_lanes.append({"id": f"L{n}", "n": n, "title": lanes[n]["title"] or short, "step": short, "text": sentence})
     for v in nodes.values():
         v["lane"] = f"L{v['lane']}"
-    return {"title": example or "The example", "lanes": out_lanes, "nodes": list(nodes.values()), "edges": edges}
+    return {"heading": HEADING, "sub": SUB, "footer": FOOTER,
+            "start": {"title": example or "The example", "lead": "Follow it left to right, or click a pack.",
+                      "items": [la["text"] for la in out_lanes]},
+            "lanes": out_lanes, "nodes": list(nodes.values()), "edges": edges}
 
 
 def render(data: dict) -> str:
