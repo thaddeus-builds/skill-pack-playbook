@@ -17,14 +17,23 @@ For the owner. The playbook is the parent of every skill pack. It changes only w
 3. **One small pull request, one concern, with a test.** The pull request template lists the checks. A change to a byte the vendor tool copies also needs a `kit/VERSION` bump, a regenerated `kit/MANIFEST.sha256` and a line in `CHANGELOG.md`.
 4. **CI runs `python3 run_all.py`.** It must end `RESULT: N passed`.
 5. **The owner merges.** The agent merges only when told, after CI is green. Anything on the risky list (the human gate, the write path, human-data tables, contract removals or renames, threshold values) is the owner's merge, not the agent's own call.
-6. **Skill packs take the change when they need it,** not on a schedule: `python3 kit/tools/vendor.py --skill-pack PATH`, then the skill pack's own suite, then a merge request in that skill pack. A skill pack that does not need the change stays on its version; that costs nothing until it needs something newer.
+6. **Skill packs take the kit on the train** (next section), with one command: `python3 tools/fleet.py update SKILL_PACK_PATH...`. A skill pack that is behind and needs nothing from the train costs nothing; one that needs a change waits for the next train, not for a merge.
+
+## The release train
+
+Why: on 2026-10-26 the kit had been bumped 52 times in four weeks while the skill packs sat on six versions, none current. A version that moves on every merge cannot be followed.
+
+- **A merge to main does not bump `kit/VERSION`.** Its line goes under `## [Unreleased]` in `CHANGELOG.md` and the merges accumulate there. The tests that tie `VERSION`, `MANIFEST.sha256` and the newest heading together run on the train commit, not on every merge.
+- **The train runs at most once a week,** on a day the owner names, in one pull request: pick the size from what accumulated (a patch for fixes only, a minor for a new module or hook, a major when a skill pack must change), set `kit/VERSION`, run `python3 kit/tools/manifest.py kit`, and turn `[Unreleased]` into `## [X.Y.Z] - DATE`. An urgent fix may ride a patch train in between; say why in the pull request.
+- **Every skill pack reaches the train with `fleet.py update`.** For each path it makes a worktree beside the pack (`<repo>_worktrees/kit-<version>`, branch `claude/kit-<version>`, cut from the default branch), vendors into it, runs the pack's suite (`[skill_pack].test_command` in `skill-pack.toml`, else `python3 tests/run.py`) and commits. It prints one line per pack: green, red with the failing files, refused by the vendor tool, worktree exists. The pack's own checkout is never touched. The owner or the agent then opens a merge request for each green one.
+- **A pack that falls more than two minor versions behind says so** in its own suite (`behind: kit X, playbook Y`) when its `skill-pack.toml` has `[kit] playbook = "<path to this checkout>"`. It never fails on it.
 
 ## Where the agent starts and stops
 
 - **Start of a session:** read [ROADMAP.md](../ROADMAP.md), fetch every remote, look at the open pull requests, do the one turn "Now" names.
 - **End of a session:** tests green, everything pushed, ROADMAP updated (done rows with a reference, the next turn in Now, what needs the owner as a Waiting row). A session ends with one screen for the owner: what to look at, what the agent needs, what the next session does.
 - **Checking a pull request** (the agent does this for any pull request, its own or another's): one concern; a test that fails without it; no channel code in `kit/`, `console/`, `build/`, `scaffold/`; the version, manifest and changelog if vendored bytes changed; merges cleanly with main; the whole suite passes on the merged result, not only the branch.
-- **Once a month, or before a decision about a module:** `python3 tools/consumers.py SKILL_PACK_PATH...` on each skill pack's main branch says which kit modules its own code imports; `python3 tools/fleet.py status SKILL_PACK_PATH...` says which kit version each holds and whether anyone edited a vendored copy. A module nobody imports for two minor versions is deleted, unless the owner parks it in the ROADMAP.
+- **Once a month, or before a decision about a module:** `python3 tools/consumers.py SKILL_PACK_PATH...` on each skill pack's main branch says which kit modules its own code imports; `python3 tools/fleet.py status SKILL_PACK_PATH...` says which kit version each holds and whether anyone edited a vendored copy (the day after a train, run `update`, not `status`). A module nobody imports for two minor versions is deleted, unless the owner parks it in the ROADMAP.
 
 ## Access: what to give the agent
 

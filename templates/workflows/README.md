@@ -27,7 +27,7 @@ flowchart TB
 | --- | --- | --- |
 | Decided work: verified fixes, features, planned merge requests | [`build-review-fix-verify.js`](build-review-fix-verify.js) | Per item: a status, the verified head, the MR title and text, the owner questions |
 | A codebase to tidy, or a backlog to check before anyone builds it | [`sweep-skeptic-plan.js`](sweep-skeptic-plan.js) | A verdict, planned items in the build script's shape, each with a design brief, and what was refuted |
-| One outside report, point by point | The reader and skeptic prompts in [`../verify-challenge.md`](../verify-challenge.md) | A verdict per point |
+| One outside report, point by point | Two prompts: a reader restates each point, then a skeptic tries to break each verdict | A verdict per point |
 | A run that was cut off | The same script again: [after a restart](#after-a-restart) | |
 
 ## Fill in the config and the items
