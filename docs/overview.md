@@ -15,13 +15,49 @@ Each skill pack is one specialist on a client's team. A client's growth work is 
 | **Maker** | Makes assets to a spec and hands them over with a manifest | Knows a platform's API; uploads | `adcut` (video), `ad-copy` (text), `product-keyframe-video` (images) |
 | **Owner** | Signs five things: meaning, stories, numbers, money, release | | |
 
+### How the work moves
+
+Follow one example: a brand launches a spring promotion on Meta and Google. Each arrow is **a document one pack hands to another**, and its label is the document's name ([contracts](../contracts/README.md)). Nothing else passes between packs.
+
+1. **Truth packs** say what is true: what shoppers search for, what is for sale and when the promotion runs, what the brand may say and to whom.
+2. **Makers** turn that into ads: video and text.
+3. **Operators** run them. Each proposes changes, the owner approves, and each writes only to its own platform.
+4. **`measurement`** checks the platforms' results against the company's own numbers and hands back the break-even ROAS to aim for. Operators also tell the makers how many creatives they need.
+
 ```mermaid
 flowchart LR
-    S["Truth<br/>what to say, what is for sale,<br/>what the numbers are"] --> MK["Makers<br/>video · text · names and tags"]
-    MK --> R["Operators<br/>propose; the owner approves;<br/>each writes only its own platform"]
-    R --> LN["Truth: measurement<br/>compares with the company's own numbers;<br/>confirmed values go to the client hub"]
-    LN --> S
-    LN -. "which creative to make more of" .-> MK
+    subgraph TR["1 · Truth: facts with one owner"]
+      direction TB
+      INTEL["search-intel<br/>what shoppers search for"]
+      FEED["product-feed<br/>what is for sale, price, promotion dates"]
+      MSG["messaging<br/>what the brand may say, and to whom"]
+    end
+    subgraph MK["2 · Makers"]
+      direction TB
+      ADCUT["adcut<br/>video"]
+      COPY["ad-copy<br/>text for each placement"]
+    end
+    subgraph OP["3 · Operators"]
+      direction TB
+      VADS["video-ads<br/>Meta, 千川, 腾讯"]
+      GADS["google-ads<br/>Search, Shopping, YouTube"]
+    end
+    MEAS["4 · measurement<br/>platform results against the company's own numbers"]
+    INTEL -- "intel/1" --> COPY
+    INTEL -- "intel/1" --> GADS
+    FEED -- "catalog/1" --> COPY
+    FEED -- "catalog/1" --> GADS
+    MSG -- "messages/1" --> ADCUT
+    MSG -- "messages/1" --> COPY
+    ADCUT -- "ads.creatives/1" --> VADS
+    ADCUT -- "ads.creatives/1" --> GADS
+    COPY -- "copy.proposals/1" --> VADS
+    COPY -- "copy.proposals/1" --> GADS
+    VADS -- "ads.results/1" --> MEAS
+    GADS -- "ads.results/1" --> MEAS
+    VADS -- "ads.demand/1: how many creatives" --> ADCUT
+    MEAS -- "truth/1: break-even ROAS" --> VADS
+    MEAS -- "truth/1: break-even ROAS" --> GADS
 ```
 
 Five rules keep the roles apart ([portfolio.md](portfolio.md#ownership-rules)):
