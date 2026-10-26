@@ -1,0 +1,11 @@
+pack	status	since	until	consumers	counted	note
+compliance	shared	2026-10-05		ad-copy-skill-pack,adcut-skill-pack,geo-china-skill-pack,koc-script-skill-pack	2026-10-26	copylint has four importers; claimscope and phrasebook have one (adcut)
+generation	incubating	2026-10-05	2026-12-31	adcut-skill-pack	2026-10-26	product-keyframe-video declares the pack and imports nothing from it yet
+data	incubating	2026-10-05	2026-12-31	video-ads-skill-pack	2026-10-26	retry alone; eight skill packs declare the pack, one imports it: decide whether retry belongs in base
+workbook	shared	2026-10-10		creator-program-skill-pack,koc-script-skill-pack	2026-10-26	ROADMAP P1 (no importer, 2026-10-23) is stale: creator-program imports all five modules, koc-script imports workbook
+learning	incubating	2026-10-12	2026-12-31	adcut-skill-pack	2026-10-26	
+pages	incubating	2026-10-13	2026-12-31	adcut-skill-pack	2026-10-26
+autonomy	incubating	2026-10-13	2026-12-31	adcut-skill-pack	2026-10-26
+exchange	shared	2026-10-23		outbound-skill-pack,sdr-skill-pack,video-ads-skill-pack	2026-10-26
+ads-core	incubating	2026-10-24	2026-12-31		2026-10-26	lifted from video-ads and amazon-ppc for meta-ads, video-ads and google-ads (ROADMAP X12); meta-ads declares it
+creative	incubating	2026-10-25	2026-12-31		2026-10-26	lifted from video-ads for meta-ads, video-ads and google-ads (ROADMAP X12); meta-ads declares it
