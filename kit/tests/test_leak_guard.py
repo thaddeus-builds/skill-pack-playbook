@@ -363,6 +363,22 @@ def main() -> int:
     p = push("HEAD:refs/heads/main")
     check("with no term list the push is refused",
           p.returncode != 0 and "refusing" in p.stderr, p.stderr)
+    # the optional test command: off unless configured, then run from the top level, and its failure refuses
+    (lists).mkdir(parents=True)
+    (lists / "client_terms.txt").write_text(TERMS, encoding="utf-8")
+    git(r, "commit", "-q", "--amend", "-m", "clean again")
+    git(r, "config", "skillpack.prepush-tests", "echo ran > ../ran.txt; exit 3")
+    p = push("HEAD:refs/heads/main")
+    check("a failing test command refuses the push", p.returncode != 0 and (d / "ran.txt").exists()
+          and "echo ran" in p.stderr, p.stdout + p.stderr)
+    git(r, "config", "skillpack.prepush-tests", "true")
+    p = push("HEAD:refs/heads/main")
+    check("a passing test command lets the push through", p.returncode == 0, p.stderr)
+    git(r, "config", "--unset", "skillpack.prepush-tests")
+    (d / "ran.txt").unlink()
+    git(r, "commit", "-q", "--allow-empty", "-m", "again")
+    p = push("HEAD:refs/heads/main")
+    check("with the option unset no test command runs", p.returncode == 0 and not (d / "ran.txt").exists(), p.stderr)
     return finish()
 
 
