@@ -4,13 +4,21 @@ A throwaway git repository stands in for the playbook (CI checks out one
 commit, so the real history is not there): kit 0.1.0, then 0.2.0. A skill pack
 vendored at 0.1.0 is behind; a file in no version of the playbook is local;
 the copy's own manifest names an edit made after vendoring.
+
+`update` is tried on a skill pack cloned from a bare repository whose default
+branch is `trunk`, against a throwaway playbook that carries the real kit/tools:
+green, red, refused by the vendor tool, worktree exists, already current, and
+the pack's own checkout untouched.
 """
 
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -123,6 +131,157 @@ def test_without_history_it_says_so():
         doc = json.loads(fleet(pb, "status", str(h), "--json").stdout)["skill_packs"][0]
         assert doc["history"].startswith("none"), doc
         assert fleet(pb, "status", str(Path(tmp) / "nowhere")).returncode == 2
+
+
+# ---------------------------------------------------------------- update
+
+IDENTITY = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+PASS = "print('RESULT: 1 passed')\n"
+FAIL = "import sys\nprint('FAIL   0.1s  test_money.py        exit 1')\nsys.exit(1)\n"
+LOG = "# Changelog\n\n## [Unreleased]\n\n### Changed\n- a\n\n## [1.0.0] - 2026-01-01\n"
+
+
+def git(cwd: Path, *args: str) -> str:
+    r = subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True,
+                       env={**os.environ, **IDENTITY})
+    return r.stdout.strip()
+
+
+def train(tmp: Path, version: str) -> Path:
+    """A playbook holding the real kit (without its tests) at `version`."""
+    pb = tmp / "playbook"
+    if not pb.exists():
+        shutil.copytree(ROOT / "kit", pb / "kit", ignore=shutil.ignore_patterns("tests", "__pycache__"))
+    (pb / "kit" / "VERSION").write_text(version + "\n")
+    return pb
+
+
+def make_pack(tmp: Path, toml: str = "", suite: str = PASS, extra: dict | None = None) -> tuple[Path, Path]:
+    """A pack vendored at kit 0.1.0, cloned from a bare origin whose default branch is
+    `trunk`, left on another branch; the playbook is then moved on to 0.2.0."""
+    origin, pack = tmp / "origin.git", tmp / "work" / "acme"
+    git(tmp, "init", "-q", "--bare", "-b", "trunk", str(origin))
+    git(tmp, "clone", "-q", str(origin), str(pack))
+    git(pack, "checkout", "-q", "-b", "trunk")
+    write(pack, {"skill-pack.toml": '[skill_pack]\nname = "acme"\n', "CHANGELOG.md": LOG,
+                 "tests/run.py": suite, **(extra or {})})
+    old = train(tmp, "0.1.0")
+    subprocess.run([sys.executable, str(old / "kit" / "tools" / "vendor.py"), "--skill-pack", str(pack)],
+                   check=True, capture_output=True)
+    with open(pack / "skill-pack.toml", "a") as f:        # after the first vendoring: it may be one the tool refuses
+        f.write(toml)
+    git(pack, "add", "-A")
+    git(pack, "commit", "-qm", "start")
+    git(pack, "push", "-q", "origin", "trunk")
+    git(pack, "checkout", "-q", "-b", "feature")      # someone's branch: update must leave it alone
+    return train(tmp, "0.2.0"), pack
+
+
+def update(pb: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "update", *args],
+                          capture_output=True, text=True, env={**os.environ, **IDENTITY})
+
+
+def drop(pack: Path) -> None:
+    git(pack, "worktree", "remove", "--force", str(pack.parent / "acme_worktrees" / "kit-0.2.0"))
+    git(pack, "branch", "-D", "claude/kit-0.2.0")
+
+
+def test_update_commits_the_new_kit_in_a_worktree_beside_the_pack():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        head = git(pack, "rev-parse", "HEAD")
+        r = update(pb, str(pack))
+        assert r.returncode == 0, r.stdout + r.stderr
+        work = pack.parent / "acme_worktrees" / "kit-0.2.0"
+        assert r.stdout.startswith("acme: green  kit 0.1.0 -> 0.2.0, suite green;"), r.stdout
+        assert (work / "scripts" / "kit" / "VERSION").read_text().strip() == "0.2.0"
+        assert git(work, "branch", "--show-current") == "claude/kit-0.2.0"
+        assert git(work, "rev-parse", "HEAD~1") == git(pack, "rev-parse", "origin/trunk"), "cut from the default branch"
+        assert git(work, "status", "--porcelain") == "", "everything is committed"
+        msg = git(work, "log", "-1", "--format=%B")
+        assert "0.1.0 -> 0.2.0" in msg and "Suite: green" in msg, msg
+        log = (work / "CHANGELOG.md").read_text()
+        assert log.index("### Changed\n- Re-vendored the playbook kit 0.1.0 -> 0.2.0") < log.index("- a\n"), log
+        assert "suite green" in log and log.count("Re-vendored") == 1
+        assert (git(pack, "rev-parse", "HEAD"), git(pack, "branch", "--show-current"), git(pack, "status", "--porcelain")) \
+            == (head, "feature", ""), "the pack's own checkout is untouched"
+        assert (pack / "scripts" / "kit" / "VERSION").read_text().strip() == "0.1.0"
+
+
+def test_update_commits_a_red_suite_and_names_the_failing_files():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp), suite=FAIL)
+        r = update(pb, str(pack))
+        assert r.returncode == 1, r.stdout
+        assert "acme: red  kit 0.1.0 -> 0.2.0, suite red (test_money.py);" in r.stdout, r.stdout
+        work = pack.parent / "acme_worktrees" / "kit-0.2.0"
+        assert "Suite: red (test_money.py)" in git(work, "log", "-1", "--format=%B")
+        assert "suite red" in (work / "CHANGELOG.md").read_text()
+
+
+def test_update_honours_test_command_and_no_tests():
+    with _t.tmpdir() as tmp:
+        py = shlex.quote(sys.executable)
+        pb, pack = make_pack(Path(tmp), toml=f'test_command = "{py} tests/fail.py"\n',
+                             extra={"tests/fail.py": FAIL})
+        r = update(pb, str(pack), "--no-tests")
+        assert r.returncode == 0 and "suite not run;" in r.stdout, r.stdout
+        drop(pack)
+        r = update(pb, str(pack))
+        assert r.returncode == 1 and "suite red (test_money.py)" in r.stdout, r.stdout
+
+
+def test_update_refuses_what_the_vendor_tool_refuses_and_leaves_nothing_behind():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp), toml='\n[kit]\npacks = ["nonesuch"]\n')
+        r = update(pb, str(pack))
+        assert r.returncode == 1 and "acme: refused by the vendor tool:" in r.stdout, r.stdout
+        assert not (pack.parent / "acme_worktrees" / "kit-0.2.0").exists()
+        assert git(pack, "branch", "--list", "claude/kit-*") == ""
+
+
+def test_update_stops_at_an_existing_worktree_and_at_a_pack_already_current():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        assert update(pb, str(pack)).returncode == 0
+        again = update(pb, str(pack))
+        assert again.returncode == 1 and "acme: worktree exists:" in again.stdout, again.stdout
+        work = pack.parent / "acme_worktrees" / "kit-0.2.0"
+        git(work, "push", "-q", "origin", "HEAD:trunk")      # the train reaches the default branch
+        drop(pack)
+        r = update(pb, str(pack))
+        assert r.returncode == 0 and "acme: already holds kit 0.2.0" in r.stdout, r.stdout
+        assert not work.exists() and git(pack, "branch", "--list", "claude/kit-*") == ""
+
+
+def test_update_takes_only_the_version_the_playbook_is_at():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        r = update(pb, str(pack), "--version", "0.3.0")
+        assert r.returncode == 2 and "this playbook is at kit 0.2.0, not 0.3.0" in r.stderr, r.stderr
+        assert update(pb, str(pack), "--version", "0.2.0").returncode == 0
+
+
+def test_the_changelog_line_goes_first_under_unreleased_in_each_shape():
+    spec = importlib.util.spec_from_file_location("fleet_tool", FLEET)
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    cases = {
+        "## [Unreleased]\n\n### Added\n- a\n": "## [Unreleased]\n\n### Added\nL\n- a\n",
+        "## [Unreleased]\n\n- a\n## [1.0.0]\n": "## [Unreleased]\n\nL\n- a\n## [1.0.0]\n",
+        "## [Unreleased]\n## [1.0.0]\n": "## [Unreleased]\n\nL\n\n## [1.0.0]\n",
+        "## [Unreleased]\n": "## [Unreleased]\n\nL\n\n",
+    }
+    with _t.tmpdir() as tmp:
+        f = Path(tmp) / "CHANGELOG.md"
+        for before, after in cases.items():
+            f.write_text(before)
+            assert tool.add_changelog(f, "L\n") and f.read_text() == after, (before, f.read_text())
+        f.write_text("# Changelog\n\n## [1.0.0]\n")
+        assert not tool.add_changelog(f, "L\n") and f.read_text() == "# Changelog\n\n## [1.0.0]\n"
+        assert not tool.add_changelog(Path(tmp) / "none.md", "L\n")
 
 
 if __name__ == "__main__":
