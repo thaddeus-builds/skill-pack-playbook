@@ -3,7 +3,7 @@ compliance	shared	2026-10-05		ad-copy-skill-pack,adcut-skill-pack,geo-china-skil
 generation	incubating	2026-10-05	2026-12-31	adcut-skill-pack	2026-10-26	product-keyframe-video declares the pack and imports nothing from it yet
 data	incubating	2026-10-05	2026-12-31	video-ads-skill-pack	2026-10-26	retry alone; eight skill packs declare the pack, one imports it: decide whether retry belongs in base
 workbook	shared	2026-10-10		creator-program-skill-pack,koc-script-skill-pack	2026-10-26	ROADMAP P1 (no importer, 2026-10-23) is stale: creator-program imports all five modules, koc-script imports workbook
-learning	incubating	2026-10-12	2026-12-31	adcut-skill-pack	2026-10-26	questions has no importer (ROADMAP P1)
+learning	incubating	2026-10-12	2026-12-31	adcut-skill-pack	2026-10-26	
 pages	incubating	2026-10-13	2026-12-31	adcut-skill-pack	2026-10-26
 autonomy	incubating	2026-10-13	2026-12-31	adcut-skill-pack	2026-10-26
 exchange	shared	2026-10-23		outbound-skill-pack,sdr-skill-pack,video-ads-skill-pack	2026-10-26
