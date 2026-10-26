@@ -122,6 +122,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 
 | Read | For |
 | --- | --- |
+| [docs/overview.md](docs/overview.md) | The whole framework on one page: the layers, the owner gates, the solutions, the kit's packs |
 | [docs/stages.md](docs/stages.md) | Stage 0 (client meetings), the ten stages one line each, the day-one checklist |
 | [docs/rules.md](docs/rules.md) | Data layers and their guards, the human-in-the-loop rules, writing into someone else's system, what an agent judges, stories that prove themselves, registries |
 | [docs/consoles.md](docs/consoles.md) | The owner console, the client console, one workspace per client |
