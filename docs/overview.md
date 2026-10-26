@@ -166,14 +166,6 @@ flowchart TB
 
 A new module goes into the pack named for its concern, never `base`. It moves to `base` when two skill packs import it from code merged to their main branches ([CLAUDE.md](../CLAUDE.md)).
 
-## Where it stands (2026-10-26)
+## Where it stands
 
-| Part | State |
-| --- | --- |
-| Kit | 0.40.0; packs and selective vendoring built |
-| Unified across packs | Only for the two packs in use, and they sit on different kit versions; bringing them to one is the open turn (ROADMAP N2) |
-| Truth packs | Scaffolds or local only; the "learn" step of the loop has barely run |
-| Client hub, contracts | Built; no real client has moved onto a hub yet (X10). Three contracts exist, the rest are drafts a first producer and consumer settle |
-| Waiting on the owner | ROADMAP, "Waiting on owner" |
-
-This table is hand-written and goes stale: the commands at the top of the page are the source.
+Run the two commands at the top of this page, and read [ROADMAP.md](../ROADMAP.md): a table here went stale within days.
