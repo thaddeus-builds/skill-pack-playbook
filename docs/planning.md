@@ -1,4 +1,6 @@
-# Roadmap: planning a skill pack (worked example: SEO 路线图)
+# Planning a running skill pack (worked example: SEO 路线图)
+
+<!-- The method. The playbook's own plan is ROADMAP.md at the root; a skill pack's is its docs/ROADMAP.md, in the format of templates/ROADMAP.md. -->
 
 How to turn an owner's vision into the next months of work for a skill pack that already runs: which pillars, which stories, in which order, done when, and who builds them. Use it after the first milestone has shipped and again at each milestone's end.
 

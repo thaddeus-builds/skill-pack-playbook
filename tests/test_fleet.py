@@ -3,7 +3,9 @@
 A throwaway git repository stands in for the playbook (CI checks out one
 commit, so the real history is not there): kit 0.1.0, then 0.2.0. A skill pack
 vendored at 0.1.0 is behind; a file in no version of the playbook is local;
-the copy's own manifest names an edit made after vendoring.
+the copy's own manifest names an edit made after vendoring. The console copy
+carries the VERSION stamp vendor.py writes (the playbook's console/ has none):
+it is read for the version and is never a local file.
 
 `update` is tried on a skill pack cloned from a bare repository whose default
 branch is `trunk`, against a throwaway playbook that carries the real kit/tools:
@@ -43,14 +45,18 @@ def write(root: Path, files: dict[str, str]) -> None:
         p.write_text(text)
 
 
-def vendor(src: Path, dest: Path) -> None:
-    """A plain copy with its MANIFEST.sha256, as kit/tools/vendor.py writes it."""
+def vendor(src: Path, dest: Path, stamp: str | None = None) -> None:
+    """A plain copy with its MANIFEST.sha256, as kit/tools/vendor.py writes it; `stamp` is the
+    VERSION it adds to a copy whose source has none (the console)."""
     lines = []
     for p in sorted(src.rglob("*")):
         if p.is_file() and "tests" not in p.relative_to(src).parts:
             rel = p.relative_to(src).as_posix()
             write(dest, {rel: p.read_text()})
             lines.append(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {rel}")
+    if stamp:
+        write(dest, {"VERSION": stamp + "\n"})
+        lines.append(f"{hashlib.sha256((stamp + chr(10)).encode()).hexdigest()}  VERSION")
     (dest / "MANIFEST.sha256").write_text("\n".join(lines) + "\n")
 
 
@@ -68,6 +74,7 @@ def setup(tmp: Path) -> tuple[Path, Path]:
     sh(pb, "git", "commit", "-qm", "0.1.0")
     write(h, {"skill-pack.toml": '[skill_pack]\nname = "acme"\nscripts_dir = "scripts"\n'})
     vendor(pb / "kit", h / "scripts" / "kit")
+    vendor(pb / "console", h / "console", stamp="0.1.0")
     (pb / "kit" / "gone.py").unlink()
     write(pb, {"kit/VERSION": "0.2.0\n", "kit/a.py": "A = 2\n", "kit/b.py": "B = 1\n"})
     sh(pb, "git", "add", "-A")
@@ -81,14 +88,18 @@ def test_a_copy_vendored_earlier_is_behind_and_loses_nothing():
         r = fleet(pb, "status", str(h), "--json")
         assert r.returncode == 0, r.stderr
         [doc] = json.loads(r.stdout)["skill_packs"]
-        [kit] = doc["copies"]
+        kit, console = doc["copies"]
         assert doc["name"] == "acme" and doc["history"] == "ok", doc
         assert (kit["version"], kit["playbook_version"]) == ("0.1.0", "0.2.0"), kit
         states = {f["file"]: f["state"] for f in kit["files"]}
         assert states == {"VERSION": "older", "a.py": "older", "b.py": "missing", "gone.py": "extra"}, states
         assert "as the playbook had it from kit 0.1.0" in next(f["note"] for f in kit["files"] if f["file"] == "a.py")
         assert kit["verdict"].startswith("behind") and kit["edited"] == [], kit
-        assert not (h / "console").exists() and [c["part"] for c in doc["copies"]] == ["kit"]
+        # the console copy differs only by its VERSION stamp, which the playbook's console/ never has
+        assert (console["part"], console["version"], console["playbook_version"]) == ("console", "0.1.0", "0.2.0"), console
+        assert console["files"] == [] and console["edited"] == [], console
+        assert console["verdict"].startswith("behind"), console
+        assert "extra    VERSION" not in r.stdout and "local changes" not in fleet(pb, "status", str(h)).stdout
 
 
 def test_a_change_no_playbook_version_had_is_local_and_named():
@@ -109,9 +120,10 @@ def test_a_copy_equal_to_the_playbook_is_in_sync():
         kit = h / "scripts" / "kit"
         subprocess.run(["rm", "-rf", str(kit)], check=True)
         vendor(pb / "kit", kit)
+        vendor(pb / "console", h / "console", stamp="0.2.0")
         r = fleet(pb, "status", str(h), "--json")
-        [copy] = json.loads(r.stdout)["skill_packs"][0]["copies"]
-        assert copy["verdict"] == "in sync" and copy["files"] == [], copy
+        for copy in json.loads(r.stdout)["skill_packs"][0]["copies"]:
+            assert copy["verdict"] == "in sync" and copy["files"] == [], copy
 
 
 def test_diff_shows_the_skill_pack_copy_against_the_playbook():
