@@ -140,6 +140,10 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.42.0] - 2026-10-26
+### Removed
+- `kit/questions.py` and its test (pack `learning`): open questions that never hold the plan. No skill pack imported it in the two minor versions after ROADMAP P1 parked it (counted 2026-10-26 on the fifteen skill packs that vendor the kit), so the admission rule removes it; the rule it checked moves from `docs/rules.md` (rule 13) to `docs/lessons.md`, as a lesson. A skill pack that re-vendors loses the file; none imports it. `learning` is `patternstore` and `pathweights`.
+
 ## [0.41.0] - 2026-10-26
 ### Added
 - `kit/tools/pre-push.sample`: an optional second step after the leak guard. `git config skillpack.prepush-tests "<the pack's test command>"` runs that command from the top level before a push and refuses the push when it fails; unset (the default) it does nothing, and `git push --no-verify` skips the hook. Moves a failing suite ahead of a CI run that spends quota. A skill pack takes it by re-vendoring; no other change needed.
