@@ -16,7 +16,7 @@ Updated: 2026-10-26
 - [X5] 2026-10-05 kit modules with no or one user: count them with `python3 tools/consumers.py` on each skill pack's main branch (D21 read five), then delete, move or keep (P1 is parked); `copylint` has one importer, adcut; the KOL skill pack's branch with a second one is not on its main (#22)
 - [X6] 2026-10-05 quality evals in every skill pack; SEO and outreach adoption (#26)
 - [X7] 2026-10-05 consent check limits, kept template copies, the golden engine run end to end (#27)
-- [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/workbook-and-browser-ops.md, no code yet
+- [X8] 2026-10-10 `browser-ops`, the second proposed kit module from the KOL skill pack's client (a guarded browser: read, draft, operate): design in docs/history/workbook-and-browser-ops-2026-10.md (archived 2026-10-26, the workbook half built), no code yet
 - [X10] 2026-10-22 the first real client moves onto its hub (R5, after the exchange folder, D22): re-vendor kit 0.35.0 into its packs (schema version bump, the `facts sync-hub` verb row, a test calling `kit.guards.hub_keys.check`), make its hub with `scaffold/new_hub.py`, move the shared facts there, put each disagreeing value to the owner once
 - [X11] 2026-10-23 portfolio phase 3: each producer and consumer pair emits and reads its contract through `kit.contracts` (kit 0.37.0), one session per pair, touching disjoint repositories; `ads.demand`, `ads.changes`, `catalog`, `messages`, `truth`, `intel`, `leads`, `handoff.batch`, `copy.proposals` are drafts a first producer and consumer settle
 ## Done
