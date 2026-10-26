@@ -88,6 +88,8 @@ RENDERED = {
     "vendor-api-discovery.md": "docs/vendor-api-discovery.md",
     "session-handoff.md": "docs/session-handoff.md",
     "ROADMAP.md": "docs/ROADMAP.md",
+    "research-index.md": "docs/research/README.md",
+    "prior-art-index.md": "docs/prior-art/README.md",
     "ssot/README.md": "ssot/README.md",
 }
 # the files the build writes later (B2, B8): `<<fill: …>>` may stay there

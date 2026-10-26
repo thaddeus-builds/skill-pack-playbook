@@ -9,6 +9,8 @@ The files a new skill pack starts from. The build workflow, [BUILD.md](../BUILD.
 | [meeting-intake.md](meeting-intake.md) | B0 | (used, not copied) | The organizer prompt |
 | [intake.schema.json](intake.schema.json) | B0 | (used, not copied) | The shape of one `intake.json`: every item's `iid`, `audience` and `source`; `build/check_intake.py` reads it |
 | [prior-art-scan.md](prior-art-scan.md) | B0.5 | `docs/prior-art/` | When and how to scan what already exists |
+| [prior-art-index.md](prior-art-index.md) | B0.5 | `docs/prior-art/README.md` | The scans' index, read before any search: one row per dated scan; `tests/test_ssot.py` fails on a scan with no row and a row with no file |
+| [research-index.md](research-index.md) | B0.5 | `docs/research/README.md` | The index of questions already looked up: one row per file (question, date, answer, where used), each file dated and its claims tagged; `tests/test_ssot.py` holds it (`kit.guards.research`) |
 | [vendor-api-discovery.md](vendor-api-discovery.md) | B0.5, B4, B7 | `docs/vendor-api-discovery.md` | Pinning down a paid vendor API cheaply: product pages and their network requests, free calls first, one smallest paid call, the published schema recorded and every body preflighted against it |
 | [owner-queue-item.md](owner-queue-item.md) | B0.6, B10 | (used, not copied) | The shape of one owner ask, and its console fields |
 | [decision-rights.md](decision-rights.md) | B0.6, B2 | `docs/decision-rights.md` | The three lanes, the risky list, the channels that count, the digest |
@@ -82,7 +84,7 @@ The scaffolder generates exactly these files, each one call into the vendored ki
 | Test | What it checks |
 | --- | --- |
 | `tests/test_run_tests.py` | The runner fails a file that exits non-zero, prints no `RESULT: N passed` line, ran no test, or left files in its temp folder |
-| `tests/test_ssot.py` | The index lists every ssot file; owner files hold no engineering words; siblings share ids; ids are unique and never reused; every owner row names its `decided` answer; no stage is signed before its `after` |
+| `tests/test_ssot.py` | Every file of `docs/research/` and `docs/prior-art/` has a row in its README and every row a file, a research file is dated and tags its claims; the index lists every ssot file; owner files hold no engineering words; siblings share ids; ids are unique and never reused; every owner row names its `decided` answer; no stage is signed before its `after` |
 | `tests/test_layering.py` | The `[layers]` rules of `skill-pack.toml`: pull, ingest, compute and the one writer |
 | `tests/test_clock.py` | The one clock: no code reads the calendar but through `scripts/kit/dates.py` (`datetime.now`, `today`, `utcnow`, a `time.strftime` with no time, a name bound by `from kit.dates import now`), and the clock itself reads it once |
 | `tests/test_boundary.py` | The core never names the console, an adapter or a chat app; an adapter runs only read verbs, and gated verbs with relay flags |
