@@ -72,7 +72,7 @@ class Suite(NamedTuple):
 
 
 SUITES = (
-    Suite("docs", "tests/run.py", (), "the build docs held to the files, and run_all.py"),
+    Suite("docs", "tests/run.py", ("git",), "the build docs held to the files, and run_all.py"),
     Suite("kit", "kit/tests/run.py", ("git", "node"), "the shared skill pack modules and their guards (pagestyle's copy script runs under node)"),
     Suite("scaffold", "scaffold/tests/run.py", ("git",), "the scaffolder: a generated skill pack is green before its first feature"),
     Suite("build", "build/tests/run.py", (), "the build-time tools: intake check, asks, apply"),

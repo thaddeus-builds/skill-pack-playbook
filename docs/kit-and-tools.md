@@ -22,9 +22,10 @@ The checklist above, already built: a new skill pack starts from these instead o
 Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/packs.tsv`](../kit/packs.tsv).
 
 - **A new module goes in the pack named for its concern, never in `base`.**
-- **It moves to `base` once two skill packs import it from code merged to their main branches.** Only merged use counts ([RESTRUCTURE.md](../RESTRUCTURE.md), decision 4): a branch that has not merged, a locally changed copy of the kit and a skill pack that wrote its own version of the job are not uses.
+- **It moves to `base` once two skill packs import it from code merged to their main branches.** Only merged use counts ([the 2026-10 restructure](history/restructure-2026-10.md), decision 4): a branch that has not merged, a locally changed copy of the kit and a skill pack that wrote its own version of the job are not uses.
 - **A module no skill pack imports for two minor versions is deleted.** Git history keeps it. Several modules in `testkit` and `base` are reached by every generated skill pack, the console's integration test or the Zylos adapter: look there before calling one unused.
 - **A pack imports only `base` and itself.** [`kit/tests/test_packs.py`](../kit/tests/test_packs.py) fails on a module with no row, a row with no module, and an import that crosses packs (lazy imports included).
+- **A pack may be born before its second importer, but not for good.** An engine lifted out of one skill pack so the next starts from it (the `ads-core` and `creative` packs, from the video-ads and Amazon PPC skill packs) is `incubating` in [`tools/pack_status.tsv`](../tools/pack_status.tsv): the day it was made, the day by which two skill packs must import it from their main branches, the importers counted so far and the day they were counted (`python3 tools/consumers.py PATH…`). [`tests/test_pack_status.py`](../tests/test_pack_status.py) fails the day after that date, on a pack with no row, and on a `shared` row with fewer than two importers. On that day the owner extends the date with a reason, marks the pack `shared`, or moves it back into the skill pack it came from. `base` and `testkit` are never incubating.
 
 **Packs decide what a skill pack vendors.** `base`, `compliance`, `generation`, `data`, `workbook`, `learning`, `pages`, `autonomy` and `testkit` ([kit/README.md](../kit/README.md), "Packs"). A skill pack names its packs under `[kit] packs` in `skill-pack.toml`, and `kit/tools/vendor.py` copies only those, plus `base` and `testkit`. A skill pack without the line still receives every pack.
 
@@ -51,7 +52,6 @@ Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/p
 | [`templates/owner-queue-item.md`](../templates/owner-queue-item.md) | 10 | The shape of one owner ask |
 | [`console/`](../console/) | 10 | A module, not a template: the agent's ask CLI and the owner's one-page console |
 | [`templates/triage-checklist.md`](../templates/triage-checklist.md) | 10 | Judging an agent-filed issue; the triage line |
-| [`templates/verify-challenge.md`](../templates/verify-challenge.md) | 10 | Reader and skeptic prompts for an outside report |
 | [`templates/intake.schema.json`](../templates/intake.schema.json) | 0 | The shape of one meeting's intake; `build/check_intake.py` reads it |
 | [`templates/prior-art-scan.md`](../templates/prior-art-scan.md) | 0, 4, 8 | When and how to scan what already exists, each claim with its link and date |
 | [`templates/vendor-api-discovery.md`](../templates/vendor-api-discovery.md) | 0, 4, 8 | Pinning down a paid vendor API cheaply, and preflighting every request against its published schema |
@@ -59,7 +59,6 @@ Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/p
 | [`templates/claim-scope.md`](../templates/claim-scope.md) | 5, 7, 10 | Regulated copy names only what the approved document allows: the claims record at the gate, the lexicon, waivers, the phrase library, rejections as recall tests |
 | [`templates/design-first.md`](../templates/design-first.md) | 7, 10 | Before a feature an owner steers: research, one design page with the asks and what it stores, a synthetic demo drawn by the skill pack's own renderer, the owner's yes, then the code |
 | [`templates/owner-review-loop.md`](../templates/owner-review-loop.md) | 7, 10 | One published page the owner decides on per item, read back by the next session |
-| [`templates/outcome-learning.md`](../templates/outcome-learning.md) | 10 | Winners against the rest on one factor catalog; rules stay pending until a variant confirms them |
 | [`templates/session-handoff.md`](../templates/session-handoff.md) | all | Each session closes one turn and leaves the next one ready |
 | [`templates/skill-pack.toml`](../templates/skill-pack.toml) | 3 | The skill pack declares itself once: names, languages, scopes, layers, what a release ships |
 | [`templates/gitlab-ci.yml`](../templates/gitlab-ci.yml) | 3, 9 | The short form of that CI, the one the scaffolder renders into every skill pack: secret scan, story id in the title, the RESULT-gated test job, each with its rules |
