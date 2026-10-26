@@ -20,7 +20,7 @@ The checklist above, already built: a new skill pack starts from these instead o
 Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/packs.tsv`](../kit/packs.tsv).
 
 - **A new module goes in the pack named for its concern, never in `base`.**
-- **It moves to `base` once two skill packs import it from code merged to their main branches.** Only merged use counts ([RESTRUCTURE.md](../RESTRUCTURE.md), decision 4): a branch that has not merged, a locally changed copy of the kit and a skill pack that wrote its own version of the job are not uses.
+- **It moves to `base` once two skill packs import it from code merged to their main branches.** Only merged use counts ([the 2026-10 restructure](history/restructure-2026-10.md), decision 4): a branch that has not merged, a locally changed copy of the kit and a skill pack that wrote its own version of the job are not uses.
 - **A module no skill pack imports for two minor versions is deleted.** Git history keeps it. Several modules in `testkit` and `base` are reached by every generated skill pack, the console's integration test or the Zylos adapter: look there before calling one unused.
 - **A pack imports only `base` and itself.** [`kit/tests/test_packs.py`](../kit/tests/test_packs.py) fails on a module with no row, a row with no module, and an import that crosses packs (lazy imports included).
 

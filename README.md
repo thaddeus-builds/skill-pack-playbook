@@ -129,7 +129,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/autonomy.md](docs/autonomy.md) | Autonomy levels L0 to L5: what proof each write into someone else's system carries, scoped approvals and the owner's switch; the `autonomy` pack |
 | [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a skill pack small, hosting |
 | [docs/maintaining.md](docs/maintaining.md) | For the owner: how the playbook itself changes (issue, small pull request, merge, re-vendor when needed), what the agent checks, and the access token it needs |
-| [docs/roadmap.md](docs/roadmap.md) | Planning a running skill pack: vision to pillars to story rows and milestones, owner questions with defaults, one story per session, feedback from testers; the SEO skill pack's roadmap as the example |
+| [docs/planning.md](docs/planning.md) | Planning a running skill pack: vision to pillars to story rows and milestones, owner questions with defaults, one story per session, feedback from testers; the SEO skill pack's roadmap as the example |
 | [docs/portfolio.md](docs/portfolio.md) | The growth portfolio: which skill pack owns which platform, fact and engine, and the contracts between them |
 | [docs/solutions.md](docs/solutions.md) | Which skill packs serve which kind of client (five solutions), how they work together, and how to start a client on them |
 | [docs/channels.md](docs/channels.md) | Reusing a skill pack for other channels; generated creative and real people |
@@ -140,7 +140,8 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/page-style.md](docs/page-style.md) | The `pages` pack: one look for the pages that guide making and show the reasoning, and the check every such page passes |
 | [docs/workbook-and-browser-ops.md](docs/workbook-and-browser-ops.md) | Two proposed kit modules, design only: a client's spreadsheet in and out, and a guarded browser for platforms with no API |
 | [BUILD.md](BUILD.md) | The build workflow, B0 to B10 |
-| [ROADMAP.md](ROADMAP.md), [RESTRUCTURE.md](RESTRUCTURE.md) | Open work and the restructure in progress |
+| [ROADMAP.md](ROADMAP.md) | Open work: what this session does, what waits on the owner, what is next |
+| [docs/history/](docs/history/restructure-2026-10.md) | Plans that were carried out, kept as written: the 2026-10 restructure |
 
 | Folder | What it is |
 | --- | --- |
