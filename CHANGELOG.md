@@ -10,6 +10,7 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `tools/fleet.py` no longer reports every skill pack's console as `local changes`: the `VERSION` stamp `vendor.py` writes into a console copy (the playbook's `console/` has none) is read for the version and never counted as a file of the skill pack's own. Before this, all fifteen vendoring skill packs read as `local changes in 1 file(s)` on a console that was only behind. Tested in `tests/test_fleet.py`. No kit change.
 - CI minutes are a quota on a private repository: `.github/workflows/ci.yml` cancels the older run of the same ref (never one on `main`); `.githooks/pre-push` runs every suite in this repository (`git config core.hooksPath .githooks`); `templates/gitlab-ci.yml` marks its jobs `interruptible` as the fuller CI already did, so a new skill pack's GitLab pipelines cancel too. Default hosting stays GitLab and nothing here is required. Tested in `tests/test_ci_quota.py`.
 ### Other
 - `templates/prior-art-scan.md`, "Auditing a skill pack that already exists", and `docs/lessons.md` (Research is kept, not repeated): the module-by-module survey of what is already built, with a verdict per module (adopt, borrow-idea, keep-own, watch), a sources registry with pinned versions, a coverage test, and the owner's three-claim spot-check. Seen once (the Amazon PPC skill pack, 2026-10-26), tested in `tests/test_prior_art_audit.py`.

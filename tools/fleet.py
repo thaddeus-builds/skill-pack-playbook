@@ -16,7 +16,9 @@ each file with the playbook's current copy (kit/, console/, hosts/zylos/):
     upstream it (a fix here, with its test) or drop it before re-vendoring;
   * missing: the playbook has it and the copy does not (the copy is older);
   * extra: the copy has it and the playbook does not now (removed upstream,
-    when history has it; a local file otherwise).
+    when history has it; a local file otherwise). A `VERSION` the playbook's
+    folder lacks is the stamp vendor.py writes (the console's) and is read for
+    the version, never counted as a file.
 
 `edited` lists the files that differ from the copy's own MANIFEST.sha256
 (an edit made after vendoring). The verdict per copy is `in sync`,
@@ -157,6 +159,8 @@ def compare(part: dict, history: History) -> dict | None:
     have = set(files(dest, part["skip"]))
     rows = []
     for rel in sorted(want | have):
+        if rel == "VERSION" and rel not in want:
+            continue                  # vendor.py's stamp, written when the playbook's folder has no VERSION (the console)
         path = f"{part['src_rel']}/{rel}"
         if rel not in have:
             rows.append({"file": rel, "state": "missing"})
