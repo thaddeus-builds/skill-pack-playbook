@@ -10,6 +10,8 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `scaffold/new_skill_pack.py` writes `docs/research/README.md` and `docs/prior-art/README.md` from the new `templates/research-index.md` and `templates/prior-art-index.md` (listed in `templates/README.md` with their targets), and the generated `tests/test_ssot.py` also runs `suites.research` (kit 0.42.0), so a research file or scan with no row in its index fails from the first commit. BUILD.md B0.5: the index is read before any search. No new test file: the generated set stays thirteen. A skill pack that already exists takes it by adding `suites.run(suites.research(ROOT))` to a test of its own after re-vendoring. Tested in `scaffold/tests/test_new_skill_pack.py` and `kit/tests/test_research.py`.
+### Other
 - CI minutes are a quota on a private repository: `.github/workflows/ci.yml` cancels the older run of the same ref (never one on `main`); `.githooks/pre-push` runs every suite in this repository (`git config core.hooksPath .githooks`); `templates/gitlab-ci.yml` marks its jobs `interruptible` as the fuller CI already did, so a new skill pack's GitLab pipelines cancel too. Default hosting stays GitLab and nothing here is required. Tested in `tests/test_ci_quota.py`.
 ### Other
 - `templates/prior-art-scan.md`, "Auditing a skill pack that already exists", and `docs/lessons.md` (Research is kept, not repeated): the module-by-module survey of what is already built, with a verdict per module (adopt, borrow-idea, keep-own, watch), a sources registry with pinned versions, a coverage test, and the owner's three-claim spot-check. Seen once (the Amazon PPC skill pack, 2026-10-26), tested in `tests/test_prior_art_audit.py`.

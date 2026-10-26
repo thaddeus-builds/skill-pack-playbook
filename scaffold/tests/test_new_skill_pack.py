@@ -165,6 +165,21 @@ def test_tree(root: Path) -> None:
               "from kit.testing import suites" in text
               and "raise SystemExit(finish())" in text
               and len(text.splitlines()) < 30)
+    indexes = {rel: (root / rel).read_text(encoding="utf-8") if (root / rel).is_file() else ""
+               for rel in ("docs/research/README.md", "docs/prior-art/README.md")}
+    check("docs/research/README.md and docs/prior-art/README.md are written, named for the skill pack, with no row yet",
+          all("acme-skill-pack" in t and "| --- |" in t and "](" not in t for t in indexes.values()), indexes)
+    sys.path.insert(0, str(PLAYBOOK))
+    from kit.guards import research
+    clean = research.problems(root)
+    stray = root / "docs" / "research" / "stray.md"
+    stray.write_text("# Stray\n", encoding="utf-8")
+    stray_problems = research.problems(root)
+    stray.unlink()
+    check("…they pass kit.guards.research, and a file added with no row does not",
+          clean == [] and any("stray.md" in p for p in stray_problems), (clean, stray_problems))
+    check("tests/test_ssot.py runs it (suites.research)",
+          "suites.research(ROOT)" in (root / "tests" / "test_ssot.py").read_text(encoding="utf-8"))
     cfg = tomllib.loads((root / "skill-pack.toml").read_text(encoding="utf-8"))
     h = cfg["skill_pack"]
     check("skill-pack.toml: the names, the markets, the languages",
