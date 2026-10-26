@@ -144,8 +144,13 @@ scaffold, console, docs, conformance.
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
 ## [0.42.0] - 2026-10-26
+<<<<<<< HEAD
+### Added
+- `kit.guards.drift.behind(root)`: a hint, never a failure. When a skill pack's `skill-pack.toml` names a playbook checkout (`[kit] playbook = "../skill-pack-playbook"`, relative to the skill pack or absolute) whose `kit/VERSION` is more than two minor versions ahead of the vendored kit, `check_drift()` and the generated `tests/test_kit_drift.py` (`kit.testing.suites.kit_drift`) print `behind: kit X.Y.Z, playbook A.B.C`. Seen in the 2026-10-26 review: 14 skill packs on six different kit versions, none current, and nothing in their own suites said so. A skill pack takes it by re-vending (`python3 kit/tools/vendor.py --skill-pack PATH`), then adds the `[kit] playbook` line if it wants the hint. Tested in `kit/tests/test_guards.py`.
+=======
 ### Removed
 - `kit/questions.py` and its test (pack `learning`): open questions that never hold the plan. No skill pack imported it in the two minor versions after ROADMAP P1 parked it (counted 2026-10-26 on the fifteen skill packs that vendor the kit), so the admission rule removes it; the rule it checked moves from `docs/rules.md` (rule 13) to `docs/lessons.md`, as a lesson. A skill pack that re-vendors loses the file; none imports it. `learning` is `patternstore` and `pathweights`.
+>>>>>>> origin/main
 
 ## [0.41.0] - 2026-10-26
 ### Added
