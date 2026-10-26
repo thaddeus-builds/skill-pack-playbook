@@ -18,6 +18,7 @@ kit.testing.check.
   drift.py          a vendored kit/ or console/ matches its MANIFEST.sha256
   hub_keys.py       a client hub's shared fact keys are defined alike in the skill pack (type, unit, bounds, labels)
   roadmap.py        the one ROADMAP.md format: seven sections, dated rows with ids, what each wait unblocks
+  research.py       docs/research/ and docs/prior-art/: every file has a row in its README and every row a file; a research file says when and tags its claims
   pages.py          no shipped file links to a hosted artifact: a page the skill pack delivers is drawn by one of its verbs
   evals.py          agent evals, the offline half: sound cases, and the forbidden-command pattern generated from the verb table;
                     SKILL.md's Never table names exactly the verbs only a person runs

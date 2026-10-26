@@ -145,6 +145,10 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.44.0] - 2026-10-26
+### Added
+- `kit/guards/research.py` and `suites.research(root)` (pack `testkit`, no new vendored module for a skill pack to import): research is kept, not repeated. `docs/research/` and `docs/prior-art/` each have a `README.md` that lists every file of the folder, and every link of the README is a file; a research file says `Researched YYYY-MM-DD` and tags a claim `[documented]`, `[vendor]`, `[academic]`, `[ours]` or `[inference]`; a prior-art file has its day in its name or on a `Scan date:` line. A skill pack with neither folder is not read. Lifted from the video-ads skill pack's `tests/test_research_index.py`; opt in with `suites.run(suites.research(ROOT))` in a test of your own (the scaffolder's generated `test_ssot.py` calls it from the next playbook pull request). Tested in `kit/tests/test_research.py` and `test_suites.py`.
+
 ## [0.43.0] - 2026-10-26
 ### Added
 - `kit.guards.drift.behind(root)`: a hint, never a failure. When a skill pack's `skill-pack.toml` names a playbook checkout (`[kit] playbook = "../skill-pack-playbook"`, relative to the skill pack or absolute) whose `kit/VERSION` is more than two minor versions ahead of the vendored kit, `check_drift()` and the generated `tests/test_kit_drift.py` (`kit.testing.suites.kit_drift`) print `behind: kit X.Y.Z, playbook A.B.C`. Seen in the 2026-10-26 review: 14 skill packs on six different kit versions, none current, and nothing in their own suites said so. A skill pack takes it by re-vending (`python3 kit/tools/vendor.py --skill-pack PATH`), then adds the `[kit] playbook` line if it wants the hint. Tested in `kit/tests/test_guards.py`.

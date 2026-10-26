@@ -46,6 +46,11 @@ reports them through kit.testing.check. A generated test is
   roadmap       kit.guards.roadmap.check_roadmap: docs/ROADMAP.md (or
                 [guards.roadmap] file) keeps the one format, and its planted
                 self-test
+  research      kit.guards.research.check_research: every file of
+                docs/research/ and docs/prior-art/ has a row in its README
+                and every row a file; a research file says when it was
+                researched and tags its claims; a missing folder is not
+                read (opt-in by having one), and its planted self-test
   page_links    kit.guards.pages.check_links: no shipped file links to a
                 hosted artifact (opt-in: a skill pack adds `run(page_links(ROOT))`
                 to a test of its own), and its planted self-test
@@ -671,6 +676,19 @@ def roadmap(root: Path | str) -> Results:
     return [("the roadmap rule catches each planted break", g.self_test()),
             ("the roadmap keeps the one format (sections, dated rows, ids, "
              "what each wait unblocks)", g.check_roadmap(root))]
+
+
+# ---- research ------------------------------------------------------------------------
+
+def research(root: Path | str) -> Results:
+    """Research is kept, not repeated: the indexes of docs/research/ and
+    docs/prior-art/ (it reads no index of ssot, so a skill pack with its own
+    test adds it as `run(research(ROOT))`; it reads no skill-pack.toml)."""
+    from kit.guards import research as g
+    return [("the research rule catches each planted break", g.self_test()),
+            ("docs/research/ and docs/prior-art/ list every file in their "
+             "README, and a research file says when and tags its claims",
+             g.check_research(root))]
 
 
 # ---- never_table ---------------------------------------------------------------------
