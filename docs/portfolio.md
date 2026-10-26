@@ -155,7 +155,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 
 ## Engines in the kit
 
-The kit's admission rule holds: a module joins when a second pack uses it.
+The kit's admission rule holds with one allowance: an engine may be lifted out of its first skill pack before a second imports it, as an `incubating` pack with a date by which it must have two importers ([tools/pack_status.tsv](../tools/pack_status.tsv); the rule is in [CLAUDE.md](../CLAUDE.md)).
 
 | Kit pack | What | From | Consumers |
 | --- | --- | --- | --- |
