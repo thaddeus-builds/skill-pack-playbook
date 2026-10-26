@@ -3,6 +3,7 @@
 
     python3 tools/fleet.py status SKILL_PACK... [--json]
     python3 tools/fleet.py diff SKILL_PACK [FILE...]
+    python3 tools/fleet.py update SKILL_PACK... [--version X] [--no-tests]
 
 For each skill pack it reads the kit (<scripts_dir>/kit/), the console
 (console/) and the Zylos adapter (zylos/), whichever it holds, and compares
@@ -16,20 +17,43 @@ each file with the playbook's current copy (kit/, console/, hosts/zylos/):
     upstream it (a fix here, with its test) or drop it before re-vendoring;
   * missing: the playbook has it and the copy does not (the copy is older);
   * extra: the copy has it and the playbook does not now (removed upstream,
-    when history has it; a local file otherwise).
+    when history has it; a local file otherwise). A `VERSION` the playbook's
+    folder lacks is the stamp vendor.py writes (the console's) and is read for
+    the version, never counted as a file.
 
 `edited` lists the files that differ from the copy's own MANIFEST.sha256
 (an edit made after vendoring). The verdict per copy is `in sync`,
 `behind` (re-vendor) or `local changes` (decide each file first). Phase 1 of
-RESTRUCTURE.md: bring every skill pack to one kit version.
+the 2026-10 restructure (docs/history/restructure-2026-10.md, now ROADMAP.md N2):
+bring every skill pack to one kit version.
 
 `diff` prints a unified diff, skill pack copy against the playbook's current
 file, for each file that is not the same (or only the FILEs named, as
 `kit/facts.py`, `console/core.py` or `zylos/lib.js`).
 
-Read-only: it writes nothing anywhere. Stdlib only; needs `git` for the
-history lookups (without history, older and local cannot be told apart and
-the report says so). Test: tests/test_fleet.py.
+`update` brings each skill pack to this playbook's kit in a worktree of its
+own, so the pack's checkout is never touched: it asks `git remote show origin`
+for the default branch, fetches it, adds `<repo>_worktrees/kit-<version>` on
+branch `claude/kit-<version>` cut from `origin/<default>`, runs kit/tools/
+vendor.py into it, runs the pack's suite (`[skill_pack].test_command` in its
+skill-pack.toml, else `python3 tests/run.py`; `--no-tests` skips it), adds one
+line under `## [Unreleased]` of its CHANGELOG.md when it has one, and commits
+with the from and to versions and the suite result. One line per pack:
+
+  * green: committed, suite passed (or `not run`);
+  * red: committed all the same, the failing test files named;
+  * refused: the vendor tool said no (nothing is left behind);
+  * exists: the worktree or branch is already there (nothing is touched);
+  * current: the pack already holds this kit (nothing is left behind).
+
+`--version X` names the train being taken and must equal this playbook's
+kit/VERSION (the vendor tool copies the checkout it is in). The commit needs a
+git identity: `git config`, or GIT_AUTHOR_* and GIT_COMMITTER_* in the
+environment. Exit 0 only when every pack is green or current.
+
+`status` and `diff` are read-only: they write nothing anywhere. Stdlib only;
+needs `git` for the history lookups (without history, older and local cannot
+be told apart and the report says so). Test: tests/test_fleet.py.
 """
 
 from __future__ import annotations
@@ -38,6 +62,9 @@ import argparse
 import difflib
 import hashlib
 import json
+import os
+import re
+import shlex
 import subprocess
 import sys
 import tomllib
@@ -157,6 +184,8 @@ def compare(part: dict, history: History) -> dict | None:
     have = set(files(dest, part["skip"]))
     rows = []
     for rel in sorted(want | have):
+        if rel == "VERSION" and rel not in want:
+            continue                  # vendor.py's stamp, written when the playbook's folder has no VERSION (the console)
         path = f"{part['src_rel']}/{rel}"
         if rel not in have:
             rows.append({"file": rel, "state": "missing"})
@@ -233,6 +262,129 @@ def diff(skill_pack: Path, playbook: Path, only: list[str]) -> str:
     return "".join(out)
 
 
+# ---------------------------------------------------------------- update
+
+CHANGELOG_LINE = "- Re-vendored the playbook kit {old} -> {new} (`tools/fleet.py update`); suite {suite}.\n"
+UNRELEASED = re.compile(r"^## \[Unreleased\]", re.I | re.M)
+
+
+def run(cwd: Path, *cmd: str, env: dict | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, errors="replace",
+                          env={**os.environ, **(env or {})})
+
+
+def first_line(r: subprocess.CompletedProcess) -> str:
+    text = (r.stderr.strip() or r.stdout.strip()).splitlines()
+    return "; ".join(ln.strip() for ln in text[:3]) or f"exit {r.returncode}"
+
+
+def default_branch(pack: Path) -> str | None:
+    """The branch `git remote show origin` calls HEAD; None when it says (unknown) or fails."""
+    r = run(pack, "git", "remote", "show", "origin")
+    m = re.search(r"^\s*HEAD branch:\s*(\S+)", r.stdout, re.M) if r.returncode == 0 else None
+    return m.group(1) if m and m.group(1) != "(unknown)" else None
+
+
+def suite_command(pack: Path) -> list[str]:
+    cmd = read_toml(pack / "skill-pack.toml").get("skill_pack", {}).get("test_command")
+    return shlex.split(cmd) if isinstance(cmd, str) and cmd.strip() else [sys.executable, "tests/run.py"]
+
+
+def failing_files(out: str) -> list[str]:
+    """The test files a runner's `FAIL ... test_x.py` lines name."""
+    seen = []
+    for ln in out.splitlines():
+        if ln.startswith("FAIL"):
+            seen += [f for f in re.findall(r"[\w./-]*test_\w+\.py", ln) if f not in seen]
+    return seen
+
+
+def add_changelog(path: Path, line: str) -> bool:
+    """Put `line` first under `## [Unreleased]` (under its first `###` when it has one); False when there is none."""
+    if not path.is_file():
+        return False
+    lines = path.read_text("utf-8").splitlines(keepends=True)
+    at = next((i for i, ln in enumerate(lines) if UNRELEASED.match(ln)), None)
+    if at is None:
+        return False
+    i = at + 1
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    nxt = lines[i] if i < len(lines) else ""
+    if nxt.startswith("### "):
+        at, text = i + 1, line
+    else:
+        at, text = i, ("\n" if i == at + 1 else "") + line + ("" if nxt.startswith("- ") else "\n")
+    lines.insert(at, text)
+    path.write_text("".join(lines), "utf-8")
+    return True
+
+
+def update(pack: Path, playbook: Path, version: str, tests: bool = True) -> dict:
+    """Bring one skill pack to the playbook's kit. {pack, state, text, ...}; see the module docstring."""
+    name = read_toml(pack / "skill-pack.toml").get("skill_pack", {}).get("name") or pack.name
+    out = {"pack": name, "path": str(pack)}
+
+    def done(state: str, text: str, **more) -> dict:
+        return {**out, "state": state, "text": text, **more}
+
+    top = run(pack, "git", "rev-parse", "--show-toplevel")
+    if top.returncode != 0 or Path(top.stdout.strip()).resolve() != pack:
+        return done("refused", "not the top of a git checkout")
+    branch = default_branch(pack)
+    if not branch:
+        return done("refused", "`git remote show origin` names no default branch")
+    work = pack.parent / f"{pack.name}_worktrees" / f"kit-{version}"
+    new = f"claude/kit-{version}"
+    if work.exists() or run(pack, "git", "rev-parse", "--verify", "-q", f"refs/heads/{new}").returncode == 0:
+        return done("exists", f"worktree exists: {work} (branch {new}); remove it to start again")
+    fetched = run(pack, "git", "fetch", "-q", "origin", branch)
+    if fetched.returncode != 0:
+        return done("refused", f"cannot fetch origin {branch}: {first_line(fetched)}")
+    added = run(pack, "git", "worktree", "add", "-q", "--no-track", "-b", new, str(work), f"origin/{branch}")
+    if added.returncode != 0:
+        return done("refused", f"cannot add the worktree: {first_line(added)}")
+
+    def discard() -> None:
+        run(pack, "git", "worktree", "remove", "--force", str(work))
+        run(pack, "git", "branch", "-D", new)
+
+    scripts = str(read_toml(work / "skill-pack.toml").get("skill_pack", {}).get("scripts_dir") or "scripts")
+    old_file = work / scripts / "kit" / "VERSION"
+    old = old_file.read_text("utf-8").strip() if old_file.is_file() else "none"
+    vendored = run(work, sys.executable, str(playbook / "kit" / "tools" / "vendor.py"), "--skill-pack", str(work))
+    if vendored.returncode != 0:
+        discard()
+        return done("refused", f"refused by the vendor tool: {first_line(vendored)}")
+    run(work, "git", "add", "-A")
+    if not run(work, "git", "status", "--porcelain").stdout.strip():
+        discard()
+        return done("current", f"already holds kit {version}")
+    suite, failing = "not run", []
+    if tests:
+        cmd = suite_command(work)
+        if len(cmd) > 1 and cmd[-1] == "tests/run.py" and not (work / "tests" / "run.py").is_file():
+            suite = "not run (no tests/run.py)"
+        else:
+            try:
+                r = run(work, *cmd, env={"PYTHONDONTWRITEBYTECODE": "1"})
+            except OSError as e:
+                r = subprocess.CompletedProcess(cmd, 127, "", str(e))
+            failing = failing_files(r.stdout + r.stderr)
+            suite = "green" if r.returncode == 0 else \
+                "red" + (f" ({', '.join(failing)})" if failing else f" ({first_line(r)})")
+    if add_changelog(work / "CHANGELOG.md", CHANGELOG_LINE.format(old=old, new=version, suite=suite.split(" (")[0])):
+        run(work, "git", "add", "CHANGELOG.md")
+    msg = (f"Re-vendor the playbook kit {old} -> {version}\n\n"
+           f"python3 kit/tools/vendor.py --skill-pack, by tools/fleet.py update.\nSuite: {suite}.\n")
+    c = run(work, "git", "commit", "-q", "-m", msg)
+    if c.returncode != 0:
+        return done("refused", f"vendored in {work} but the commit failed: {first_line(c)}", worktree=str(work))
+    state = "red" if suite.startswith("red") else "green"
+    return done(state, f"{state}  kit {old} -> {version}, suite {suite}; branch {new} in {work}",
+                worktree=str(work), branch=new, failing=failing)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--playbook", default=str(PLAYBOOK), help=argparse.SUPPRESS)
@@ -243,14 +395,28 @@ def main(argv: list[str] | None = None) -> int:
     d = sub.add_parser("diff", help="unified diffs, skill pack copy against the playbook")
     d.add_argument("skill_pack")
     d.add_argument("file", nargs="*", help="e.g. kit/facts.py; default every differing file")
+    u = sub.add_parser("update", help="vendor this playbook's kit into a worktree of each skill pack, test, commit")
+    u.add_argument("skill_pack", nargs="+")
+    u.add_argument("--version", help="the kit version being taken; must equal this playbook's kit/VERSION")
+    u.add_argument("--no-tests", action="store_true", help="vendor and commit without running the suite")
     args = ap.parse_args(argv)
     playbook = Path(args.playbook).resolve()
     skill_packs = [Path(h).expanduser().resolve() for h in
-                 (args.skill_pack if args.cmd == "status" else [args.skill_pack])]
+                 (args.skill_pack if args.cmd in ("status", "update") else [args.skill_pack])]
     for h in skill_packs:
         if not h.is_dir():
             print(f"error: {h} is not a directory", file=sys.stderr)
             return 2
+    if args.cmd == "update":
+        current = (playbook / "kit" / "VERSION").read_text("utf-8").strip()
+        if args.version and args.version != current:
+            print(f"error: this playbook is at kit {current}, not {args.version}; "
+                  f"check out the version to take first", file=sys.stderr)
+            return 2
+        results = [update(h, playbook, current, not args.no_tests) for h in skill_packs]
+        for r in results:
+            print(f"{r['pack']}: {r['text']}")
+        return 0 if all(r["state"] in ("green", "current") for r in results) else 1
     if args.cmd == "diff":
         sys.stdout.write(diff(skill_packs[0], playbook, args.file))
         return 0
