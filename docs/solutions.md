@@ -14,7 +14,7 @@ Every solution runs on the same three layers:
 
 | Solution | For | Operators | Truth | Makers |
 | --- | --- | --- | --- | --- |
-| **A. Brand, paid growth on several channels** | a direct-to-consumer brand with a site, ads on feeds and search, and creators | `video-ads` (Meta, 千川, 腾讯), `google-ads`; `koc-script`, `creator-program` when creators are part of it | `product-feed`, `measurement`, `search-intel`, `asset-handoff`, messaging | `adcut`, `ad-copy`, `product-keyframe-video` |
+| **A. Brand, paid growth on several channels** | a direct-to-consumer brand with a site, ads on feeds and search, and creators | `meta-ads`, `video-ads` (千川, 腾讯), `google-ads`; `koc-script`, `creator-program` when creators are part of it | `product-feed`, `measurement`, `search-intel`, `asset-handoff`, messaging | `adcut`, `ad-copy`, `product-keyframe-video` |
 | **B. Short-video commerce in a regulated category** | a brand selling through feed video on Chinese platforms, with claims a regulator limits (medicine, health, finance) | `video-ads` (千川, 腾讯) | `measurement`; messaging and the claims scope | `adcut` (with the kit's `compliance`), `product-keyframe-video` |
 | **C. Marketplace seller** | a seller whose sales happen on Amazon | `amazon-ppc` | `search-intel`, `measurement` | `adcut` for Sponsored Brands video, when wanted |
 | **D. B2B, organic and sales-led** | a manufacturer or exporter that wins buyers through search, AI answers and outreach | `ecommerce-seo`, `geo-china` (China) or a global GEO pack (not built), `outbound`, `sdr` | `search-intel`, `measurement` | — (the agent writes the copy; `seo` publishes) |
@@ -40,7 +40,8 @@ flowchart LR
       COPY["ad-copy<br/>text"]
     end
     subgraph ops["Operators"]
-      VADS["video-ads<br/>Meta, 千川, 腾讯"]
+      META["meta-ads<br/>Meta"]
+      VADS["video-ads<br/>千川, 腾讯"]
       GADS["google-ads<br/>Search, Shopping, PMax, YouTube"]
       CRP["creator-program<br/>creators, coupons, affiliate"]
       KOS["koc-script<br/>creator briefs"]
@@ -53,18 +54,25 @@ flowchart LR
     FEED --> GADS
     FEED --> COPY
     ADCUT -- "ads.creatives/1" --> VADS
+    ADCUT -- "ads.creatives/1" --> META
     ADCUT -- "ads.creatives/1" --> GADS
     COPY -- "copy.proposals/1" --> GADS
     COPY -- "copy.proposals/1" --> VADS
+    COPY -- "copy.proposals/1" --> META
     HAND -- "handoff.batch/1" --> VADS
+    HAND -- "handoff.batch/1" --> META
     HAND -- "handoff.batch/1" --> GADS
     VADS -- "ads.demand/1" --> ADCUT
+    META -- "ads.demand/1" --> ADCUT
     VADS -- "ads.results/1" --> ADCUT
+    META -- "ads.results/1" --> ADCUT
     VADS -- "ads.results/1, ads.changes/1" --> MEAS
+    META -- "ads.results/1, ads.changes/1" --> MEAS
     GADS -- "ads.results/1, ads.changes/1" --> MEAS
-    CRP -- "creators.roster/1" --> VADS
-    VADS -- "ads.results/1" --> CRP
+    CRP -- "creators.roster/1" --> META
+    META -- "ads.results/1" --> CRP
     MEAS -- "truth/1 (confirmed in the hub)" --> VADS
+    MEAS -- "truth/1 (confirmed in the hub)" --> META
     MEAS -- "truth/1 (confirmed in the hub)" --> GADS
 ```
 
@@ -72,7 +80,7 @@ The loop, in words:
 
 1. **What to say.** `search-intel` says what people search for and what competitors say. Messaging (the insight matrix and the claims scope) says what the brand may say to whom. `product-feed` says what is for sale, at what price, in which promotion window.
 2. **Make.** `adcut` makes video, `ad-copy` writes and checks the text for each placement, and `asset-handoff` names every creative and tags it once.
-3. **Run.** `video-ads` and `google-ads` run the ads. Each proposes; a person approves every change; each writes only its own platform. Creators' work enters `video-ads` through `creator-program`'s roster.
+3. **Run.** `meta-ads`, `video-ads` and `google-ads` run the ads. Each proposes; a person approves every change; each writes only its own platform. Creators' work enters `meta-ads` through `creator-program`'s roster.
 4. **Learn.** Operators send results and changes to `measurement`, which compares them with the company's own numbers. Its confirmed values (the coefficient, the break-even ROAS, which campaign types to trust) go into the hub's facts, and the operators read them as their targets. Results also go back to `adcut` (which creative to make more of) and to `creator-program` (what each creator and code earned).
 
 ## Starting a client
