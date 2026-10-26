@@ -10,6 +10,7 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `docs/maintaining.md`, "The release train": a `kit/VERSION` bump is a dated train at most once a week, merges to main accumulate under Unreleased, and `tools/fleet.py update` is how every skill pack reaches the train; step 6 of the loop now points there. Decided by the owner after the 2026-10-26 review (52 bumps in four weeks, 14 packs on six versions). No kit change.
 - CI minutes are a quota on a private repository: `.github/workflows/ci.yml` cancels the older run of the same ref (never one on `main`); `.githooks/pre-push` runs every suite in this repository (`git config core.hooksPath .githooks`); `templates/gitlab-ci.yml` marks its jobs `interruptible` as the fuller CI already did, so a new skill pack's GitLab pipelines cancel too. Default hosting stays GitLab and nothing here is required. Tested in `tests/test_ci_quota.py`.
 ### Other
 - `templates/prior-art-scan.md`, "Auditing a skill pack that already exists", and `docs/lessons.md` (Research is kept, not repeated): the module-by-module survey of what is already built, with a verdict per module (adopt, borrow-idea, keep-own, watch), a sources registry with pinned versions, a coverage test, and the owner's three-claim spot-check. Seen once (the Amazon PPC skill pack, 2026-10-26), tested in `tests/test_prior_art_audit.py`.
