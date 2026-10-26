@@ -136,6 +136,10 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.42.0] - 2026-10-26
+### Added
+- `kit.guards.drift.behind(root)`: a hint, never a failure. When a skill pack's `skill-pack.toml` names a playbook checkout (`[kit] playbook = "../skill-pack-playbook"`, relative to the skill pack or absolute) whose `kit/VERSION` is more than two minor versions ahead of the vendored kit, `check_drift()` and the generated `tests/test_kit_drift.py` (`kit.testing.suites.kit_drift`) print `behind: kit X.Y.Z, playbook A.B.C`. Seen in the 2026-10-26 review: 14 skill packs on six different kit versions, none current, and nothing in their own suites said so. A skill pack takes it by re-vending (`python3 kit/tools/vendor.py --skill-pack PATH`), then adds the `[kit] playbook` line if it wants the hint. Tested in `kit/tests/test_guards.py`.
+
 ## [0.41.0] - 2026-10-26
 ### Added
 - `kit/tools/pre-push.sample`: an optional second step after the leak guard. `git config skillpack.prepush-tests "<the pack's test command>"` runs that command from the top level before a push and refuses the push when it fails; unset (the default) it does nothing, and `git push --no-verify` skips the hook. Moves a failing suite ahead of a CI run that spends quota. A skill pack takes it by re-vendoring; no other change needed.
