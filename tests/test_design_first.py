@@ -5,9 +5,9 @@ Checked, each on a broken copy first, so a check cannot pass by looking at nothi
   - the template keeps its sections, its five steps in order, the design page's parts, the demo's guards and its
     checklist, and the words that carry the rule (the prior-art scan, a recommended answer, append-only columns proven
     on a scratch copy of real data, DEMO ids, failing closed);
-  - docs/lessons.md keeps the lesson (what it paid for, how often it was seen) and points at the template; a new
-    skill pack's CLAUDE.md (templates/AGENT_INSTRUCTIONS.md) names the template where a feature starts; the prior-art
-    scan and BUILD.md's B0.5 point at it;
+  - a new skill pack's CLAUDE.md (templates/AGENT_INSTRUCTIONS.md) names the template where a feature starts; the
+    prior-art scan and BUILD.md's B0.5 point at it (the lesson in docs/lessons.md is not pinned by wording:
+    tests/test_docs_build.py keeps it short, says where it was seen, and resolves its link to the template);
   - the demo guard, the template's one Python block, is run as written: a demo page drawn with kit.pagestyle from a
     synthetic world passes it, and each way a demo breaks the rule is reported: a world not marked synthetic (any
     value but true itself); no ids, or an id that is not DEMO; no synthetic badge with its words in the page's first
@@ -37,7 +37,6 @@ from test_docs_build import doc, section  # noqa: E402
 from kit import pagestyle as ps  # noqa: E402
 
 TEMPLATE = "templates/design-first.md"
-LESSON = "Design and a synthetic demo before code (from adcut-harness X45, 2026-10-13)"
 SECTIONS = ("When", "The steps", "The design page", "The demo", "After the owner confirms", "Checklist")
 STEPS = ("Research first.", "One design page, in the owner's language.", "A clickable demo from a synthetic world.",
          "Wait for the owner's yes.", "Then the code, and the skill pack draws the demo.")
@@ -80,11 +79,9 @@ def template_problems(text: str) -> list[str]:
     return out
 
 
-def pointer_problems(lessons: str, agent: str, scan: str, build: str) -> list[str]:
-    """The lesson that is not kept whole, and each pointer at the template that is gone."""
-    body = section(lessons, LESSON)
-    out = [f"lesson: {w}" for w in ("](../templates/design-first.md)", "*Paid for:*", "*Seen once*", "The rules:")
-           if w not in body]
+def pointer_problems(agent: str, scan: str, build: str) -> list[str]:
+    """Each pointer at the template that is gone."""
+    out = []
     if "the playbook's `templates/design-first.md`" not in section(agent, "What lives here"):
         out.append("AGENT_INSTRUCTIONS.md: where a feature starts")
     if "](design-first.md)" not in section(scan, "When to scan"):
@@ -113,22 +110,16 @@ def test_the_template_keeps_its_steps_its_parts_its_guards_and_its_checklist():
         "one Python block with demo_problems"]
 
 
-def test_the_lesson_and_every_pointer_name_the_template():
+def test_every_pointer_names_the_template():
     assert os.path.isfile(os.path.join(REPO, TEMPLATE))
-    texts = (doc("docs/lessons.md"), doc("templates/AGENT_INSTRUCTIONS.md"), doc("templates/prior-art-scan.md"),
-             doc("BUILD.md"))
+    texts = (doc("templates/AGENT_INSTRUCTIONS.md"), doc("templates/prior-art-scan.md"), doc("BUILD.md"))
     assert pointer_problems(*texts) == [], pointer_problems(*texts)
-    lessons, agent, scan, build = texts
-    assert pointer_problems(lessons.replace(f"## {LESSON}", "## x"), *texts[1:]) == [
-        "lesson: ](../templates/design-first.md)", "lesson: *Paid for:*", "lesson: *Seen once*", "lesson: The rules:"]
-    seen = section(lessons, LESSON)
-    assert pointer_problems(lessons.replace(seen, seen.replace("*Seen once*", "*Seen*")), *texts[1:]) == [
-        "lesson: *Seen once*"]
-    assert pointer_problems(lessons, agent.replace("`templates/design-first.md`", "`x.md`"), scan, build) == [
+    agent, scan, build = texts
+    assert pointer_problems(agent.replace("`templates/design-first.md`", "`x.md`"), scan, build) == [
         "AGENT_INSTRUCTIONS.md: where a feature starts"]
-    assert pointer_problems(lessons, agent, scan.replace("](design-first.md)", "](x.md)"), build) == [
+    assert pointer_problems(agent, scan.replace("](design-first.md)", "](x.md)"), build) == [
         "prior-art-scan.md: when to scan"]
-    assert pointer_problems(lessons, agent, scan, build.replace("](templates/design-first.md)", "](x.md)")) == [
+    assert pointer_problems(agent, scan, build.replace("](templates/design-first.md)", "](x.md)")) == [
         "BUILD.md: B0.5"]
 
 
