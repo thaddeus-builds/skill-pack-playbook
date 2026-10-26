@@ -10,6 +10,7 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- Trimmed: `docs/workbook-and-browser-ops.md` (the workbook half is built, the browser half is ROADMAP X8) is archived as `docs/history/workbook-and-browser-ops-2026-10.md`; `templates/verify-challenge.md` and `templates/outcome-learning.md` are removed, no skill pack holds or names either (checked on fifteen, 2026-10-26); `docs/overview.md` loses its hand-written "Where it stands" table, which was already a version behind. No kit change.
 - A rule for the packs that exist ahead of their second importer (`ads-core`, `creative`, and the four only adcut imports): CLAUDE.md, "A pack may be born before its second importer, but not for good". `tools/pack_status.tsv` lists every pack but `base` and `testkit` as `shared` (the importers `tools/consumers.py` counted, and when) or `incubating` (with the day by which two skill packs must import it); `tests/test_pack_status.py` fails the day after, on a pack with no row and on a `shared` row with fewer than two importers. Counted 2026-10-26 on the fifteen skill packs that vendor the kit: `compliance`, `workbook` and `exchange` are shared; the rest incubate until 2026-12-31. No kit change.
 - The top level reads as what is current: `RESTRUCTURE.md`, the 2026-10 plan that is carried out but for its phase 1 (now ROADMAP N2), is archived unchanged as `docs/history/restructure-2026-10.md` with a status line; `docs/roadmap.md`, the planning method, is `docs/planning.md`, so it no longer shares a name with `ROADMAP.md`, the plan. Every link and mention is updated. No kit change.
 - `tests/test_docs_build.py` no longer pins paragraphs of `docs/rules.md`, `lessons.md`, `operating.md`, `consoles.md`, `path-weights.md` and the planning doc: seventeen checks that wanted a lesson's exact sentences are gone (RESTRUCTURE.md phase 3, step 3), and the autonomy check keeps only what holds `docs/autonomy.md` to `kit/autonomy.py` (the levels, built or not, and the proofs). What stays is held to something checkable: paths, links, flags, counts, tables the code defines. A lesson is kept by its readers; a rule by the check that fails when it is broken. No kit change.
@@ -139,6 +140,10 @@ scaffold, console, docs, conformance.
   switch that travels with a copied database; an agent narrows it, only the owner moves it (`write_host`, S34, S47).
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
+
+## [0.42.0] - 2026-10-26
+### Removed
+- `kit/questions.py` and its test (pack `learning`): open questions that never hold the plan. No skill pack imported it in the two minor versions after ROADMAP P1 parked it (counted 2026-10-26 on the fifteen skill packs that vendor the kit), so the admission rule removes it; the rule it checked moves from `docs/rules.md` (rule 13) to `docs/lessons.md`, as a lesson. A skill pack that re-vendors loses the file; none imports it. `learning` is `patternstore` and `pathweights`.
 
 ## [0.41.0] - 2026-10-26
 ### Added
