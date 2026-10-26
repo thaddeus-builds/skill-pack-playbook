@@ -6,6 +6,9 @@
 # <PREFIX>_CLIENT_TERMS. Without a usable list the push is refused.
 # git passes the remote's name and url as arguments and the refs being pushed on stdin;
 # both go to the guard.
+# Optional, off by default (a CI run is a quota on some hosts): git config skillpack.prepush-tests "<the pack's test command>"
+# runs that command from the top level after the guard passes, and refuses the push when it fails.
+# Unset it to stop; `git push --no-verify` skips the hook. CI still runs the same tests.
 top=$(git rev-parse --show-toplevel) || exit 2
 guard="$top/scripts/kit/tools/leak_guard.py"     # <[skill_pack].scripts_dir>/kit/tools/
 [ -f "$guard" ] || guard="$top/kit/tools/leak_guard.py"
@@ -15,4 +18,7 @@ for py in python3 python3.13 python3.12 python3.11; do
   py=""
 done
 [ -n "$py" ] || { echo "pre-push: no Python 3.11 or newer on PATH; push refused" >&2; exit 2; }
-exec "$py" "$guard" "$@"
+stdin=$(cat)
+printf '%s\n' "$stdin" | "$py" "$guard" "$@" || exit $?
+tests=$(git config --get skillpack.prepush-tests)
+[ -z "$tests" ] || { cd "$top" && echo "pre-push: $tests" >&2 && sh -c "$tests" >&2; }

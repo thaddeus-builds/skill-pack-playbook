@@ -19,6 +19,11 @@ workflow:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
 
+# A newer push cancels the older pipeline of the same ref: CI minutes are a
+# budget that can run out mid-project.
+default:
+  interruptible: true
+
 # Last line of defence if .gitignore ever breaks: fail on anything that looks
 # like a real credential in tracked text. Add the skill pack's own credential
 # prefixes to the pattern. This file names the patterns, so it is not scanned;
