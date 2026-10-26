@@ -299,6 +299,8 @@ def boundary(root: Path | str) -> Results:
 def kit_drift(root: Path | str) -> Results:
     bind(root)
     from kit.guards import drift
+    if hint := drift.behind(root):
+        print(hint)
     return [("scripts/kit/ and console/ match their MANIFEST.sha256 and "
              "VERSION", drift.check_skill_pack(root))]
 
