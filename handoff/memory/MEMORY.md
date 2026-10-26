@@ -1,0 +1,4 @@
+- [Chinese-reading, non-technical owner](user-chinese-nontechnical-owner.md) — reply in Chinese, plain words, numbers in tables, decoupled and lean is the goal
+- [Commit identity and GitLab quirks](feedback-commit-identity-and-gitlab.md) — commit with -c user.name/email as Claude Code; retry git.coco.xyz pushes; Draft MRs need a story id; no amend+force-push
+- [Playbook review 2026-10-26](project-playbook-review-2026-10-26.md) — PR stack #180–#185, 14 re-vendor MRs, open items in approved order
+- [Skip the full suite locally when safe](feedback-skip-full-suite-locally.md) — docs/test-only changes: run the affected suite, CI runs run_all; full run only for kit bytes or the risky list
