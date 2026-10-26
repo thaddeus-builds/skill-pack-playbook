@@ -10,6 +10,7 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `tools/research.py PATH…` (new): one table of what the skill packs already looked up, read from each pack's `docs/research/README.md` and `docs/prior-art/README.md` (pack, kind, question, date, answer, file), optionally written in full as a TSV with `--write docs/research-index.tsv`; documented in `docs/kit-and-tools.md`. Read-only, stdlib only, outside the vendored bytes: no kit version. Tested in `tests/test_research_tool.py` on throwaway packs.
 - CI minutes are a quota on a private repository: `.github/workflows/ci.yml` cancels the older run of the same ref (never one on `main`); `.githooks/pre-push` runs every suite in this repository (`git config core.hooksPath .githooks`); `templates/gitlab-ci.yml` marks its jobs `interruptible` as the fuller CI already did, so a new skill pack's GitLab pipelines cancel too. Default hosting stays GitLab and nothing here is required. Tested in `tests/test_ci_quota.py`.
 ### Other
 - `templates/prior-art-scan.md`, "Auditing a skill pack that already exists", and `docs/lessons.md` (Research is kept, not repeated): the module-by-module survey of what is already built, with a verdict per module (adopt, borrow-idea, keep-own, watch), a sources registry with pinned versions, a coverage test, and the owner's three-claim spot-check. Seen once (the Amazon PPC skill pack, 2026-10-26), tested in `tests/test_prior_art_audit.py`.
