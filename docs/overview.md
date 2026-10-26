@@ -166,6 +166,8 @@ flowchart TB
 
 A new module goes into the pack named for its concern, never `base`. It moves to `base` when two skill packs import it from code merged to their main branches ([CLAUDE.md](../CLAUDE.md)).
 
+How far each skill pack is on the kit is a level, L0 to L3, with the command that proves it ([INVARIANTS.md](../conformance/INVARIANTS.md), "Adoption levels"); [tools/adoption.tsv](../tools/adoption.tsv) holds every pack's level and target.
+
 ## Where it stands
 
 Run the two commands at the top of this page, and read [ROADMAP.md](../ROADMAP.md): a table here went stale within days.
