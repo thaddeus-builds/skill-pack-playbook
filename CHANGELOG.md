@@ -136,6 +136,10 @@ scaffold, console, docs, conformance.
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.42.0] - 2026-10-26
+### Added
+- `kit/guards/research.py` and `suites.research(root)` (pack `testkit`, no new vendored module for a skill pack to import): research is kept, not repeated. `docs/research/` and `docs/prior-art/` each have a `README.md` that lists every file of the folder, and every link of the README is a file; a research file says `Researched YYYY-MM-DD` and tags a claim `[documented]`, `[vendor]`, `[academic]`, `[ours]` or `[inference]`; a prior-art file has its day in its name or on a `Scan date:` line. A skill pack with neither folder is not read. Lifted from the video-ads skill pack's `tests/test_research_index.py`; opt in with `suites.run(suites.research(ROOT))` in a test of your own (the scaffolder's generated `test_ssot.py` calls it from the next playbook pull request). Tested in `kit/tests/test_research.py` and `test_suites.py`.
+
 ## [0.41.0] - 2026-10-26
 ### Added
 - `kit/tools/pre-push.sample`: an optional second step after the leak guard. `git config skillpack.prepush-tests "<the pack's test command>"` runs that command from the top level before a push and refuses the push when it fails; unset (the default) it does nothing, and `git push --no-verify` skips the hook. Moves a failing suite ahead of a CI run that spends quota. A skill pack takes it by re-vendoring; no other change needed.
