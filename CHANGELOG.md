@@ -10,6 +10,8 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- CI minutes are a quota on a private repository: `.github/workflows/ci.yml` cancels the older run of the same ref (never one on `main`); `.githooks/pre-push` runs every suite in this repository (`git config core.hooksPath .githooks`); `templates/gitlab-ci.yml` marks its jobs `interruptible` as the fuller CI already did, so a new skill pack's GitLab pipelines cancel too. Default hosting stays GitLab and nothing here is required. Tested in `tests/test_ci_quota.py`.
+### Other
 - `templates/prior-art-scan.md`, "Auditing a skill pack that already exists", and `docs/lessons.md` (Research is kept, not repeated): the module-by-module survey of what is already built, with a verdict per module (adopt, borrow-idea, keep-own, watch), a sources registry with pinned versions, a coverage test, and the owner's three-claim spot-check. Seen once (the Amazon PPC skill pack, 2026-10-26), tested in `tests/test_prior_art_audit.py`.
 - `docs/overview.md`: the autonomy levels L0 to L5 on the overview, one row each with who decides the write, an example and whether it is built (L4 and L5 are not), linked to `docs/autonomy.md`. No kit change.
 - `docs/overview.md`, "How the work moves": the diagram now follows one example (a promotion on two platforms), names what each arrow carries (the contract) and says in words what each of the four steps does; before, it drew four abstract boxes. No kit change.
@@ -133,6 +135,10 @@ scaffold, console, docs, conformance.
   switch that travels with a copied database; an agent narrows it, only the owner moves it (`write_host`, S34, S47).
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
+
+## [0.41.0] - 2026-10-26
+### Added
+- `kit/tools/pre-push.sample`: an optional second step after the leak guard. `git config skillpack.prepush-tests "<the pack's test command>"` runs that command from the top level before a push and refuses the push when it fails; unset (the default) it does nothing, and `git push --no-verify` skips the hook. Moves a failing suite ahead of a CI run that spends quota. A skill pack takes it by re-vendoring; no other change needed.
 
 ## [0.40.0] - 2026-10-25
 ### Added
