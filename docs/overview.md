@@ -1,78 +1,38 @@
 # The growth framework on one page
 
-How the parts fit: what a skill pack is, how one is built, how several work together for a client, and where the shared code sits. Detail is one link away; this page only joins the views. State as of 2026-10-26, from [ROADMAP.md](../ROADMAP.md) and [portfolio.md](portfolio.md); for a live count run `python3 tools/fleet.py status PATH…` and `python3 tools/consumers.py PATH…`.
+Two questions, answered apart. **Part 1:** in growth operations, who owns what. **Part 2:** how this playbook makes every skill pack alike, what it unifies and what it saves each pack. State as of 2026-10-26, from [ROADMAP.md](../ROADMAP.md) and [portfolio.md](portfolio.md); for live counts run `python3 tools/fleet.py status PATH…` and `python3 tools/consumers.py PATH…`.
 
-## 1. Three views, one system
+---
 
-```mermaid
-flowchart LR
-    subgraph B["Build one skill pack"]
-      direction TB
-      B1["Client meetings"] --> B2["Ten stages<br/>five owner gates"]
-    end
-    subgraph C["Combine packs for a client"]
-      direction TB
-      C1["Client hub<br/>facts · inbox · exchange"] --> C2["Packs of one solution<br/>talking by contracts"]
-    end
-    subgraph K["Shared code"]
-      direction TB
-      K1["Kit packs<br/>vendored, stdlib only"] --> K2["Console · host adapter"]
-    end
-    B -- "scaffold vendors" --> K
-    B -- "a finished pack joins" --> C
-    C -- "results and owner asks feed" --> B
-```
+# Part 1 · Growth operations: who owns what
 
-| View | Answers | Read |
-| --- | --- | --- |
-| Build | How a pack goes from a meeting to production | [README](../README.md), [BUILD.md](../BUILD.md), [stages.md](stages.md) |
-| Combine | Which packs a client needs and how they hand work over | [portfolio.md](portfolio.md), [solutions.md](solutions.md) |
-| Share | What code is common and how a pack gets it | [kit/README.md](../kit/README.md), [kit-and-tools.md](kit-and-tools.md) |
+Each skill pack is one specialist on a client's team. A client's growth work is cut into three roles, plus the owner.
 
-## 2. The five layers
-
-```mermaid
-flowchart TB
-    subgraph L5["5 · Engines: logic two packs use, in the kit"]
-      E["ads-core · creative · intent · compliance · generation"]
-    end
-    subgraph L4["4 · Makers: make assets to a spec, know no platform API"]
-      M["video · product images · text"]
-    end
-    subgraph L3["3 · Truth: one owner per fact"]
-      T["catalog · attribution and break-even ROAS · search demand · creative identity · messaging"]
-    end
-    subgraph L2["2 · Operators: one pack per platform account"]
-      O["credential · pulls · ledger · change log · the one guarded writer"]
-    end
-    subgraph L1["1 · Platform"]
-      P["kit · client hub · exchange folder"]
-    end
-    L5 -.-> L2
-    L5 -.-> L4
-    L4 -- "ads.creatives · copy.proposals" --> L2
-    L3 -- "catalog · truth · intel · messages" --> L2
-    L3 -- "messages" --> L4
-    L2 -- "ads.results · ads.changes · ads.demand" --> L3
-    L2 -- "ads.results · ads.demand" --> L4
-    L1 --- L2
-```
-
-Five rules hold it together ([portfolio.md](portfolio.md#ownership-rules)): one operator per platform account; one owner per fact; one writer per external field; a pack never opens another pack's database; a client's own data lives in its hub, never in a pack.
-
-## 3. Where the owner decides
+| Role | Does | Never does | Examples |
+| --- | --- | --- | --- |
+| **Operator** | Holds one platform account: pulls its data, reports, proposes actions, and writes to the account once approved | Touches another platform; invents its own number for a shared fact | `video-ads` (Meta, 千川, 腾讯), `google-ads`, `amazon-ppc`, `ecommerce-seo` |
+| **Truth** | Owns one kind of number the others need and publishes it | Runs ads; writes to any account | `product-feed` (price, stock), `measurement` (attribution, break-even ROAS), `search-intel` (demand, competitors) |
+| **Maker** | Makes assets to a spec and hands them over with a manifest | Knows a platform's API; uploads | `adcut` (video), `ad-copy` (text), `product-keyframe-video` (images) |
+| **Owner** | Signs five things: meaning, stories, numbers, money, release | | |
 
 ```mermaid
 flowchart LR
-    G1["Meaning<br/>words, decision rights"]:::owner --> G2["Stories"]:::owner --> G3["Numbers<br/>registries"]:::owner --> G4["Money<br/>each action, 24 h"]:::owner --> G5["Release"]:::owner
-    A["AI proposes a pending value"] --> H["Human gate"]:::owner --> V["Confirmed value"]
-    V --> Q["Approval queue"] --> D["Dry run"] --> W["One writer<br/>allowlist · caps · kill switch"]
-    classDef owner fill:#e8f0fe,stroke:#1a73e8,stroke-width:2px,color:#202124
+    S["Truth<br/>what to say, what is for sale,<br/>what the numbers are"] --> MK["Makers<br/>video · text · names and tags"]
+    MK --> R["Operators<br/>propose; the owner approves;<br/>each writes only its own platform"]
+    R --> LN["Truth: measurement<br/>compares with the company's own numbers;<br/>confirmed values go to the client hub"]
+    LN --> S
+    LN -. "which creative to make more of" .-> MK
 ```
 
-A person confirms exactly what was shown; only a human raises a value's trust; nothing is written outside the queue. At most 10 open asks per owner across a client's packs ([rules.md](rules.md), [autonomy.md](autonomy.md)).
+Five rules keep the roles apart ([portfolio.md](portfolio.md#ownership-rules)):
 
-## 4. Five solutions
+1. **One operator per platform account.** Nobody else holds its credential or writes to it.
+2. **One owner per fact.** A price, a break-even ROAS or a coefficient is published by its owner; the rest read it.
+3. **One writer per external field.** Website product content belongs to `seo`; merchant-feed overrides belong to `feed`.
+4. **A pack never opens another pack's database.** It reads versioned `--json` documents, written once into the client hub's exchange folder.
+5. **A client's own data lives in its hub,** never in a pack.
+
+Which packs a client needs depends on the business ([solutions.md](solutions.md)):
 
 | Solution | For | Operators |
 | --- | --- | --- |
@@ -82,28 +42,70 @@ A person confirms exactly what was shown; only a human raises a value's trust; n
 | D. B2B, organic and sales-led | buyers won by search, AI answers and outreach | `ecommerce-seo`, `geo-china`, `outbound`, `sdr` |
 | E. Our own acquisition | the agency's own pipeline | the SEO, outreach and sales packs |
 
-A client may need two; each pack still runs only its own platform. Start order: the operator closest to the money, then `measurement`, then makers, then the other truth packs ([solutions.md](solutions.md#starting-a-client)).
+A client may need two. Start order: the operator closest to the money, then `measurement`, then makers, then the other truth packs.
 
-## 5. The loop for solution A
+---
+
+# Part 2 · The playbook: what it unifies, what it saves
+
+The playbook does no growth work and holds no channel logic. It is the factory that builds skill packs and the safety parts they share. A skill pack adds only its channel: its pulls, reports, registries and the hooks the kit calls.
 
 ```mermaid
 flowchart LR
-    S["What to say<br/>search demand · messaging · catalog"] --> MK["Make<br/>video · text · names and tags"]
-    MK --> R["Run<br/>operators propose, owner approves,<br/>each writes only its platform"]
-    R --> LN["Learn<br/>measurement vs company numbers<br/>confirmed into the hub's facts"]
-    LN --> S
-    LN -. "which creative to make more of" .-> MK
+    subgraph PB["This playbook"]
+      direction TB
+      W["Build workflow<br/>ten stages, B0 to B10"]
+      SC["Scaffold<br/>a green pack on day one"]
+      K["Kit<br/>gate · queue · write guard · contract"]
+      CO["Console and host adapter"]
+      CF["Conformance check"]
+    end
+    subgraph SP["Each skill pack"]
+      direction TB
+      CH["Its channel only<br/>pulls · reports · registries"]
+    end
+    PB -- "vendored copy, never edited in place" --> SP
+    SP -- "a lesson comes back as a small change with a test" --> PB
 ```
 
-## 6. The kit's packs
+| Unified | What it means in practice |
+| --- | --- |
+| The gate | A person confirms exactly what was shown, by retype or a one-time code. There is no bypass flag. |
+| Human data | A client's facts and decisions stay pending until a person confirms them, keep their history, and are never dropped or shrunk. |
+| The money path | Nothing goes out unapproved: queue, approval that expires, dry run, opt-in, exact-shape allowlist, kill switch. |
+| Raw data | Raw files are written once, atomically; a second scheduled run skips; throttling is a recorded gap. |
+| Talking to an agent | Every command prints one `--json` document, failures included; every message has a code from a closed registry. |
+| The build | Ten stages, five owner gates, the same for every pack. |
+| The owner's door | One console, one inbox, at most 10 open asks per owner across a client's packs. |
+| Hand-offs | Twelve contracts and one exchange folder. |
 
-A skill pack names the kit packs it takes in `skill-pack.toml`; a pack imports only `base` and itself ([kit/packs.tsv](../kit/packs.tsv), tested by `kit/tests/test_packs.py`).
+| What a skill pack saves | How |
+| --- | --- |
+| Writing the safety parts | Scaffold generates a pack with the kit and the thirteen day-one tests, green before its first feature. |
+| Designing the process | [BUILD.md](../BUILD.md) and the build skill are the process. |
+| Building a console | The console is vendored with the pack. |
+| Keeping up | `fleet.py` shows where each copy stands; `vendor.py` brings it up to date; a local edit to a vendored byte fails the drift test, so the fix goes upstream first. |
+| Carrying what it does not use | A pack takes only the kit packs it names in `skill-pack.toml`. |
+
+Where the owner decides, and how a value earns trust:
+
+```mermaid
+flowchart LR
+    G1["Meaning"]:::owner --> G2["Stories"]:::owner --> G3["Numbers"]:::owner --> G4["Money<br/>each action, 24 h"]:::owner --> G5["Release"]:::owner
+    A["AI proposes a pending value"] --> H["Human gate"]:::owner --> V["Confirmed value"]
+    V --> Q["Approval queue"] --> D["Dry run"] --> W["One writer<br/>allowlist · caps · kill switch"]
+    classDef owner fill:#e8f0fe,stroke:#1a73e8,stroke-width:2px,color:#202124
+```
+
+Only a human raises a value's trust; anyone may lower it.
+
+The kit is split into packs, and a skill pack names the ones it takes. A pack imports only `base` and itself; `kit/tests/test_packs.py` enforces it ([kit/packs.tsv](../kit/packs.tsv)).
 
 ```mermaid
 flowchart TB
     base["base · gate, human tables, queue, execute, write guard, CLI, raw, contract"]
     testkit["testkit · guards, day-one tests, vendor tool"]
-    subgraph chan["Channel-neutral packs, each imports base only"]
+    subgraph chan["Packs that import base only"]
       direction LR
       compliance & generation & data & workbook & learning & pages & autonomy & exchange & adscore["ads-core"] & creative
     end
@@ -113,14 +115,14 @@ flowchart TB
 
 A new module goes into the pack named for its concern, never `base`. It moves to `base` when two skill packs import it from code merged to their main branches ([CLAUDE.md](../CLAUDE.md)).
 
-## 7. Where it stands (2026-10-26)
+## Where it stands (2026-10-26)
 
 | Part | State |
 | --- | --- |
 | Kit | 0.40.0; packs and selective vendoring built |
-| Packs in use on the kit | the creator-video pack and the short-video ad pack, on different kit versions; bringing them to one is the open turn (ROADMAP N2) |
-| Client hub, contracts | built; no real client has moved onto a hub yet (X10); three contracts exist, the rest are drafts a first producer and consumer settle |
-| Truth packs | scaffolds or local only |
+| Unified across packs | Only for the two packs in use, and they sit on different kit versions; bringing them to one is the open turn (ROADMAP N2) |
+| Truth packs | Scaffolds or local only; the "learn" step of the loop has barely run |
+| Client hub, contracts | Built; no real client has moved onto a hub yet (X10). Three contracts exist, the rest are drafts a first producer and consumer settle |
 | Waiting on the owner | ROADMAP, "Waiting on owner" |
 
 This table is hand-written and goes stale: the commands at the top of the page are the source.
