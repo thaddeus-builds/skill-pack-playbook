@@ -3,9 +3,8 @@
 Checked, each on a broken copy first, so a check cannot pass by looking at nothing:
 
   - the template keeps the section, the four verdicts, the sources registry's columns, the front page's parts, the
-    coverage test and the spot-check of the heaviest claims;
-  - docs/lessons.md points at that section from "Research is kept, not repeated", says where it was seen, and the
-    section points back at the claim tags of that lesson.
+    coverage test, the spot-check of the heaviest claims and its pointer back at docs/lessons.md. The lesson's own
+    wording is not pinned (tests/test_docs_build.py: a lesson is short and says where it was seen; its links resolve).
 """
 
 from __future__ import annotations
@@ -22,12 +21,10 @@ from test_docs_build import doc, section  # noqa: E402
 
 TEMPLATE = "templates/prior-art-scan.md"
 HEADING = "Auditing a skill pack that already exists"
-LESSON = "Research is kept, not repeated (from the video-ads skill pack, 2026-10-22)"
 WORDS = ("`adopt`", "`borrow-idea`", "`keep-own`", "`watch`", "docs/prior-art/sources.tsv",
          "id, url, kind, title, author_or_org, published_or_version, accessed, pinned, licence, claim_tag, used_for, note",
          "**Borrow** (at most 12", "**Not surveyed**", "**Could not verify**", "A test holds the coverage",
          "fetch the three heaviest claims yourself", "](../docs/lessons.md)")
-POINTER = "](../templates/prior-art-scan.md#auditing-a-skill-pack-that-already-exists)"
 
 
 def template_problems(text: str) -> list[str]:
@@ -37,10 +34,6 @@ def template_problems(text: str) -> list[str]:
     return [w for w in WORDS if w not in body]
 
 
-def lesson_problems(lessons: str) -> list[str]:
-    body = section(lessons, LESSON)
-    return [w for w in (POINTER, "*Seen once* (2026-10-26)") if w not in body]
-
 
 def test_the_template_keeps_the_audit_section():
     text = doc(TEMPLATE)
@@ -49,12 +42,6 @@ def test_the_template_keeps_the_audit_section():
         assert template_problems(text.replace(w, "x")) == [w], w
     assert template_problems(text.replace(f"## {HEADING}", "## x")) == [f"## {HEADING}"]
 
-
-def test_the_lesson_points_at_the_section():
-    lessons = doc("docs/lessons.md")
-    assert lesson_problems(lessons) == [], lesson_problems(lessons)
-    assert lesson_problems(lessons.replace(POINTER, "](x.md)")) == [POINTER]
-    assert lesson_problems(lessons.replace("*Seen once* (2026-10-26)", "*Seen*")) == ["*Seen once* (2026-10-26)"]
 
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
 # Restructuring plan: a smaller parent
 
+> **Archived 2026-10-26.** This is the plan as accepted on 2026-10-05, kept as written. What it decided is now the rule in [CLAUDE.md](../../CLAUDE.md) and [kit-and-tools.md](../kit-and-tools.md). Phases 2, 4 and 5 are done; phase 3 finished when the prose-pinning tests went (kit 0.41.0, unreleased); phase 1 (one kit version in every skill pack) is the open turn of [ROADMAP.md](../../ROADMAP.md) (N2) and selective vendoring per skill pack is X2. Phase 6 is a list of separate decisions, none taken. Links below point at the tree as it was.
+
 Status: **accepted 2026-10-05** (decisions 1 and 2: packs as drawn, phase 1 first). Phase 1 is in progress: step 4 and the comparison tool are done; steps 1 to 3 need the skill pack checkouts. Phase 2 steps 1 to 5 are done in kit 0.7.0 (packs, selective vendoring, `--packs`); step 6 needs the skill pack checkouts. Phases 4 and 5 are done. Phase 3 is done for the registry (2026-10-21: `kit-tiers.tsv` and its test are deleted; the consumers script and the prose-pinning tests are not). Each phase lists the decisions it needs from the owner. Related issues: #19, #20, #22, #24, #26.
 
 ## Why
