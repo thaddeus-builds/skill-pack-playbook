@@ -1,6 +1,6 @@
 # Working in the playbook
 
-This repository is the **parent of every growth-marketing skill pack** (KOL, Amazon Ads, Meta ads, SEO, ...). A skill pack adds only its channel: its pulls, reports, registries and the hooks the kit calls. Everything here exists because two or more skill packs need it. Why it is shaped this way: [RESTRUCTURE.md](RESTRUCTURE.md). Read [ROADMAP.md](ROADMAP.md) before you start.
+This repository is the **parent of every growth-marketing skill pack** (KOL, Amazon Ads, Meta ads, SEO, ...). A skill pack adds only its channel: its pulls, reports, registries and the hooks the kit calls. Everything here exists because two or more skill packs need it. Why it is shaped this way: [docs/history/restructure-2026-10.md](docs/history/restructure-2026-10.md). Read [ROADMAP.md](ROADMAP.md) before you start.
 
 ## Keep it small
 

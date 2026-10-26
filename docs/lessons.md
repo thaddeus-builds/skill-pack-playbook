@@ -4,7 +4,7 @@ What the source project and the skill packs after it paid for, kept here when th
 
 ## Pulling into raw (from `kit/pull.py`, removed in kit 0.7.0)
 
-`kit/pull.py` merged each pull into raw, planned long pulls in chunks and kept a ledger of gaps. No skill pack imported it, so it was removed (RESTRUCTURE.md, phase 5). The last version is at commit `8e13e16` (`git show 8e13e16:kit/pull.py`), with its test in `kit/tests/test_pull.py`. Before writing a pull layer again, compare dlt (incremental cursors and state) and Airbyte's Amazon Ads source, which re-pulls a lookback window (3 days by default) for numbers the platform restates.
+`kit/pull.py` merged each pull into raw, planned long pulls in chunks and kept a ledger of gaps. No skill pack imported it, so it was removed ([the 2026-10 restructure](history/restructure-2026-10.md), phase 5). The last version is at commit `8e13e16` (`git show 8e13e16:kit/pull.py`), with its test in `kit/tests/test_pull.py`. Before writing a pull layer again, compare dlt (incremental cursors and state) and Airbyte's Amazon Ads source, which re-pulls a lookback window (3 days by default) for numbers the platform restates.
 
 *Paid for:* each pull replaced raw and the platform keeps only a few months; a late resumed report put older numbers back; an unreadable raw file was overwritten by one pull's rows; a long pull killed halfway started over and the quota ran out again; a run that cleared the last run's gaps lost the list a gaps-only pull needed.
 
@@ -388,7 +388,7 @@ on its `main` yet, the entry says so. Some sharpen a rule above; the entry names
    refusal is `nextjs_push_rejected` in `push_branch` (`scripts/_lib/nextjs_static.py`); the runs are under
    `raw/apply/nextjs-static/` in that client's workspace (S163).
 8. **Allocate a shared id where the writes meet, not where each session claims it.** Sharpens "Only the coordinator
-   allocates story ids" in [roadmap.md](roadmap.md#who-works-where) and [Registries](rules.md#registries-one-place-per-value)
+   allocates story ids" in [planning.md](planning.md#who-works-where) and [Registries](rules.md#registries-one-place-per-value)
    rule 11. *Paid for:* with many sessions in parallel, picking "the next free id" on a branch raced even after the
    picker learned to read every branch and merge request. In the two days to 2026-10-15 the skill pack's `main` took at
    least 8 fix-up commits that renumbered a story ("S180: renumber from S179 (taken by !196 and !197)", "S172 was taken
