@@ -12,7 +12,8 @@ paths; the CI templates' title rule and secret scan match what they should and
 every CI job states its rules; the digest guidance in decision-rights.md names real
 console verbs; docs/autonomy.md's levels and proofs are the ones kit/autonomy.py
 defines. Each check is tried on a broken input first, so it cannot pass by
-looking at nothing.
+looking at nothing. docs/lessons.md is held to a cap: at most 150 words per lesson,
+each saying where it was seen; the long form lives in the skill pack that paid for it.
 
 A document's prose (docs/rules.md, lessons.md, operating.md and the rest) is not
 pinned here: a lesson is kept by the people who read it, and a rule is kept by
@@ -914,6 +915,32 @@ def test_the_build_skill_follows_the_agent_skills_spec():
     assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name) and len(name) <= 64, name
     assert name == os.path.basename(os.path.dirname(SKILL)), "the name is the skill's folder"
     assert 0 < len(desc) <= 1024, len(desc)
+
+
+LESSON_WORDS = 150
+
+
+def lesson_problems(text: str) -> list[str]:
+    """What docs/lessons.md gets wrong: a lesson over LESSON_WORDS words, or one that does not say where it was seen
+    (a "(from ...)" in its heading, or a *Seen*, *Paid for* or *Why* marker in its body)."""
+    out = []
+    for part in re.split(r"^(?=## )", text, flags=re.M)[1:]:
+        head, body = part.splitlines()[0], " ".join(part.splitlines()[1:])
+        n = len(body.split())
+        if n > LESSON_WORDS:
+            out.append(f"{head[3:]}: {n} words, the cap is {LESSON_WORDS}; the long form belongs in the skill pack that paid for it")
+        if "(from " not in head and not re.search(r"\*(Seen|Paid for|Why)", body):
+            out.append(f"{head[3:]}: says not where it was seen")
+    return out
+
+
+def test_every_lesson_is_short_and_says_where_it_was_seen():
+    text = doc("docs/lessons.md")
+    assert lesson_problems(text) == [], "\n".join(lesson_problems(text))
+    long = "# L\n\n## A lesson\n\n" + "word " * (LESSON_WORDS + 1) + "*Seen once.*\n"
+    assert lesson_problems(long) == [f"A lesson: {LESSON_WORDS + 3} words, the cap is {LESSON_WORDS}; the long form belongs in the skill pack that paid for it"]
+    assert lesson_problems("# L\n\n## A lesson\n\nshort rule.\n") == ["A lesson: says not where it was seen"]
+    assert lesson_problems("# L\n\n## A lesson (from a pack, 2026-10-26)\n\nshort rule.\n") == []
 
 
 if __name__ == "__main__":
