@@ -33,6 +33,12 @@ The rules, each learned from one of those bugs:
 
 Its neighbours stay in the kit: `kit/raw.py` (write-once raw files), `kit/atomic.py` (the write), `kit/single_instance.py` (one run at a time) and `kit/retry.py` (`call` waits at least the quota's refill period; `GaveUp` carries the reason a gap is recorded with).
 
+## Open questions that never hold the plan (from `kit/questions.py`, removed in kit 0.42.0)
+
+`kit/questions.py` checked a skill pack's open questions: each named the data that could answer it and what the plan did meanwhile, and a read-back listed the questions new data could answer. No skill pack imported it in the two minor versions after ROADMAP P1 parked it (counted 2026-10-26, `tools/consumers.py`), so it was removed; the last version is at kit 0.41.0. The rule it checked, kept as a lesson:
+
+**An open question never holds the plan.** What the skill pack cannot answer yet is recorded, not waited on. Each open question names `by_data`, the data that can answer it without asking anyone once the skill pack holds it (a kind from the skill pack's own closed list, or `ask_only` when only a person can), and `meanwhile`, what the plan does until then. `meanwhile` is an action, never a wait: "write the template and make no video" passes, "TBD" or "wait for the client" does not (the check catches the obvious waits, and a short text that opens with "hold" or "pause" too; a reviewer reads the rest). When the data arrives the skill pack prompts a read-back: each unanswered question that data can answer is listed with the data's fingerprint, until the answer is recorded or the agent records the fingerprint it read; a new version of the data prompts again. The owner is asked only what no data can answer. *Seen once:* the video-ads skill pack (owner decision, 2026-10-13): its client rarely knows such answers, while the results file the client sends back can answer some. Its questions carry both fields (a `meanwhile` there reads "say nothing about direct dispatch, free shipping or price in the ads" or "write the template, make no video"), its insight page groups them (the data will answer, only a person can, no data named, answered), and it warns once the results file it names holds this project's creatives.
+
 ## Paid generation jobs (from adcut-harness, its first real batch, 2026-10-06)
 
 A background job generates paid takes (a video model behind a hosted workflow), renders, checks and exports each file under
