@@ -30,6 +30,19 @@ First run, 2026-10-05:
 | seoh | pass | pass |
 | ppc (amazon-ads-harness, branch `fix-pr-a-sqlite-utils`) | **fail**: `facts set` on a confirmed fact replaces the value and the fact stays confirmed (`is_assumption` stays 0), so an agent can change what the owner signed | pass |
 
+## Adoption levels
+
+How far a skill pack is on the kit, said once. Each level includes the one below it. A pack sits at the highest level whose proof passes on its **main branch** (merged code only). These are adoption levels of a skill pack, not the autonomy levels of a write ([autonomy.md](../docs/autonomy.md)), which share the letter.
+
+| Level | A skill pack at this level | Proof, run on a checkout of its main branch |
+| --- | --- | --- |
+| **L0** | keeps the invariants above, however it is written | `python3 conformance/check.py conformance/adapters/<name>.toml --root PACK` ends `RESULT: 2 passed`. A pack that vendors the kit unedited needs no adapter: `python3 tools/fleet.py status PACK` lists no `local` kit file and no `edited` one, so the kit's own gate and doctor are the ones `check.py` would drive |
+| **L1** | vendors `base` and `testkit` and routes its CLI through `kit.cli` | `python3 tools/consumers.py PACK` says it vendors the kit and lists `cli` among the modules it imports |
+| **L2** | declares in `skill-pack.toml` and vendors only the kit packs it imports, and has deleted its own copy of any module the kit holds (golden diff 0 against the copy it deleted) | each pack in `[kit] packs` owns a module that `tools/consumers.py PACK` lists as imported by it; no file of its own code has a kit module's name |
+| **L3** | has the full scaffold structure: `ssot/`, `console/`, a host adapter (`zylos/` on the Zylos host) and the thirteen day-one tests (the files under `scaffold/skeleton/tests/`) | `python3 tools/fleet.py status PACK` shows its console and host adapter copies with no `local` file; its own `scripts/<cli>.py test` ends `RESULT: N passed` |
+
+[`tools/adoption.tsv`](../tools/adoption.tsv) records each known skill pack's level, its target, the day the proofs were last run, and the next step. `tests/test_adoption.py` checks the table's shape and that each row names a folder among the sibling checkouts; it cannot know a pack's level, so `checked` is the day someone ran the commands above, and a level is trusted only as far as that day.
+
 ## Adding an invariant or a check
 
 1. A second skill pack must show it, in a path named in the row.
