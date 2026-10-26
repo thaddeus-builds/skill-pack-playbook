@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>How the packs work together</title>
+<style>
+:root{
+  --bg:#f6f6f3; --card:#fff; --ink:#1d1d1b; --mute:#6b6b66; --line:#d9d9d2; --chip:#eef0ec; --ring:#1d1d1b;
+  --l0:#2f6f8f; --l1:#a05a2c; --l2:#3d7a4a; --l3:#7a4f9a; --l4:#8a7a1f; --l5:#a0446b;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#161614; --card:#21211e; --ink:#ecebe6; --mute:#9c9b93; --line:#3a3a35; --chip:#2c2c28; --ring:#ecebe6;
+    --l0:#6bb0d0; --l1:#e0935c; --l2:#78c088; --l3:#b793d6; --l4:#d8c85a; --l5:#e08ab0; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+main{max-width:1120px;margin:0 auto;padding:28px 16px 56px}
+h1{font-size:24px;margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--mute);margin:0 0 20px;max-width:62ch}
+.steps{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.steps button{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 12px;border-radius:999px;cursor:pointer}
+.steps button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps .hint{color:var(--mute);font-size:13px;align-self:center;margin-left:4px}
+#stage{position:relative}
+#lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+.lanes{position:relative;z-index:1;display:grid;grid-template-columns:repeat(var(--n),1fr);gap:0 104px;align-items:start}
+.lane h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:0 0 10px;font-weight:600}
+.lane h2 b{display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:var(--c);color:var(--bg);font-size:11px;margin-right:6px}
+.cards{display:flex;flex-direction:column;gap:12px}
+.card{all:unset;box-sizing:border-box;display:block;cursor:pointer;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:10px;padding:10px 12px;transition:opacity .15s,box-shadow .15s,transform .15s}
+.card:hover{transform:translateY(-1px);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.card:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.card .n{font:600 14px ui-monospace,SFMono-Regular,Menlo,monospace}
+.card .d{color:var(--mute);font-size:13px;margin-top:2px}
+.dim .card.off{opacity:.35}
+.card.sel{box-shadow:0 0 0 2px var(--ring)}
+.card.rel{border-color:var(--c)}
+#panel{margin-top:22px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;min-height:96px}
+#panel h3{margin:0 0 2px;font:600 16px ui-monospace,SFMono-Regular,Menlo,monospace}
+#panel p.lead{margin:0 0 10px;color:var(--mute)}
+#panel .cols{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px}
+#panel h4{margin:6px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);font-weight:600}
+#panel ul{list-style:none;margin:0;padding:0}
+#panel li{padding:3px 0;font-size:14px}
+#panel ol{margin:0;padding-left:20px;color:var(--mute)}
+code.k{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--chip);border-radius:5px;padding:1px 6px}
+.none{color:var(--mute)}
+.chip{position:absolute;z-index:2;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--bg);font:600 11px/20px -apple-system,system-ui,sans-serif;text-align:center}
+.num{display:inline-block;width:18px;height:18px;border-radius:50%;background:var(--ink);color:var(--bg);font:600 11px/18px -apple-system,system-ui,sans-serif;text-align:center;margin-right:6px;vertical-align:1px}
+.legend{margin-top:18px;color:var(--mute);font-size:13px}
+@media (max-width:860px){
+  .lanes{grid-template-columns:1fr;gap:22px}
+  #lines,.chip{display:none}
+  #panel .cols{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>How the packs work together</h1>
+  <p class="sub">Each pack does one job and hands the next a named document. Nothing else passes between them. Pick a step, or pick any pack, to see what it reads and what it hands on.</p>
+  <div class="steps" id="steps" role="group" aria-label="Steps"></div>
+  <div id="stage">
+    <svg id="lines" aria-hidden="true"></svg>
+    <div class="lanes" id="lanes"></div>
+  </div>
+  <section id="panel" aria-live="polite"></section>
+  <p class="legend">Drawn from the diagram in <code class="k">docs/overview.md</code> by <code class="k">tools/overview_page.py</code>, so the page and the diagram cannot disagree. The rules that keep the roles apart are in <code class="k">docs/portfolio.md</code>, “Ownership rules”.</p>
+</main>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const DATA = JSON.parse(document.getElementById('data').textContent);
+const LANE_COLOR = ['var(--l0)','var(--l1)','var(--l2)','var(--l3)','var(--l4)','var(--l5)'];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const byId = Object.fromEntries(DATA.nodes.map(n=>[n.id,n]));
+const laneIdx = Object.fromEntries(DATA.lanes.map((l,i)=>[l.id,i]));
+const lanesEl = document.getElementById('lanes'), svg = document.getElementById('lines'),
+      stage = document.getElementById('stage'), panel = document.getElementById('panel'),
+      stepsEl = document.getElementById('steps');
+let sel = null; // {type:'node'|'lane', id}
+// Idempotent: a browser's "save page" keeps the DOM this script built, so a saved copy runs it again on top of its own output.
+lanesEl.replaceChildren(); stepsEl.replaceChildren(); svg.replaceChildren();
+stage.querySelectorAll('.chip').forEach(c => c.remove());
+lanesEl.style.setProperty('--n', DATA.lanes.length);
+
+DATA.lanes.forEach((l,i)=>{
+  const color = LANE_COLOR[i % LANE_COLOR.length];
+  const col = document.createElement('div'); col.className='lane'; col.style.setProperty('--c',color);
+  col.innerHTML = `<h2><b>${i+1}</b>${esc(l.title)}</h2><div class="cards"></div>`;
+  DATA.nodes.filter(n=>n.lane===l.id).forEach(n=>{
+    const b=document.createElement('button'); b.className='card'; b.dataset.id=n.id;
+    b.style.setProperty('--c',color);
+    b.innerHTML=`<div class="n">${esc(n.name)}</div><div class="d">${esc(n.desc)}</div>`;
+    b.onclick=()=>choose(sel&&sel.type==='node'&&sel.id===n.id?null:{type:'node',id:n.id});
+    col.querySelector('.cards').appendChild(b);
+  });
+  lanesEl.appendChild(col);
+  const s=document.createElement('button'); s.textContent=`${i+1} · ${l.step}`; s.dataset.lane=l.id; s.setAttribute('aria-pressed','false');
+  s.onclick=()=>choose(sel&&sel.type==='lane'&&sel.id===l.id?null:{type:'lane',id:l.id});
+  stepsEl.appendChild(s);
+});
+const hint=document.createElement('span'); hint.className='hint'; hint.textContent='or click a pack'; stepsEl.appendChild(hint);
+
+function relEdges(){
+  if(!sel) return [];
+  if(sel.type==='node') return DATA.edges.filter(e=>e.from===sel.id||e.to===sel.id);
+  return DATA.edges.filter(e=>byId[e.from].lane===sel.id);
+}
+function choose(s){
+  sel=s; render();
+  if(s&&getComputedStyle(svg).display==='none') panel.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
+function render(){
+  const es=relEdges(), touched=new Set(es.flatMap(e=>[e.from,e.to]));
+  if(sel&&sel.type==='node') touched.add(sel.id);
+  if(sel&&sel.type==='lane') DATA.nodes.filter(n=>n.lane===sel.id).forEach(n=>touched.add(n.id));
+  stage.classList.toggle('dim',!!sel);
+  document.querySelectorAll('.card').forEach(c=>{
+    c.classList.toggle('off',!!sel&&!touched.has(c.dataset.id));
+    c.classList.toggle('sel',!!sel&&sel.type==='node'&&sel.id===c.dataset.id);
+    c.classList.toggle('rel',touched.has(c.dataset.id));
+  });
+  stepsEl.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(!!sel&&sel.type==='lane'&&sel.id===b.dataset.lane)));
+  drawLines(es); drawPanel(es);
+}
+
+function box(id){
+  const r=document.querySelector(`.card[data-id="${CSS.escape(id)}"]`).getBoundingClientRect(), s=stage.getBoundingClientRect();
+  return {l:r.left-s.left,r:r.right-s.left,t:r.top-s.top};
+}
+function drawLines(es){
+  svg.innerHTML=''; stage.querySelectorAll('.chip').forEach(c=>c.remove());
+  if(getComputedStyle(svg).display==='none') return;
+  svg.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);
+  const side={};
+  es.forEach((e,idx)=>{
+    const a=box(e.from), b=box(e.to), fa=laneIdx[byId[e.from].lane], fb=laneIdx[byId[e.to].lane];
+    if(fa===fb) return;
+    const fwd=fb>fa, k1=e.from+(fwd?'R':'L'), k2=e.to+(fwd?'L':'R');
+    side[k1]=(side[k1]||0)+1; side[k2]=(side[k2]||0)+1;
+    const y1=a.t+16+(side[k1]-1)*26, y2=b.t+16+(side[k2]-1)*26;
+    const x1=fwd?a.r:a.l, x2=fwd?b.l:b.r, dx=Math.max(40,Math.abs(x2-x1)*.45)*(fwd?1:-1);
+    svg.insertAdjacentHTML('beforeend',`<path d="M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}" fill="none" stroke="${LANE_COLOR[fa%LANE_COLOR.length]}" stroke-width="2" stroke-linecap="round" marker-end="url(#ah)"/>`);
+    const atTarget = !(sel&&sel.type==='node'&&sel.id===e.to);
+    const chip=document.createElement('div'); chip.className='chip'; chip.textContent=idx+1;
+    chip.style.left=(atTarget ? x2+(fwd?-16:16) : x1+(fwd?16:-16))+'px'; chip.style.top=(atTarget?y2:y1)+'px'; stage.appendChild(chip);
+  });
+  svg.insertAdjacentHTML('afterbegin','<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="context-stroke"/></marker></defs>');
+}
+function drawPanel(es){
+  if(!sel){
+    panel.innerHTML=`<h3>${esc(DATA.title)}</h3><p class="lead">Follow it left to right, or click a pack.</p>
+      <ol>${DATA.lanes.map(l=>`<li>${esc(l.text)}</li>`).join('')}</ol>`;
+    return;
+  }
+  const item=(e,out)=>{const o=byId[out?e.to:e.from];return `<li><span class="num">${es.indexOf(e)+1}</span><code class="k">${esc(e.contract)}</code> ${out?'to':'from'} <b>${esc(o.name)}</b>${e.why?` — ${esc(e.why)}`:''}</li>`};
+  if(sel.type==='lane'){
+    const i=laneIdx[sel.id];
+    panel.innerHTML=`<h3>${i+1} · ${esc(DATA.lanes[i].step)}</h3><p class="lead">${esc(DATA.lanes[i].text)}</p>
+      <div class="cols"><div><h4>Hands on</h4><ul>${es.map((e,k)=>`<li><span class="num">${k+1}</span><b>${esc(byId[e.from].name)}</b> → <code class="k">${esc(e.contract)}</code> → <b>${esc(byId[e.to].name)}</b></li>`).join('')||'<li class="none">nothing</li>'}</ul></div></div>`;
+    return;
+  }
+  const n=byId[sel.id], reads=es.filter(e=>e.to===n.id), gives=es.filter(e=>e.from===n.id);
+  panel.innerHTML=`<h3>${esc(n.name)}</h3><p class="lead">${esc(n.desc)}</p>
+    <div class="cols"><div><h4>Reads</h4><ul>${reads.map(e=>item(e,false)).join('')||'<li class="none">no documents from other packs in this example</li>'}</ul></div>
+    <div><h4>Hands on</h4><ul>${gives.map(e=>item(e,true)).join('')||'<li class="none">nothing to another pack in this example</li>'}</ul></div></div>`;
+}
+addEventListener('resize',()=>drawLines(relEdges()));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')choose(null)});
+render();
+</script>
+</body>
+</html>

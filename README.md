@@ -150,4 +150,4 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [`hosts/zylos/`](hosts/zylos/) | The host adapter, the worked example for any other host |
 | [`scaffold/`](scaffold/), [`build/`](build/), [`templates/`](templates/) | The generator, the build-time tools, the templates |
 | [`conformance/`](conformance/INVARIANTS.md) | The invariants every skill pack keeps, and a black-box check that drives a skill pack's CLI from an adapter kept here |
-| [`tools/`](tools/) | Playbook tooling: `fleet.py`, `consumers.py` |
+| [`tools/`](tools/) | Playbook tooling: `fleet.py`, `consumers.py`, `overview_page.py` (the overview's diagram as one page to click through) |
