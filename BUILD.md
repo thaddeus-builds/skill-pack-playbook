@@ -50,6 +50,8 @@ Follow [templates/prior-art-scan.md](templates/prior-art-scan.md): one agent per
 
 ## B1 · Scaffold
 
+A skill pack that already exists does not start here: it starts at the adoption level [tools/adoption.tsv](tools/adoption.tsv) gives it, and [conformance/](conformance/INVARIANTS.md) is its first gate.
+
 ```
 python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack \
   --name acme-skill-pack --cli acme --prefix ACME --markets AA,BB \
