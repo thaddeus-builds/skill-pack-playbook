@@ -39,6 +39,20 @@ Rules:
 
 *Seen once, in a video-ad skill pack:* the scan replaced a planned renderer whose licence needed a company licence, found that the target editor's drafts are encrypted on read, and found that the client's "model API" key belonged to a gateway serving the model's open weights as ComfyUI workflows, with a lip-sync workflow the vendor's own API lacked. None of this was in the brief.
 
+## Auditing a skill pack that already exists
+
+The scan above runs before a build. A skill pack that is already built needs the other question, once its module list has grown or before a rewrite or a new dependency: **for each module we made, is there a mature open-source answer, so we stop reinventing it?** Scan again after 90 days, or at any trigger the front page names.
+
+- **Lenses are groups of modules**, taken from the skill pack's pipeline map, not the five lenses above: four to six agents in parallel, each owning the modules of one area. Read this template before briefing them, so their files land where it says (`docs/prior-art/`).
+- **Brief each agent with the skill pack's own invariants** (its `CLAUDE.md`): they decide whether a candidate fits (single-file CLIs, offline hosts, a guarded write path, closed registries), and they are why most answers are "keep ours". Tell it to read pages, not clone or run anything, and to finish with a reply of at most 150 words.
+- **One verdict per module section**, one of `adopt` (a dependency), `borrow-idea` (copy the idea, not the code), `keep-own` (say why) or `watch` (say what would change it), then **Why** in at most four lines naming the invariant or fact that decides. "Keep ours" is a finished answer: a dependency costs supply chain, offline installs and a version to follow.
+- **Sources go in one registry**, `docs/prior-art/sources.tsv`: `id, url, kind, title, author_or_org, published_or_version, accessed, pinned, licence, claim_tag, used_for, note`. `pinned` is a release tag, PyPI version, arXiv id or DOI (a commit SHA when the host will show it), so a moved page can be found again; `claim_tag` is the one from [Research is kept, not repeated](../docs/lessons.md); `note` is the fact relied on, in your own words. A cited `[id]` with no row is a failure.
+- **The front page** (`README.md`) carries the verdict counts, **Borrow** (at most 12, each naming the module it would change), **Avoid**, at most 5 owner questions, **Not surveyed** (modules left out and why, including a lens skipped), **Could not verify** and the re-scan date.
+- **A test holds the coverage:** every module of the pipeline map has a section or a line under *Not surveyed*, every section has one valid verdict, every cited id has a row. Without it the next module slips in unasked.
+- **Before the owner reads it, fetch the three heaviest claims yourself.** An agent's report is a claim; the ids resolving shows the paper trail exists, not that the page says it.
+
+*Seen once, in the Amazon PPC skill pack (2026-10-26):* five agents, 97 to 132 tool calls each, 254 sources and 47 verdicts (31 keep-own, 13 borrow-idea, 3 watch, none adopt). It found no mature open-source Amazon PPC optimiser, and 12 ideas worth borrowing, two of them about Amazon's own platform (the stream it reads is marked outdated; a published migration kit) rather than about any library. Every agent hit pages it could not read (script-rendered, 403, 503, certificate errors); each said so in its row instead of filling the gap from memory. The first brief named `docs/research/`, the template said `docs/prior-art/`; the files were moved.
+
 ## Output
 
 A folder in the skill pack repository, `docs/prior-art/`:
