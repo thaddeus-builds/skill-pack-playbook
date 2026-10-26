@@ -4,7 +4,7 @@ What the source project and the skill packs after it paid for, kept here when th
 
 ## Pulling into raw (from `kit/pull.py`, removed in kit 0.7.0)
 
-`kit/pull.py` merged each pull into raw, planned long pulls in chunks and kept a ledger of gaps. No skill pack imported it, so it was removed (RESTRUCTURE.md, phase 5). The last version is at commit `8e13e16` (`git show 8e13e16:kit/pull.py`), with its test in `kit/tests/test_pull.py`. Before writing a pull layer again, compare dlt (incremental cursors and state) and Airbyte's Amazon Ads source, which re-pulls a lookback window (3 days by default) for numbers the platform restates.
+`kit/pull.py` merged each pull into raw, planned long pulls in chunks and kept a ledger of gaps. No skill pack imported it, so it was removed ([the 2026-10 restructure](history/restructure-2026-10.md), phase 5). The last version is at commit `8e13e16` (`git show 8e13e16:kit/pull.py`), with its test in `kit/tests/test_pull.py`. Before writing a pull layer again, compare dlt (incremental cursors and state) and Airbyte's Amazon Ads source, which re-pulls a lookback window (3 days by default) for numbers the platform restates.
 
 *Paid for:* each pull replaced raw and the platform keeps only a few months; a late resumed report put older numbers back; an unreadable raw file was overwritten by one pull's rows; a long pull killed halfway started over and the quota ran out again; a run that cleared the last run's gaps lost the list a gaps-only pull needed.
 
@@ -32,6 +32,12 @@ The rules, each learned from one of those bugs:
   and is cut off by the next write; any other broken line raises.
 
 Its neighbours stay in the kit: `kit/raw.py` (write-once raw files), `kit/atomic.py` (the write), `kit/single_instance.py` (one run at a time) and `kit/retry.py` (`call` waits at least the quota's refill period; `GaveUp` carries the reason a gap is recorded with).
+
+## Open questions that never hold the plan (from `kit/questions.py`, removed in kit 0.42.0)
+
+`kit/questions.py` checked a skill pack's open questions: each named the data that could answer it and what the plan did meanwhile, and a read-back listed the questions new data could answer. No skill pack imported it in the two minor versions after ROADMAP P1 parked it (counted 2026-10-26, `tools/consumers.py`), so it was removed; the last version is at kit 0.41.0. The rule it checked, kept as a lesson:
+
+**An open question never holds the plan.** What the skill pack cannot answer yet is recorded, not waited on. Each open question names `by_data`, the data that can answer it without asking anyone once the skill pack holds it (a kind from the skill pack's own closed list, or `ask_only` when only a person can), and `meanwhile`, what the plan does until then. `meanwhile` is an action, never a wait: "write the template and make no video" passes, "TBD" or "wait for the client" does not (the check catches the obvious waits, and a short text that opens with "hold" or "pause" too; a reviewer reads the rest). When the data arrives the skill pack prompts a read-back: each unanswered question that data can answer is listed with the data's fingerprint, until the answer is recorded or the agent records the fingerprint it read; a new version of the data prompts again. The owner is asked only what no data can answer. *Seen once:* the video-ads skill pack (owner decision, 2026-10-13): its client rarely knows such answers, while the results file the client sends back can answer some. Its questions carry both fields (a `meanwhile` there reads "say nothing about direct dispatch, free shipping or price in the ads" or "write the template, make no video"), its insight page groups them (the data will answer, only a person can, no data named, answered), and it warns once the results file it names holds this project's creatives.
 
 ## Paid generation jobs (from adcut-harness, its first real batch, 2026-10-06)
 
@@ -320,7 +326,7 @@ The rules:
 
 ## Reading a client's software by its screens: the CLI first, the browser for what it lacks, nothing saved (from the video-ads skill pack, 2026-10-14 and 23)
 
-[workbook-and-browser-ops.md](workbook-and-browser-ops.md) proposes a guarded browser for a platform with no API access. The video-ads skill pack's practice before that module exists, on a client's media-library tool:
+[the 2026-10 design](history/workbook-and-browser-ops-2026-10.md) proposes a guarded browser for a platform with no API access. The video-ads skill pack's practice before that module exists, on a client's media-library tool:
 
 - Fresh numbers came from the pack's own pull (a saved report's read-only export), not from the screens. The browser was used for the one question the export could not answer: what the report builder offers (an hour dimension, a learning-phase column, an ad set's bid and targeting). The answer: an `Hour (S2S)` dimension of unknown meaning, bid and budget columns, no learning column, targeting only as an audience segment.
 - The session was the owner's, already signed in; the agent signed nothing in and entered no credential. Each picker was opened, read and closed with "discard changes"; the Save button stayed greyed out; nothing was downloaded. A control the session's guard refused (the access-tokens tab of an export dialog, 2026-10-14) was not gone around.
@@ -388,7 +394,7 @@ on its `main` yet, the entry says so. Some sharpen a rule above; the entry names
    refusal is `nextjs_push_rejected` in `push_branch` (`scripts/_lib/nextjs_static.py`); the runs are under
    `raw/apply/nextjs-static/` in that client's workspace (S163).
 8. **Allocate a shared id where the writes meet, not where each session claims it.** Sharpens "Only the coordinator
-   allocates story ids" in [roadmap.md](roadmap.md#who-works-where) and [Registries](rules.md#registries-one-place-per-value)
+   allocates story ids" in [planning.md](planning.md#who-works-where) and [Registries](rules.md#registries-one-place-per-value)
    rule 11. *Paid for:* with many sessions in parallel, picking "the next free id" on a branch raced even after the
    picker learned to read every branch and merge request. In the two days to 2026-10-15 the skill pack's `main` took at
    least 8 fix-up commits that renumbered a story ("S180: renumber from S179 (taken by !196 and !197)", "S172 was taken
