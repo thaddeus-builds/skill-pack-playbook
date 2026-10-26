@@ -40,9 +40,26 @@ Operators by axis:
 
 | | Pull | Push |
 | --- | --- | --- |
-| **Paid** | `amazon-ppc` (Amazon Ads), `google-ads` (every Google Ads campaign type). Later: Microsoft Ads, Naver, Apple Search Ads | `video-ads` (Meta, 千川, 腾讯广告/视频号). Later: TikTok |
+| **Paid** | `amazon-ppc` (Amazon Ads), `google-ads` (every Google Ads campaign type). Later: Microsoft Ads, Naver, Apple Search Ads | `meta-ads` (Meta, through Smartly or its API), `video-ads` (千川, 腾讯广告/视频号). Later: TikTok, in a pack of its own |
 | **Organic / earned** | `ecommerce-seo` (Google organic), `seo-programmatic`, `seo-tools` (frozen), `geo-china` (Chinese AI assistants) | creators: `koc-script` (briefs), `creator-program` (economics, coupons, affiliate). Own social: `social-marketing` (dormant) |
 | **Sales-led** | `outbound` (find companies and contacts) hands to `sdr` (the pipeline to the CRM) | — |
+
+## Meta is its own operator; the 千川 and 腾讯 bundle is temporary
+
+Decided 2026-10-26 (the owner, in chat): Meta becomes `meta-ads` (`mads`), split out of `video-ads`. Ownership rule 1 already says one operator per platform account. `video-ads` grew from one client's creative loop into a pack holding three platforms, and the three differ where it matters:
+
+- **Different write risk and route.** Meta is read through Smartly's reports and exports, or Meta's API; where a client's own team pushes to Meta, the pack holds no right to write to the ad account. 千川 and 腾讯 are reached through their APIs, read and write (video-ads R66). One pack would hold a write guard that is on for one platform and off for another.
+- **The media library is the platform's.** The upload to Meta's media library, through Smartly or the API, is one write with two routes (video-ads R80), and ownership rule 3 gives it to the platform's operator.
+- **The engines are in the kit.** With `ads-core` and `creative` there (kit 0.38.0 and 0.40.0), what a platform pack keeps is small: its pull adapters, its field mapping, its limits table and its guarded writer. Splitting no longer copies a ledger, a pacing rule or a lifecycle.
+
+The split is behaviour-preserving: its steps are the Next rows of `meta-ads`' `docs/ROADMAP.md` (X1 to X7), and it starts once `video-ads` is on the kit's engines (its X63, portfolio phase 4), so the new pack does not copy a copy.
+
+**When `video-ads` splits again.** 千川 and 腾讯 stay together only while neither has its own writer: both are read from report files or an API, into one ledger route each. Each becomes a pack of its own (one per platform account) when any of these holds:
+1. one of them gets its guarded writer (video-ads X89): a different credential, a different allowlist and kill switch;
+2. a client uses one and not the other;
+3. one of them needs pull logic the other does not use.
+
+TikTok is not added to `video-ads`: it is a pack of its own when a client needs it. The name `video-ads` is then misleading (it will hold ad platforms, not videos); renaming costs every client wrapper once, so it waits for the second split.
 
 ## Where every repository sits
 
@@ -50,7 +67,8 @@ Operators by axis:
 | --- | --- | --- | --- | --- |
 | amazon-ppc-skill-pack | `ppc` | Operator, paid pull, Amazon | 0.21.0, no kit; holds its own copy of every engine | Names its neighbours; its intent engines are the source for the kit's `intent` |
 | google-ads-skill-pack | `gads` | Operator, paid pull and push, Google | Scaffold, at B0.6 | Takes YouTube and Display (open decision 1); takes `intent` and `creative` from the kit at B3 |
-| video-ads-skill-pack | `vads` | Operator, paid push: Meta, 千川, 腾讯 | 0.3.0, kit 0.32; holds most generic engines | R43 rewritten; engines to `ads-core` and `creative` (its X63) |
+| meta-ads-skill-pack | `mads` | Operator, paid push, Meta | Scaffold on 2026-10-26, kit 0.40.0; no Meta code has moved yet | Takes the Meta side of `video-ads` (its `docs/ROADMAP.md`, X1 to X7), on the kit's `ads-core` and `creative`; the upload to Meta's media library is its write (video-ads R80) |
+| video-ads-skill-pack | `vads` | Operator, paid push: 千川, 腾讯 (Meta leaves it, see below) | 0.3.0, kit 0.32; holds most generic engines and, until the split is done, the Meta side | R43 rewritten; engines to `ads-core` and `creative` (its X63), then the Meta side to `meta-ads` |
 | ecommerce-seo-skill-pack | `seo` | Operator, organic pull, Google organic | 1.16.0, own core | Owns website content fields; reads `intel/1` for new demand work |
 | ecommerce-seo-skill-pack-plugins | — | Distribution of `seo` (web audit, app, MCP) | Active | None |
 | seo-programmatic-skill-pack | `pseo` | Operator, organic pull, page sets | Scaffold; the generator is in its case repository | Reads its page list from `seo` (its S07) |
@@ -66,7 +84,7 @@ Operators by axis:
 | asset-handoff-skill-pack | `handoff` | Truth: a creative's identity and tags | M1 on local main, read-only, no remote | Publishes `handoff.batch/1`; writes nothing outside: the upload to a media library is the platform operator's write |
 | search-intel-skill-pack | `intel` | Truth: demand and competitors | Scaffold | Publishes `intel/1` for paid and organic search |
 | adcut-skill-pack | `adcut` | Maker, video | 0.4.1, kit 0.33 | Writes `ads.creatives/1`, reads `ads.results/1` from any operator; the insight matrix is the messaging source (open decision 3) |
-| ad-copy-skill-pack | `adcopy` | Maker, text | M1 on local main (placement specs and the check), no remote | Publishes `copy.proposals/1`; `gads` and `vads` read its placement checks instead of building their own |
+| ad-copy-skill-pack | `adcopy` | Maker, text | M1 on local main (placement specs and the check), no remote | Publishes `copy.proposals/1`; `gads`, `mads` and `vads` read its placement checks instead of building their own |
 | product-keyframe-video | `keyframe` | Maker, product images | 0.1.0, frozen until its first demo | Hands frames with `ads.creatives/1` when it has a consumer |
 | cloud-gpu-skill-pack | `cloudgpu` | Platform, GPU jobs | 0.2.0, not on the kit | The one provider behind the kit's `generation` for self-hosted runs |
 | skill-pack-playbook | — | Platform | kit 0.33.1; client hub on a branch | Holds the contract schemas, the exchange folder and the engines |
@@ -83,10 +101,10 @@ Not skill packs, or superseded (archive or leave):
 - `*-workspaces` repositories: client workspaces.
 
 `asset-handoff` was first planned as no pack and was then built. It holds a fact several packs need, a creative's identity and tags, so it sits in the truth layer and stays read-only. Its planned writes do not stay with it:
-- uploading to a media library (Smartly, for Meta) is the Meta operator's write, in `video-ads`;
+- uploading to a media library (Smartly, for Meta) is the Meta operator's write, in `meta-ads`;
 - appending rows to the client's intake form is a person's step in v1.
 
-The pack that runs the ads still owns the delivery spec (vads R43); `handoff.batch/1` carries the names and tags it reads.
+The pack that runs the ads still owns the delivery spec (video-ads R43 for 千川 and 腾讯; `meta-ads` for Meta once the split is done); `handoff.batch/1` carries the names and tags it reads.
 
 ## How the Google Ads work was cut (2026-10-22)
 
@@ -133,7 +151,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `truth/1` | `measurement` | operators | coefficient per campaign type, break-even ROAS, trust per campaign type; confirmed values go into the hub's facts |
 | `intel/1` | `search-intel` | `gads`, `ppc`, `seo`, `pseo` | keyword demand, trends, competitors seen, with sources and dates |
 | `leads/1` | `outbound` | `sdr` | company, contacts, source, evidence |
-| `creators.roster/1` (exists as vads K5) | `creator-program` | `video-ads` | collaborations, codes, ad ids |
+| `creators.roster/1` (exists as vads K5) | `creator-program` | `meta-ads` | collaborations, codes, ad ids |
 
 ## Engines in the kit
 
@@ -141,9 +159,9 @@ The kit's admission rule holds: a module joins when a second pack uses it.
 
 | Kit pack | What | From | Consumers |
 | --- | --- | --- | --- |
-| `ads-core` (kit 0.38.0) | the report ledger (settled days, restatement, currency), pacing and the two wallets, alerts against an entity's own baseline, the change log, two-route reconcile, a campaign's lifecycle state machine, the proven/unproven rule | `video-ads` (`perfledger`, `pacing`, `adgroup`, `allocation`, `reconcile`, `campaign`) and `amazon-ppc` (`compute_budget`, `certainty`, `compute_alerts`, `compute_changes`) | `vads`, `gads`, `ppc` |
+| `ads-core` (kit 0.38.0) | the report ledger (settled days, restatement, currency), pacing and the two wallets, alerts against an entity's own baseline, the change log, two-route reconcile, a campaign's lifecycle state machine, the proven/unproven rule | `video-ads` (`perfledger`, `pacing`, `adgroup`, `allocation`, `reconcile`, `campaign`) and `amazon-ppc` (`compute_budget`, `certainty`, `compute_alerts`, `compute_changes`) | `mads`, `vads`, `gads`, `ppc` |
 | `intent` | search-term triage, harvest and negatives; auction pressure; impression share with its clamped values | `amazon-ppc` (`compute_triage`, `auction_pressure`, `keyword_leaders`) | `ppc`, `gads` |
-| `creative` | creative lifecycle and fission score, creative demand, portfolio life | `video-ads` (`life`, `fission`, `demand`, `portfolio`) | `vads`, `gads` (YouTube), `ppc` (Sponsored Brands video) |
+| `creative` | creative lifecycle and fission score, creative demand, portfolio life | `video-ads` (`life`, `fission`, `demand`, `portfolio`) | `mads`, `vads`, `gads` (YouTube), `ppc` (Sponsored Brands video) |
 | `compliance` (exists) | one claims and copy check, rules per jurisdiction | merges adcut's lint and claim scope, kos's `claim_rules`, geo's draft rules | every maker and `kos` |
 | `generation` (exists) | paid takes, prices, preflight, consent; `cloud-gpu` as the self-hosted provider | replaces three separate autodl clients (adcut, keyframe, cloudgpu) | makers |
 
@@ -156,14 +174,14 @@ The kit's admission rule holds: a module joins when a second pack uses it.
 
 ## Conflicts to fix, in order
 
-1. `video-ads` R43 sends Google Search to `amazon-ppc` and claims YouTube Shorts. Google belongs to `gads`; R43 keeps Meta, 千川, 腾讯 and TikTok.
+1. `video-ads` R43 sends Google Search to `amazon-ppc` and claims YouTube Shorts. Google belongs to `gads`; Meta belongs to `meta-ads`; what R43 keeps is 千川 and 腾讯 (TikTok later, in a pack of its own).
 2. adcut's results contract names `commerce-ads-harness`, which `video-ads` absorbed. Any operator emits `ads.results/1`.
 3. Demand research exists three times (`seo`'s DataForSEO, `seoh/kw`, `ppc`'s SellerSprite), and competitor discovery four times. `search-intel` owns them; older packs move only when they next change.
 4. Two writers of product data: `seo` writes website product fields and `feed` writes merchant-feed overrides. Rule 3 above settles it.
 5. `outbound` and `sdr` repeat discovery, enrichment and registries without knowing each other. `leads/1` joins them.
 6. The claims check exists three times (adcut, kos, geo). It merges into the kit's `compliance`.
 7. Three autodl clients. One provider behind `generation`.
-8. Three upload paths to Smartly (adcut's person-run `tools/smartly_upload.py`, asset-handoff's planned upload, video-ads' upload contract). Only `video-ads` writes to Smartly; the other two hand it files.
+8. Three upload paths to Smartly (adcut's person-run `tools/smartly_upload.py`, asset-handoff's planned upload, video-ads' upload contract). Only `meta-ads` writes to Smartly (video-ads R80: Smartly and the Meta API are two routes of one platform); the other two hand it files.
 9. Archive the five superseded repositories.
 
 ## Rollout
