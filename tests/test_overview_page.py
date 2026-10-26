@@ -79,7 +79,7 @@ def test_the_real_overview_is_drawn_whole():
 
 def test_the_grammar_on_a_small_document():
     d = op.parse(SMALL)
-    assert d["title"] == "A shop runs a sale"
+    assert d["start"]["title"] == "A shop runs a sale"
     assert [(la["n"], la["title"], la["step"]) for la in d["lanes"]] == [(1, "Makers", "Makers"), (2, "Checker", "Checker")], d["lanes"]
     by = {n["id"]: n for n in d["nodes"]}
     assert by["A"]["desc"] == "makes things" and by["C"]["name"] == "checker" and by["C"]["lane"] == "L2", by
