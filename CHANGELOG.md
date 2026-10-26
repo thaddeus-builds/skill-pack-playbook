@@ -10,6 +10,7 @@ scaffold, console, docs, conformance.
 
 ## [Unreleased]
 ### Other
+- `templates/prior-art-scan.md`, "Auditing a skill pack that already exists", and `docs/lessons.md` (Research is kept, not repeated): the module-by-module survey of what is already built, with a verdict per module (adopt, borrow-idea, keep-own, watch), a sources registry with pinned versions, a coverage test, and the owner's three-claim spot-check. Seen once (the Amazon PPC skill pack, 2026-10-26), tested in `tests/test_prior_art_audit.py`.
 - `docs/overview.md`: the autonomy levels L0 to L5 on the overview, one row each with who decides the write, an example and whether it is built (L4 and L5 are not), linked to `docs/autonomy.md`. No kit change.
 - `docs/overview.md`, "How the work moves": the diagram now follows one example (a promotion on two platforms), names what each arrow carries (the contract) and says in words what each of the four steps does; before, it drew four abstract boxes. No kit change.
 - `docs/overview.md` (new): the framework on one page, in two parts: who owns what in growth operations (operator, truth, maker, owner; the five ownership rules; the five solutions), and what the playbook unifies and saves each skill pack (the gate, the money path, the build, the kit's packs); a dated state table that points to `tools/fleet.py` and `tools/consumers.py` for live counts. The README's map links to it. No kit change.
