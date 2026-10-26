@@ -50,7 +50,6 @@ Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/p
 | [`templates/owner-queue-item.md`](../templates/owner-queue-item.md) | 10 | The shape of one owner ask |
 | [`console/`](../console/) | 10 | A module, not a template: the agent's ask CLI and the owner's one-page console |
 | [`templates/triage-checklist.md`](../templates/triage-checklist.md) | 10 | Judging an agent-filed issue; the triage line |
-| [`templates/verify-challenge.md`](../templates/verify-challenge.md) | 10 | Reader and skeptic prompts for an outside report |
 | [`templates/intake.schema.json`](../templates/intake.schema.json) | 0 | The shape of one meeting's intake; `build/check_intake.py` reads it |
 | [`templates/prior-art-scan.md`](../templates/prior-art-scan.md) | 0, 4, 8 | When and how to scan what already exists, each claim with its link and date |
 | [`templates/vendor-api-discovery.md`](../templates/vendor-api-discovery.md) | 0, 4, 8 | Pinning down a paid vendor API cheaply, and preflighting every request against its published schema |
@@ -58,7 +57,6 @@ Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/p
 | [`templates/claim-scope.md`](../templates/claim-scope.md) | 5, 7, 10 | Regulated copy names only what the approved document allows: the claims record at the gate, the lexicon, waivers, the phrase library, rejections as recall tests |
 | [`templates/design-first.md`](../templates/design-first.md) | 7, 10 | Before a feature an owner steers: research, one design page with the asks and what it stores, a synthetic demo drawn by the skill pack's own renderer, the owner's yes, then the code |
 | [`templates/owner-review-loop.md`](../templates/owner-review-loop.md) | 7, 10 | One published page the owner decides on per item, read back by the next session |
-| [`templates/outcome-learning.md`](../templates/outcome-learning.md) | 10 | Winners against the rest on one factor catalog; rules stay pending until a variant confirms them |
 | [`templates/session-handoff.md`](../templates/session-handoff.md) | all | Each session closes one turn and leaves the next one ready |
 | [`templates/skill-pack.toml`](../templates/skill-pack.toml) | 3 | The skill pack declares itself once: names, languages, scopes, layers, what a release ships |
 | [`templates/gitlab-ci.yml`](../templates/gitlab-ci.yml) | 3, 9 | The short form of that CI, the one the scaffolder renders into every skill pack: secret scan, story id in the title, the RESULT-gated test job, each with its rules |

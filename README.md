@@ -138,10 +138,9 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/pattern-store.md](docs/pattern-store.md) | The `learning` pack: a per-client pattern store, what a client's outputs taught as closed rows and shrunk rates |
 | [docs/path-weights.md](docs/path-weights.md) | The `learning` pack: path weights, which variants beat the account, what to make next and which a person may close |
 | [docs/page-style.md](docs/page-style.md) | The `pages` pack: one look for the pages that guide making and show the reasoning, and the check every such page passes |
-| [docs/workbook-and-browser-ops.md](docs/workbook-and-browser-ops.md) | Two proposed kit modules, design only: a client's spreadsheet in and out, and a guarded browser for platforms with no API |
 | [BUILD.md](BUILD.md) | The build workflow, B0 to B10 |
 | [ROADMAP.md](ROADMAP.md) | Open work: what this session does, what waits on the owner, what is next |
-| [docs/history/](docs/history/restructure-2026-10.md) | Plans that were carried out, kept as written: the 2026-10 restructure |
+| [docs/history/](docs/history/restructure-2026-10.md) | Plans and designs that were carried out or parked, kept as written: the 2026-10 restructure, the workbook and browser-ops design |
 
 | Folder | What it is |
 | --- | --- |
