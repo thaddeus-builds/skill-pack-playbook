@@ -4,7 +4,8 @@
   [0] self_test: the sound folders pass and every planted break is caught; a skill pack with neither folder passes
   [1] each rule on a folder on disk: a file with no row, a row with no file, a link with a path is no row, a missing README, a row with no
       day, a file with no Researched day (or an unreal one), no tagged claim; a prior-art file takes its day from its name or a Scan date line
-  [2] the day-one suite runs the rule (suites.research) and reports each break by file
+  [2] the shipped templates (research-index.md, prior-art-index.md), filled as the scaffolder fills them, pass with no file yet
+  [3] the day-one suite runs the rule (suites.research) and reports each break by file
 """
 
 import shutil
@@ -14,6 +15,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import _shop  # noqa: E402
 from kit.guards import research  # noqa: E402
 from kit.testing import suites  # noqa: E402
 from kit.testing.check import check, finish, tmp_dir  # noqa: E402
@@ -68,8 +70,19 @@ def test_disk() -> None:
     check("an index with no row and no file passes (the day-one state)", research.problems(empty) == [], research.problems(empty))
 
 
+def test_templates() -> None:
+    print("\n[2] the templates")
+    for name, rel in (("research-index.md", "docs/research"), ("prior-art-index.md", "docs/prior-art")):
+        root = Path(tmp_dir("research-"))
+        (root / rel).mkdir(parents=True)
+        text = (_shop.PLAYBOOK / "templates" / name).read_text(encoding="utf-8")
+        check(f"{name}: its only placeholder is {{{{name}}}}", {m for m in __import__("re").findall(r"\{\{(\w+)\}\}", text)} == {"name"})
+        (root / rel / "README.md").write_text(text.replace("{{name}}", "acme-skill-pack"), encoding="utf-8")
+        check(f"{name}: filled, it passes with no file yet", research.problems(root) == [], research.problems(root))
+
+
 def test_suite() -> None:
-    print("\n[2] the day-one suite")
+    print("\n[3] the day-one suite")
     root = folder()
     res = suites.research(root)
     check("suites.research: green on the sound folders", not [p for _, p in res if p], res)
@@ -81,6 +94,7 @@ def test_suite() -> None:
 def main() -> int:
     test_rules()
     test_disk()
+    test_templates()
     test_suite()
     return finish()
 
