@@ -1,12 +1,10 @@
-# Every suite of the playbook on every pull request and on every push to main (a push to a branch with an open
-# pull request would run the same suite a second time): `python3 run_all.py`
-# (see run_all.py). No secrets and no write access: the job only reads the checkout.
+# Every suite of the playbook, started by hand (Actions tab, "Run workflow"): `python3 run_all.py` (see run_all.py).
+# It does not start by itself: the pre-push hook runs the same command before each push, and minutes are a quota on
+# a private repository. Click it for a clean-environment run before a release or after a kit change. No secrets and no write access: the job only reads the checkout.
 name: ci
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -33,7 +33,7 @@ The entry point is run over throwaway trees of planted suites, in this process
   * the real list keeps the Zylos adapter's suite (the host every skill pack is
     adapted to), names node and git for every suite whose tests call them (each
     folder is scanned), and its RESULT parsing agrees with kit/testing/run_tests.py;
-  * .github/workflows/ci.yml runs `python3 run_all.py` on push and pull request,
+  * .github/workflows/ci.yml runs `python3 run_all.py` when started by hand (workflow_dispatch),
     with pinned actions, no secret, no `if:` and nothing that swallows a failure, in
     the two-space shape the text checks can read; the README names both, and every
     suite name in its `python3 run_all.py <names>` example is a suite of the list.
@@ -604,8 +604,8 @@ def yaml_shape_problems(text: str) -> list[str]:
 def ci_problems(text: str) -> list[str]:
     """What is wrong with a workflow file, read as text (there is no YAML parser in the standard library)."""
     out = []
-    if not re.search(r"^on:\n(?:  .*\n)*?  push:", text, re.M) or not re.search(r"^on:\n(?:  .*\n)*?  pull_request:", text, re.M):
-        out.append("does not run on both push and pull_request")
+    if not re.search(r"^on:\n(?:  .*\n)*?  workflow_dispatch:", text, re.M):
+        out.append("cannot be started by hand (workflow_dispatch)")
     if not re.search(r"^\s*- run: python3 run_all\.py$", text, re.M):
         out.append("does not run `python3 run_all.py`")
     uses = re.findall(r"^\s*- uses: (\S+)$", text, re.M)
@@ -628,16 +628,16 @@ def ci_problems(text: str) -> list[str]:
     return out
 
 
-GOOD_CI = ("name: ci\n\non:\n  push:\n  pull_request:\n\npermissions:\n  contents: read\n\njobs:\n  suites:\n"
+GOOD_CI = ("name: ci\n\non:\n  workflow_dispatch:\n\npermissions:\n  contents: read\n\njobs:\n  suites:\n"
            "    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-python@v7\n"
            "        with:\n          python-version: \"3.12\"\n      - uses: actions/setup-node@v7\n        with:\n"
            "          node-version: \"24\"\n      - run: python3 run_all.py\n")
 
 
-def test_the_ci_workflow_runs_run_all_on_push_and_pull_request_and_hides_no_failure():
+def test_the_ci_workflow_runs_run_all_by_hand_and_hides_no_failure():
     assert ci_problems(GOOD_CI) == []
     broken = {
-        "on: push only": GOOD_CI.replace("  pull_request:\n", ""),
+        "on: push only": GOOD_CI.replace("  workflow_dispatch:\n", "  push:\n"),
         "no run_all": GOOD_CI.replace("run_all.py", "tests/run.py"),
         "a branch tag": GOOD_CI.replace("setup-node@v7", "setup-node@main"),
         "a sha": GOOD_CI.replace("checkout@v7", "checkout@" + "a" * 40),
