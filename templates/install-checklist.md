@@ -13,7 +13,7 @@ Written from the version the host actually runs, not the previous tag: tags are 
 ## Steps
 
 1. Back up: the database (with an integrity check), the web-server config, the user list for the console.
-2. Fetch the tag with a read-only deploy token; `git archive` it into a fresh release folder; delete the clone.
+2. Fetch the tag with a read-only deploy key or token ([a private skill pack](#a-private-skill-pack-a-read-only-deploy-key-per-host-and-repository)); `git archive` it into a fresh release folder; delete the clone.
 3. Uninstall the old version without purging data; install the new release folder.
 4. Restore any web-server block the reinstall dropped; validate and reload the config.
 5. Run the post-install doctor; re-register the scheduled tasks.
@@ -40,6 +40,14 @@ Rules: no confirm, approve or apply on the owner's behalf; no paid data calls; r
 - On the source host (Zylos), agent tool calls stop at about 10 minutes; check your host's limit. A longer job runs detached: it writes a log ending `EXIT <code>` and a job file with its pid and start time; the agent polls the log. Pulls are read-only and resumable, so a killed job is simply rerun.
 - A resource that expires or needs renewing (a cloned voice, a token, a licence, a price confirmation) is kept by a plan-and-run verb of the skill pack, which installs no scheduler. The host agent picks the trigger its host has (its own scheduler, a cron or launchd job, or a standing reminder to the owner), says at install what it set up and the next run's date, and tells the owner the same day when a run fails. Seen once: the adcut skill pack's voice keepalive (2026-10-21).
 - Keep the skill pack, its data folder and its virtualenv on the internal disk. An external disk the OS unmounts at screen lock kills a detached job without its exit line (the playbook's `docs/lessons.md`, "Paid generation jobs").
+
+## A private skill pack: a read-only deploy key per host and repository
+
+Once, before the first install from a private repository (why: [lessons](../docs/lessons.md#a-host-pulls-a-private-skill-pack-with-a-read-only-deploy-key-one-per-host-and-repository-from-the-adcut-skill-pack-2026-10-27)):
+
+1. On the host: `ssh-keygen -t ed25519 -N "" -f <key file>`, used for nothing else; point that repository's remote at it (an ssh `Host` alias per repository when a host holds two).
+2. Send the owner the public half only. The owner adds it under the repository's Settings, Deploy keys, without write access.
+3. Time a clone from the host before the source is switched.
 
 ## New host, or a replaced host agent: what can it reach?
 
