@@ -4,7 +4,10 @@ Checked, each on a broken copy first, so a check cannot pass by looking at nothi
 
   - .github/workflows/ci.yml cancels an older run of the same ref and never a run on main;
   - .githooks/pre-push is executable and runs run_all.py from the repository root;
-  - CLAUDE.md tells a contributor how to install the hook.
+  - CLAUDE.md tells a contributor how to install the hook;
+  - the two GitLab CI templates run only the few-second checks by themselves (secret scan, story id, changelog); every
+    heavier job (the suite, the adapter checks) is a manual job that never blocks a pipeline;
+  - the scaffold tells a new skill pack to run its suite before each push, since CI no longer does.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..")))
 import _t  # noqa: E402,F401
-from test_docs_build import doc  # noqa: E402
+from test_docs_build import CI_TEMPLATES, ci_jobs, doc  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(HERE, ".."))
 HOOK = ".githooks/pre-push"
@@ -66,6 +69,37 @@ def test_the_gitlab_template_cancels_a_stale_pipeline():
     text = doc("templates/gitlab-ci.yml")
     assert re.search(r"^default:\n  interruptible: true$", text, re.M)
     assert not re.search(r"^default:\n  interruptible: true$", text.replace("interruptible: true", "interruptible: false"), re.M)
+
+
+SMALL_JOBS = {"secret scan", "story id", "changelog"}                  # seconds each, no suite
+
+
+def slim_problems(text: str) -> list[str]:
+    """The jobs of a GitLab CI file that break the slim shape: a small check must run by itself; any other job must be
+    a manual job with allow_failure, which GitLab otherwise counts as blocking the pipeline."""
+    out = []
+    for name, body in ci_jobs(text).items():
+        manual = "when: manual" in body
+        if name in SMALL_JOBS and manual:
+            out.append(f"{name}: a few-second check must not wait for a click")
+        if name not in SMALL_JOBS and not (manual and "allow_failure: true" in body):
+            out.append(f"{name}: a heavy job must be `when: manual` with `allow_failure: true`")
+    return out
+
+
+def test_the_gitlab_templates_run_only_the_small_checks_by_themselves():
+    for rel in CI_TEMPLATES:
+        text = doc(rel)
+        assert slim_problems(text) == [], (rel, slim_problems(text))
+        assert SMALL_JOBS <= set(ci_jobs(text)), rel                                   # the small checks stay
+        heavy = [n for n in ci_jobs(text) if n not in SMALL_JOBS]
+        assert heavy, rel                                                              # and there is a heavy job to check
+        for name in heavy:                                                             # the check notices each way to break it
+            body = ci_jobs(text)[name]
+            assert slim_problems(text.replace(body, body.replace("when: manual", "when: on_success"))), (rel, name)
+            assert slim_problems(text.replace(body, body.replace("allow_failure: true", "allow_failure: false"))), (rel, name)
+        small = ci_jobs(text)["secret scan"]
+        assert slim_problems(text.replace(small, small.replace("when: on_success", "when: manual"))), rel
 
 
 def test_claude_md_says_how_to_install_the_hook():

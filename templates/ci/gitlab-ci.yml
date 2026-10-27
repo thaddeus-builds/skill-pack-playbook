@@ -5,9 +5,14 @@
 #   secret scan   every change: no credential-shaped text in the checkout
 #   story id      merge requests: the title names its milestone, story or policy
 #   changelog     merge requests: a visible change adds its CHANGELOG.md line
-#   test          every change: the offline suite, dependencies cached
-#   zylos check   every change: the Zylos adapter's manifest agrees with its files
-#   adapter smoke only when the host adapter changes: against each host version
+#   test          manual: the offline suite, dependencies cached
+#   zylos check   manual: the Zylos adapter's manifest agrees with its files
+#   adapter smoke manual, offered when the host adapter changes: against each host version
+#
+# CI runs by itself only what takes seconds (secret scan, story id, changelog). The suite and
+# the adapter checks run before each push (git config skillpack.prepush-tests, BUILD.md B1);
+# a click on a manual job is the clean-environment run. Each manual job says
+# `allow_failure: true`: without it a manual job holds the whole pipeline.
 #
 # One stage, so every job runs at once and one failure never hides another.
 stages: [check]
@@ -163,7 +168,8 @@ test:
   stage: check
   image: python:3.12-slim
   rules:
-    - when: on_success
+    - when: manual
+      allow_failure: true
   variables:
     UV_CACHE_DIR: .uv-cache
     PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -183,7 +189,8 @@ zylos check:
   stage: check
   image: node:22-alpine
   rules:
-    - when: on_success
+    - when: manual
+      allow_failure: true
   script:
     - node zylos/lib.js check
 
@@ -199,6 +206,8 @@ adapter smoke:
     - changes:
         paths: ['adapter/**/*', '.gitlab-ci.yml']
         compare_to: refs/heads/main
+      when: manual
+      allow_failure: true
   variables:
     HOST_PLATFORM_REPO: https://host.example.com/host-platform.git
   parallel:
