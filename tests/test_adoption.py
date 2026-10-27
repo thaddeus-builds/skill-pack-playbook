@@ -160,5 +160,24 @@ def test_every_known_skill_pack_has_a_sound_row():
     assert found == [], "\n".join(found)
 
 
+PROMPTS = ROOT / "docs" / "skill-pack-agent-prompts.md"
+
+
+def prompt_packs(text: str) -> list[str]:
+    """The skill packs docs/skill-pack-agent-prompts.md writes a prompt for: its `## <name>-skill-pack` headings."""
+    return re.findall(r"^## (\S+-skill-pack)$", text, re.M)
+
+
+def test_each_agent_prompt_is_for_a_skill_pack_the_adoption_table_tracks():
+    _, rows = table(TABLE.read_text("utf-8"))
+    known = {r["pack"] for r in rows}
+    text = PROMPTS.read_text("utf-8")
+    named = prompt_packs(text)
+    assert named, "the page has no prompt for any skill pack"
+    assert [n for n in named if n not in known] == [], "a prompt for a skill pack that is not a row of adoption.tsv"
+    assert prompt_packs(text.replace("## geo-china-skill-pack", "## geo-china-skill-packs")) != named   # a renamed heading is seen
+    assert [n for n in prompt_packs(text.replace("## geo-china-skill-pack", "## nobody-skill-pack")) if n not in known] == ["nobody-skill-pack"]
+
+
 if __name__ == "__main__":
     _t.main(globals())
