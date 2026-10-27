@@ -129,6 +129,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/autonomy.md](docs/autonomy.md) | Autonomy levels L0 to L5: what proof each write into someone else's system carries, scoped approvals and the owner's switch; the `autonomy` pack |
 | [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a skill pack small, hosting |
 | [docs/maintaining.md](docs/maintaining.md) | For the owner: how the playbook itself changes (issue, small pull request, merge, re-vendor when needed), what the agent checks, and the access token it needs |
+| [docs/skill-pack-agent-prompts.md](docs/skill-pack-agent-prompts.md) | The words to give a skill pack's own agent for what needs someone who knows that pack (a migration, a branch, a red test of its own); the fleet-wide steps stay with `tools/fleet.py` |
 | [docs/planning.md](docs/planning.md) | Planning a running skill pack: vision to pillars to story rows and milestones, owner questions with defaults, one story per session, feedback from testers; the SEO skill pack's roadmap as the example |
 | [docs/portfolio.md](docs/portfolio.md) | The growth portfolio: which skill pack owns which platform, fact and engine, and the contracts between them |
 | [docs/solutions.md](docs/solutions.md) | Which skill packs serve which kind of client (five solutions), how they work together, and how to start a client on them |

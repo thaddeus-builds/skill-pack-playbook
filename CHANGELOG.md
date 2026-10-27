@@ -12,6 +12,7 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 ### Other
+- `docs/skill-pack-agent-prompts.md` (new): a common prompt and one each for geo-china, search-intel and creator-program, for the agent that works inside that skill pack, with how to use them; `tests/test_adoption.py` fails on a prompt for a pack that is not a row of `tools/adoption.tsv`. No kit change.
 - `tests/test_changelog.py`: from kit 0.45.0 each CHANGELOG version carries a `- Skill packs: nothing | mechanical (...) | judgement (...)` line, so a skill pack's own session can act on a release without asking the playbook (mechanical is `python3 tools/fleet.py update`; judgement is the pack's call). Earlier entries are not rewritten. No kit change.
 - `tools/adoption.tsv` and `tools/pack_status.tsv` recounted on every skill pack's main branch (2026-10-27, `tools/consumers.py`): the seven "drop the unused declaration" next steps are done and removed, kit versions are 0.44.0, `exchange` is imported by adcut, sdr and video-ads (not outbound), `data` by video-ads alone. `tests/test_pack_status.py` also fails on a consumer that is not a row of `adoption.tsv`. No kit change.
 - The playbook's own `.github/workflows/ci.yml` starts only by hand (`workflow_dispatch`); the pre-push hook runs `run_all.py` before every push. `CLAUDE.md` and the hook's comment say so. Tested in `tests/test_ci_quota.py`. No kit change.
