@@ -2,6 +2,7 @@
 
 Checked, each on a broken copy first, so a check cannot pass by looking at nothing:
 
+  - .github/workflows/ci.yml starts only by hand (workflow_dispatch): the full suite runs before each push, through the hook;
   - .github/workflows/ci.yml cancels an older run of the same ref and never a run on main;
   - .githooks/pre-push is executable and runs run_all.py from the repository root;
   - CLAUDE.md tells a contributor how to install the hook;
@@ -30,6 +31,11 @@ INSTALL = "git config core.hooksPath .githooks"
 
 def ci_problems(text: str) -> list[str]:
     out = []
+    on = text.split("\non:\n", 1)[1].split("\n\n", 1)[0] if "\non:\n" in text else ""
+    if "workflow_dispatch" not in on:
+        out.append("ci.yml cannot be started by hand")
+    if re.search(r"^  (push|pull_request|schedule):", on, re.M):
+        out.append("ci.yml starts by itself, and the suite already runs before each push")
     if not re.search(r"^concurrency:\n  group: ci-\$\{\{ github\.ref \}\}\n  cancel-in-progress: \$\{\{ github\.ref != 'refs/heads/main' \}\}$", text, re.M):
         out.append("ci.yml does not cancel an older run of the same ref, or may cancel one on main")
     return out
@@ -53,6 +59,9 @@ def test_ci_cancels_a_stale_run_and_never_one_on_main():
     assert ci_problems(ci) == [], ci_problems(ci)
     assert ci_problems(ci.replace("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}", "cancel-in-progress: true"))
     assert ci_problems(ci.replace("concurrency:", "x:"))
+    assert ci_problems(ci.replace("  workflow_dispatch:", "  pull_request:"))              # an automatic trigger is noticed
+    assert ci_problems(ci.replace("on:\n", "on:\n  push:\n", 1))
+    assert ci_problems(ci.replace("workflow_dispatch", "x"))                              # and so is no manual one
     assert ci_problems(ci.replace("group: ci-${{ github.ref }}", "group: ci"))
 
 
