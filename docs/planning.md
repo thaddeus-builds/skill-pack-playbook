@@ -77,8 +77,9 @@ Done when all three hold, and you paste their output in the merge request:
 2. {test command} ends RESULT with 0 failed;
 3. {host check} passes.
 
-Then set the agent row's status to done, regenerate the roadmap view, commit with
-the story id in the title, and open the merge request. Do not merge it.
+Then set the agent row's status to done, build the roadmap view to see it still builds (it is
+ignored: never commit it), commit the rows with the story id in the title, and open the
+merge request. Do not merge it.
 ```
 
 ## Feedback from production testers
