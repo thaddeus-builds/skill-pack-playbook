@@ -54,3 +54,14 @@
 只在旧机器、不用搬：geo-china 的 `claude/kit-0.41.0`（测试是红的，旧 harness 名；迁移 0.31.0 改名后用 `fleet.py update` 重新生成）。
 
 没动：video-ads 主检出里未跟踪的 `STATUS.json`（看似生成物）；measurement 本地 main 比远端多 3 个提交（已包含在它的 `claude/kit-0.41.0` 分支里）。
+
+## 更新 · 2026-10-27(第二个 session)
+
+- main CI 绿,kit 0.44.0,playbook 无开着的 PR。
+- 11 个 kit 0.41.0 的 Draft MR 已按 owner 同意合并(ad-copy、asset-handoff、google-ads、koc-script、measurement、meta-ads、outbound、product-feed、product-keyframe-video、sdr、video-ads)。合并时只有"故事编号/roadmap id"一项红,用 GitLab API 合的(glab 因流水线红拒绝)。
+- `fleet.py update` 已在真实子包上跑通(建 worktree、vendor、提交、测试都对)。子包测试只要几秒,以后不要加 `--no-tests`。
+- 9 个子包已升到 0.44.0,各自 Draft MR(分支 `claude/kit-0.44.0`):google-ads !3、ad-copy !2、asset-handoff !2、measurement !2、meta-ads !2、product-feed !4、product-keyframe-video !3、sdr !21、outbound !4、video-ads !92。(共 10 个;koc-script 还没升。)
+- outbound !4 和 video-ads !92 各有一个红测试,在 main 上同样红,与 kit 无关(outbound 缺 pydantic_settings;video-ads 的 close_milestone.sh --dry-run)。
+- 12 个子包已克隆到 `/Volumes/1T/openmax/skill-pack/<repo>`。
+- 没动:koc-script(待升)、adcut(MR 266 冲突+真失败)、search-intel(9 个含客户词提交)、geo-china(先迁移 0.31.0)、creator-program(默认分支 m1-roster)。
+- 仍待 owner:MR 标题补编号还是放宽规则;精简项(data 包、CHANGELOG 归档、两张页面工具、rules/operating 精简)。
