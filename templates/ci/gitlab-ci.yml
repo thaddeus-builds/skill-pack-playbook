@@ -94,7 +94,7 @@ secret scan:
       esac
 
 # Every merge request names the milestone (M..) it closes, or the story (S..) or policy (P..) it serves, or is
-# a release ("release X.Y.Z"). Written only in the agent instructions, this
+# a release ("release X.Y.Z") or a re-vendor of the kit ("Re-vendor the kit ..."). Written only in the agent instructions, this
 # rule was skipped by 17 of the source project's first 105 merge requests;
 # as this job, by none of the next 77. Merge request pipelines only: GitLab
 # gives the title there. The title reaches the shell as a variable, never as
@@ -113,10 +113,10 @@ story id:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
-      if printf '%s\n' "$CI_MERGE_REQUEST_TITLE" | grep -Eq '(^|[^A-Za-z0-9])([SP][0-9]{2,}|M[0-9]+)([^0-9]|$)|^release [0-9]'; then
+      if printf '%s\n' "$CI_MERGE_REQUEST_TITLE" | grep -Eq '(^|[^A-Za-z0-9])([SP][0-9]{2,}|M[0-9]+)([^0-9]|$)|^release [0-9]|^Re-vendor the kit([: ]|$)'; then
         echo "OK: the title names a milestone, a story or a policy (or is a release)."
       else
-        echo "Name the milestone (M..) it closes, or the story (S..) or policy (P..) it serves, or start the title with 'release X.Y.Z'."
+        echo "Name the milestone (M..) it closes, or the story (S..) or policy (P..) it serves, or start the title with 'release X.Y.Z' or 'Re-vendor the kit '."
         exit 1
       fi
 
