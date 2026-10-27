@@ -65,3 +65,13 @@
 - 12 个子包已克隆到 `/Volumes/1T/openmax/skill-pack/<repo>`。
 - 没动:adcut(MR 266 冲突+真失败)、search-intel(9 个含客户词提交)、geo-china(先迁移 0.31.0)、creator-program(默认分支 m1-roster)。
 - 仍待 owner:MR 标题补编号还是放宽规则;精简项(data 包、CHANGELOG 归档、两张页面工具、rules/operating 精简)。
+
+## 更新 · 2026-10-27 晚
+
+- playbook PR 198–201 已合并:re-vendor 标题免编号;子包 CI 模板只自动跑小检查(完整测试手动);playbook 自己的 ci.yml 只能手动;adoption/pack_status 重算。完整测试靠 pre-push 钩子,每个克隆要设一次 `git config skillpack.prepush-tests "python3 scripts/<cli>.py test"`(不进 git)。
+- 11 个子包 main 都在 kit 0.44.0,CI 已改手动(MR 里的 `.gitlab-ci.yml`)。
+- 7 个子包已删无用的 kit 包声明(google-ads、asset-handoff、measurement、outbound、product-feed、sdr、video-ads)。meta-ads、product-keyframe-video 按 owner 意思先不删。
+- playbook GitHub 仓库目前是 PUBLIC(交接说明写的"私有"不对);是否转私有由 owner 在 GitHub 设置里做。
+- 还没做:adcut(MR 266 冲突+真失败)、search-intel(9 个含客户词提交,bundle 未到)、geo-china(先迁 0.31.0 改名)、creator-program(默认分支 m1-roster)。
+- owner 待拍板的精简项:`data` 包只剩 retry(只有 video-ads 用,可并 base)、CHANGELOG 0.31.0 之前归档、两张页面工具、rules.md/operating.md 精简;2026-12-31 孵化到期(ads-core、creative 零使用者最危险)。
+- outbound 与 sdr 的关系:owner 说 outbound 并入 sdr,但仓库里没有代码搬迁的证据,未归档。
