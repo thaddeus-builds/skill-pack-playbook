@@ -945,5 +945,14 @@ def test_every_lesson_is_short_and_says_where_it_was_seen():
     assert lesson_problems("# L\n\n## A lesson (from a pack, 2026-10-26)\n\nshort rule.\n") == []
 
 
+def test_a_generated_view_is_built_and_ignored_and_never_committed():
+    """Parallel sessions conflicted on a committed overview page in every merge (adcut, 20 changes in three days): the template says built on demand."""
+    rule = doc("templates/system-overview.md").split("1. **", 1)[1].split("\n", 1)[0]
+    assert rule.startswith("Generated, not committed, checked."), rule
+    assert "/docs/overview.html" in doc("templates/gitignore").split(), "the gitignore template ignores the built page"
+    assert "generated and committed" not in doc("templates/README.md")
+    assert "instead of committing it" in doc("docs/rules.md") and "stale" not in doc("docs/planning.md").split("A generated view")[1].split("\n")[0]
+
+
 if __name__ == "__main__":
     _t.main(globals())
