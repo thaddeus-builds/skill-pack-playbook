@@ -50,8 +50,10 @@ def kit_packs() -> set[str]:
     return set(packs.table(ROOT / "kit").values()) - NEVER
 
 
-def problems(header: list[str], rows: list[dict[str, str]], known: set[str], day: date) -> list[str]:
-    """What the table gets wrong, one line each; [] when every pack is accounted for."""
+def problems(header: list[str], rows: list[dict[str, str]], known: set[str], day: date,
+             skill_packs: set[str] | None = None) -> list[str]:
+    """What the table gets wrong, one line each; [] when every pack is accounted for. With `skill_packs` (the rows of
+    tools/adoption.tsv), a consumer that is not one of them is a typo or a skill pack nobody tracks."""
     out = []
     if header != COLUMNS:
         return [f"header: {header} is not {COLUMNS}"]
@@ -72,6 +74,9 @@ def problems(header: list[str], rows: list[dict[str, str]], known: set[str], day
         names = [n for n in r["consumers"].split(",") if n.strip()]
         if len(set(names)) != len(names):
             out.append(f"{pack}: a consumer is named twice")
+        for n in names:
+            if skill_packs is not None and n not in skill_packs:
+                out.append(f"{pack}: consumer {n} is not a row of tools/adoption.tsv")
         until = r["until"].strip()
         if status == "shared":
             if len(set(names)) < MIN_SHARED:
@@ -109,6 +114,8 @@ DAY0 = date(2026, 10, 26)
 
 def test_the_check_sees_each_break_planted_in_a_small_table():
     assert problems(*table(GOOD), KNOWN, DAY0) == [], problems(*table(GOOD), KNOWN, DAY0)
+    assert problems(*table(GOOD), KNOWN, DAY0, {"a-skill-pack", "b-skill-pack"}) == []
+    assert any("not a row of tools/adoption.tsv" in p for p in problems(*table(GOOD), KNOWN, DAY0, {"a-skill-pack"}))
     breaks = {
         "header": GOOD.replace("\tnote", "\tnotes"),
         "not a kit pack": GOOD.replace("alpha\t", "gamma\t"),
@@ -136,7 +143,8 @@ def test_every_kit_pack_is_shared_or_incubating_and_no_incubation_has_run_out():
     header, rows = read(TABLE)
     known = kit_packs()
     assert known, "kit/packs.tsv names no pack besides base and testkit"
-    found = problems(header, rows, known, today())
+    adoption = {ln.split("\t")[0] for ln in (ROOT / "tools" / "adoption.tsv").read_text("utf-8").splitlines()[1:]}
+    found = problems(header, rows, known, today(), adoption)
     assert found == [], "\n".join(found)
 
 
