@@ -23,6 +23,9 @@ from pathlib import Path
 
 TABLE = "packs.tsv"
 ALWAYS = ("base", "testkit")
+# Packs that no longer exist, each with where its modules went: a skill pack that still declares one is told what to
+# delete instead of "unknown pack".
+RETIRED = {"data": "retry moved to base in kit 0.45.0"}
 SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", "out"}
 
 
@@ -83,6 +86,10 @@ def declared(skill_pack: Path, names: set[str]) -> list[str] | None:
     packs = kit["packs"]
     if not isinstance(packs, list) or not all(isinstance(p, str) for p in packs):
         raise PackError("skill-pack.toml: [kit] packs must be a list of pack names")
+    retired = sorted(set(packs) & set(RETIRED))
+    if retired:
+        raise PackError("skill-pack.toml: [kit] packs names a retired pack: "
+                        + "; ".join(f"{p} ({RETIRED[p]}; delete {p} from [kit] packs and re-vendor)" for p in retired))
     unknown = sorted(set(packs) - names)
     if unknown:
         raise PackError(f"skill-pack.toml: [kit] packs names an unknown pack: {', '.join(unknown)}"
