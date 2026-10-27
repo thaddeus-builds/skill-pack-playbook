@@ -29,10 +29,9 @@ packs = ["compliance"]      # base and testkit always come; no [kit] packs = eve
 
 | Pack | What it holds | Who takes it |
 | --- | --- | --- |
-| `base` | the contract, messages, clock, paths; the database and the human tables, the gate, facts, decisions, pending, the queue, execute and the write guard; the CLI, verbs, doctor, env, auth, runner, stories | every skill pack |
+| `base` | the contract, messages, clock, paths; the database and the human tables, the gate, facts, decisions, pending, the queue, execute and the write guard; the CLI, verbs, doctor, env, auth, runner, stories; `retry` (reads retried within the quota), moved here from the retired `data` pack in 0.45.0 | every skill pack |
 | `compliance` | `copylint`, `claimscope`, `phrasebook` | a skill pack that writes ad copy |
 | `generation` | `takes`, `prices`, `preflight`, `consent` | a skill pack that pays for AI generation or uses a real person's likeness |
-| `data` | `retry` | a skill pack that pulls rate-limited APIs |
 | `workbook` | `workbook`, `workbook_map`, `workbook_store`, `file_gate`, `workbook_patch` | a skill pack that runs beside a client's own spreadsheet (reads it in, writes its results into a copy) |
 | `learning` | `patternstore`, `pathweights` | a skill pack that learns from its outputs' outcomes, per client ([docs/pattern-store.md](../docs/pattern-store.md), [docs/path-weights.md](../docs/path-weights.md)) |
 | `pages` | `pagestyle` | a skill pack that writes pages a person reads to decide what to make next, and why ([docs/page-style.md](../docs/page-style.md)) |
@@ -42,7 +41,7 @@ packs = ["compliance"]      # base and testkit always come; no [kit] packs = eve
 | `creative` | `creative_life`, `creative_portfolio`, `fission`, `creative_demand` | a skill pack that runs creatives (video, image) as ads: each creative's state and the wallet it spends from, how many to ask the maker for, which to multiply next; pure rules, the pack brings the days |
 | `testkit` | `guards/`, `testing/`, `tools/` | every skill pack's own tests (keep it in `[release].internal`) |
 
-A module imports only `base` and its own pack, so any choice of packs imports cleanly (`tests/test_packs.py`). A module's message codes (`message_codes.d/<module>.tsv`) travel with it. `vendor.py` refuses to leave out a module the skill pack's own code imports: it names the file and the pack to add. `scaffold/new_skill_pack.py --packs data,compliance` writes the line for a new skill pack.
+A module imports only `base` and its own pack, so any choice of packs imports cleanly (`tests/test_packs.py`). A module's message codes (`message_codes.d/<module>.tsv`) travel with it. `vendor.py` refuses to leave out a module the skill pack's own code imports: it names the file and the pack to add. `scaffold/new_skill_pack.py --packs exchange,compliance` writes the line for a new skill pack.
 
 The skill pack declares itself once, in `skill-pack.toml` at its root ([templates/skill-pack.toml](../templates/skill-pack.toml)); every kit module reads names from it through `kit.config` and hard-codes none:
 

@@ -188,10 +188,10 @@ def test_tree(root: Path) -> None:
           and h["markets"] == ["HK", "TW"] and h["languages"] == ["en", "zh"]
           and "scripts/acme.py" in cfg["release"]["must_ship"])
     kd = root / "scripts" / "kit"
-    check("no --packs: [kit] packs = [], the kit copy holds base and testkit only",
+    check("no --packs: [kit] packs = [], the kit copy holds base (retry with it) and testkit only",
           cfg["kit"]["packs"] == [] and (kd / "facts.py").is_file()
           and (kd / "testing" / "suites.py").is_file()
-          and not (kd / "takes.py").exists() and not (kd / "retry.py").exists())
+          and not (kd / "takes.py").exists() and (kd / "retry.py").is_file())     # retry is base since 0.45.0
     heads = {"constants.tsv": ["name", "default", "unit", "min", "max",
                                "group", "label_en", "label_zh", "explain",
                                "why"],
@@ -354,12 +354,12 @@ def test_update_kit(root: Path) -> None:
 def test_other_shape() -> None:
     print("\n[8] no markets, three languages, two packs")
     root = Path(tmp_dir("scaffold-flat-")).resolve() / "acme"
-    rc, out, err = scaffold(*args(root, "--langs", "en,zh,ja", "--packs", "data,compliance"))
+    rc, out, err = scaffold(*args(root, "--langs", "en,zh,ja", "--packs", "exchange,compliance"))
     check("generated", rc == 0, err)
     cfg = tomllib.loads((root / "skill-pack.toml").read_text(encoding="utf-8"))
     kd = root / "scripts" / "kit"
     check("[kit] packs as given; the copy holds them and not the others",
-          cfg["kit"]["packs"] == ["data", "compliance"] and (kd / "retry.py").is_file()
+          cfg["kit"]["packs"] == ["exchange", "compliance"] and (kd / "retry.py").is_file()
           and (kd / "copylint.py").is_file() and not (kd / "takes.py").exists())
     check("markets = [], languages en, zh, ja",
           cfg["skill_pack"]["markets"] == []

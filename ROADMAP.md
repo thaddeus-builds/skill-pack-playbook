@@ -1,5 +1,5 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-26
+Updated: 2026-10-27
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
 - [N2] 2026-10-23 turn 2 (#20), now that the checkouts are read: bring the two skill packs in use to one kit version (the RedNote skill pack is out of it, R8). Where they stand (D21): the KOL skill pack 0.32.0 and adcut 0.33.0 (RedNote 0.5.0 with local changes in 15 kit files, unused); playbook 0.35.0. Start with `python3 tools/fleet.py status` on full clones (a shallow clone cannot tell an older file from a local one), upstream or drop each local change, then re-vendor one skill pack per merge request
@@ -56,6 +56,7 @@ Updated: 2026-10-26
 - [R9] 2026-10-23 the growth portfolio (docs/portfolio.md) is the map for every acquisition and growth skill pack: packs cut by platform account, pull and push as kit engine families, truth packs with one owner per fact, makers, typed contracts through the client hub; three decisions stay open on that page: "我觉得你上面论述的层次结构已经非常清晰了 我可以按照你的这个结构重新设计" (chat 2026-10-23)
 - [R10] 2026-10-24 three kit packs for the ad engines (W5): `ads-core` (nine modules), `creative` (four), `intent` (four), each its own pull request, kit 0.38.0 to 0.40.0; the creative's own state machine (`life`) goes to `creative` and a campaign's (`campaign`) to `ads-core`; the paid-search skill pack keeps its copies (R3) and its month cap and wallet moves stay there, only rules with a test here move: "同意，按 W5 开 PR" (the owner's choice in the session)
 - [R11] 2026-10-26 Meta becomes its own operator, `meta-ads` (`mads`), split out of `video-ads`; `video-ads` keeps 千川 and 腾讯 until one of them gets a writer, a client uses only one, or one needs its own pull logic (docs/portfolio.md, "Meta is its own operator"): "那你帮我拆出来一个 meta ads 创建对应的 skill pack工作目录" (the owner, chat 2026-10-26)
+- [R12] 2026-10-27 `retry` moves into `base` (kit 0.45.0) and the `data` pack is retired, an exception to "a module joins base once two skill packs import it": only video-ads imports it today, and the Amazon PPC skill pack, which holds its own `amazon_apis/retry.py`, becomes the second importer when it adopts the kit (tools/adoption.tsv); a skill pack still declaring `data` is told to delete it (`kit.tools.packs.RETIRED`): "同意方案 A:retry 并进 base(kit 0.45.0),在 ROADMAP 的决定里记一条例外理由" (the owner, chat 2026-10-27)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`
