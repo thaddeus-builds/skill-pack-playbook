@@ -1,7 +1,8 @@
-# {{name}}: CI. Every merge request, the default branch and every tag run the secret scan and the
-# offline test suite; a merge request also checks that its title names a milestone, a story or a rule.
-# A push to another branch runs nothing: the unit that reaches main is a milestone, not a push
-# (docs/operating.md, "Integrate by milestone").
+# {{name}}: CI. Every merge request, the default branch and every tag run the few-second checks: the secret
+# scan, and for a merge request its title (a milestone, a story or a rule) and its changelog line. The offline
+# test suite is a manual job here: it runs before each push (git config skillpack.prepush-tests, BUILD.md B1),
+# and a click starts it in CI for a clean-environment check. A push to another branch runs nothing: the unit
+# that reaches main is a milestone, not a push (docs/operating.md, "Integrate by milestone").
 # Nothing here needs a secret or the client's data folder.
 
 stages: [check]
@@ -95,14 +96,16 @@ changelog:
       fi
 
 # The whole suite is offline: fixtures and temporary folders, no credentials.
-# The runner fails any test file that exits non-zero, prints no
+# Manual and never blocking (`allow_failure: true`; a manual job without it holds the pipeline): it
+# runs before each push, and a click here is the clean-environment run. The runner fails any test file that exits non-zero, prints no
 # "RESULT: N passed" line, or leaves files behind; this job also checks the
 # runner's own last line, so a runner that stops early cannot pass.
 {{cli}} test:
   stage: check
   image: python:3.12-bookworm
   rules:
-    - when: on_success
+    - when: manual
+      allow_failure: true
   variables:
     UV_CACHE_DIR: .uv-cache
   cache:

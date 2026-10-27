@@ -447,7 +447,10 @@ def next_steps(d: Path, values: dict) -> list[str]:
         f"  2. name it in skill-pack.toml: [guards.leak] terms = [\"{lists}\"]",
         f"  3. install the leak guard as the pre-push hook: install -m 755 "
         f"{HOOK} .git/hooks/pre-push",
-        "  4. push",
+        f"  4. make the hook run the suite before each push, since CI runs only "
+        f"the few-second checks: git config skillpack.prepush-tests "
+        f"\"python3 scripts/{values['cli']}.py test\"",
+        "  5. push",
     ]
 
 

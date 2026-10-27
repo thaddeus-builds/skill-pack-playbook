@@ -237,10 +237,14 @@ def test_suite(root: Path, out: str) -> None:
           m is not None and (root / nh.HOOK).is_file(), out[-800:])
     order = [out.find(x) for x in ("create the client-term list",
                                    "[guards.leak] terms", "install -m 755",
-                                   "4. push")]
+                                   "skillpack.prepush-tests", "5. push")]
     check("… only after the client-term list is created and named, and "
           "before the push", -1 not in order and order == sorted(order)
           and "--no-verify" not in out, out[-800:])
+    check("… and the next steps make the hook run the suite before each push, "
+          "since CI does not (the command is the skill pack's own test verb)",
+          re.search(r'git config skillpack\.prepush-tests "python3 scripts/\w+\.py test"', out) is not None,
+          out[-800:])
     if m:
         subprocess.run(m.group(1).split(), cwd=root, check=True, timeout=60)
     hook = root / ".git" / "hooks" / "pre-push"
