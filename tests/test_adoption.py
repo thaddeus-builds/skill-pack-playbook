@@ -179,5 +179,14 @@ def test_each_agent_prompt_is_for_a_skill_pack_the_adoption_table_tracks():
     assert [n for n in prompt_packs(text.replace("## geo-china-skill-pack", "## nobody-skill-pack")) if n not in known] == ["nobody-skill-pack"]
 
 
+def test_a_prompt_is_deleted_once_its_skill_pack_stands_on_the_current_kit():
+    """A prompt exists to bring a skill pack to the kit; once the pack's row says it is there, the prompt is stale."""
+    _, rows = table(TABLE.read_text("utf-8"))
+    current = (ROOT / "kit" / "VERSION").read_text("utf-8").strip()
+    done = [r["pack"] for r in rows if r["pack"] in prompt_packs(PROMPTS.read_text("utf-8"))
+            and re.search(rf"\bkit {re.escape(current)}\b", r["note"])]
+    assert done == [], f"on kit {current} already, delete the prompt from docs/skill-pack-agent-prompts.md: {done}"
+
+
 if __name__ == "__main__":
     _t.main(globals())
