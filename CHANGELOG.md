@@ -155,6 +155,11 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
   Rule 8: one gate for every platform and an adapter per platform row, the gate extracted when the second platform
   arrives (`apply_gate.py`, S51). `docs/lessons.md`: an export branch never merges back into main.
 
+## [0.45.0] - 2026-10-27
+### Changed
+- Skill packs: judgement (a skill pack that declares `data` in `[kit] packs` deletes it from `skill-pack.toml` first, then `python3 tools/fleet.py update`; a skill pack that does not declare it just runs the update)
+- `kit/retry.py` moves from the pack `data` into `base`, and the pack `data` is retired (it held `retry` alone). An exception to "a module joins base once two skill packs import it" (ROADMAP R12): one skill pack imports it today, the Amazon PPC skill pack becomes the second when it adopts the kit. A skill pack that still declares `data` in `[kit] packs` must delete it before it re-vendors: `kit/tools/vendor.py` refuses with a message that says so (`kit.tools.packs.RETIRED`). A skill pack that imports `kit.retry` changes nothing else; every skill pack now receives `retry.py`. Tested in `kit/tests/test_packs.py` and `kit/tests/test_vendor.py`.
+
 ## [0.44.0] - 2026-10-26
 ### Added
 - `kit/guards/research.py` and `suites.research(root)` (pack `testkit`, no new vendored module for a skill pack to import): research is kept, not repeated. `docs/research/` and `docs/prior-art/` each have a `README.md` that lists every file of the folder, and every link of the README is a file; a research file says `Researched YYYY-MM-DD` and tags a claim `[documented]`, `[vendor]`, `[academic]`, `[ours]` or `[inference]`; a prior-art file has its day in its name or on a `Scan date:` line. A skill pack with neither folder is not read. Lifted from the video-ads skill pack's `tests/test_research_index.py`; opt in with `suites.run(suites.research(ROOT))` in a test of your own (the scaffolder's generated `test_ssot.py` calls it from the next playbook pull request). Tested in `kit/tests/test_research.py` and `test_suites.py`.
