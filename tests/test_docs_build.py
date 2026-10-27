@@ -945,5 +945,28 @@ def test_every_lesson_is_short_and_says_where_it_was_seen():
     assert lesson_problems("# L\n\n## A lesson (from a pack, 2026-10-26)\n\nshort rule.\n") == []
 
 
+def view_problems(template: str, gitignore: str, readme: str) -> list[str]:
+    """What the overview template says that lets a generated page be committed again."""
+    rule = template.split("1. **", 1)[1].split("\n", 1)[0]
+    out = []
+    if not rule.startswith("Generated, not committed, checked."):
+        out.append("rule 1 does not say not committed")
+    if "/docs/overview.html" not in gitignore.split():
+        out.append("the gitignore template does not ignore the built page")
+    if "generated and committed" in readme:
+        out.append("the templates README still says generated and committed")
+    return out
+
+
+def test_a_generated_view_is_built_and_ignored_and_never_committed():
+    """Parallel sessions conflicted on a committed overview page in every merge (adcut, 20 changes in three days): the template says built on demand."""
+    args = (doc("templates/system-overview.md"), doc("templates/gitignore"), doc("templates/README.md"))
+    assert view_problems(*args) == []
+    assert view_problems(args[0].replace("not committed", "committed"), args[1], args[2]) == ["rule 1 does not say not committed"]
+    assert view_problems(args[0], "", args[2]) == ["the gitignore template does not ignore the built page"]
+    assert view_problems(args[0], args[1], "generated and committed") == ["the templates README still says generated and committed"]
+    assert "instead of committing it" in doc("docs/rules.md") and "stale" not in doc("docs/planning.md").split("A generated view")[1].split("\n")[0]
+
+
 if __name__ == "__main__":
     _t.main(globals())
