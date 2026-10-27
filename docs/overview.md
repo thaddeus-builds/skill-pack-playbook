@@ -158,7 +158,7 @@ flowchart TB
     testkit["testkit · guards, day-one tests, vendor tool"]
     subgraph chan["Packs that import base only"]
       direction LR
-      compliance & generation & data & workbook & learning & pages & autonomy & exchange & adscore["ads-core"] & creative
+      compliance & generation & data & workbook & learning & pages & autonomy & exchange & adscore["ads-core"] & creative & ops
     end
     base --- chan
     base --- testkit

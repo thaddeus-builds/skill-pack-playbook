@@ -57,6 +57,7 @@ creative_life	creative	a creative's state machine: testing, learning, doubt, mat
 creative_portfolio	creative	a portfolio of creatives over time: trend, projection, half-life, yield, what closing a gap takes
 fission	creative	a creative's fission score against the account's proven creatives
 creative_demand	creative	how many creatives to ask for: cost per verdict, lead time, whole batches, the money limit
+snapshot	ops	a client workspace packed into one package that restores it: the database by backup, no secret in it, a manifest with every sha256, older packages pruned
 guards.__init__	testkit	
 guards.boundary	testkit	
 guards.changelog	testkit	
