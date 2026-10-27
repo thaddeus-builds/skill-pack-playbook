@@ -44,23 +44,6 @@ Bring this skill pack from kit 0.8.1 to the playbook's current kit (kit/VERSION)
 Ask the owner before: deleting any of this pack's own copies of a kit module, or changing a client-facing output.
 ```
 
-## search-intel-skill-pack
-
-Its default branch is clean on the remote at kit 0.33.1; an old Draft MR (!1) holds 0.43.0. The checkout on the owner's other machine has nine local commits that a leak guard refused: they hold client terms and must never be pushed.
-
-```text
-Bring this skill pack to the playbook's current kit.
-1. Work from origin/main only. Do not push, copy or cherry-pick any commit of a local main that is ahead of origin/main,
-   and never anything under docs/prior-art/evidence/. If the leak guard (scripts/kit/tools/leak_guard.py) refuses a push,
-   stop and tell the owner; never turn it off and never use --no-verify.
-2. Close the old Draft MR !1 (0.43.0) with a comment that it is replaced; do not build on its branch.
-3. Run `python3 ../skill-pack-playbook/tools/consumers.py .` and make [kit] packs in skill-pack.toml list exactly the packs
-   this pack imports besides base and testkit (it declares data and imports base only: drop data).
-4. Run `python3 ../skill-pack-playbook/tools/fleet.py update .`, fix what it reports in this pack's own code, push the
-   branch, open one merge request, add the CHANGELOG.md line. Stop.
-Ask the owner before: anything touching the nine local commits or the evidence folder.
-```
-
 ## creator-program-skill-pack
 
 Its default branch is `m1-roster`, which imports `workbook`; `main` does not. The 0.41.0 re-vendor MR (!2) targets `m1-roster` and is behind. It has one test, `test_ads_docs.py`, that is red for a reason of its own.
