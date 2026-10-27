@@ -22,6 +22,9 @@ secret
 /backups/
 /reports/
 
+# generated views: built on demand from the registries (tools/overview.py), never committed
+/docs/overview.html
+
 # Python and tools
 __pycache__/
 *.py[cod]
