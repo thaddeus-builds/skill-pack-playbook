@@ -971,5 +971,18 @@ def test_a_generated_view_is_built_and_ignored_and_never_committed():
     assert "instead of committing it" in doc("docs/rules.md") and "stale" not in doc("docs/planning.md").split("A generated view")[1].split("\n")[0]
 
 
+def planning_prompt_problems(text: str) -> list[str]:
+    """What the building agent's prompt says that has it commit the generated roadmap view."""
+    prompt = text.split("Done when all three hold", 1)[1].split("```", 1)[0]
+    return [] if "never commit it" in prompt and "regenerate the roadmap view" not in prompt else ["the prompt has the view committed"]
+
+
+def test_the_planning_prompt_never_has_an_agent_commit_the_generated_view():
+    """The planning method's prompt for the building agent said "regenerate the roadmap view, commit": it would commit a page that is ignored."""
+    assert planning_prompt_problems(doc("docs/planning.md")) == []
+    broken = "Done when all three hold\nThen set it to done, regenerate the roadmap view, commit with\n```"
+    assert planning_prompt_problems(broken) == ["the prompt has the view committed"]
+
+
 if __name__ == "__main__":
     _t.main(globals())
