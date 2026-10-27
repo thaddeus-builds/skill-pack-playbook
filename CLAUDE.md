@@ -19,6 +19,6 @@ This repository is the **parent of every growth-marketing skill pack** (KOL, Ama
 
 ## Before you push
 
-`python3 run_all.py` (Python 3.11 or newer; macOS's own `python3` is 3.9) must end `RESULT: N passed`. A hook runs it for you on every push: `git config core.hooksPath .githooks` once per clone (`git push --no-verify` skips it). CI runs the same command and cancels the run of an older push to the same pull request, because minutes are a quota on a private repository.
+`python3 run_all.py` (Python 3.11 or newer; macOS's own `python3` is 3.9) must end `RESULT: N passed`. A hook runs it for you on every push: `git config core.hooksPath .githooks` once per clone (`git push --no-verify` skips it). CI does not start by itself: it is the same command, started by hand from the Actions tab for a clean-environment run (it cancels an older run of the same ref), because minutes are a quota on a private repository.
 
 Issues and pull requests start from the templates in `.github/`: they ask for what the rules above need to be checked.

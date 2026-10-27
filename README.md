@@ -114,7 +114,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 4. To show the owner how the project is going on one page, an agent loads [skills/progress-page/SKILL.md](skills/progress-page/SKILL.md); the handoff runs it at the end of each session.
 5. To show what a skill pack can do and how it works on one page, the skill pack draws its own overview from its registries ([templates/system-overview.md](templates/system-overview.md)); the pipeline above is the same for every skill pack and stays here.
 
-**Check the whole playbook with one command.** [`run_all.py`](run_all.py) runs every test suite in the repository and ends with one `RESULT:` line; it exits 1 if any suite fails. `python3 run_all.py --list` names the suites and `python3 run_all.py kit console` runs some. [CI](.github/workflows/ci.yml) runs it on every pull request and on every push to main.
+**Check the whole playbook with one command.** [`run_all.py`](run_all.py) runs every test suite in the repository and ends with one `RESULT:` line; it exits 1 if any suite fails. `python3 run_all.py --list` names the suites and `python3 run_all.py kit console` runs some. The pre-push hook runs it before every push; [CI](.github/workflows/ci.yml) runs it only when started by hand.
 
 ---
 
