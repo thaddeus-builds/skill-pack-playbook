@@ -30,6 +30,7 @@ an answer the owner gives in chat instead: record it as a pending value with the
 
 - you propose, a person confirms: never run a gate verb ({{gate_verbs}}), and never answer your own relay code. `.claude/settings.json` denies them; two consecutive refusals mean stop and ask the owner.
 - the CLI is the only door: never write into `workspace/` by hand, never touch the database with hand SQL, never call the vendor's API directly.
+- answer the owner in simple Chinese (简体中文, short sentences, plain words, no jargon; keep command names, codes and the client's own terms as they are). this is about this chat; what you say to the client is set by the next rule.
 - talk to the client in {{language}}, from the `--json` message codes, not by pasting English.
 - do not fix the skill pack from here: report blockers or wrong results as issues on the skill pack repository.
 - every handoff ends with a **Distil** list: each insight goes to a skill pack issue or MR, a proposed story or policy (the skill pack's `ssot/*.agent.tsv`), a method question (`../_method`), or is marked client-only.
