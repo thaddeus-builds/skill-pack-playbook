@@ -7,9 +7,12 @@ a major when a skill pack must change). `hosts/zylos` has its own `VERSION`, not
 where it moved. The short hash on a version line is the commit that set it; dates
 are the merge day. Everything under *Other* is outside the kit: templates, build,
 scaffold, console, docs, conformance.
+From 0.45.0 each version has one line `- Skill packs: nothing | mechanical (...) | judgement (...)`:
+what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 ### Other
+- `tests/test_changelog.py`: from kit 0.45.0 each CHANGELOG version carries a `- Skill packs: nothing | mechanical (...) | judgement (...)` line, so a skill pack's own session can act on a release without asking the playbook (mechanical is `python3 tools/fleet.py update`; judgement is the pack's call). Earlier entries are not rewritten. No kit change.
 - `tools/adoption.tsv` and `tools/pack_status.tsv` recounted on every skill pack's main branch (2026-10-27, `tools/consumers.py`): the seven "drop the unused declaration" next steps are done and removed, kit versions are 0.44.0, `exchange` is imported by adcut, sdr and video-ads (not outbound), `data` by video-ads alone. `tests/test_pack_status.py` also fails on a consumer that is not a row of `adoption.tsv`. No kit change.
 - The playbook's own `.github/workflows/ci.yml` starts only by hand (`workflow_dispatch`); the pre-push hook runs `run_all.py` before every push. `CLAUDE.md` and the hook's comment say so. Tested in `tests/test_ci_quota.py`. No kit change.
 - Both GitLab CI templates (`templates/gitlab-ci.yml`, `templates/ci/gitlab-ci.yml`) run by themselves only the few-second checks (secret scan, story id, changelog); the suite, the Zylos adapter check and adapter smoke become manual jobs with `allow_failure: true`, so a pipeline is never held. The scaffold's next steps add a step 4, `git config skillpack.prepush-tests "python3 scripts/<cli>.py test"`, so the kit's pre-push hook runs the suite before each push (the hook already supported it; no kit change). A skill pack scaffolded earlier edits its `.gitlab-ci.yml` the same way and sets the config once per clone. Tested in `tests/test_ci_quota.py` and `scaffold/tests/test_new_skill_pack.py`.
