@@ -27,3 +27,4 @@ pending_gate_too_many_words	id,words	{id}: no gate, its verb is {words} words, m
 pending_title_hub_conflict	label,market,hub_value,value	{label} for {market}: the client hub says {hub_value}, this skill pack {value}. Which is right?	{market} 的{label}：客户中心是 {hub_value}，本技能包是 {value}。哪个对？
 pending_why_hub_conflict	key,market,value,hub,hub_value,hub_history_id,why	{key} [{market}] was confirmed here as {value} and at the client hub {hub} as {hub_value} (its confirm #{hub_history_id}). The copy never overwrites a value confirmed here, so a person chooses. It is used for: {why}	{key}（{market}）在这里确认为 {value}，在客户中心 {hub} 确认为 {hub_value}（其确认记录 #{hub_history_id}）。复制从不覆盖这里已确认的值，所以由人来选。用途：{why}
 pending_if_no_hub_conflict	key,value	{value} stays in effect here; if it is the right one, the hub's {key} is corrected at the hub	这里继续使用 {value}；如果它是对的，就在客户中心改正 {key}
+pending_derived_invalid	key,problem	derived[{key}]: {problem}	derived[{key}]：{problem}

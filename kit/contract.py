@@ -12,7 +12,8 @@
     and `subject`, kit.human.CodeRequired) is rendered here too, byte for
     byte what console/relay.py expects: code confirm_code_required,
     params.confirm_code, `subject`, and `next` = the same command rerun
-    with `--code C --relay-user <sender_id> --relay-at <iso_time>`.
+    with `--code C --relay-user <sender_id> --relay-at <iso_time>`, plus
+    `--relay-quote <their_words>` when the exception has need_quote true.
   * Read verbs never create the DB: `missing_db_error()`.
   * `Parser`: argparse whose usage errors are coded refusals (`usage`),
     so a mistyped verb under --json still prints one document.
@@ -78,8 +79,11 @@ def failure_doc(e: BaseException, cmd: list[str]) -> dict:
            **_failure(e)}
     confirm_code = getattr(e, "confirm_code", None)
     if confirm_code is not None:
+        quote = (" --relay-quote <their_words>"
+                 if getattr(e, "need_quote", False) else "")
         doc["next"] = [f"{shlex.join(cmd)} --code {confirm_code} "
-                       f"--relay-user <sender_id> --relay-at <iso_time>"]
+                       f"--relay-user <sender_id> --relay-at <iso_time>"
+                       f"{quote}"]
     subject = getattr(e, "subject", None)
     if subject is not None:
         doc["subject"] = subject
