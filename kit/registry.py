@@ -9,8 +9,10 @@ not in these TSVs is refused where it is typed, with a coded message.
                         unique when named. No quoting: a cell is everything
                         between two tabs.
   * FactKeys            ssot/fact_keys.tsv `key, group, type, unit, min,
-                        max, label_<lang>…, why`; type = number | text |
-                        date | choice:a|b. validate(key, raw) returns the
+                        max, label_<lang>…, why[, owner]`; type = number |
+                        text | date | choice:a|b; owner = pack (default) |
+                        hub: a key the client's hub confirms (kit.facts
+                        refuses to write it while a hub is in force). validate(key, raw) returns the
                         canonical value to store (numbers normalised: 15.0
                         -> 15) or refuses: fact_key_unknown,
                         fact_value_not_number, fact_value_out_of_range,
@@ -91,6 +93,7 @@ KIT_CONSTANTS = Path(__file__).resolve().parent / "constants.d"
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 FACT_PREFIX = "threshold_"
 FACT_TYPES = ("number", "text", "date")      # and choice:a|b
+OWNERS = ("pack", "hub")                      # who confirms a fact key
 DOMAINS = ("date", "json", "text", "sha256")  # and int:a..b, number:a..b, a|b|c
 CONFIRM = ("human", "none", "skill_pack")
 _NUMBER = re.compile(r"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
@@ -263,9 +266,13 @@ class FactKeys:
                 raise _bad(self.path, f"{key}: min/max only bound a number")
             if lo is not None and hi is not None and lo > hi:
                 raise _bad(self.path, f"{key}: min {r['min']} > max {r['max']}")
+            owner = r.get("owner") or "pack"
+            if owner not in OWNERS:
+                raise _bad(self.path, f"{key}: owner {owner!r} is not "
+                           f"{' or '.join(OWNERS)}")
             _check_labels(self.path, key, r)
             self._rows[key] = {**r, "_kind": kind[0], "_choices": kind[1],
-                               "_lo": lo, "_hi": hi}
+                               "_lo": lo, "_hi": hi, "_owner": owner}
 
     def settable(self, thresholds: "Thresholds | None" = None
                  ) -> tuple[str, ...]:
@@ -279,6 +286,11 @@ class FactKeys:
 
     def groups(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(r["group"] for r in self._rows.values()))
+
+    def hub_owned(self) -> tuple[str, ...]:
+        """The keys the client's hub confirms (`owner = hub`), in file
+        order: read here, written only at the hub while one is in force."""
+        return tuple(k for k, r in self._rows.items() if r["_owner"] == "hub")
 
     def row(self, key: str) -> dict | None:
         """The TSV row of `key` (its cells as written), None if unknown."""

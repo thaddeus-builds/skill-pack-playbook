@@ -92,6 +92,12 @@ skill pack without markets serves one hub market per workspace
 in its "_" (declarations never: it has no market door); hub_copies keeps
 the pack's "_", and the hub row is named by hub_history_id and a digest
 over the hub's own market. Nothing refreshes on its own: a person decides.
+A key the pack lists with `owner = hub` in fact_keys.tsv (registry.FactKeys,
+its definition still alike the hub's) is read here like any other, but
+`set`, `confirm`, `rollback` and the init question refuse it while a hub is
+in force (`fact_hub_owned`): it is confirmed at the hub and copied. Run with
+no hub, it is an ordinary key. A key the hub defines and the pack does not
+list is named as the hub's when `set` refuses it (`fact_key_hub_undeclared`).
 
 Deviations from the reference and from the SPEC, each deliberate:
   * No klass, no value_type: the kit's client_facts has neither (a key's
@@ -296,13 +302,72 @@ def _settable(run: _Run, key: str) -> None:
     fact_key_malformed, or FactKeys' fact_key_unknown."""
     _key_shape(key)
     if key not in run.keys.settable(run.thresholds):
-        run.keys.validate(key, "", thresholds=run.thresholds)  # raises
+        _validate(run, key, "")                                # raises
+    _hub_owned(run, key)
+
+
+def _validate(run: _Run, key: str, raw: str) -> str:
+    """FactKeys.validate, with one more word on an unknown key: with a hub
+    in force, a key the hub defines is named as the hub's (a pack lists it
+    with `owner = hub`), where plain "nothing reads it" sends nobody
+    anywhere."""
+    try:
+        return run.keys.validate(key, raw, thresholds=run.thresholds)
+    except SkillPackError as e:
+        if getattr(e.message, "code", None) != "fact_key_unknown":
+            raise
+        hint = _hub_key_hint(key)
+        if hint is None:
+            raise
+        raise hint from None
+
+
+def _hub_key_hint(key: str) -> SkillPackError | None:
+    try:
+        hub = hub_dir()
+        if hub is None:
+            return None
+        theirs = hub_keys_path(hub)
+        if key not in {r["key"] for r in registry.read_tsv(theirs, ["key"])}:
+            return None
+    except SkillPackError:
+        return None
+    return SkillPackError(msg(
+        "fact_key_hub_undeclared", f"{key!r} is a fact of the hub {hub.name}, "
+        f"which this skill pack does not list. Add its row to fact_keys.tsv "
+        f"as the hub defines it ({theirs}), with owner = hub", key=key,
+        hub=hub.name, file=str(theirs)),
+        [f"{_cli()} facts sync-hub"])
+
+
+def _hub_blocked(run: _Run, key: str) -> bool:
+    """True when `key` is the hub's to confirm and a hub is in force."""
+    return key in run.keys.hub_owned() and hub_dir() is not None
+
+
+def _hub_owned(run: _Run, key: str) -> None:
+    """Refuse to write a key the pack lists as `owner = hub` while a hub is
+    in force (`<P>_HUB_DIR`): it is confirmed once at the hub and copied by
+    `facts sync-hub`. With no hub it is an ordinary key, so a skill pack
+    run on its own still works."""
+    if key not in run.keys.hub_owned():
+        return
+    hub = hub_dir()
+    if hub is None:
+        return
+    raise SkillPackError(msg(
+        "fact_hub_owned", f"{key} is confirmed at the hub {hub.name}, not "
+        f"here: set it there, then copy it with `{_cli()} facts sync-hub`",
+        key=key, hub=hub.name),
+        [f"{hub}/bin/hub hub facts set {key} VALUE --market M --source S "
+         f"--reason R", f"{_cli()} facts sync-hub"])
 
 
 def _stored(run: _Run, key: str, raw: str) -> str:
     """The canonical value to store, after every check a write makes."""
     _key_shape(key)
-    return run.keys.validate(key, raw, thresholds=run.thresholds)
+    _hub_owned(run, key)
+    return _validate(run, key, raw)
 
 
 def _labels(run: _Run, key: str) -> dict:
@@ -503,6 +568,7 @@ def cmd_confirm(run: _Run) -> dict | None:
     a, con = run.args, run.con
     reason = human.why(a.reason)
     client = human.client_name(a.for_client)
+    _hub_owned(run, a.key)
     typed = None if a.value is None else _stored(run, a.key, a.value)
     m = _market(run, a.market, door=a.key != MARKET_KEY)
     existing = _fetch(con, m, a.key)
@@ -810,7 +876,7 @@ def _ask_value(run: _Run, m: str, key: str, prompt: str,
         if not raw:
             return None
         try:
-            stored = run.keys.validate(key, raw, thresholds=run.thresholds)
+            stored = _validate(run, key, raw)
         except SkillPackError as e:
             _say(f"  {e} — try again.")
             continue
@@ -837,8 +903,9 @@ def cmd_init(run: _Run) -> dict | None:
     partitioned = bool(cfg.markets)
     m = _ask_market(con) if partitioned else market.PSEUDO
     answers: dict[str, str] = {}
-    n = len(run.questions)
-    for i, (key, prompt) in enumerate(run.questions, 1):
+    asked = [q for q in run.questions if not _hub_blocked(run, q[0])]
+    n = len(asked)
+    for i, (key, prompt) in enumerate(asked, 1):
         v = _ask_value(run, m, key, f"[{i}/{n} {key}] {prompt}",
                        _fetch(con, m, key))
         if v is not None:
@@ -898,7 +965,7 @@ def cmd_init(run: _Run) -> dict | None:
     state = ("none" if decl is None
              else "pending" if decl["is_assumption"] else "confirmed")
     recorded = sum(1 for w in written if w["key"] != MARKET_KEY)
-    kept = [k for k, _ in run.questions if k not in answers]
+    kept = [k for k, _ in asked if k not in answers]
     nxt = ([f"{cfg.cli} facts confirm {MARKET_KEY} --market {m} "
             f"--reason <why>"] if state == "pending" else [])
     note = msg("fact_init_done",
