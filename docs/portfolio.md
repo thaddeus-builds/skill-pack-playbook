@@ -65,7 +65,7 @@ TikTok is not added to `video-ads`: it is a pack of its own when a client needs 
 
 | Repository | CLI | Layer and role | State on 2026-10-23, or the date in the cell | What changes |
 | --- | --- | --- | --- | --- |
-| amazon-ppc-skill-pack | `ppc` | Operator, paid pull, Amazon | 0.21.0, no kit; holds its own copy of every engine | Names its neighbours; its intent engines are the source for the kit's `intent` |
+| amazon-ppc-skill-pack | `ppc` | Operator, paid pull, Amazon | 0.21.0, no kit; holds its own copy of every engine; on GitHub (`thaddeus-builds`, private) since 2026-10-28, no longer on GitLab | Names its neighbours; its intent engines are the source for the kit's `intent` |
 | google-ads-skill-pack | `gads` | Operator, paid pull and push, Google | Scaffold, at B0.6 | Takes YouTube and Display (open decision 1); takes `intent` and `creative` from the kit at B3 |
 | meta-ads-skill-pack | `mads` | Operator, paid push, Meta | On 2026-10-28: scaffolded 2026-10-26, kit 0.45.0; the Meta read side has moved from `video-ads`, on a branch only, not yet on `main`; imports `base` only | Takes the Meta side of `video-ads` (its `docs/ROADMAP.md`, X1 to X7), on the kit's `ads-core` and `creative` (its thin verbs, X23 and X24, import them); the upload to Meta's media library is its write (video-ads R80) |
 | video-ads-skill-pack | `vads` | Operator, paid push: 千川, 腾讯 (Meta leaves it, see below) | On 2026-10-28: 0.3.0, kit 0.45.0; still holds its own copies of the engines and, until the split is done, the Meta side | R43 rewritten; engines to `ads-core` and `creative` (its X63), then the Meta side to `meta-ads` |

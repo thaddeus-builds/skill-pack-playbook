@@ -21,6 +21,7 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (a pack that reads a hub key adds `owner = hub` to its row, or lists the key with it; video-ads' `npr_roas` is the first)
 
 ### Other
+- `ROADMAP.md` and `docs/portfolio.md`: the Amazon PPC skill pack now lives on GitHub (`thaddeus-builds/amazon-ppc-skill-pack`, private; owner 2026-10-28), not GitLab; the playbook's own address is `thaddeus-builds/skill-pack-playbook` (the old `thaddeus-growth` name redirects). The GitLab CI templates stay: other skill packs are still on GitLab. Docs only.
 - `scaffold/markets.py` and `scaffold/countries.tsv` (owner's decision, 2026-10-28; no pack has been hurt by this yet, it closes the door before one is): `new_hub.py new --markets` and `new_skill_pack.py --markets` accept only ISO 3166-1 alpha-2 codes (249 plus `XK` for Kosovo), in capitals, each once. `UK` is refused with `GB`, `hk` with `HK`, a made-up code is named. Before, any plain word passed, so a hub and the packs it serves could spell one market two ways and `facts sync-hub` would skip the fact. The running kit is unchanged (its closed set is still `[skill_pack].markets`), so a hub or pack already made keeps working; its fixtures in the scaffold tests now use real codes. Tested in `scaffold/tests/test_markets.py`. No kit change.
 
 ### Other
