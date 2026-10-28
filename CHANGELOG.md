@@ -11,6 +11,10 @@ From 0.45.0 each version has one line `- Skill packs: nothing | mechanical (...)
 what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
+
+### Kit
+- `kit.autonomy.signed()` (issue #155, seen once in adcut): refuses a `client:<name>@relay` author, an empty user and a second `@`, as `docs/autonomy.md` rule 3 says ("a `client:` row never counts"); before, any of them read as a person's confirm and could open a mode. A real `<user>@tty|relay` row is unchanged. Tested in `kit/tests/test_autonomy.py`.
+- Skill packs: nothing (a pack that wrote its own full-match check around `signed()` can drop it at its next kit move)
 ### Other
 - `templates/client/CLAUDE.md`: a client's agent answers the owner in simple Chinese (plain words, no jargon, command names and the client's own terms kept as they are); what it tells the client is still set by the client-language rule. Seen in three client workspaces of geo-china-skill-pack, where the line was added by hand. A client folder scaffolded earlier adds the line to its `CLAUDE.md`. No kit change.
 

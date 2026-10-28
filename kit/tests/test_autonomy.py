@@ -134,6 +134,11 @@ def test_switch() -> None:
              "auto_off_expired")):
         got = on(h)
         check(f"off: {label} ({want})", not got["on"] and got["why_off"] == want, got)
+    for by in ("client:Acme@relay", "@relay", "@tty", "a@b@relay", "owner@", "owner", "", None):
+        check(f"signed() refuses {by!r}: rule 3 says only a row a person signed raises", not A.signed(by), by)
+    check("signed() still takes a person's tty and relay rows", A.signed("owner@tty") and A.signed("uid:501@relay"))
+    check("a forged client:<name>@relay confirm does not turn it on",
+          on(hist(ON[:2] + ("client:Acme@relay", ON[3])))["why_off"] == "auto_off_unproven")
     far = on(hist(("confirm", "2027-06-01:T14", "owner@relay", "2026-10-01T08:00:00+00:00")))
     check("a far day is clamped to the confirm's day + max_days, then expires",
           far["until"] == "2026-10-29" and far["on"], far)
