@@ -55,6 +55,7 @@ changes	ads-core	the change record: own writes against the platform's, before an
 reconcile	ads-core	two routes of one platform's numbers, side by side
 lifecycle	ads-core	a campaign's state machine and its hold
 compute_campaign	ads-core	the campaign document: a pack's tables through lifecycle, the benchmark, the hold and the proposals, as one --json document
+compute_pacing	ads-core	the pacing document: the month's money over its days, the two wallets, each ad group's wallet, the efficiency; the pack's tables through the rules
 daily	ads-core	the day's advice of the three layers as one list of items under stable ids; answered ones that no longer come up are solved
 event_days	ads-core	the account's event days: a calendar of sale, payday and holiday days, read strictly, left out of the weekday weights
 event_catalogue	ads-core	the public events a client may pick its event days from, by market and year: fixed, rule or table dates, never a guess
