@@ -9,6 +9,7 @@
 <!-- Skill packs that import or need this, by name. One: it lives in the pack named for its concern. Two, merged to their main branches: `base`. -->
 
 ## Checklist
+- [ ] An agent or a person read the diff, the release note and the issue text for a description that identifies a client (the leak guard only matches listed terms, at push); the term list grew if a new client appears
 - [ ] One concern: not a kit change, a build-tool change and a scaffold change together
 - [ ] A test that fails without this change
 - [ ] Channel code stays out: no platform API, field or vocabulary in `kit/`, `console/`, `build/` or `scaffold/`
