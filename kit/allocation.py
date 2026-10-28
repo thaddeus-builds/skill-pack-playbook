@@ -80,9 +80,19 @@ def marginal(e: float, se_e: float, roas: float, conversions: float) -> tuple[fl
     return m, m * rel
 
 
+E_CEILING = 0.999               # a numerical guard, not a threshold: the elasticity is held a hair under 1, where x = b (m / level)^(1/(1-e)) would divide by zero
+
+
 def budget_at(level: float, b: float, m: float, e: float) -> float:
-    """The budget at which a campaign's marginal return falls to `level`, on revenue = a x^e calibrated at its budget b, where it is m: x = b (m / level)^(1/(1-e))."""
-    return b * (m / level) ** (1 / (1 - e)) if level > 0 else float("inf")
+    """The budget at which a campaign's marginal return falls to `level`, on revenue = a x^e calibrated at its budget b, where it is m: x = b (m / level)^(1/(1-e)).
+    `shrink` holds e inside [e_min, e_max] and e_max may be 1 (a proportional response), where this is undefined: e is read as at most `E_CEILING`, and a budget too
+    large to represent is infinite (the boxes in `solve` clip it)."""
+    if level <= 0:
+        return float("inf")
+    try:
+        return b * (m / level) ** (1 / (1 - min(e, E_CEILING)))
+    except OverflowError:
+        return float("inf")
 
 
 def solve(items: list[dict], total: float) -> float:
