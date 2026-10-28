@@ -1,0 +1,13 @@
+code	params	meaning_en	meaning_zh
+campaign_kind_pattern_invalid	file,pattern	{file}: {pattern!r} is not a regular expression	{file}：{pattern!r} 不是有效的正则表达式
+campaign_no_data	market	no complete day of {market}'s data: nothing to judge	{market} 没有完整一天的数据：无从评判
+campaign_kinds_missing	file	{file} is not in the data folder: every campaign is unclassified and is compared with the account's return	数据目录里没有 {file}：所有 campaign 都未分类，只与账户整体回报比较
+campaign_raise_budget	step,roas,benchmark	raise its budget by one step: its return is above its benchmark's	把预算提高一档：它的回报高于基准
+campaign_ask_creatives	roas,benchmark,use	its return is above its benchmark's but it does not spend its budget: its creatives are the limit; ask for more	回报高于基准但预算没花完：限制在 creative 而不是钱，需要更多 creative
+campaign_rest_creatives	declining,now,peak	its creatives are wearing out: its relative click-through rate is {now} against a peak of {peak}; rest its declining creatives and ask for new ones	creative 在老化：相对点击率 {now}，峰值是 {peak}；让衰退的 creative 休息，并要新的 creative
+campaign_fix_issue	reason	the campaign is blocked: name the ads with issues to the person who can fix them	campaign 受阻：把有问题的广告交给能处理的人
+campaign_add_creative	mature	it holds mature creatives: add a new one beside them	campaign 里已有成熟 creative：在旁边加一个新的
+campaign_thresholds_draft	names	the campaign_* thresholds are drafts the owner has not confirmed yet: read the states as a proposal, not a verdict	campaign_* 阈值仍是草案，尚未经负责人确认：状态只是提议，不是结论
+campaign_check_account	roas,before	its return fell from {before} to {roas} with no sign that the creatives wore out: look at the budget, the season and the landing page before asking for new creatives	回报从 {before} 掉到 {roas}，但没有 creative 老化的迹象：先看预算、季节和落地页，再决定要不要新的 creative
+campaign_lagging	roas,benchmark	its return is {roas} against {benchmark} and it did not fall: it never was good or settled low; look at the budget and the audience before asking for creatives; the allocation may lower its budget	回报 {roas}，低于基准 {benchmark}，而且不是掉下来的：一直不好或已经稳在低位；先看预算和受众，再决定要不要新的 creative；分配时可能降它的预算
+compute_input_invalid	part,problem	the pack's tables give {part} {problem}	技能包的表里给出的 {part} {problem}
