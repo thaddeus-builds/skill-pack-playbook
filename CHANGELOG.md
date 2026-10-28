@@ -11,6 +11,8 @@ From 0.45.0 each version has one line `- Skill packs: nothing | mechanical (...)
 what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
+### Other
+- `templates/client/CLAUDE.md`: a client's agent answers the owner in simple Chinese (plain words, no jargon, command names and the client's own terms kept as they are); what it tells the client is still set by the client-language rule. Seen in three client workspaces of geo-china-skill-pack, where the line was added by hand. A client folder scaffolded earlier adds the line to its `CLAUDE.md`. No kit change.
 
 ## [0.46.0] - 2026-10-27
 ### Kit
