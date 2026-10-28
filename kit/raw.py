@@ -1,7 +1,8 @@
 """The append-only raw store: raw only grows.
 
 Everything a skill pack pulls or imports lands here first, under
-`<DATA_DIR>/raw/<source>/<name>`, and ingest rebuilds the DB from it. The
+`<DATA_DIR>/raw/<source>/<name>` (the root is `kit.paths.raw_dir()`: `<P>_RAW`
+when set), and ingest rebuilds the DB from it. The
 rule this module holds is the lesson of a rebuild that shrank 3,072 rows
 to 329: a raw file is written once and never replaced, so the DB can
 always be rebuilt from everything ever pulled.
@@ -45,7 +46,7 @@ from kit import paths
 from kit.contract import SkillPackError
 from kit.messages import msg
 
-RAW = "raw"
+RAW = paths.RAW
 
 
 def _plain(name: str) -> str:
@@ -60,8 +61,8 @@ def _plain(name: str) -> str:
 
 
 def raw_dir(source: str) -> Path:
-    """<DATA_DIR>/raw/<source>/ (created)."""
-    d = paths.data_dir() / RAW / _plain(source)
+    """<paths.raw_dir()>/<source>/ (created); <DATA_DIR>/raw unless <P>_RAW is set."""
+    d = paths.raw_dir() / _plain(source)
     d.mkdir(parents=True, exist_ok=True)
     return d
 

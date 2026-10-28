@@ -222,6 +222,22 @@ def test_paths() -> None:
     check("a data dir inside the checkout: a warning per path",
           codes(doc, "data_dir").count("doctor_inside_repo") == 2
           and found(doc, "data_dir", "warn"))
+    check("no SHOP_RAW: it is not listed",
+          all(c["message_code"]["params"].get("var") != "SHOP_RAW"
+              for c in found(doc, "data_dir")))
+    _, _, _, doc = run(inside.parent / "x", "--json",
+                       **{CFG.env("RAW"): str(inside)})
+    check("SHOP_RAW set inside the checkout: listed, and warned about",
+          [c["message_code"]["params"]["path"] for c in found(doc, "data_dir")
+           if c["message_code"]["params"].get("var") == "SHOP_RAW"]
+          == [str(inside)] * 2, codes(doc, "data_dir"))
+    out_raw = Path(tmp_dir("doc-r-"))
+    _, _, _, doc = run(Path(tmp_dir("doc-t-")), "--json",
+                       **{CFG.env("RAW"): str(out_raw)})
+    check("SHOP_RAW outside it: listed, no warning",
+          [c["message_code"]["params"]["path"] for c in found(doc, "data_dir")
+           if c["message_code"]["params"].get("var") == "SHOP_RAW"]
+          == [str(out_raw)] and codes(doc, "data_dir").count("doctor_inside_repo") == 0)
     _, _, _, doc = run(Path(tmp_dir("doc-t-")), "--json",
                        **{CFG.env("TOKEN_SOURCE"): "vault"})
     check("an unknown token source: a warning (auth_bad_token_source)",
