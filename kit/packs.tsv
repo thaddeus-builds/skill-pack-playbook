@@ -57,6 +57,7 @@ lifecycle	ads-core	a campaign's state machine and its hold
 compute_campaign	ads-core	the campaign document: a pack's tables through lifecycle, the benchmark, the hold and the proposals, as one --json document
 compute_pacing	ads-core	the pacing document: the month's money over its days, the two wallets, each ad group's wallet, the efficiency; the pack's tables through the rules
 compute_allocate	ads-core	the allocation document: the performance wallet's split across campaigns replayed day by day, the evidence bar calibrated, tomorrow's moves with their evidence
+export_changes	ads-core	the ads.changes/1 body: the platform's budget and status changes seen between pulls and the changes people reported on the daily page, with stable ids; the pack writes it through kit.contracts
 daily	ads-core	the day's advice of the three layers as one list of items under stable ids; answered ones that no longer come up are solved
 event_days	ads-core	the account's event days: a calendar of sale, payday and holiday days, read strictly, left out of the weekday weights
 event_catalogue	ads-core	the public events a client may pick its event days from, by market and year: fixed, rule or table dates, never a guess
