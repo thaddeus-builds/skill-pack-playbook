@@ -1040,7 +1040,7 @@ class Store:
     # ---- the agent's side ----
     def post(self, name: str, asks: list, *, max_open: int = MAX_OPEN,
              dry_run: bool = False, gate_verbs: list | None = None,
-             default_expires: str | None = None) -> dict:
+             page_only: list | None = None, default_expires: str | None = None) -> dict:
         """`max_open` is the number of open asks allowed (the caller's: the
         manifest's, or MAX_OPEN). It counts every open ask in this log, whoever
         posted it (`--as`), so packs that share one console share one budget.
@@ -1048,7 +1048,9 @@ class Store:
         given, makes an ask whose gate verb starts with none of them invalid
         (`not_allowed` on `gate.verb`), so the console never draws it as a form
         that can only be declined. `default_expires` is given to a new ask that
-        names no `expires` (ask.py add: EXPIRES_DAYS ahead); a revision that
+        names no `expires` (ask.py add: EXPIRES_DAYS ahead); `page_only` (a
+        manifest's page_only_verbs) makes an ask whose gate verb starts with one of
+        them invalid too: only a button the skill pack's page draws may run it; a revision that
         names none keeps the one it had, so posting the same ask again is not a
         change. An `expires` that has already passed is refused."""
         by = self._by("agent", name)
@@ -1062,6 +1064,12 @@ class Store:
                                "message": f"the verb {' '.join(ask['gate']['verb'])!r} is not in the manifest's "
                                           f"relay_verbs ({_show_verbs(gate_verbs)}): add it there, or drop the gate "
                                           "so the owner is told to confirm another way"})
+                ask = None
+            elif ask and page_only and ask.get("gate") and verb_allowed(page_only, ask["gate"]["verb"]):
+                errors.append({"ask": label, "field": "gate.verb", "code": "not_allowed",
+                               "message": f"the verb {' '.join(ask['gate']['verb'])!r} is page-only in the manifest "
+                                          f"({_show_verbs(page_only)}): only a button on the skill pack's own page may "
+                                          "run it, so an ask cannot carry it"})
                 ask = None
             if ask:
                 if ask["id"] in seen:

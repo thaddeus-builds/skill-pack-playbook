@@ -22,6 +22,7 @@ One JSON file in the skill pack. The operator starts the console with `serve.py 
   "version": 1,
   "cmd": ["uv", "run", "my_skill_pack.py"],
   "relay_verbs": [["facts", "confirm"], ["queue", "approve"]],
+  "page_only_verbs": [["queue", "approve"]],
   "max_open": 20,
   "counts": ["console", "counts"],
   "pages": [
@@ -36,6 +37,7 @@ One JSON file in the skill pack. The operator starts the console with `serve.py 
 | `version` | `1`. A file for a newer console is refused, not guessed at |
 | `cmd` | The skill pack command (argv). It runs every page verb and every gate; an ask or a page cannot change it |
 | `relay_verbs` | The verb prefixes (word lists) a gate or a button may run. Default: none |
+| `page_only_verbs` | Optional. Relay verb prefixes that only a button the skill pack's own page draws may run (one that grants something: a mode, a spending period). An ask whose gate is one of them is refused by `ask.py add` and, if one was written some other way, when it is answered (`verb_not_allowed`). Each must start with a relay verb. Default: none |
 | `max_open` | How many asks may be open at once (1 to 100; default 10). `ask.py add --max-open N` can still only lower it |
 | `counts` | Optional verb that prints `{"counts": {"<page>": N}}`: the number on each tab. The console keeps it for 5 seconds; if it fails the tabs have no numbers and the pages work |
 | `pages` | At most 12. `name` (a-z, 0-9, `_`; the page is `page-<name>`), `title` (text, or `{en, zh}`), `order` (the built-in Waiting is 10 and History 1000), `verb` (the page verb), `blocking` (true: its number is added to the Waiting tab, the owner's "what blocks the next step" count) |
@@ -78,6 +80,8 @@ The manifest's `relay_verbs` decide which gates and buttons can run, and they ar
 
 - **An ask** whose `gate.verb` starts with none of them is refused by `ask.py add` (`invalid_ask`, field `gate.verb`, code `not_allowed`, naming the verb and the allowed ones), together with every other problem of the batch, nothing posted. Without a manifest `add` cannot know, so set `CONSOLE_MANIFEST` in the agent's environment.
 - **A button** whose verb is not allowed is not drawn as a form: the page says in a sentence that it cannot run here. A click forged for it is refused (`verb_not_allowed`) before the skill pack is called.
+
+- **A page-only verb** (`page_only_verbs`) is refused as an ask's gate, by `ask.py add` and again when the ask is answered, because the console cannot see who posted an ask: an agent that can run `ask.py add` could otherwise post a card whose click grants a mode. A button on the skill pack's own page runs it as before. The key is new in this console: a manifest that has it is refused by an older vendored console (unknown key), so re-vendor the console first.
 
 A prefix matches word for word: `["queue", "approve"]` allows `queue approve` and `queue approve n7`, not `queue approvals`.
 

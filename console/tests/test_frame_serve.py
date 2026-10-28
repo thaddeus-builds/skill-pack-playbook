@@ -268,5 +268,15 @@ def test_the_manifest_is_read_at_start_from_the_flag_or_the_environment_and_a_ba
             assert srv.get("").status == 200
 
 
+def test_an_ask_written_for_a_page_only_verb_is_refused_when_it_is_answered_even_if_it_got_past_ask_py():
+    with _t.tmpdir() as root:
+        man = {**MANIFEST, "relay_verbs": [["queue", "approve"]], "page_only_verbs": [["queue", "approve"]]}
+        with srv_with(root, manifest=man) as srv:
+            srv.agent(gate_on("p1", ["queue", "approve", "spend-1"]))                  # srv.agent has no manifest: the add check is skipped
+            h = srv.store.state()["asks"]["p1"]["hash"]
+            refused(srv.post("answer", {"id": "p1", "hash": h, "value": "yes"}), 403, "err.verb_not_allowed")
+            assert srv.events("answer") == [] and fake_calls(root) == []               # nothing written, the skill pack never called
+
+
 if __name__ == "__main__":
     _t.main(globals())
