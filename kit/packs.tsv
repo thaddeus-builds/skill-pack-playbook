@@ -67,6 +67,7 @@ fission	creative	a creative's fission score against the account's proven creativ
 creative_demand	creative	how many creatives to ask for: cost per verdict, lead time, whole batches, the money limit
 compute_life	creative	the life document: every creative's state, reason, moves and wallet; the thresholds that are rules over the account's history, each with its cold start
 compute_portfolio	creative	the portfolio document: the creatives by state, how long the performance ones keep earning, whether the month reaches its result, how many new ones it takes
+compute_review	creative	the review document: the week of the creatives for the people who read the feedback; the moves in the window, the states, the early reading, the fission scores
 snapshot	ops	a client workspace packed into one package that restores it: the database by backup, no secret in it, a manifest with every sha256, older packages pruned
 guards.__init__	testkit	
 guards.boundary	testkit	
