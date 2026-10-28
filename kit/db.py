@@ -14,7 +14,10 @@ What it guards:
     columns, other column order, other primary key) always raises
     (HumanTableDrift) before anything is changed, read-only opens too;
   * triggers in the file itself, generated from spec.append_only and
-    spec.frozen_columns, refuse what they forbid whatever code path
+    spec.frozen_columns (plus spec.extra_triggers, the pack's own rule on
+    a human table that those two cannot say: installed, checked and put
+    back like the generated ones, and part of schema_hash), refuse what
+    they forbid whatever code path
     writes (a raw sqlite3 connection included); a write-mode open
     re-installs a missing or changed one. A third one per such table,
     <t>_no_replace, refuses an INSERT over an existing key: REPLACE
@@ -51,8 +54,8 @@ Deviations (SPEC §db), each additive:
     and "defaults" besides columns/pk/not_null/doc/grain; column types
     are "TEXT", "INTEGER", "REAL", "BLOB" (or str, int, float, bytes).
   * with_human() also takes views, period_columns, append_only,
-    frozen_columns (for extra human tables only; they default to no
-    DELETE), human_added_later and backups_keep.
+    frozen_columns, extra_triggers (for extra human tables only; they
+    default to no DELETE), human_added_later and backups_keep.
   * connect() and check_rebuild() take backfill(table, missing) -> a
     command or None, which becomes LossyRebuild's `next`.
   * Extra helpers: transaction(), check_rebuild() (the --dry-run view of
@@ -99,6 +102,10 @@ BACKUPS_DIR = "backups"
 TABLE_KEYS = {"columns", "pk", "not_null", "unique", "defaults", "doc",
               "grain"}
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# the part of an extra trigger after its name: group 1 is the table it is on
+_TRIGGER_BODY = re.compile(
+    r'^(?:BEFORE|AFTER)\s+(?:INSERT|DELETE|UPDATE(?:\s+OF\s+[^;]*?)?)\s+'
+    r'ON\s+("?[A-Za-z_][A-Za-z0-9_]*"?)\s', re.I | re.S)
 
 Backfill = Callable[[str, list[str]], "str | None"]
 
@@ -158,7 +165,17 @@ def _norm_table(name: str, t: Mapping) -> dict:
 class SchemaSpec:
     """Every table of the file, which of them hold human data, and the
     version stamped into the file. Normalized and checked at construction
-    (ValueError), so a malformed spec fails where it is written."""
+    (ValueError), so a malformed spec fails where it is written.
+
+    `extra_triggers` {name: body}: a rule on a human table that the
+    generated triggers cannot say (a column's allowed values, a
+    one-way status, a value that is never reused). `body` is everything
+    after the name: `BEFORE|AFTER INSERT|DELETE|UPDATE [OF cols] ON
+    <human table> [WHEN ...] BEGIN ...; END`. The kit installs it with
+    the generated ones, puts back a missing or changed one on the next
+    write open, and schema_hash covers it. It must not take the name of
+    a generated trigger. One the spec no longer lists is left in the
+    file: removing a rule is the pack's own deliberate migration."""
 
     tables: dict[str, dict]
     human_tables: tuple[str, ...]
@@ -169,6 +186,7 @@ class SchemaSpec:
     views: dict[str, str] = field(default_factory=dict)
     backups_keep: int = 30
     human_added_later: tuple[str, ...] = ()
+    extra_triggers: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         put = object.__setattr__
@@ -207,6 +225,23 @@ class SchemaSpec:
         _subset(self.period_columns, self.cache_tables(), "period_columns")
         for t, col in self.period_columns.items():
             _subset([col], self.columns(t), f"period_columns[{t!r}]")
+        put(self, "extra_triggers", {n: b.strip() if isinstance(b, str) else b
+                                     for n, b in self.extra_triggers.items()})
+        generated = _generated_triggers(self)
+        for n, body in self.extra_triggers.items():
+            _ident(n, "extra trigger name")
+            if n in generated:
+                raise ValueError(f"extra trigger {n!r} has the name of a "
+                                 f"generated one")
+            m = _TRIGGER_BODY.match(body) if isinstance(body, str) else None
+            if not (m and body.rstrip().rstrip(";").upper().endswith("END")):
+                raise ValueError(f"extra trigger {n!r}: give what follows "
+                                 f"its name, 'BEFORE|AFTER INSERT|UPDATE "
+                                 f"[OF cols]|DELETE ON <table> ... BEGIN "
+                                 f"...; END'")
+            if m.group(1).strip('"') not in self.human_tables:
+                raise ValueError(f"extra trigger {n!r}: its table "
+                                 f"{m.group(1)} is not a human table")
         for v, sql in self.views.items():
             _ident(v, "view name")
             if v in self.tables:
@@ -236,12 +271,16 @@ def with_human(cache: Mapping[str, dict], *, version: int,
                period_columns: Mapping[str, str] | None = None,
                append_only: Mapping[str, Iterable[str]] | None = None,
                frozen_columns: Mapping[str, Iterable[str]] | None = None,
+               extra_triggers: Mapping[str, str] | None = None,
                human_added_later: Iterable[str] = (),
                backups_keep: int = 30) -> SchemaSpec:
     """The skill pack's cache tables + the kit's human tables (schema_base)
     + the skill pack's own extra human tables. The kit's human tables keep
     the kit's triggers; `append_only` / `frozen_columns` name extra human
-    tables only, which default to refusing DELETE."""
+    tables only, which default to refusing DELETE. `extra_triggers` is
+    {name: what follows CREATE TRIGGER "name"} for a rule on an extra
+    human table that append_only and frozen_columns cannot say (see
+    SchemaSpec.extra_triggers)."""
     extra = dict(extra_human or {})
     base = schema_base.HUMAN
     clash = sorted((set(base) & set(extra)) | (set(base) | set(extra))
@@ -250,6 +289,12 @@ def with_human(cache: Mapping[str, dict], *, version: int,
         raise ValueError(f"table name(s) used twice: {clash}")
     append_only, frozen = dict(append_only or {}), dict(frozen_columns or {})
     ours = sorted((set(append_only) | set(frozen)) & set(base))
+    on_kit = sorted(n for n, b in dict(extra_triggers or {}).items()
+                    if (m := _TRIGGER_BODY.match(str(b).strip()))
+                    and m.group(1).strip('"') in base)
+    if on_kit:
+        raise ValueError(f"the kit's human tables keep the kit's triggers: "
+                         f"extra trigger(s) {on_kit}")
     if ours:
         raise ValueError(f"the kit's human tables keep the kit's triggers: "
                          f"{ours}")
@@ -262,7 +307,8 @@ def with_human(cache: Mapping[str, dict], *, version: int,
         period_columns=dict(period_columns or {}), views=dict(views or {}),
         backups_keep=backups_keep,
         human_added_later=tuple(dict.fromkeys(
-            (*schema_base.ADDED_LATER, *human_added_later))))
+            (*schema_base.ADDED_LATER, *human_added_later))),
+        extra_triggers=dict(extra_triggers or {}))
 
 
 def schema_hash(spec: SchemaSpec) -> str:
@@ -323,7 +369,15 @@ def table_sql(spec: SchemaSpec, table: str) -> str:
 
 
 def triggers(spec: SchemaSpec) -> dict[str, str]:
-    """{trigger name: CREATE TRIGGER} from append_only (<t>_no_update,
+    """{trigger name: CREATE TRIGGER}: the generated ones (below), then
+    spec.extra_triggers."""
+    return {**_generated_triggers(spec),
+            **{n: f"CREATE TRIGGER {_q(n)} {b}"
+               for n, b in spec.extra_triggers.items()}}
+
+
+def _generated_triggers(spec: SchemaSpec) -> dict[str, str]:
+    """The triggers the spec's data says: from append_only (<t>_no_update,
     <t>_no_delete) and frozen_columns (<t>_frozen: BEFORE UPDATE OF every
     column the table does not list as mutable), plus <t>_no_replace for
     each table with either: BEFORE INSERT, aborting when the key exists
