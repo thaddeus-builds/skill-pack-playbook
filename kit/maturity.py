@@ -22,6 +22,8 @@ worth), which mature differently.
     `immature` (its visible share is under `maturity_immature_share`);
   * `judge(window, threshold)`: a verdict with no number of its own: a mature window is decided by its estimate, an immature one whose interval straddles the threshold is
     `undecided_immature`, never a verdict;
+  * `Reading`, `window_reading`, `day_reading`: what a judgement (`kit.lifecycle`, `kit.alerts`) needs to read days on the estimate: the two curves, the date the days
+    were taken and the parameters, and the estimate of a window of daily rows or of one day;
   * `refit`, `drift`, `stale`: the pack stores each fitted curve with the day it was fitted on and the data it saw; `drift` flags a parameter that moved by more than
     `maturity_drift_se` standard errors; `stale` says a curve is older than `maturity_refit_days`. The kit never schedules: the pack decides the cadence.
 
@@ -410,3 +412,37 @@ def stale(curve: Curve, today: str, p: Params) -> bool:
     if curve.fitted_on is None:
         return True
     return (date.fromisoformat(today) - date.fromisoformat(curve.fitted_on)).days >= p.refit_days
+
+
+# ---- what a judgement reads ---------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Reading:
+    """The days a judgement reads, taken on `observed_on`: a day's age is that date less the day. `kit.lifecycle.judge` and `kit.alerts.check` read a window on the estimate
+    when they are given one, and decide nothing from an immature window whose interval straddles the rule's threshold."""
+    count: Curve
+    value: Curve
+    observed_on: str
+    params: Params
+
+
+def window_reading(days: dict, first: date, last: date, reading: Reading) -> dict | None:
+    """The window from `first` to `last` (inclusive) of a campaign's `days` ({YYYY-MM-DD: (spend, revenue, conversions, ...)}), read on the estimate: {roas, low, high, revenue,
+    conversions, share, immature}, or None when it spent nothing. `roas` is the estimated revenue over the spend, `low` and `high` its interval (equal to `roas` when the
+    window is not immature)."""
+    rows = [{"day": d, "spend": x[0], "count": x[2], "value": x[1]} for d, x in days.items() if first <= date.fromisoformat(d) <= last]
+    if not rows or sum(r["spend"] for r in rows) <= 0:
+        return None
+    s = summarize(adjust(rows, reading.observed_on, reading.count, reading.value, reading.params), first.isoformat(), last.isoformat(), reading.params)
+    r = s["return"]
+    lo, hi = (r["low"], r["high"]) if s["immature"] else (r["estimate"], r["estimate"])
+    return {"roas": r["estimate"], "low": lo, "high": hi, "revenue": s["value"]["estimate"], "conversions": s["count"]["estimate"], "share": s["share"], "immature": s["immature"]}
+
+
+def day_reading(day: str, spend: float, orders: float, sales: float, reading: Reading) -> dict | None:
+    """One day's sales read on the estimate: {sales, low, high, share, immature} (low and high equal to sales when the day is not immature), or None when the day has no spend."""
+    if spend <= 0:
+        return None
+    a = adjust([{"day": day, "spend": spend, "count": orders, "value": sales}], reading.observed_on, reading.count, reading.value, reading.params)[0]["value"]
+    immature = a["share"] < reading.params.immature_share
+    return {"sales": a["estimate"], "low": a["low"] if immature else a["estimate"], "high": a["high"] if immature else a["estimate"], "share": a["share"], "immature": immature}

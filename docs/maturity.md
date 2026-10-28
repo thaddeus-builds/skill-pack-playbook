@@ -41,7 +41,19 @@ The pack stores each fitted curve (`to_dict`) with its `fitted_on` day and the d
 
 ## What a pack hands over
 
-Observations: every export of a day with the time it was taken. A pack that already keeps every export (the ledger, raw) rebuilds this table from raw; it is a cache, never a source. Per key it chooses what is pooled: an account, a campaign type, an attribution setting. Then days to read: `{day, spend, count, value}` with the date they were taken. The documents (`compute_campaign`, the alerts) read the estimate and the `immature` flag through the hooks; those are a later change.
+Observations: every export of a day with the time it was taken. A pack that already keeps every export (the ledger, raw) rebuilds this table from raw; it is a cache, never a source. Per key it chooses what is pooled: an account, a campaign type, an attribution setting. Then days to read: `{day, spend, count, value}` with the date they were taken, and the two curves: a `maturity.Reading(count, value, observed_on, params)`, which the three hooks below take.
+
+## The hooks: where a judgement reads the estimate
+
+Given a `Reading`, three places read a window on the estimate and none gives a verdict the interval cannot back. Without one they are exactly as they were.
+
+- **`kit.lifecycle.judge`** reads a campaign's return on the estimate. A rule on the return (earning, declining, lagging) is decided only when the whole interval of an *immature* window is on one side of its threshold; where it cannot tell, the state is **`unjudged` with the reason `immature`**. That is an existing state, so the closed list of states is unchanged, and `hold` already keeps one week of it from moving a held state. A mature window is judged as before. The evidence gates (enough spend, enough conversions) stay on what was **seen**: a graduation needs real conversions, and an estimate must not manufacture them.
+- **`kit.compute_campaign`** takes `Source.maturity` (the reading; its `observed_on` must be after the last complete day). The benchmark a campaign is held to is built from the other campaigns' **estimated** revenue, not their understated tail. Each campaign's `window` keeps what was seen and adds `matured {roas, low, high, revenue, conversions, share, immature}`; the document says which curves it was read on (`tau`, family, `prior_only`, `fitted_on`) and warns, coded, when a curve is only the cold start.
+- **`kit.alerts.check`** (`reading=...`) reads a *return* on the current day's estimate, so an alert need not wait for the ledger's settle days: it fires only when the whole interval is on the firing side of `threshold x baseline`, is silent only when none of it is, and otherwise has **no verdict** (`immature_undecided`). The baseline's days are read as point estimates. An unsettled day with no `orders` cannot be put on a curve (`orders_unknown`). Spend is final at once and is never read on a curve.
+
+**Left alone on purpose: `kit.creative_life`'s cost reading.** It replays a creative's whole history day by day on today's numbers, so the last few days are understated, and a short run of them is what its "declining" rule looks for. That is the same flaw, but mending it changes a state machine's replay, which is its own change with its own tests (issue filed); its conversion counts for graduation stay observed in any case.
+
+What it does to a campaign whose true return equals the benchmark (4.0 against 4.0), seen on its last seven days at 82 % visible: observed 3.29, called **lagging** without a reading; with one, an estimate of 4.0 with an interval of 3.3 to 4.7 across both the lagging bar (3.4) and the earning bar (4.6), so **unjudged, immature**. A campaign truly at 1.0 is still lagging and one at 9.0 still earning, because their intervals clear the bars.
 
 ## What the test world showed
 
