@@ -10,6 +10,8 @@ A candidate is a *proposal*, never a fact: a client may not run a sale on it. `b
   * `rule`:  computed from a rule (the day after the fourth Thursday of November; Easter by the Gregorian computus and the days counted from it);
   * `table`: a lunar date, from a short table (`TABLE_YEARS`); a year outside it gives no such candidate, never a guess.
 
+**A candidate's `name` is its identity, and it is stable across years**: the same event has the same name in 2026 and in 2030 while its date moves (Black Friday, Lunar New Year), so a pack stores "this client does not run it" (a strike) by name and the next year's candidate is skipped; a test holds the set of names of a market equal over every year of the table.
+
 `markets` is the ISO 3166-1 alpha-2 codes the event is public in, or `*` for every market. A market the catalogue does not list gets the `*` events only.
 
 What is not here, on purpose: a sale a platform schedules itself (its dates are announced late and name the platform, which the kit does not), and a client's
@@ -126,6 +128,15 @@ def for_markets(markets: list[str], year: int) -> list[Candidate]:
                 seen.add((c.name, c.day))
                 out.append(c)
     return sorted(out, key=lambda c: (c.day, c.name))
+
+
+def open_candidates(candidates: list[Candidate], confirmed=(), struck=()) -> list[Candidate]:
+    """The candidates still to ask a person about, in the order given: not one whose name was struck (by name, so for every year), and not one already confirmed (the
+    same name on the same day: `confirmed` is anything with `.day` and `.name`, such as `kit.event_days.Event`). A confirmed day of last year does not hide this year's:
+    its date moved, so it is asked again."""
+    gone = {str(n) for n in struck}
+    have = {(e.day, e.name) for e in confirmed}
+    return [c for c in candidates if c.name not in gone and (c.day, c.name) not in have]
 
 
 def rows(picked: list[Candidate]) -> list[dict[str, str]]:
