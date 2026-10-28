@@ -45,6 +45,11 @@ by week, a stock snapshot):
   [16] shrunk_since_backup: human rows lost since the newest backup are
       seen (a wiped or deleted file included); a killed backup is never
       taken for one
+  [17] extra_triggers: a pack's own rule on a human table (a one-way
+      status, a value never reused) is installed with the generated ones,
+      refuses on a raw connection, is put back when dropped or changed,
+      reaches a file made before it existed, is in schema_hash, and a
+      malformed one fails at construction
 """
 
 import contextlib
@@ -1050,12 +1055,147 @@ def t16_shrunk_since_backup() -> None:
           and counts(made) == SEEDED, made)
 
 
+ENTRIES = {"columns": {"id": "INTEGER", "kind": "TEXT", "status": "TEXT",
+                       "retired_at": "TEXT", "retired_reason": "TEXT",
+                       "version": "INTEGER"},
+           "pk": ("id",), "doc": "one-way rows", "grain": "entry"}
+ONE_WAY = ('BEFORE UPDATE ON "entries" WHEN NOT (OLD.status = \'active\' AND '
+           'NEW.status = \'retired\' AND NEW.retired_at IS NOT NULL AND '
+           "trim(coalesce(NEW.retired_reason, '')) <> '') BEGIN SELECT "
+           "RAISE(ABORT, 'entries: a row only moves active -> retired, with "
+           "a reason'); END")
+INSERT_RULES = ('BEFORE INSERT ON "entries" WHEN NEW.status IS NOT '
+                "'active' OR trim(coalesce(NEW.kind, '')) = '' BEGIN SELECT "
+                "RAISE(ABORT, 'entries: a new row is active and has a "
+                "kind'); END")
+VERSION_ONCE = ('BEFORE INSERT ON entries WHEN EXISTS (SELECT 1 FROM entries '
+                'WHERE version = NEW.version) BEGIN SELECT RAISE(ABORT, '
+                "'entries: a version is never reused'); END")
+EXTRA = {"entries_one_way": ONE_WAY, "entries_insert_rules": INSERT_RULES,
+         "entries_version_once": VERSION_ONCE}
+
+
+def t17_extra_triggers() -> None:
+    print("\n[17] extra_triggers: the pack's own rule on a human table")
+    s = spec(extra_human={"entries": ENTRIES}, extra_triggers=EXTRA)
+    plain = spec(extra_human={"entries": ENTRIES})
+    path = fresh(s)
+    have = lambda p: {n: q for n, q in raw(p).execute(  # noqa: E731
+        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'")}
+    check("installed with the generated ones, named as given",
+          set(EXTRA) <= set(have(path))
+          and "entries_no_delete" in have(path), sorted(have(path)))
+    check("triggers() lists them after the generated ones",
+          list(db.triggers(s))[-len(EXTRA):] == list(EXTRA)
+          and set(db.triggers(plain)) < set(db.triggers(s)))
+    c = raw(path)
+    c.execute("INSERT INTO entries (kind, status, version) VALUES "
+              "('objection', 'active', 1)")
+    refused = {
+        "a new row not active": "INSERT INTO entries (kind, status, version) "
+                                "VALUES ('k', 'retired', 2)",
+        "a new row without a kind": "INSERT INTO entries (kind, status, "
+                                    "version) VALUES (' ', 'active', 2)",
+        "a retire without a reason": "UPDATE entries SET status = "
+                                     "'retired', retired_at = 't'",
+        "an edit that is no retire": "UPDATE entries SET kind = 'other'",
+        "a reused version (REPLACE too)": "INSERT OR REPLACE INTO entries "
+                                          "(id, kind, status, version) VALUES "
+                                          "(9, 'k', 'active', 1)",
+    }
+    for label, sql in refused.items():
+        try:
+            c.execute(sql)
+            got = "no error"
+        except sqlite3.IntegrityError as e:
+            got = str(e)
+        check(f"raw: {label} refused", got.startswith("entries:")
+              or "refused" in got, got)
+    c.execute("UPDATE entries SET status = 'retired', retired_at = 't', "
+              "retired_reason = 'sold' WHERE id = 1")
+    check("the allowed write passes", rows(path, "entries")[0][2:5]
+          == ("retired", "t", "sold"), rows(path, "entries"))
+
+    print("      put back when dropped or changed; left alone when the "
+          "spec no longer lists one")
+    c.execute("DROP TRIGGER entries_one_way")
+    c.execute("DROP TRIGGER entries_insert_rules")
+    c.execute("DROP TRIGGER entries_version_once")
+    c.execute('CREATE TRIGGER "entries_version_once" BEFORE INSERT ON '
+              '"entries" BEGIN SELECT 1; END')
+    c.execute('CREATE TRIGGER "entries_old_rule" BEFORE INSERT ON "entries" '
+              "BEGIN SELECT 1; END")
+    c.close()
+    quiet(lambda: db.connect(s, path, read_only=True))[0].close()
+    check("a read-only open changes nothing", "entries_one_way"
+          not in have(path))
+    quiet(lambda: db.connect(s, path))[0].close()
+    now = have(path)
+    check("the next write open restores all three, the changed one too",
+          all(now[n] == q for n, q in db.triggers(s).items()
+              if n in EXTRA), sorted(now))
+    check("a trigger of the file the spec does not list stays",
+          "entries_old_rule" in now)
+
+    print("      a file made before the rule reaches it on its next write "
+          "open")
+    old = fresh(plain)
+    check("… it has none yet", not set(EXTRA) & set(have(old)))
+    quiet(lambda: db.connect(s, old))[0].close()
+    check("… now it has them", set(EXTRA) <= set(have(old)))
+    check("… the human rows are untouched",
+          counts(old, s) == {**SEEDED, "entries": 0}, counts(old, s))
+
+    print("      schema_hash covers them; without any it is unchanged")
+    check("the base hash does not move (no extras: empty dict)",
+          db.schema_hash(db.with_human({}, version=1)) == "cbc2de94bc52aa06")
+    check("a rule moves the hash, so does editing its text",
+          len({db.schema_hash(plain), db.schema_hash(s),
+               db.schema_hash(spec(extra_human={"entries": ENTRIES},
+                                   extra_triggers={
+                                       **EXTRA, "entries_one_way":
+                                       ONE_WAY.replace("a reason",
+                                                       "reasons")}))}) == 3)
+    bad = {
+        "the name of a generated trigger":
+            lambda: spec(extra_human={"entries": ENTRIES}, extra_triggers={
+                "entries_no_delete": INSERT_RULES}),
+        "a name that is not a plain SQL name":
+            lambda: spec(extra_human={"entries": ENTRIES}, extra_triggers={
+                "bad name": INSERT_RULES}),
+        "a body that is not a trigger body":
+            lambda: spec(extra_human={"entries": ENTRIES}, extra_triggers={
+                "x": "DROP TABLE entries"}),
+        "a body without its END":
+            lambda: spec(extra_human={"entries": ENTRIES}, extra_triggers={
+                "x": INSERT_RULES[:-5]}),
+        "INSTEAD OF (a view's)":
+            lambda: spec(extra_human={"entries": ENTRIES}, extra_triggers={
+                "x": INSERT_RULES.replace("BEFORE", "INSTEAD OF")}),
+        "a cache table":
+            lambda: spec(extra_triggers={"x": INSERT_RULES.replace(
+                '"entries"', "stock")}),
+        "a table the spec does not have":
+            lambda: spec(extra_triggers={"x": INSERT_RULES}),
+        "one of the kit's human tables (with_human)":
+            lambda: spec(extra_triggers={"x": INSERT_RULES.replace(
+                '"entries"', "client_facts")}),
+    }
+    for label, fn in bad.items():
+        check(f"refused: {label}", raises(fn, ValueError) is not None)
+    check("a SchemaSpec built directly takes a rule on any human table",
+          db.SchemaSpec(tables={**schema_base.HUMAN}, version=1,
+                        human_tables=tuple(schema_base.HUMAN),
+                        extra_triggers={"cf": 'BEFORE INSERT ON client_facts '
+                                        "BEGIN SELECT 1; END"}) is not None)
+
+
 def main() -> int:
     _shop.use()
     for t in (t1_bootstrap, t2_triggers, t3_keep_human_rows, t4_lossy,
               t5_only_adds, t6_human_drift, t7_too_new, t8_no_db, t9_upsert,
               t10_backups, t11_hash, t12_validation, t13_listing, t14_views,
-              t15_codes, t16_shrunk_since_backup):
+              t15_codes, t16_shrunk_since_backup, t17_extra_triggers):
         t()
     return finish()
 

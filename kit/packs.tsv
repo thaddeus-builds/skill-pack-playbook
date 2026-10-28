@@ -55,12 +55,24 @@ changes	ads-core	the change record: own writes against the platform's, before an
 reconcile	ads-core	two routes of one platform's numbers, side by side
 lifecycle	ads-core	a campaign's state machine and its hold
 compute_campaign	ads-core	the campaign document: a pack's tables through lifecycle, the benchmark, the hold and the proposals, as one --json document
+compute_pacing	ads-core	the pacing document: the month's money over its days, the two wallets, each ad group's wallet, the efficiency; the pack's tables through the rules
+compute_allocate	ads-core	the allocation document: the performance wallet's split across campaigns replayed day by day, the evidence bar calibrated, tomorrow's moves with their evidence
+export_changes	ads-core	the ads.changes/1 body: the platform's budget and status changes seen between pulls and the changes people reported on the daily page, with stable ids; the pack writes it through kit.contracts
 daily	ads-core	the day's advice of the three layers as one list of items under stable ids; answered ones that no longer come up are solved
+event_days	ads-core	the account's event days: a calendar of sale, payday and holiday days, read strictly, left out of the weekday weights
+event_catalogue	ads-core	the public events a client may pick its event days from, by market and year: fixed, rule or table dates, never a guess
+maturity	ads-core	how much of a day's final number is visible at an age: a curve fitted from restated numbers, a recent day read as a matured estimate with an interval, a verdict that waits when the interval straddles
 audit	ads-core	the account audit's rules over a pack's facts: a finding is a code, a severity and its numbers; the wording stays in the pack
 creative_life	creative	a creative's state machine: testing, learning, doubt, mature, declining, parked, ended; the wallet it spends from
 creative_portfolio	creative	a portfolio of creatives over time: trend, projection, half-life, yield, what closing a gap takes
 fission	creative	a creative's fission score against the account's proven creatives
 creative_demand	creative	how many creatives to ask for: cost per verdict, lead time, whole batches, the money limit
+compute_life	creative	the life document: every creative's state, reason, moves and wallet; the thresholds that are rules over the account's history, each with its cold start
+compute_portfolio	creative	the portfolio document: the creatives by state, how long the performance ones keep earning, whether the month reaches its result, how many new ones it takes
+compute_review	creative	the review document: the week of the creatives for the people who read the feedback; the moves in the window, the states, the early reading, the fission scores
+compute_demand	creative	the demand document: how many creatives to ask the maker for, in whole batches, by the exploration money of the pacing plan and what a verdict costs
+export_demand	creative	the ads.demand/1 file: the demand document's request for the makers (a count, the day it is needed by, the window of a verdict); the pack writes it through kit.contracts
+export_results	creative	the ads.results/1 rows: the report's current rows with each creative's stage and, once it has a verdict, its fission score; the pack writes them through kit.contracts
 snapshot	ops	a client workspace packed into one package that restores it: the database by backup, no secret in it, a manifest with every sha256, older packages pruned
 guards.__init__	testkit	
 guards.boundary	testkit	
