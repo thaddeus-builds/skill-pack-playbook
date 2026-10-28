@@ -13,6 +13,9 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [Unreleased]
 
 ### Other
+- `tools/adoption.tsv` and `ROADMAP.md` N2 (2026-10-28): the kit versions of adcut (0.44.0), creator-program (0.45.0), geo-china (0.45.0) and ecommerce-seo (0.46.0) are as read from each pack's `origin/main` (GitLab and GitHub clones fetched that day); every one of the 16 packs vendoring the kit matches its own `MANIFEST.sha256`, so nothing has been edited by hand. N2 no longer says the packs sit on 0.32.0 and 0.33.0: what is left of it is the weekly train. The other columns of those rows keep their earlier check date. No kit change.
+
+### Other
 - `docs/maintaining.md` (issue #166, seen once in adcut): the agent-access list says to name the git host on every `glab` call (`GITLAB_HOST` or `--hostname`), because outside a checkout it defaults to gitlab.com and the 401 or 404 looks like a bad token. Documentation only, no check possible. No kit change.
 
 ### Kit
