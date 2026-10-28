@@ -330,7 +330,10 @@ def check_data_dir(ctx: Context) -> None:
             f"any client that leaves it unset lands in this data dir)",
             var=var, file=home), [f"export {var}=/absolute/path/to/client-data",
                                   f"export {ch.paths_var}=none"])
-    for v, p in ((var, d), (cfg.env("DB"), paths.db_path())):
+    checked = [(var, d), (cfg.env("DB"), paths.db_path())]
+    if os.environ.get(cfg.env("RAW"), "").strip():       # listed only when set
+        checked.append((cfg.env("RAW"), paths.raw_dir()))
+    for v, p in checked:
         if v != var:
             ctx.ok("data_dir", msg("doctor_path", f"{v} -> {p}", var=v,
                                    path=str(p)))
