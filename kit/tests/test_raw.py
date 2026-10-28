@@ -137,6 +137,21 @@ def main() -> int:
           raises(lambda: raw.save("orders", "s.txt", "text"), TypeError)
           is not None)
 
+    print("\n[4b] <P>_RAW moves the root; the default is unchanged")
+    check("RAW is paths.RAW; no <P>_RAW: <DATA_DIR>/raw/<source>",
+          raw.RAW == "raw" and raw.raw_dir("moved") == data / "raw" / "moved")
+    os.environ["SHOP_RAW"] = "elsewhere/raw"
+    try:
+        q = raw.save("moved", "a.json", b"{}")
+        check("SHOP_RAW (relative = under the data dir): saved and listed there",
+              q == data / "elsewhere" / "raw" / "moved" / "a.json"
+              and raw.listing("moved") == [q]
+              and not (data / "raw" / "moved" / "a.json").exists(), q)
+    finally:
+        del os.environ["SHOP_RAW"]
+    check("unset again: the default root, the moved file is not in it",
+          raw.listing("moved") == [])
+
     print("\n[5] no data dir, no raw")
     del os.environ["SHOP_DATA_DIR"]
     check("unset data dir: data_dir_unset, nothing written in the cwd",
