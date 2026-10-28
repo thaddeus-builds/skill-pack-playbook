@@ -9,6 +9,11 @@ ingest reads as real data. Write a temp sibling, flush it to disk
 the temp file is removed and the target is untouched; a temp left by a
 killed writer is never in the way of the next write.
 
+The folder is not created unless asked (`makedirs=True`): a typo in a path
+must not build a tree. A pack that writes into a folder that may not exist
+yet (a raw-data tree by source and date) passes it instead of a `makedirs`
+line before every call.
+
 The temp name is unique per call (pid + random), so two writers of the
 same path never share a temp file; it is created with the process umask
 like a plain open() would.
@@ -33,7 +38,9 @@ def _tmp_for(path: str | os.PathLike) -> str:
 
 
 @contextmanager
-def _open_tmp(path: str | os.PathLike, mode: str) -> Iterator[IO]:
+def _open_tmp(path: str | os.PathLike, mode: str, makedirs: bool = False) -> Iterator[IO]:
+    if makedirs:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = _tmp_for(path)
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
     try:
@@ -52,22 +59,32 @@ def _open_tmp(path: str | os.PathLike, mode: str) -> Iterator[IO]:
 
 
 @contextmanager
-def open_atomic(path: str | os.PathLike) -> Iterator[IO[str]]:
-    """Text-write `path` (utf-8) so a reader never sees a partial file."""
-    with _open_tmp(path, "w") as f:
+def open_atomic(path: str | os.PathLike, *, makedirs: bool = False) -> Iterator[IO[str]]:
+    """Text-write `path` (utf-8) so a reader never sees a partial file.
+
+    `makedirs=True` creates the missing parent folders first."""
+    with _open_tmp(path, "w", makedirs) as f:
         yield f
 
 
 def write_json_atomic(path: str | os.PathLike, obj: Any, *,
-                      indent: int | None = None) -> None:
+                      indent: int | None = None, makedirs: bool = False) -> None:
     """Serialize `obj` to `path` (ensure_ascii=False) atomically."""
-    with open_atomic(path) as f:
+    with open_atomic(path, makedirs=makedirs) as f:
         json.dump(obj, f, ensure_ascii=False, indent=indent)
 
 
-def write_bytes_atomic(path: str | os.PathLike, data: bytes) -> None:
+def write_text_atomic(path: str | os.PathLike, text: str, *,
+                      makedirs: bool = False) -> None:
+    """Write `text` (utf-8) to `path` atomically."""
+    with open_atomic(path, makedirs=makedirs) as f:
+        f.write(text)
+
+
+def write_bytes_atomic(path: str | os.PathLike, data: bytes, *,
+                       makedirs: bool = False) -> None:
     """Write `data` to `path` atomically."""
-    with _open_tmp(path, "wb") as f:
+    with _open_tmp(path, "wb", makedirs) as f:
         f.write(data)
 
 

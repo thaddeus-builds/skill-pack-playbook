@@ -6,6 +6,8 @@
   * the temp is fsynced before it replaces the target, and a writer
     killed mid-write (SIGKILL) leaves the old file whole, its leftover
     temp never in the way of the next write;
+  * makedirs=True creates the missing parent folders (default: it does
+    not, and the write fails as before); write_text_atomic;
   * hold(): the first holder gets True, a second (another open file, or
     another process) gets False without waiting; the lock goes with its
     holder; the lock file stays.
@@ -13,6 +15,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -84,6 +87,57 @@ def main() -> int:
           json.loads(target.read_text("utf-8")) == {"rows": []}
           and sorted(n for n in os.listdir(d) if not atomic.is_temp(n))
           == ["b.bin", "raw.json", "t.txt"], os.listdir(d))
+
+    print("\n[1b] makedirs and write_text_atomic")
+    deep = d / "raw" / "pull" / "src" / "2026-10-28"
+    for label, write in (
+            ("write_json_atomic", lambda p, **k: atomic.write_json_atomic(p, {"a": 1}, **k)),
+            ("write_bytes_atomic", lambda p, **k: atomic.write_bytes_atomic(p, b"x", **k)),
+            ("write_text_atomic", lambda p, **k: atomic.write_text_atomic(p, "x", **k)),
+            ("open_atomic", lambda p, **k: atomic.open_atomic(p, **k).__enter__())):
+        check(f"{label}: by default no folder is created (FileNotFoundError)",
+              raises(lambda: write(deep / "f.json"), FileNotFoundError) is not None
+              and not (d / "raw").exists())
+    atomic.write_json_atomic(deep / "f.json", {"a": 1}, makedirs=True)
+    check("makedirs=True creates nested folders, then writes",
+          json.loads((deep / "f.json").read_text("utf-8")) == {"a": 1}
+          and os.listdir(deep) == ["f.json"])
+    atomic.write_bytes_atomic(deep / "g" / "b.bin", b"\x01", makedirs=True)
+    atomic.write_text_atomic(deep / "h" / "t.txt", "你好", makedirs=True)
+    with atomic.open_atomic(deep / "i" / "o.txt", makedirs=True) as f:
+        f.write("o")
+    check("… for bytes, text and open_atomic too",
+          (deep / "g" / "b.bin").read_bytes() == b"\x01"
+          and (deep / "h" / "t.txt").read_text("utf-8") == "你好"
+          and (deep / "i" / "o.txt").read_text() == "o")
+    atomic.write_text_atomic(deep / "f.json", "{}", makedirs=True)
+    check("makedirs=True on an existing folder is fine",
+          (deep / "f.json").read_text() == "{}")
+    nested = {"é": "价格", "l": [1, {"k": None}]}
+    atomic.write_json_atomic(d / "j.json", nested, indent=1)
+    check("write_json_atomic(indent=1) is json.dumps(ensure_ascii=False, indent=1), byte for byte",
+          (d / "j.json").read_bytes()
+          == json.dumps(nested, ensure_ascii=False, indent=1).encode("utf-8"))
+    atomic.write_text_atomic(d / "x.txt", "old")
+
+    def crash_new():
+        with atomic.open_atomic(deep / "new" / "x.txt", makedirs=True) as f:
+            f.write("half")
+            raise OSError("disk full")
+    check("a failure after makedirs propagates", raises(crash_new, OSError) is not None)
+    check("… the temp is removed and no target appears",
+          os.listdir(deep / "new") == [])
+
+    def crash_old():
+        with atomic.open_atomic(d / "x.txt", makedirs=True) as f:
+            f.write("half")
+            raise OSError("disk full")
+    raises(crash_old, OSError)
+    check("… and an existing target is left whole",
+          (d / "x.txt").read_text() == "old" and not any(
+              n.startswith("x.txt.") and atomic.is_temp(n) for n in os.listdir(d)),
+          os.listdir(d))
+    shutil.rmtree(d / "raw")
 
     print("\n[2] single_instance.hold")
     lock = d / "locks" / "run.lock"
