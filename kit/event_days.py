@@ -5,6 +5,7 @@ calendar in `ssot/event_days.tsv` and hands the rows to the engines that need th
     2026-11-11  autumn_sale         sale
     2026-12-25  midyear_payday      payday
 
+  * `from_rows()`: the same rules over rows a pack holds elsewhere (a decision in its database), with no file to read;
   * `read()`: the file, strictly (a header with `date`, `name`, `kind`; each date an ISO day; a name and a kind in lower snake_case; a date and name
     once), as `Event` rows in date order. A problem is `registry_file_invalid` naming the line;
   * `days()` and `is_event()`: the set of dates, and the `is_event(iso_date)` that `kit.alerts.without_event_days` takes;
@@ -42,22 +43,31 @@ def _bad(path: Path | str, problem: str) -> SkillPackError:
     return SkillPackError(msg("registry_file_invalid", f"{path}: {problem}", path=str(path), problem=problem))
 
 
-def read(path: Path | str) -> list[Event]:
-    """The events of an `event_days.tsv`, in date order. A missing file is `registry_file_missing` (a pack with no calendar does not call this)."""
+def from_rows(rows: Iterable[dict], source: str = "the event days", *, first_row: int = 1) -> list[Event]:
+    """The events of `rows` ([{date, name, kind}]), in date order, under the same rules as the file: a pack that keeps its calendar elsewhere (a decision in its
+    database) hands over the rows and gets the same strictness, and the same `registry_file_invalid` naming the row (counted from `first_row`) and `source`."""
     events, seen = [], set()
-    for n, r in enumerate(read_tsv(path, COLUMNS), start=2):
+    for n, r in enumerate(rows, start=first_row):
+        absent = [c for c in COLUMNS if not isinstance(r, dict) or c not in r]
+        if absent:
+            raise _bad(source, f"row {n}: without {', '.join(absent)}")
         try:
             day = date.fromisoformat(r["date"])
-        except ValueError:
-            raise _bad(path, f"row {n}: {r['date']!r} is not a day (YYYY-MM-DD)") from None
+        except (TypeError, ValueError):
+            raise _bad(source, f"row {n}: {r['date']!r} is not a day (YYYY-MM-DD)") from None
         for col in ("name", "kind"):
-            if not WORD.match(r[col]):
-                raise _bad(path, f"row {n}: {col} {r[col]!r} is not lower snake_case")
+            if not isinstance(r[col], str) or not WORD.match(r[col]):
+                raise _bad(source, f"row {n}: {col} {r[col]!r} is not lower snake_case")
         if (day, r["name"]) in seen:
-            raise _bad(path, f"row {n}: {r['date']} {r['name']} is listed twice")
+            raise _bad(source, f"row {n}: {r['date']} {r['name']} is listed twice")
         seen.add((day, r["name"]))
         events.append(Event(day, r["name"], r["kind"]))
     return sorted(events, key=lambda e: (e.day, e.name))
+
+
+def read(path: Path | str) -> list[Event]:
+    """The events of an `event_days.tsv`, in date order. A missing file is `registry_file_missing` (a pack with no calendar does not call this)."""
+    return from_rows(read_tsv(path, COLUMNS), str(path), first_row=2)
 
 
 def days(events: Iterable[Event]) -> set[date]:
