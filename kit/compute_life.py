@@ -17,7 +17,7 @@ creative's complete, unblocked days. Every run replays everything from the days,
   * `compute()`: the replay of every creative, optionally only one state, one creative, one entity or one account.
 
 One document reads one set of creatives and derives its thresholds from them: a pack that reads two sources (two platforms' tables) calls it once for
-each, as their histories differ. A row's `spend7` and `conv7` (the last 7 counted days) are what `kit.compute_pacing` reads to size the performance wallet.
+each, as their histories differ. A row's `spend7` and `conv7` (the last 7 counted days, not rounded: they are fed forward) are what `kit.compute_pacing` reads to size the performance wallet.
 
 From the video-ads skill pack (`scripts/compute_life.py`, `_lib/life_data.py` `derive` and `pad_off_tail`, `_lib/life_view.py`; its cases are this
 module's test, over a synthetic fixture).
@@ -199,7 +199,7 @@ def compute(src: Source, k: dict, *, state: str | None = None, creative: str | N
                      "accounts": accounts, "entities": entities, "since": lf.since, "reason": lf.moves[-1].reason if lf.moves else None,
                      "moves": moves, "waiting": lf.waiting, "totals": lf.totals, "signal": life.signal(counted), "blocked_now": lf.blocked_now,
                      "review_due": lf.review_due, "last_day": counted[-1].date if counted else None,
-                     "spend7": round(sum(d.spend for d in counted[-life.WINDOW:]), 2), "conv7": sum(d.conversions for d in counted[-life.WINDOW:])})
+                     "spend7": sum(d.spend for d in counted[-life.WINDOW:]), "conv7": sum(d.conversions for d in counted[-life.WINDOW:])})
     rows.sort(key=lambda r: (ORDER.index(r["state"]), -r["totals"].get("spend", 0), r["creative"]))
     wallets = {"explore": 0.0, "perform": 0.0, "other": 0.0}
     for r in rows:
