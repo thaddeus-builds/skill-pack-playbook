@@ -426,7 +426,7 @@ def main() -> int:
 
     print("[9] a pack without markets, once per hub market")
     mh = root / "teahouse"
-    rc, out, err = run(HUB_PY, "new", "--hub", str(mh), "--title", "Tea", "--markets", "DN,DS",
+    rc, out, err = run(HUB_PY, "new", "--hub", str(mh), "--title", "Tea", "--markets", "NL,SE",
                        "--console-home", str(home))
     pm = fake_pack("demoa")
     for argv, what in ((["--skill-pack", str(pm)], "--market"),
@@ -435,26 +435,26 @@ def main() -> int:
         check(f"refused, exit 2: {what}", rc == 2 and what in err, err)
     own = fake_pack("demob")
     (own / "skill-pack.toml").write_text(
-        (own / "skill-pack.toml").read_text(encoding="utf-8") + 'markets = ["DN"]\n',
+        (own / "skill-pack.toml").read_text(encoding="utf-8") + 'markets = ["NL"]\n',
         encoding="utf-8")
     rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(own),
-                       "--market", "DN")
+                       "--market", "NL")
     check("refused, exit 2: --market for a pack with its own markets",
           rc == 2 and "keeps its own markets" in err, err)
-    for m in ("DN", "DS"):
+    for m in ("NL", "SE"):
         rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(pm),
                            "--market", m)
         check(f"add-pack --market {m}: a folder of its own", rc == 0
               and (mh / f"demoa-{m.lower()}" / "bin" / "demoa").is_file(), out + err)
     rc, out, err = run(HUB_PY, "add-pack", "--hub", str(mh), "--skill-pack", str(pm),
-                       "--market", "DN", "--folder", "other")
+                       "--market", "NL", "--folder", "other")
     check("refused, exit 2: the same pack for a market it already serves",
           rc == 2 and "already" in err, err)
     hj = json.loads((mh / "hub.json").read_text(encoding="utf-8"))
     check("hub.json records each folder's market and dispatch name",
           [(p_["folder"], p_["market"], p_["word"]) for p_ in hj["packs"]]
-          == [("demoa-dn", "DN", "demoa-dn"), ("demoa-ds", "DS", "demoa-ds")], hj["packs"])
-    for m in ("DN", "DS"):
+          == [("demoa-nl", "NL", "demoa-nl"), ("demoa-se", "SE", "demoa-se")], hj["packs"])
+    for m in ("NL", "SE"):
         r = subprocess.run([str(mh / "bin" / "hub"), f"demoa-{m.lower()}", "status"],
                            capture_output=True, text=True, timeout=60, env=clean_env())
         doc = json.loads(r.stdout or "{}")
@@ -466,15 +466,15 @@ def main() -> int:
               r.stdout + r.stderr)
     t = texts(mh)
     check("the console relays each folder's verbs under its name, one secret per prefix",
-          "demoa-dn facts confirm,demoa-dn decisions confirm" in t["bin/console"]
-          and "demoa-ds queue approve" in t["bin/console"]
+          "demoa-nl facts confirm,demoa-nl decisions confirm" in t["bin/console"]
+          and "demoa-se queue approve" in t["bin/console"]
           and t["bin/console"].count("DEMOA_CONFIRM_CODE_SECRET=") == 1, t["bin/console"])
     deny = json.loads(t[".claude/settings.json"])["permissions"]["deny"]
     check("the deny list holds each folder's gate verbs through bin/hub and its wrapper",
-          {"Bash(./bin/hub demoa-dn facts confirm:*)", "Bash(bin/hub demoa-ds queue approve:*)",
-           "Bash(./demoa-ds/bin/demoa facts confirm:*)"} <= set(deny), deny)
-    check("the pack folder's brief runs its gate through ../bin/hub demoa-dn",
-          "`../bin/hub demoa-dn …`" in t["demoa-dn/CLAUDE.md"])
+          {"Bash(./bin/hub demoa-nl facts confirm:*)", "Bash(bin/hub demoa-se queue approve:*)",
+           "Bash(./demoa-se/bin/demoa facts confirm:*)"} <= set(deny), deny)
+    check("the pack folder's brief runs its gate through ../bin/hub demoa-nl",
+          "`../bin/hub demoa-nl …`" in t["demoa-nl/CLAUDE.md"])
     r = subprocess.run([str(mh / "bin" / "hub"), "demoa", "status"], capture_output=True,
                        text=True, timeout=60, env=clean_env())
     check("the bare cli word is no dispatch name then", r.returncode == 2, r.stderr)
