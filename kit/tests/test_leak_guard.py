@@ -182,6 +182,11 @@ def main() -> int:
           and leak_guard.scan("X示Y", loaded) == ["line 1 of list 1"]
           and leak_guard.scan("bb", loaded) == ["line 4 of list 1"],
           (loaded.any and loaded.any.pattern, leak_guard.scan("X示Y", loaded)))
+    check("a floor, not a proof: two words side by side that spell a listed term are a hit "
+          "(kept on purpose), and a description with no listed term passes",
+          leak_guard.scan("a widget co sale", loaded) == ["line 3 of list 1"]
+          and leak_guard.scan("the maker of the widgets, a client in the north", loaded) == [],
+          leak_guard.scan("a widget co sale", loaded))
 
     r, terms, base = repo()
     commit(r, {"b.md": "a clean line\n"}, "ship it for Widgetco")
