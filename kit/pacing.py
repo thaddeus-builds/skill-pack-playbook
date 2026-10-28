@@ -6,7 +6,9 @@ the module returns the plan.
     still to reach needs at the proven creatives' efficiency (never more than the day's budget), *explore* is the rest. Flags,
     not floors: `shortfall`, `result_met`, `no_performance`, `flat`. An optional band (`explore_min_share`, `explore_max_share`
     of each day's budget) is the one floor and ceiling: it clips the day's exploration money into the band and says so
-    (`explore_floor`, `explore_cap`) with the performance need it gave up.
+    (`explore_floor`, `explore_cap`) with the performance need it gave up. Optional `event_days` (`kit.event_days`) are left out of the
+    weekday weights, and an event day is planned at the weight of its weekday times the lift the account's earlier event days showed
+    (`event_lift`); with none earlier it is planned as an ordinary day and the flag `event_no_history` says so.
   * `cap_status()`: a monthly cap against what is spent so far, at the recent run-rate: `ok`, `warn`, `projected_over`,
     `over_cap`, or `unknown` while the spend so far is only a lower bound (days missing: a crossing is proved, never its absence).
     `reach()` is the date a target is crossed at that rate.
@@ -29,14 +31,16 @@ def month_days(month: str) -> list[date]:
     return [date(y, m, d) for d in range(1, calendar.monthrange(y, m)[1] + 1)]
 
 
-def weekday_weights(daily_spend: dict[str, float], through: date, history_weeks: int, min_weeks: int) -> tuple[list[float], str, int]:
+def weekday_weights(daily_spend: dict[str, float], through: date, history_weeks: int, min_weeks: int,
+                    event_days: set[date] | None = None) -> tuple[list[float], str, int]:
     """(7 weights Monday..Sunday with mean 1, 'weighted' | 'flat', the least occurrences of a weekday). The history is the
-    complete days of the last `history_weeks` weeks up to `through`."""
+    complete days of the last `history_weeks` weeks up to `through`; an event day is not part of it (it is neither a day of its weekday
+    nor counted toward `min_weeks`)."""
     start = through - timedelta(days=7 * history_weeks - 1)
     sums, counts = [0.0] * 7, [0] * 7
     for iso, spend in daily_spend.items():
         d = date.fromisoformat(iso)
-        if start <= d <= through:
+        if start <= d <= through and not (event_days and d in event_days):
             sums[d.weekday()] += spend
             counts[d.weekday()] += 1
     least = min(counts)
@@ -49,9 +53,32 @@ def weekday_weights(daily_spend: dict[str, float], through: date, history_weeks:
     return [m / avg for m in means], "weighted", least
 
 
+def event_lift(daily_spend: dict[str, float], event_days: set[date], through: date, history_weeks: int,
+               by_weekday: bool) -> tuple[float | None, int]:
+    """(the lift of an event day over an ordinary one, the event days it was read from). Each earlier event day with spend gives its spend over
+    the mean of the history's ordinary days of its weekday (`by_weekday`: the weights are weighted) or over the mean ordinary day (flat weights); the
+    lift is the mean of those ratios. None with no earlier event day that spent, or no ordinary day to compare with."""
+    start = through - timedelta(days=7 * history_weeks - 1)
+    ordinary: dict[int, list[float]] = {k: [] for k in range(7)}
+    for iso, v in daily_spend.items():
+        d = date.fromisoformat(iso)
+        if start <= d <= through and d not in event_days:
+            ordinary[d.weekday()].append(v)
+    every = [v for vs in ordinary.values() for v in vs]
+    ratios = []
+    for iso, spend in daily_spend.items():
+        d = date.fromisoformat(iso)
+        if d in event_days and d <= through and spend > 0:
+            pool = ordinary[d.weekday()] if by_weekday else every
+            if pool and sum(pool) > 0:
+                ratios.append(spend / (sum(pool) / len(pool)))
+    return (sum(ratios) / len(ratios), len(ratios)) if ratios else (None, 0)
+
+
 def plan(month: str, spend_target: float, result_target: float | None, daily_spend: dict[str, float],
          daily_conv: dict[str, float], last_day: date, efficiency: float | None, history_weeks: int, min_weeks: int,
-         day: date | None = None, explore_min_share: float = 0.0, explore_max_share: float = 1.0) -> dict:
+         day: date | None = None, explore_min_share: float = 0.0, explore_max_share: float = 1.0,
+         event_days: set[date] | None = None) -> dict:
     """The plan for `day` (default: the day after `last_day`) and the days left of the month.
 
     efficiency: conversions per unit of money of the Performance creatives over their last 7 days, None when unknown.
@@ -62,13 +89,18 @@ def plan(month: str, spend_target: float, result_target: float | None, daily_spe
     if not 0.0 <= explore_min_share <= explore_max_share <= 1.0:
         raise ValueError(f"bad exploration band: {explore_min_share} to {explore_max_share} (0 <= min <= max <= 1)")
     can_perform = bool(efficiency and efficiency > 0)
+    event_days = set(event_days or ())
     days = month_days(month)
     elapsed = [d for d in days if d <= last_day]
     left = [d for d in days if d > last_day]
     spent = sum(v for iso, v in daily_spend.items() if date.fromisoformat(iso) in set(elapsed))
     conv = sum(v for iso, v in daily_conv.items() if date.fromisoformat(iso) in set(elapsed))
-    weights, kind, least = weekday_weights(daily_spend, last_day, history_weeks, min_weeks)
+    weights, kind, least = weekday_weights(daily_spend, last_day, history_weeks, min_weeks, event_days)
     w = {d: weights[d.weekday()] for d in days}
+    month_events = [d for d in days if d in event_days]
+    lift, lift_n = event_lift(daily_spend, event_days, last_day, history_weeks, kind == "weighted") if month_events else (None, 0)
+    for d in month_events:
+        w[d] *= lift or 1.0
     money_left = max(0.0, spend_target - spent)
     result_left = None if result_target is None else max(0.0, result_target - conv)
     wsum = sum(w[d] for d in left)
@@ -86,6 +118,8 @@ def plan(month: str, spend_target: float, result_target: float | None, daily_spe
             clip, need = "explore_cap", budget * (1 - explore_max_share)
         rows.append({"day": d.isoformat(), "weekday": d.strftime("%a"), "weight": round(w[d], 4),
                      "budget": round(budget, 2), "perform": round(need, 2), "explore": round(budget - need, 2)})
+        if d in event_days:
+            rows[-1]["event"] = True
         if clip:
             rows[-1]["explore_clip"] = clip
             if clip == "explore_floor":
@@ -103,11 +137,16 @@ def plan(month: str, spend_target: float, result_target: float | None, daily_spe
     if kind == "flat":
         flags.append("flat")
     flags.extend(sorted(flags_clip))
-    return {"month": month, "last_day": last_day.isoformat(), "weights": [round(x, 4) for x in weights], "weights_kind": kind,
+    if any(d in event_days for d in left) and lift is None:
+        flags.append("event_no_history")
+    out = {"month": month, "last_day": last_day.isoformat(), "weights": [round(x, 4) for x in weights], "weights_kind": kind,
             "weekday_weeks": least, "spend_to_date": round(spent, 2), "result_to_date": round(conv, 4),
             "money_left": round(money_left, 2), "result_left": None if result_left is None else round(result_left, 4),
             "days_left": len(left), "perform_need_total": None if perform_total is None else round(perform_total, 2),
             "pace_ratio": round(spent / even, 4) if even else None, "day": today, "days": rows, "flags": flags}
+    if event_days:
+        out.update(event_lift=None if lift is None else round(lift, 4), event_lift_days=lift_n, event_days_in_month=[d.isoformat() for d in month_events])
+    return out
 
 
 def reach(spent: float, target: float, rate: float, last: date, end: date) -> tuple[str, date | None]:
