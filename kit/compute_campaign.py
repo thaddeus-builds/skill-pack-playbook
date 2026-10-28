@@ -3,9 +3,9 @@ file, no platform: the pack reads its own tables into a `Source` (below) and the
 
     {as_of, market, currency, window {from, to, days}, params, kinds {source, n}, hold_weeks,
      campaigns [{campaign, name, type, kind, status, state, raw_state, reason, pending, first_spend, last_spend, budget {daily, basis},
-                 window {spend, revenue, roas, conversions, days}, previous {...}, use_share, benchmark {roas, basis, n},
+                 window {spend, revenue, roas, conversions, days[, matured {roas, low, high, revenue, conversions, share, immature}]}, previous {...}, use_share, benchmark {roas, basis, n},
                  creatives {<state>: count}, ctr, proposals [{action, evidence, message_code, ...}]}],
-     summary {<state>: count}, warnings, warning_codes}
+     summary {<state>: count}, maturity {observed_on, count {...}, value {...}} | None, warnings, warning_codes}
 
 The pack adds its own `meta` (the sources it read and how fresh they are). A proposal is a sentence with its evidence, never a write.
 
@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Callable
 
-from kit import lifecycle
+from kit import lifecycle, maturity
 from kit.contract import SkillPackError
 from kit.messages import Msg, coded, msg
 
@@ -65,6 +65,8 @@ class Source:
     kinds            [(regular expression, kind)] in the order the first match wins; [] = none
     kinds_file       what the pack calls that registry (for the warning and `kinds.source`)
     warnings         coded messages the pack's own reading raised, kept in the document
+    maturity         a `kit.maturity.Reading` (the count and value curves, the date these days were taken, which is after `as_of`), or None: then the windows are read as
+                     they were seen. With one, a window that includes recent days is read on the estimate and a rule it cannot decide gives `unjudged` for the reason `immature`
     """
     as_of: str | None
     currency: str | None
@@ -77,6 +79,7 @@ class Source:
     kinds: list = field(default_factory=list)
     kinds_file: str = "campaign kinds"
     warnings: list = field(default_factory=list)
+    maturity: object = None
 
 
 ReadAt = Callable[[str | None], Source]
@@ -107,6 +110,21 @@ def check(src: Source) -> None:
     for kind in src.kinds:
         if not isinstance(kind, (tuple, list)) or len(kind) != 2:
             raise _bad("kinds", "that are not (pattern, kind) pairs")
+    if src.maturity is not None:
+        if not isinstance(src.maturity, maturity.Reading):
+            raise _bad("maturity", "that is not a kit.maturity.Reading")
+        _day = _parse_day(src.maturity.observed_on)
+        if _day is None:
+            raise _bad("maturity.observed_on", f"{src.maturity.observed_on!r}, which is not a day (YYYY-MM-DD)")
+        if src.as_of is not None and _day <= date.fromisoformat(src.as_of):
+            raise _bad("maturity.observed_on", f"{src.maturity.observed_on}, which is not after the last complete day {src.as_of}")
+
+
+def _parse_day(value) -> date | None:
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def compile_kinds(kinds: list, file: str) -> list[tuple[re.Pattern, str]]:
@@ -141,7 +159,7 @@ def params(k: dict, doubt_spend: float | None) -> lifecycle.Params:
 
 def proposals(c: dict, v: lifecycle.Verdict, p: lifecycle.Params) -> list[dict]:
     """What a person could do, each with its evidence (never a write)."""
-    roas, bench = v.window["roas"], v.benchmark_roas
+    roas, bench = ((v.window.get("matured") or {}).get("roas") or v.window["roas"]), v.benchmark_roas
     out = []
 
     def add(action: str, m: Msg) -> None:
@@ -182,7 +200,13 @@ def proposals(c: dict, v: lifecycle.Verdict, p: lifecycle.Params) -> list[dict]:
 
 
 def _round(d: dict) -> dict:
-    return {k: (round(x, 2) if isinstance(x, float) else x) for k, x in d.items()}
+    return {k: (round(x, 2) if isinstance(x, float) else (_round(x) if isinstance(x, dict) else x)) for k, x in d.items()}
+
+
+def _revenue(w: dict) -> float:
+    """A window's revenue as it will come to when there is a reading of it, else as it was seen."""
+    m = w.get("matured")
+    return m["revenue"] if m else w["revenue"]
 
 
 def read(src: Source, k: dict, *, market: str) -> dict:
@@ -199,6 +223,11 @@ def read(src: Source, k: dict, *, market: str) -> dict:
                             "compared with the account's return", file=src.kinds_file))
     warnings.append(msg("campaign_thresholds_draft", "the campaign_* thresholds are drafts the owner has not confirmed yet: read the states as a "
                         "proposal, not a verdict", names=sorted(n for n in k if n.startswith("campaign_"))))
+    if src.maturity is not None:
+        for c_ in (src.maturity.count, src.maturity.value):
+            if c_.prior_only:
+                warnings.append(msg("campaign_maturity_prior_only", f"the {c_.kind} curve of the {c_.window}-day window is only the cold start ({c_.n_pairs} pairs seen, {src.maturity.params.min_pairs} needed): "
+                                    "the estimates are wide", kind=c_.kind, window=c_.window, have=c_.n_pairs, need=src.maturity.params.min_pairs))
     by_camp: dict[str, Counter] = defaultdict(Counter)
     window_start = (date.fromisoformat(as_of) - timedelta(days=p.window_days - 1)).isoformat()
     last7 = (date.fromisoformat(as_of) - timedelta(days=6)).isoformat()
@@ -228,7 +257,8 @@ def read(src: Source, k: dict, *, market: str) -> dict:
             cid, st.get("status"), src.days.get(cid, {}), budget,
             issue_share=(issue7[cid] / spend7[cid]) if spend7.get(cid) else 0.0, basis=basis, ctr=per[cid], ctr_account=account_weeks)
     kind = {cid: kind_of(src.campaigns.get(cid, {}).get("name"), kinds) for cid in ids}
-    win = {cid: lifecycle.windows(c.days, as_of, p)[0] for cid, c in camps.items()}
+    reading = src.maturity
+    win = {cid: lifecycle.windows(c.days, as_of, p, reading)[0] for cid, c in camps.items()}
 
     def benchmark(cid: str) -> tuple[float | None, str, int]:
         judged = [o for o in ids if o != cid and win[o]["spend"] >= p.judge_spend and win[o]["conversions"] >= p.min_conversions
@@ -236,13 +266,13 @@ def read(src: Source, k: dict, *, market: str) -> dict:
         same = [o for o in judged if kind[cid] != UNCLASSIFIED and kind[o] == kind[cid]]
         pool, label = (same, f"kind {kind[cid]}") if len(same) >= 2 else (judged, "the account's other campaigns")
         spend = sum(win[o]["spend"] for o in pool)
-        return ((sum(win[o]["revenue"] for o in pool) / spend) if spend > 0 else None), label, len(pool)
+        return ((sum(_revenue(win[o]) for o in pool) / spend) if spend > 0 else None), label, len(pool)       # on what each will come to, not on its understated tail
 
     rows = []
     for cid in ids:
         c = camps[cid]
         bench, bbasis, bn = benchmark(cid)
-        v = lifecycle.judge(c, as_of, p, bench)
+        v = lifecycle.judge(c, as_of, p, bench, reading)
         spent = sorted(d for d, x in c.days.items() if x[0] > 0)
         info = src.campaigns.get(cid, {})
         row = {"campaign": cid, "name": info.get("name"), "type": info.get("type"), "kind": kind[cid], "status": c.status, "state": v.state,
@@ -256,6 +286,8 @@ def read(src: Source, k: dict, *, market: str) -> dict:
     return {"as_of": as_of, "market": market, "currency": src.currency,
             "window": {"from": window_start, "to": as_of, "days": p.window_days},
             "params": {f: getattr(p, f) for f in PARAM_FIELDS}, "kinds": {"source": src.kinds_file if kinds else None, "n": len(kinds)},
+            "maturity": None if src.maturity is None else {"observed_on": src.maturity.observed_on, **{k_: {"tau": c_.tau, "family": c_.family, "prior_only": c_.prior_only,
+                                                                                                    "fitted_on": c_.fitted_on} for k_, c_ in (("count", src.maturity.count), ("value", src.maturity.value))}},
             "campaigns": rows, "summary": dict(Counter(r["state"] for r in rows)), "hold_weeks": p.hold_weeks, **coded("warnings", warnings)}
 
 

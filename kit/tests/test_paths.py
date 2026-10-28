@@ -4,6 +4,8 @@
   * unset / blank <P>_DATA_DIR -> data_dir_unset, next naming the var;
   * a relative value -> data_dir_not_absolute (it would be cwd-relative);
   * `~` expands; <P>_DB overrides the DB (relative = under the data dir);
+  * raw_dir(): <P>_RAW overrides, relative = under the data dir, default
+    <DATA_DIR>/raw; resolve() does not list it (its default output is fixed);
   * resolve() never raises; inside_repo() is the checkout and below only.
 """
 
@@ -76,7 +78,30 @@ def main() -> int:
           paths.resolve() == {"SHOP_DATA_DIR": None, "SHOP_DB": None})
     os.environ["SHOP_DATA_DIR"] = str(data)
 
-    print("\n[3] inside_repo")
+    print("\n[3] the raw root")
+    os.environ.pop("SHOP_RAW", None)
+    check("default: <DATA_DIR>/raw", paths.raw_dir() == data / "raw")
+    os.environ["SHOP_RAW"] = str(data / "elsewhere")
+    check("SHOP_RAW absolute: used as is", paths.raw_dir() == data / "elsewhere")
+    os.environ["SHOP_RAW"] = "sub/raw"
+    check("SHOP_RAW relative: under the data dir",
+          paths.raw_dir() == data / "sub" / "raw")
+    os.environ["SHOP_RAW"] = "  "
+    check("SHOP_RAW blank: the default", paths.raw_dir() == data / "raw")
+    os.environ["SHOP_RAW"] = "~/raw-x"
+    check("SHOP_RAW ~ expands", paths.raw_dir() == Path("~/raw-x").expanduser())
+    os.environ["SHOP_RAW"] = "sub/raw"
+    check("resolve() does not list SHOP_RAW, set or not",
+          paths.resolve() == {"SHOP_DATA_DIR": str(data),
+                              "SHOP_DB": str(data / "shop.db")})
+    del os.environ["SHOP_RAW"]
+    del os.environ["SHOP_DATA_DIR"]
+    e = raises(paths.raw_dir, SkillPackError)
+    check("raw_dir() with no data dir: data_dir_unset",
+          e is not None and e.message.code == "data_dir_unset", e)
+    os.environ["SHOP_DATA_DIR"] = str(data)
+
+    print("\n[4] inside_repo")
     root = cfg.root
     check("the checkout itself and anything below it",
           paths.inside_repo(root) and paths.inside_repo(root / "data" / "x"))
