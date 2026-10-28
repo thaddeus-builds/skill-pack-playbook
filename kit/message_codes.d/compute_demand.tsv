@@ -1,0 +1,5 @@
+code	params	meaning_en	meaning_zh
+pacing_demand_unknown	month	{month}: what it takes to judge one creative (doubt_spend) is not known yet: no number of creatives to ask for	{month}：判断一条素材要花多少（存疑线）还不知道：不给要向制作方要多少条素材
+pacing_money_limited	month,need,capacity	{month}: the proven creatives will fade and the exploration money can carry {capacity} new ones to a verdict, {need} are needed: raise the exploration share or accept a lower result	{month}：效果素材会衰退，探索预算只够把 {capacity} 条新素材带到有结论，需要 {need} 条：提高探索占比，或接受较低的结果
+pacing_surplus	month,need,capacity	{month}: the exploration money can carry {capacity} new creatives to a verdict and {need} are needed to replace the fading ones: the rest explores new directions	{month}：探索预算可把 {capacity} 条新素材带到有结论，替换衰退的素材需要 {need} 条：其余用来探索新方向
+pacing_limit_binds	month,limit	{month}: the platform's {limit} bound the request	{month}：平台的 {limit} 限制了这次请求
