@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Kit
+- `kit/tools/leak_guard.py` (issue #165, seen once in adcut): the docstring says it is a floor, not a proof: it matches across a word break on purpose, sees only listed terms, and runs at push alone, so a client described without a listed term, issue text and a release note pass. `.github/PULL_REQUEST_TEMPLATE.md` gets the checklist line that a person or agent reads the diff, release note and issue text for such a description. A test pins the across-words match so nobody "fixes" it into a miss. No behaviour change. Tested in `kit/tests/test_leak_guard.py`.
+- Skill packs: nothing
+
 ### Other
 - `console/` (issue #152, seen once in adcut): the manifest takes an optional `page_only_verbs` list, relay verb prefixes that only a button the skill pack's own page draws may run (a click that grants a mode or a spending period). `ask.py add` refuses an ask whose gate is one of them, and the console refuses to run one when such an ask is answered, so an ask written some other way (or posted with no manifest) is dead; before, any agent that could run `ask.py add` could post a card whose click opened an auto mode. Each page-only verb must start with a relay verb. A manifest without the key behaves as before. Tested in `console/tests/test_manifest.py` and `test_frame_serve.py`. A pack that uses the key re-vendors the console first (an older console refuses an unknown key). No kit change.
 
