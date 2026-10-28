@@ -1,8 +1,8 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-27
+Updated: 2026-10-28
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
-- [N2] 2026-10-23 turn 2 (#20), now that the checkouts are read: bring the two skill packs in use to one kit version (the RedNote skill pack is out of it, R8). Where they stand (D21): the KOL skill pack 0.32.0 and adcut 0.33.0 (RedNote 0.5.0 with local changes in 15 kit files, unused); playbook 0.35.0. Start with `python3 tools/fleet.py status` on full clones (a shallow clone cannot tell an older file from a local one), upstream or drop each local change, then re-vendor one skill pack per merge request
+- [N2] 2026-10-28 turn 2 (#20, closed), one kit version: on 2026-10-28 the main branches of 16 skill packs hold kit 0.44.0 to 0.46.0 and none has an edited vendored file (each checked against its own MANIFEST.sha256); the playbook is 0.46.0 plus what is unreleased (ads-core `daily` and `audit`, `autonomy.signed()`, copylint `withdrawn`, console `page_only_verbs`). What is left is the weekly train on a day the owner names: set `kit/VERSION` (a minor, there are new modules), run `python3 kit/tools/manifest.py kit`, then `python3 tools/fleet.py update PATH...` and one merge request per green pack (docs/maintaining.md, "The release train"). The RedNote skill pack stays out of it (R8)
 ## Waiting on owner
 - [W1] 2026-10-05 Anthropic source links in the README (#23): allow-list `www.anthropic.com` in the console leak scan and restore the three links (recommended); "no" leaves sources named by title only. unblocks: X4
 - [W2] 2026-10-05 does the SEO skill pack migrate onto the kit; does the outreach scraper take only the guide (#26)? Recommended: migrate SEO after selective vendoring; outreach takes the guide only. unblocks: X6
