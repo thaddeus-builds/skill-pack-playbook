@@ -43,6 +43,15 @@ The pack stores each fitted curve (`to_dict`) with its `fitted_on` day and the d
 
 Observations: every export of a day with the time it was taken. A pack that already keeps every export (the ledger, raw) rebuilds this table from raw; it is a cache, never a source. Per key it chooses what is pooled: an account, a campaign type, an attribution setting. Then days to read: `{day, spend, count, value}` with the date they were taken, and the two curves: a `maturity.Reading(count, value, observed_on, params)`, which the three hooks below take.
 
+**Where the pairs come from (seen once, on the first real account, 2026-10-29).** A fit needs the same `(key, day)` seen at two ages, one before the window closes and one at or after it. So:
+
+- A pack with no daily pull gets pairs only by **repeating the export on consecutive days**, each time over the same trailing range (at least `W + 1` days: then every day has a reading at each age from 0 to `W - 1` and a final one). A one-time history download gives none: every old day is seen once, at one very late age. Plan for about eight days of daily exports before a fit leaves the prior; the first pack had 6 usable pairs against the 30 the fit needs, and one distinct early age against three.
+- **Spacing in days is what matters.** A second download inside the same day returns the same numbers for settled days and adds nothing.
+- **The age is in the account's own days.** Age 0 is the account's day, so a pack must convert the time an export was taken to the account's time zone before it counts days (the first pack had counted UTC days, which moved a day's age by one for an account eight hours ahead). With a platform that exports part-way through the day, that day is age 0 and partial.
+- **What six pairs did show:** age `W - 1` against age `W` was exactly 1.0 for counts and value, nothing arrived on the last day, which fits `F = 1` at `W`. It says nothing about the shape below.
+
+Until a fit leaves the prior (`prior_only` is true) the interval is the prior's, wide by design, and cannot be called calibrated or not; the check that the 90 % interval holds about nine times in ten needs days that were read young and then settled, so it waits for those days.
+
 ## The hooks: where a judgement reads the estimate
 
 Given a `Reading`, three places read a window on the estimate and none gives a verdict the interval cannot back. Without one they are exactly as they were.
