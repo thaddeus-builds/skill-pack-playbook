@@ -92,6 +92,21 @@ def main() -> int:
                               "--code 042317 --relay-user <sender_id> "
                               "--relay-at <iso_time>"]
           and set(doc) == FAILURE_KEYS | {"subject"}, doc)
+    ch.need_quote = True
+    rc, out, err = run_fail(ch, True, ("shop", "facts", "confirm", "k"))
+    doc = one_doc(out)
+    check("a challenge with need_quote true: the hint ends with "
+          "--relay-quote; the other keys are the same",
+          doc["next"] == ["shop facts confirm k --code 042317 --relay-user "
+                          "<sender_id> --relay-at <iso_time> "
+                          "--relay-quote <their_words>"]
+          and set(doc) == FAILURE_KEYS | {"subject"}, doc)
+    ch.need_quote = False
+    rc, out, err = run_fail(ch, True, ("shop", "facts", "confirm", "k"))
+    check("need_quote false: the hint is the default one",
+          one_doc(out)["next"] == ["shop facts confirm k --code 042317 "
+                                   "--relay-user <sender_id> --relay-at "
+                                   "<iso_time>"], out)
     bad = Path(tmp_dir("broken-"))
     (bad / "skill-pack.toml").write_text(
         '[skill_pack]\nname = "x"\ncli = "x"\nenv_prefix = "X"\n'
