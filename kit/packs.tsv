@@ -60,6 +60,7 @@ compute_allocate	ads-core	the allocation document: the performance wallet's spli
 daily	ads-core	the day's advice of the three layers as one list of items under stable ids; answered ones that no longer come up are solved
 event_days	ads-core	the account's event days: a calendar of sale, payday and holiday days, read strictly, left out of the weekday weights
 event_catalogue	ads-core	the public events a client may pick its event days from, by market and year: fixed, rule or table dates, never a guess
+maturity	ads-core	how much of a day's final number is visible at an age: a curve fitted from restated numbers, a recent day read as a matured estimate with an interval, a verdict that waits when the interval straddles
 audit	ads-core	the account audit's rules over a pack's facts: a finding is a code, a severity and its numbers; the wording stays in the pack
 creative_life	creative	a creative's state machine: testing, learning, doubt, mature, declining, parked, ended; the wallet it spends from
 creative_portfolio	creative	a portfolio of creatives over time: trend, projection, half-life, yield, what closing a gap takes
