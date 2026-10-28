@@ -2,8 +2,9 @@
 
 Equal marginal return, in bounded steps (the KKT condition of a concave allocation, water-filling with a box): money moves from a
 campaign whose marginal return is under the common level to one above it, by at most `step` a day (`fast_step` when the sign has
-held `fast_days` days and the evidence separates), only when the evidence excludes zero, and not again before the cooldown. Every
-number is a field of `Params`. Nothing here writes: the output is a proposal and its replay.
+held `fast_days` days and the evidence separates), only when the evidence excludes zero, and not again before the cooldown. An
+optional `weekly_step_cap` bounds what the steps add up to: a campaign's budget stays within that share of what it was a week
+ago, however many small moves it took to get there. Every number is a field of `Params`. Nothing here writes: the output is a proposal and its replay.
 
 From the video-ads skill pack (`allocation`).
 
@@ -27,6 +28,10 @@ class Params:
     e_min: float = 0.2
     e_max: float = 1.0
     prior_sd: float = 0.2
+    weekly_step_cap: float | None = None    # the most a campaign's budget may change, compounded, over `WEEK` days; None: no cap (the kit ships no figure)
+
+
+WEEK = 7
 
 
 @dataclass
@@ -94,6 +99,16 @@ def solve(items: list[dict], total: float) -> float:
     return math.sqrt(lo * hi)
 
 
+def weekly_room(arm: Arm, today: int, p: Params) -> tuple[float, float] | None:
+    """(lowest, highest) budget the weekly cap allows `arm` today, or None without a cap. The reference is what the budget was before the earliest move of the
+    last `WEEK` days (its `from`), so the moves of the week compound against it; a budget already outside the band (the cap was set late) may only come back."""
+    if p.weekly_step_cap is None:
+        return None
+    week = [m for m in arm.moves if today - m["day"] < WEEK]
+    ref = week[0]["from"] if week else arm.budget
+    return min(ref * (1 - p.weekly_step_cap), arm.budget), max(ref * (1 + p.weekly_step_cap), arm.budget)
+
+
 def day(arms: list[Arm], inputs: dict, today: int, p: Params, fast: bool = True) -> list[dict]:
     """One day's decision over the arms of the performance wallet. `inputs[id]` = {e, se_e, roas, conversions}; returns the moves made today
     [{id, from, to, level, z, cap}] and updates the arms (budget, last_move, streak).
@@ -101,7 +116,9 @@ def day(arms: list[Arm], inputs: dict, today: int, p: Params, fast: bool = True)
     1. the level lambda_u without the boxes (the equal-marginal point) and each campaign's z = (m - lambda_u)/se: the evidence;
     2. a campaign with no evidence (|z| under `evidence_z`) keeps its budget and its run is reset; one with evidence extends its run on its side;
     3. a campaign in its cooldown keeps its budget; the others move to the box solution over their own total, the box being `step` (or `fast_step` after
-       `fast_days` days on one side, when `fast`) either way."""
+       `fast_days` days on one side, when `fast`) either way;
+    4. with a `weekly_step_cap`, the box is also kept inside what the cap leaves of the campaign's week (`weekly_room`) before the money is
+       solved, so the money still adds up; a move the cap shortened carries `weekly_cap: True`."""
     live = [a for a in arms if a.id in inputs and a.budget > 0]
     if len(live) < 2:
         return []
@@ -128,7 +145,11 @@ def day(arms: list[Arm], inputs: dict, today: int, p: Params, fast: bool = True)
     for a in movers:
         cap = p.fast_step if (fast and a.streak >= p.fast_days) else p.step
         i = inputs[a.id]
-        items.append({"a": a, "b": a.budget, "m": i["m"], "e": i["e"], "lo": a.budget * (1 - cap), "hi": a.budget * (1 + cap), "cap": cap})
+        lo, hi, room = a.budget * (1 - cap), a.budget * (1 + cap), weekly_room(a, today, p)
+        weekly = room is not None and (room[0] > lo or room[1] < hi)
+        if room is not None:
+            lo, hi = max(lo, room[0]), min(hi, room[1])
+        items.append({"a": a, "b": a.budget, "m": i["m"], "e": i["e"], "lo": lo, "hi": hi, "cap": cap, "weekly": weekly})
     level = solve(items, sum(a.budget for a in movers))
     out = []
     for it in items:
@@ -137,6 +158,8 @@ def day(arms: list[Arm], inputs: dict, today: int, p: Params, fast: bool = True)
         if abs(new - a.budget) / a.budget < 0.005:
             continue
         move = {"id": a.id, "from": round(a.budget, 2), "to": round(new, 2), "level": round(level, 3), "z": round(inputs[a.id]["z"], 2), "cap": it["cap"]}
+        if it["weekly"] and (abs(new - it["lo"]) < 1e-9 or abs(new - it["hi"]) < 1e-9):
+            move["weekly_cap"] = True
         a.moves.append({**move, "day": today})
         a.budget, a.last_move = new, today
         out.append(move)
@@ -154,8 +177,8 @@ def clip_move(frm: float, to: float, lo: float | None, hi: float | None) -> tupl
 
 def held_reason(arm: Arm, i: dict | None, today: int, p: Params) -> str:
     """Why a campaign in the performance wallet gets no move today: `no_reading` (no return to read), `too_few` (fewer than two campaigns to move money between),
-    `no_evidence` (its marginal return is not apart from the common level), `cooldown` (it moved lately), `no_counterpart` (the evidence is there but nothing to move
-    the money to or from)."""
+    `no_evidence` (its marginal return is not apart from the common level), `cooldown` (it moved lately), `weekly_cap` (the evidence points a way and the
+    week's cap leaves no room that way), `no_counterpart` (the evidence is there but nothing to move the money to or from)."""
     if i is None:
         return "no_reading"
     if "z" not in i:
@@ -164,6 +187,9 @@ def held_reason(arm: Arm, i: dict | None, today: int, p: Params) -> str:
         return "no_evidence"
     if arm.last_move is not None and today - arm.last_move < p.cooldown_days:
         return "cooldown"
+    room = weekly_room(arm, today, p)
+    if room is not None and (room[1] <= arm.budget * 1.005 if arm.side > 0 else room[0] >= arm.budget * 0.995):
+        return "weekly_cap"
     return "no_counterpart"
 
 
