@@ -107,6 +107,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import markets as iso_markets  # noqa: E402
 import new_client  # noqa: E402
 from new_client import CLIENT_RE, RELAYED, Refused  # noqa: E402
 
@@ -628,10 +629,10 @@ def cmd_new(a) -> int:
     if hub.exists() and (not hub.is_dir() or any(hub.iterdir())):
         raise Refused(f"{hub} exists and is not empty")
     markets = [m.strip() for m in (a.markets or "").split(",") if m.strip()]
-    bad = [m for m in markets if not MARKET_RE.fullmatch(m)]
-    if bad or len(set(markets)) != len(markets):
-        raise Refused(f"--markets {a.markets!r}: plain words (letters, digits, "
-                      f"'_', '-'), each once")
+    try:
+        iso_markets.check(markets)
+    except ValueError as e:
+        raise Refused(f"--markets {a.markets!r}: {e}") from None
     currencies = [c.strip() for c in (a.currencies or "").split(",") if c.strip()]
     if any(not CURRENCY_RE.fullmatch(c) for c in currencies) or len(set(currencies)) != len(currencies):
         raise Refused(f"--currencies {a.currencies!r}: ISO 4217 codes (HKD, EUR, ...), each once")
