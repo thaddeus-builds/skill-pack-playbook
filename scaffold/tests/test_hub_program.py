@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """scaffold/hub/: a client hub's own facts program, as new_hub.py binds it.
 
-  [1] `new --markets DA,DB` writes hub/bin/hub (executable, parses),
+  [1] `new --markets DE,DK` writes hub/bin/hub (executable, parses),
       hub/defs/skill-pack.toml (cli hub, prefix HUB, the markets) and
       hub/defs/fact_keys.tsv (the shared keys, read by the kit's strict
       registry); `--markets` omitted = no partition; hub/hub.db,
@@ -69,7 +69,7 @@ def main() -> int:
 
     print("[1] new --markets: the hub's facts program, bound")
     r = subprocess.run([sys.executable, str(HUB_PY), "new", "--hub", str(hub),
-                        "--title", "Demo Hub", "--markets", "DA,DB"],
+                        "--title", "Demo Hub", "--markets", "DE,DK"],
                        capture_output=True, text=True, timeout=120, env=env())
     check("written", r.returncode == 0 and hub.is_dir(), r.stdout + r.stderr)
     w = hub / "hub" / "bin" / "hub"
@@ -79,7 +79,7 @@ def main() -> int:
     toml = (hub / "hub" / "defs" / "skill-pack.toml").read_text(encoding="utf-8")
     check("its skill-pack.toml: cli hub, prefix HUB, the markets",
           'cli = "hub"' in toml and 'env_prefix = "HUB"' in toml
-          and 'markets = ["DA", "DB"]' in toml, toml)
+          and 'markets = ["DE", "DK"]' in toml, toml)
     rows = registry.read_tsv(hub / "hub" / "defs" / "fact_keys.tsv",
                              ["key", "group", "type", "unit", "min", "max",
                               "label_en", "label_zh", "why"], id_col="key")
@@ -120,14 +120,14 @@ def main() -> int:
         check(f"it says {want}", want in brief, brief)
     pa = fake_pack("demoa")
     r = subprocess.run([sys.executable, str(HUB_PY), "add-pack", "--hub",
-                        str(hub), "--skill-pack", str(pa), "--market", "DA"],
+                        str(hub), "--skill-pack", str(pa), "--market", "DE"],
                        capture_output=True, text=True, timeout=120, env=env())
     brief = (hub / "CLAUDE.md").read_text(encoding="utf-8")
     check("add-pack rewrites it: the pack folder by its name, its market, "
-          "its gate verbs, --packs demoa-da",
-          r.returncode == 0 and "packs: `demoa-da` (DA)" in brief
-          and "`demoa-da facts confirm, facts restore, decisions confirm, "
-          "queue approve`" in brief and "--packs demoa-da" in brief,
+          "its gate verbs, --packs demoa-de",
+          r.returncode == 0 and "packs: `demoa-de` (DE)" in brief
+          and "`demoa-de facts confirm, facts restore, decisions confirm, "
+          "queue approve`" in brief and "--packs demoa-de" in brief,
           r.stdout + r.stderr + brief)
 
     print("[3] bin/hub hub …: the kit's facts verbs over <hub>/hub/hub.db")
@@ -144,23 +144,23 @@ def main() -> int:
     rc, doc, out = hub_cli(hub, "facts", "list", "--json")
     check("facts list answers (no no_db) and both markets' declarations "
           "are pending, none confirmed",
-          rc == 0 and doc["pending_markets"] == ["DA", "DB"]
+          rc == 0 and doc["pending_markets"] == ["DE", "DK"]
           and doc["declared_markets"] == []
           and all(f["is_assumption"] == 1 for f in doc["facts"])
           and [f["key"] for f in doc["facts"]] == ["market_declared"] * 2, out)
     rc, doc, out = hub_cli(hub, "facts", "init", "--json",
-                           stdin="DA\n\n\n\n\n\n\n\n")
-    check("a second facts init (piped) changes nothing: DA stays pending",
+                           stdin="DE\n\n\n\n\n\n\n\n")
+    check("a second facts init (piped) changes nothing: DE stays pending",
           rc == 0 and doc["declaration"] == "pending"
           and doc["written"] == [], out)
     rc, doc, out = hub_cli(hub, "pending", "--hub", "--json")
     a = (doc or {}).get("asks", [{}])[0]
     check("pending --hub: the ask id and gate verb start with `hub`",
-          rc == 0 and a["id"].startswith("hub-market-da-")
+          rc == 0 and a["id"].startswith("hub-market-de-")
           and a["gate"]["verb"] == ["hub", "facts", "confirm",
                                     "market_declared"], out)
     sec = {"HUB_CONFIRM_CODE_SECRET": "s3cret"}
-    cmd = ["facts", "confirm", "market_declared", "--market", "DA",
+    cmd = ["facts", "confirm", "market_declared", "--market", "DE",
            "--reason", "owner", "--json"]
     rc, doc, out = hub_cli(hub, *cmd, **sec)
     code = ((doc or {}).get("params") or {}).get("confirm_code")
@@ -170,11 +170,11 @@ def main() -> int:
     check("the relayed code confirms it, @relay",
           rc == 0 and doc["changed_by"].endswith("@relay"), out)
     rc, doc, out = hub_cli(hub, "facts", "set", "currency", "HKD", "--market",
-                           "DA", "--source", "owner_call", "--reason", "owner",
+                           "DE", "--source", "owner_call", "--reason", "owner",
                            "--json")
     check("a shared key set at the hub is pending",
           rc == 0 and doc["change"] == "new", out)
-    cmd = ["facts", "confirm", "currency", "--market", "DA", "--reason",
+    cmd = ["facts", "confirm", "currency", "--market", "DE", "--reason",
            "owner", "--json"]
     rc, doc, out = hub_cli(hub, *cmd, **sec)
     code = ((doc or {}).get("params") or {}).get("confirm_code")
@@ -182,9 +182,9 @@ def main() -> int:
     check("… and confirmed through the gate",
           rc == 0 and doc["confirmed"][0]["is_assumption"] == 0, out)
     rc, doc, out = hub_cli(hub, "doctor", "--strict", "--json")
-    check("doctor --strict warns while DB's declaration waits for a person",
+    check("doctor --strict warns while DK's declaration waits for a person",
           rc != 0 and not doc["healthy"], out)
-    cmd = ["facts", "confirm", "market_declared", "--market", "DB",
+    cmd = ["facts", "confirm", "market_declared", "--market", "DK",
            "--reason", "owner", "--json"]
     rc, doc, out = hub_cli(hub, *cmd, **sec)
     code = ((doc or {}).get("params") or {}).get("confirm_code")
@@ -214,7 +214,7 @@ def main() -> int:
               + r.stderr + out)
     check("… the markets' declarations pending again, the flat hub has none "
           "to declare", hub_cli(hub, "facts", "list", "--json")[1]
-          ["pending_markets"] == ["DA", "DB"]
+          ["pending_markets"] == ["DE", "DK"]
           and hub_cli(flat, "facts", "list", "--json")[1]["facts"] == [])
     r = subprocess.run([sys.executable, str(HUB_PY), "init-facts", "--hub",
                         str(root / "nothing")], capture_output=True, text=True,

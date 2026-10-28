@@ -2,7 +2,7 @@
 """Generate a new skill pack skeleton: green before its first feature.
 
     python3 scaffold/new_skill_pack.py --name acme-skill-pack --cli acme \\
-        --prefix ACME --dir ../acme-skill-pack [--markets AA,BB] \\
+        --prefix ACME --dir ../acme-skill-pack [--markets HK,TW] \\
         [--packs compliance,data] [--owner @handle] [--repo-home WHERE] \\
         [--langs en,zh] [--dry-run]
     python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack --update-kit
@@ -63,6 +63,8 @@ TEMPLATES = PLAYBOOK / "templates"
 SKELETON = Path(__file__).resolve().parent / "skeleton"
 sys.path.insert(0, str(PLAYBOOK))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import markets as iso_markets  # noqa: E402
 from kit.tools import packs as kit_packs, vendor  # noqa: E402
 
 # the pre-push hook the next steps install (kit/tools/leak_guard.py)
@@ -161,7 +163,6 @@ DAY_ONE = {
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
 CLI = re.compile(r"^[a-z][a-z0-9]{1,15}$")
 PREFIX = re.compile(r"^[A-Z][A-Z0-9]{1,15}$")
-MARKET = re.compile(r"^[A-Za-z0-9_-]{1,16}$")
 LANG = re.compile(r"^[a-z]{2,3}$")
 TAKEN = {"kit", "verbs", "facts", "decisions", "pending", "compute_stories",
          "queue_actions", "execute_actions", "console", "test", "tests"}
@@ -344,10 +345,10 @@ def values_of(a: argparse.Namespace) -> tuple[dict[str, str], list[str],
         raise Refused(f"--cli {a.cli!r} is a script or folder name the "
                       f"skeleton already uses")
     markets = [m.strip() for m in (a.markets or "").split(",") if m.strip()]
-    if any(not MARKET.match(m) for m in markets) \
-            or len(set(markets)) != len(markets):
-        raise Refused(f"--markets {a.markets!r}: distinct plain codes, e.g. "
-                      f"AA,BB")
+    try:
+        iso_markets.check(markets)
+    except ValueError as e:
+        raise Refused(f"--markets {a.markets!r}: {e}") from None
     langs = [x.strip() for x in (a.langs or "en,zh").split(",") if x.strip()]
     if not langs or langs[0] != "en" or any(not LANG.match(x) for x in langs) \
             or len(set(langs)) != len(langs):
