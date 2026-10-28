@@ -21,6 +21,9 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (a pack that reads a hub key adds `owner = hub` to its row, or lists the key with it; video-ads' `npr_roas` is the first)
 
 ### Other
+- `scaffold/new_hub.py` (issue #254, seen once in a client hub, 2026-10-28): `new` now makes the hub's facts store: it runs the hub's own `facts init` piped once per market of `--markets`, every answer blank, so `hub/hub.db` exists and `bin/hub hub facts list` answers instead of `no_db`; each market's declaration is pending and a person still confirms it on the console (the scaffold confirms nothing and asks no scope `--markets` did not answer). New verb `init-facts --hub DIR` does the same for a hub made earlier that has no store, and refuses one that has. Tested in `scaffold/tests/test_hub_program.py` and `test_new_hub.py`. `docs/consoles.md` says it. No kit change.
+
+### Other
 - `tools/adoption.tsv` and `ROADMAP.md` N2 (2026-10-28): the kit versions of adcut (0.44.0), creator-program (0.45.0), geo-china (0.45.0) and ecommerce-seo (0.46.0) are as read from each pack's `origin/main` (GitLab and GitHub clones fetched that day); every one of the 16 packs vendoring the kit matches its own `MANIFEST.sha256`, so nothing has been edited by hand. N2 no longer says the packs sit on 0.32.0 and 0.33.0: what is left of it is the weekly train. The other columns of those rows keep their earlier check date. No kit change.
 
 ### Other
