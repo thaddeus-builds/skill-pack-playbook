@@ -1,5 +1,5 @@
 # Agent Harness Playbook roadmap
-Updated: 2026-10-28
+Updated: 2026-10-29
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
 - [N2] 2026-10-28 turn 2 (#20, closed), one kit version: on 2026-10-28 the main branches of 16 skill packs hold kit 0.44.0 to 0.46.0 and none has an edited vendored file (each checked against its own MANIFEST.sha256); the playbook is **0.47.0** since 2026-10-28 (D25), so every pack is behind. What is left is the re-vendor: `python3 tools/fleet.py update PATH...` makes a worktree per pack and runs its suite, then one merge request per green pack (docs/maintaining.md, "The release train"); it writes into the packs' repositories, so it waits for the owner's word (W8). The RedNote skill pack stays out of it (R8)
