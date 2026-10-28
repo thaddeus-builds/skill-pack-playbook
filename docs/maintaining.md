@@ -45,6 +45,7 @@ The agent can write to this repository (GitHub) and can attach a skill pack repo
 - One **read-only** token per GitLab server, set up in the cloud environment's settings, not typed in chat and not written to any file. Name it `GITLAB_TOKEN`. Add the GitLab host to the environment's allowed domains. A new session reads it; a running one does not.
 - Fine-grained GitLab tokens are denied by default, so each permission has to be ticked. What worked: **Project: Read** and **Code: Download**, for the projects the agent should read. That is enough to read and clone a project whose path the agent is told.
 - Add **User: Read** and **Group: Read** only if you want the agent to find projects itself. Without them the agent can read a project it is given by name, but cannot list projects.
+- Name the host on every call. `glab` run outside a checkout (a scratch directory has no git remote) defaults to gitlab.com and answers `401 Unauthorized`, `404 Project Not Found` or a TLS timeout, which looks like a bad token. Set `GITLAB_HOST` (or pass `--hostname`) and prefer a call from a worktree; read the host in the error's URL before blaming the token. The playbook itself is on GitHub, the packs on a private GitLab, so the wrong host is easy to reach. Seen once, in adcut (issue #166).
 - Scope it to the skill pack projects (or their group), not the whole server. Give it a short life, a few days, and delete it when the work is done.
 
 **To change a skill pack (upgrading its kit copy, a fix there):**

@@ -12,6 +12,9 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Other
+- `docs/maintaining.md` (issue #166, seen once in adcut): the agent-access list says to name the git host on every `glab` call (`GITLAB_HOST` or `--hostname`), because outside a checkout it defaults to gitlab.com and the 401 or 404 looks like a bad token. Documentation only, no check possible. No kit change.
+
 ### Kit
 - `kit/tools/leak_guard.py` (issue #165, seen once in adcut): the docstring says it is a floor, not a proof: it matches across a word break on purpose, sees only listed terms, and runs at push alone, so a client described without a listed term, issue text and a release note pass. `.github/PULL_REQUEST_TEMPLATE.md` gets the checklist line that a person or agent reads the diff, release note and issue text for such a description. A test pins the across-words match so nobody "fixes" it into a miss. No behaviour change. Tested in `kit/tests/test_leak_guard.py`.
 - Skill packs: nothing
