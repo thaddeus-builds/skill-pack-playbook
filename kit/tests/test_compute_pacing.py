@@ -108,10 +108,12 @@ def main() -> int:
           g["ad_groups"] == {"count": 3, "wallets": {"perform": 1, "explore": 1, "none": 1}, "by_reason": {"judged": 1, "unjudged": 1, "stopped_idle": 1}}, g["ad_groups"])
     check("a creative is paid by its group only as far as its own wallet allows: C1 and C5 perform, C2 (no verdict of its own) and C3 (unjudged group) explore, C4 and C6 nobody",
           g["wallets_now"] == {"explore": 80.0, "perform": 300.0, "other": 15.0}, g["wallets_now"])
+    check("the document says which wallet pays each creative, as the groups leave it (what kit.compute_demand reads): C2 and C3 explore, C4 and C6 nobody",
+          g["creative_wallets"] == {"C1": "perform", "C2": "explore", "C3": "explore", "C4": None, "C5": "perform", "C6": None}, g["creative_wallets"])
     check("the efficiency is read from the creatives the groups leave in performance: 10 conversions in 300", g["efficiency"]["performance_creatives"] == 2
           and g["efficiency"]["conversions_7d"] == 10.0 and abs(g["efficiency"]["conversions_per_money"] - 10 / 300) < 1e-12, g["efficiency"])
     g0 = cp.compute(src(creatives=cs, result_target=20.0), k)
-    check("with no ad groups handed over the creatives' own wallets pay", g0["ad_groups"] is None and g0["wallets_now"] == {"explore": 30.0, "perform": 360.0, "other": 5.0}, g0["wallets_now"])
+    check("with no ad groups handed over the creatives' own wallets pay", g0["ad_groups"] is None and g0["creative_wallets"] == {c: v["wallet"] for c, v in cs.items()} and g0["wallets_now"] == {"explore": 30.0, "perform": 360.0, "other": 5.0}, g0["wallets_now"])
 
     print("[4] no target, no data, a day to plan")
     n = cp.compute(src(spend_target=None), k)

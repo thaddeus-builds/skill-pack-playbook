@@ -3,7 +3,7 @@ document. No database, no file, no clock, no platform: the pack reads its own ta
 
     {month, inputs {spend {value, source}, result {value, source}}, last_day, plan {kit.pacing.plan's, or None}, wallets_now {explore, perform, other:
      the creatives' last 7 days' spend by the wallet that pays them}, efficiency {conversions_per_money, performance_creatives, conversions_7d, spend_7d},
-     ad_groups {count, wallets, by_reason} (None when the pack gave no ad groups), warnings, warning_codes}
+     creative_wallets {creative id: the wallet that pays it, or None} (what `kit.compute_demand` reads), ad_groups {count, wallets, by_reason} (None when the pack gave no ad groups), warnings, warning_codes}
 
 The pack adds its own `meta` (the sources it read and how fresh they are). Read-only: it proposes, a person changes a budget.
 
@@ -151,6 +151,7 @@ def compute(src: Source, k: dict) -> dict:
            "last_day": last.isoformat() if last else None, "plan": None,
            "wallets_now": {n: round(v, 2) for n, v in by_wallet.items()},
            "efficiency": {"conversions_per_money": efficiency, "performance_creatives": len(perform), "conversions_7d": p_conv, "spend_7d": round(p_spend, 2)},
+           "creative_wallets": paid,
            "ad_groups": ({"count": len(verdict), "wallets": dict(Counter(w for w, _ in verdict.values())), "by_reason": dict(Counter(r for _, r in verdict.values()))}
                          if src.groups else None)}
     if last is None:
