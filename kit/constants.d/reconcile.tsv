@@ -1,0 +1,2 @@
+name	default	unit	min	max	group	label_en	label_zh	explain	why	reads
+reconcile_tolerance	0.02	share of the larger number	0	1	reconcile	how far two routes' numbers for one day may differ before the day is called different	两条通道同一天的数字差多少以内算一致	the routes count the same ads on their own clocks and attribution; a few percent is expected, a tenth is not	a draft until a person confirms it for a client	reconcile.compare.tolerance

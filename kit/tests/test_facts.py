@@ -89,7 +89,7 @@ FIX = Path(tmp_dir("facts-fixtures-"))
     "max_step\t0.2\tratio\t0\t1\tpacing\tMax step\t最大步长\tone change's "
     "size\tsafety\n", encoding="utf-8")
 KEYS = FactKeys(FIX / "fact_keys.tsv")
-TH = Thresholds(FIX / "constants.tsv")
+TH = Thresholds(FIX / "constants.tsv", defaults=())     # the pack's file alone; the kit's rows are test_registry's
 SPEC = db.with_human({}, version=1)
 QUESTIONS = [{"key": "unit_cost", "prompt": "Unit cost per item, USD"},
              {"key": "monthly_cap"}, {"key": "fee_pct"}]

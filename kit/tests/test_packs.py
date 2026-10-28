@@ -59,6 +59,12 @@ def main() -> int:
                               packs.module_of("VERSION", set()))
           == ("facts", "guards.ssot", "takes", None, None))
 
+    check("a default-row file goes with its module, and only a .tsv of a known one",
+          (packs.module_of("constants.d/lifecycle.tsv", {"lifecycle"}),
+           packs.module_of("constants.d/lifecycle.tsv", set()),
+           packs.module_of("constants.d/lifecycle.txt", {"lifecycle"}))
+          == ("lifecycle", None, None))
+
     print("\n[4] [kit] packs")
     h = Path(tmp_dir("packs-"))
     names = set(table.values())
