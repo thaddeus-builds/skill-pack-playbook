@@ -323,6 +323,8 @@ def _answer(c: Console, user: str, lang: str, id: str, shown: str, value, commen
                 raise core.Refused("bad_value", err["message"], reason=err["reason"])
             comment = core.check_comment(comment)          # before the skill pack, not after; it gets the cleaned one
             if core.gate_runs(ask, value):
+                if core.verb_allowed((c.manifest or {}).get("page_only_verbs"), ask["gate"]["verb"]):
+                    raise core.Refused("verb_not_allowed", id=id)     # a card an agent wrote for a page-only button
                 gate = _through_gate(c, user, ask, value, comment)
             with c.lock:
                 c.store.answer(user, id, value, shown=shown, comment=comment, gate=gate)

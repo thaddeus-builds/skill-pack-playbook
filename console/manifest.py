@@ -7,6 +7,7 @@ file read in `load()`, no process, no network.
       "version": 1,
       "cmd": ["uv", "run", "my_skill_pack.py"],
       "relay_verbs": [["parcel", "release"], ["unit", "confirm"]],
+      "page_only_verbs": [["unit", "confirm"]],
       "max_open": 20,
       "counts": ["console", "counts"],
       "pages": [
@@ -21,6 +22,11 @@ file read in `load()`, no process, no network.
   relay_verbs  the verb prefixes a gate or a page button may run, each a list of
                words; anything else is refused when an ask is added or a button
                is drawn, never silently left as a no-only form. Default: none
+  page_only_verbs  optional: relay verb prefixes that only a button the skill pack's own
+               page draws may run (one that grants something: a mode, a spending
+               period). An ask whose gate is one of them is refused when it is added
+               (`ask.py add`) and when it is answered, so no agent can post a card the
+               owner would then click. Each must start with a relay verb. Default: none
   max_open     how many asks may be open at once (default core.MAX_OPEN, at most 100)
   counts       optional: one verb printing {"counts": {"<page>": N}}, a number for
                each page's tab (cached for a few seconds)
@@ -40,7 +46,7 @@ import json
 import core
 
 VERSION = 1
-KEYS = {"version", "cmd", "relay_verbs", "max_open", "counts", "pages"}
+KEYS = {"version", "cmd", "relay_verbs", "page_only_verbs", "max_open", "counts", "pages"}
 PAGE_KEYS = {"name", "title", "order", "verb", "blocking"}
 RESERVED = {"waiting", "history", "poll", "answer", "answer_all", "reopen", "note", "act", "static"}
 NAME_MAX, MAX_PAGES, MAX_OPEN_CEILING, ORDER_MAX = 24, 12, 100, 100000
@@ -81,6 +87,13 @@ def parse(doc) -> dict:
     if not isinstance(verbs, list):
         raise ManifestError('"relay_verbs" is a list of verb prefixes, each a list of words')
     verbs = [_verb(f"relay_verbs[{i}]", v) for i, v in enumerate(verbs)]
+    only = doc.get("page_only_verbs", [])
+    if not isinstance(only, list):
+        raise ManifestError('"page_only_verbs" is a list of verb prefixes, each a list of words')
+    only = [_verb(f"page_only_verbs[{i}]", v) for i, v in enumerate(only)]
+    for v in only:
+        if not core.verb_allowed(verbs, v):
+            raise ManifestError(f'"page_only_verbs": {" ".join(v)!r} does not start with a relay verb; add its prefix to "relay_verbs" or drop it')
     mo = doc.get("max_open", core.MAX_OPEN)
     if not (isinstance(mo, int) and not isinstance(mo, bool) and 1 <= mo <= MAX_OPEN_CEILING):
         raise ManifestError(f'"max_open" is a whole number from 1 to {MAX_OPEN_CEILING}')
@@ -95,7 +108,7 @@ def parse(doc) -> dict:
         raise ManifestError('"cmd" is needed: pages, relay_verbs and counts all run through the skill pack command')
     if counts and not pages:
         raise ManifestError('"counts" without pages: there is no tab to put a number on')
-    return {"version": VERSION, "cmd": cmd, "relay_verbs": verbs, "max_open": mo, "counts": counts, "pages": pages}
+    return {"version": VERSION, "cmd": cmd, "relay_verbs": verbs, "page_only_verbs": only, "max_open": mo, "counts": counts, "pages": pages}
 
 
 def _page(i: int, p, seen: set) -> dict:

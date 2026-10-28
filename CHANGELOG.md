@@ -12,6 +12,9 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Other
+- `console/` (issue #152, seen once in adcut): the manifest takes an optional `page_only_verbs` list, relay verb prefixes that only a button the skill pack's own page draws may run (a click that grants a mode or a spending period). `ask.py add` refuses an ask whose gate is one of them, and the console refuses to run one when such an ask is answered, so an ask written some other way (or posted with no manifest) is dead; before, any agent that could run `ask.py add` could post a card whose click opened an auto mode. Each page-only verb must start with a relay verb. A manifest without the key behaves as before. Tested in `console/tests/test_manifest.py` and `test_frame_serve.py`. A pack that uses the key re-vendors the console first (an older console refuses an unknown key). No kit change.
+
 ### Kit
 - `kit.copylint` (issue #151, seen once in adcut): a rule or fact with status `withdrawn` (a confirmation taken back, the word `kit.decisions` already uses) is read as pending, so it fires as a draft; before, one such row made `facts()` and `banned()` refuse the whole lint (`copylint_rule_field_invalid`). A misspelt status is still refused. Tested in `kit/tests/test_copylint.py`.
 - Skill packs: nothing

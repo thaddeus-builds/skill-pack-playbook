@@ -260,6 +260,7 @@ def cmd_add(a):
     return {"ok": True, **store.post(a.name, _read_asks(a.file), dry_run=a.dry_run,
                                      max_open=min(a.max_open, limit) if a.max_open else limit,
                                      gate_verbs=man["relay_verbs"] if man else None,
+                                     page_only=man["page_only_verbs"] if man else None,
                                      default_expires=core.days_ahead(core.EXPIRES_DAYS))}
 
 

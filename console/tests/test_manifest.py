@@ -48,7 +48,7 @@ def test_a_good_manifest_is_read_whole_with_its_defaults_filled():
     assert p[0]["title"] == {"en": "Space", "zh": "空间"} and p[0]["blocking"] is True and p[0]["order"] == 20
     assert p[1]["title"] == {"en": "Evidence", "zh": "Evidence"} and p[1]["order"] == 100 and p[1]["blocking"] is False
     empty = manifest.parse({"version": 1})                               # a manifest may declare nothing at all
-    assert empty == {"version": 1, "cmd": [], "relay_verbs": [], "max_open": core.MAX_OPEN, "counts": None, "pages": []}
+    assert empty == {"version": 1, "cmd": [], "relay_verbs": [], "page_only_verbs": [], "max_open": core.MAX_OPEN, "counts": None, "pages": []}
     assert manifest.limit(None) == core.MAX_OPEN and manifest.limit(m) == 14
 
 
@@ -139,6 +139,26 @@ def test_the_manifest_comes_from_the_flag_or_the_environment_and_a_bad_one_is_a_
         refused("bad_request", "add", "-", d=d, env={"CONSOLE_MANIFEST": put(d, "bad.json", {"version": 9})},
                 stdin=json.dumps(wrong))                                                  # never read as "no manifest"
         assert ok("--manifest", m, "schema")["max_open"] == 14 and ok("schema")["max_open"] == core.MAX_OPEN
+
+
+def test_a_page_only_verb_must_be_a_relay_verb_and_no_ask_may_carry_it():
+    m = manifest.parse(with_(page_only_verbs=[["queue", "approve"]]))
+    assert m["page_only_verbs"] == [["queue", "approve"]] and manifest.parse(GOOD)["page_only_verbs"] == []
+    bad(with_(page_only_verbs=[["pay", "invoice"]]), "does not start with a relay verb")     # not even relayed
+    bad(with_(page_only_verbs=[["-x"]]), "page_only_verbs[0]")
+    bad(with_(page_only_verbs="queue approve"), "page_only_verbs")
+    gate = lambda *v: {"verb": list(v), "expect": {"verb": " ".join(v[:2])}}          # noqa: E731
+    with _t.tmpdir() as d:
+        path = put(d, "m.json", with_(page_only_verbs=[["queue", "approve"]]))
+        card = mk_ask("g1", "approve", gate=gate("queue", "approve", "n7"))              # a prefix of the page-only verb
+        other = mk_ask("g2", "approve", gate=gate("facts", "confirm", "unit_cost"))      # relayed, not page-only
+        doc = refused("invalid_ask", "--manifest", path, "add", "-", d=d, stdin=json.dumps([card, other]))
+        errs = doc["params"]["errors"]
+        assert [(e["ask"], e["field"], e["code"]) for e in errs] == [("g1", "gate.verb", "not_allowed")], errs
+        assert "page-only" in errs[0]["message"] and ok("list", "--status", "all", d=d)["asks"] == []     # nothing posted
+        assert ok("--manifest", path, "add", "-", d=d, stdin=json.dumps(other))["posted"] == ["g2"]
+        plain = put(d, "plain.json", GOOD)
+        assert ok("--manifest", plain, "add", "-", d=d, stdin=json.dumps(card))["posted"] == ["g1"]      # no page_only_verbs: as before
 
 
 def test_the_manifest_sets_the_open_ask_budget_and_the_flag_can_only_lower_it():
