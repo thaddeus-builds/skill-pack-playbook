@@ -28,12 +28,19 @@
       --help` ends with its examples, and each example of a read verb run
       through the CLI returns a document with the keys it declares
   [6] cli.tsv / doctor.tsv: every code emitted, exact params, en + zh
+  [7] the runner: Dispatcher(runner="auto") starts a script under uv only
+      when its PEP 723 block needs it (a fake uv on PATH names the route in
+      the `+ cmd` trace), the interpreter for the rest and without uv; None
+      leaves KIT_RUNNER to the environment, and an explicit runner wins over
+      it; a word that is not a runner is refused at construction
 """
 
 import json
 import os
+import shlex
 import shutil
 import signal
+import stat
 import sys
 from pathlib import Path
 
@@ -88,12 +95,19 @@ raise SystemExit(Dispatcher({TABLE_SRC}, scripts_dir=HERE).main(sys.argv[1:]))
 '''
 
 
-def echo_dir() -> Path:
+def echo_dir(runner: str | None = None,
+             blocks: dict[str, str] | None = None) -> Path:
+    """The echo scripts and a driver over them; `runner` is the
+    Dispatcher's, `blocks` a PEP 723 block put before a script's code."""
     d = Path(tmp_dir("cli-scripts-"))
     for name in ("multi.py", "compute_sales.py", "compute_sales_deep.py",
                  "notes.py", "import_file.py"):
-        (d / name).write_text(ECHO, encoding="utf-8")
-    (d / "cli.py").write_text(DRIVER, encoding="utf-8")
+        (d / name).write_text((blocks or {}).get(name, "") + ECHO,
+                              encoding="utf-8")
+    kw = f", runner={runner!r}" if runner else ""
+    (d / "cli.py").write_text(
+        DRIVER.replace("scripts_dir=HERE)", f"scripts_dir=HERE{kw})"),
+        encoding="utf-8")
     return d
 
 
@@ -569,6 +583,90 @@ def test_codes() -> None:
               f"and every row is emitted", problems == [], problems)
 
 
+# ------------------------------------------------------------------ [7]
+
+PEP723 = '# /// script\n# requires-python = ">=3.11"\n# dependencies = {}\n# ///\n'
+NO_DEPS = PEP723.format("[]")
+DEPS = PEP723.format('["requests>=2.31"]')
+
+
+def test_runner() -> None:
+    print("\n[7] the runner: Dispatcher(runner=...)")
+    blocks = {"multi.py": NO_DEPS, "compute_sales.py": DEPS}   # notes.py: none
+    data = Path(tmp_dir("cli-data-"))
+    bin_ = Path(tmp_dir("cli-uv-"))
+    uv = bin_ / "uv"           # `uv run SCRIPT ARGS` as a plain `python SCRIPT ARGS`
+    uv.write_text(f"#!/bin/sh\nshift\nexec {shlex.quote(sys.executable)} "
+                  f'"$@"\n')
+    uv.chmod(uv.stat().st_mode | stat.S_IEXEC)
+    nowhere = Path(tmp_dir("cli-nouv-"))
+    interp = f"+ {shlex.quote(sys.executable)} "
+    via_uv = f"+ {shlex.quote(str(uv))} run "
+
+    verbs3 = (("things", "list"), ("compute", "sales"), ("notes",))
+
+    def route(scripts: Path, verb: tuple[str, ...], *, kit_runner: str = "",
+              uv_on_path: bool = True) -> tuple[str, dict]:
+        """How the verb's script was started (read from the `+ cmd` trace:
+        `interp`, `uv`) and the document it printed."""
+        e = env(data)
+        e.pop("KIT_RUNNER", None)
+        if kit_runner:
+            e["KIT_RUNNER"] = kit_runner
+        e["PATH"] = str(bin_ if uv_on_path else nowhere)
+        rc, out, err = drive(scripts, [*verb, "x"], e)
+        head = err.splitlines()[0] + " " if err else ""
+        how = ("interp" if head.startswith(interp) else
+               "uv" if head.startswith(via_uv) else head)
+        return how, (one_doc(out) or {}) if rc == 0 else {"rc": rc, "err": err}
+
+    def routes(scripts: Path, **kw) -> list[str]:
+        return [route(scripts, v, **kw)[0] for v in verbs3]
+
+    auto = echo_dir("auto", blocks)
+    how, doc = route(auto, ("things", "list"))
+    check("runner=auto: a script whose block lists no dependency: this "
+          "interpreter, though uv is on PATH; it still gets its args",
+          how == "interp" and doc.get("argv") == ["list", "x"], (how, doc))
+    how, doc = route(auto, ("compute", "sales"))
+    check("runner=auto: a script whose block lists dependencies: uv, the "
+          "script still gets its args",
+          how == "uv" and doc.get("argv") == ["x"], (how, doc))
+    check("runner=auto: a script with no block: uv",
+          route(auto, ("notes",))[0] == "uv")
+    check("runner=auto without uv: every script runs, under this interpreter",
+          routes(auto, uv_on_path=False) == ["interp"] * 3
+          and all(route(auto, v, uv_on_path=False)[1].get("argv")
+                  for v in verbs3))
+    check("runner=auto needs no KIT_RUNNER in the environment, and an "
+          "unrelated value in it changes nothing",
+          routes(auto) == routes(auto, kit_runner="pip")
+          == ["interp", "uv", "uv"])
+    check("an explicit runner wins over KIT_RUNNER: auto over uv",
+          routes(auto, kit_runner="uv") == ["interp", "uv", "uv"])
+
+    plain = echo_dir(None, blocks)
+    check("no runner and no KIT_RUNNER: every script under this interpreter "
+          "(unchanged)",
+          routes(plain) == ["interp"] * 3)
+    check("no runner, KIT_RUNNER=uv: every script under uv (unchanged)",
+          routes(plain, kit_runner="uv") == ["uv"] * 3)
+    check("no runner, KIT_RUNNER=auto: the environment chooses auto",
+          routes(plain, kit_runner="auto") == ["interp", "uv", "uv"])
+    check("runner=uv: every script under uv, whatever the environment says",
+          routes(echo_dir("uv", blocks), kit_runner="auto") == ["uv"] * 3)
+
+    check("the runner is kept on the dispatcher; the default is None",
+          Dispatcher(ECHO_TABLE, scripts_dir=SCRIPTS, runner="auto").runner
+          == "auto" and Dispatcher(ECHO_TABLE, scripts_dir=SCRIPTS).runner
+          is None)
+    for word in ("pip", "AUTO", "", "interpreter"):
+        e = raises(lambda: Dispatcher(ECHO_TABLE, scripts_dir=SCRIPTS,
+                                      runner=word), ValueError)
+        check(f"runner={word!r} is refused at construction, naming the "
+              f"runners", e is not None and "uv, auto" in str(e), e)
+
+
 def main() -> int:
     test_table()
     test_help()
@@ -576,6 +674,7 @@ def main() -> int:
     test_forwarding()
     test_real_cli()
     test_codes()
+    test_runner()
     return finish()
 
 
