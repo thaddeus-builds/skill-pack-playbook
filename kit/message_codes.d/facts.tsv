@@ -47,3 +47,5 @@ fact_hub_current	hub,checked	Hub {hub}: every confirmed fact this skill pack dec
 fact_hub_defs_unreadable	path,detail	The hub's definitions {path} cannot be read: {detail}	客户中心的定义 {path} 无法读取：{detail}
 fact_hub_market_partitioned	var,value	{var}={value}: this skill pack keeps its own markets and copies each hub market into its own; unset {var}	{var}={value}：本技能包有自己的市场，会把客户中心的每个市场复制到同名市场；请取消 {var}
 fact_hub_copy_missing	key,market	{key} [{market}]: confirmed at the hub, never copied here	{key}（{market}）：已在客户中心确认，但从未复制到这里
+fact_hub_owned	key,hub	{key} is confirmed at the hub {hub}, not here: set it there, then copy it with facts sync-hub	{key} 由客户中心 {hub} 确认，不在这里设置：请先在客户中心设置，再用 facts sync-hub 复制过来
+fact_key_hub_undeclared	key,hub,file	{key} is a fact of the hub {hub}, which this skill pack does not list: add its row to fact_keys.tsv as the hub defines it ({file}), with owner = hub	{key} 是客户中心 {hub} 的设置，这个技能包没有列出它：请把客户中心定义的那一行（{file}）加进 fact_keys.tsv，并写上 owner = hub
