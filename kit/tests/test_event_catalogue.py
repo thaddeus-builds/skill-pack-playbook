@@ -52,6 +52,23 @@ def main() -> int:
     check("the list is in date order and a name is not listed twice on one day", all(
         [c.day for c in cs] == sorted(c.day for c in cs) and len({(c.name, c.day) for c in cs}) == len(cs) for cs in (cat.candidates(m, 2027) for m in ("US", "CN", "SG", "GB", "AU"))))
 
+    print("[3b] a name is the identity across years, and what is left to ask")
+    markets = sorted({m for *_, ms, _r in cat.EVENTS for m in ms.split() if m != cat.ALL}) + [None]
+    years = range(cat.TABLE_YEARS[0], cat.TABLE_YEARS[1] + 1)
+    drift = {m: [sorted({c.name for c in cat.candidates(m, y)}) for y in years] for m in markets}
+    check("every market lists the same names in every year of the table: a name is the identity of an event, so a strike by name holds for every year",
+          all(all(names == per[0] for names in per) for per in drift.values()), {m: [len(n) for n in per] for m, per in drift.items()})
+    c26 = cat.candidates("US", 2026)
+    black = next(c for c in c26 if c.name == "black_friday")
+    from kit import event_days  # noqa: E402
+    done = event_days.from_rows([{"date": black.day.isoformat(), "name": "black_friday", "kind": "sale"}])
+    check("nothing confirmed or struck: every candidate is still to ask, in the order given", cat.open_candidates(c26) == c26 and cat.open_candidates(c26, [], []) == c26)
+    check("a confirmed day (the same name on the same day) is no longer asked, and the rest keep their order", [c.name for c in cat.open_candidates(c26, done)] == [c.name for c in c26 if c.name != "black_friday"])
+    check("a strike is by name: it holds for every year", all("black_friday" not in {c.name for c in cat.open_candidates(cat.candidates("US", y), struck=["black_friday"])} for y in (2026, 2027, 2028)))
+    c27 = cat.candidates("US", 2027)
+    check("a confirmed day of last year does not hide this year's (its date moved): Black Friday of 2027 is asked again", "black_friday" in {c.name for c in cat.open_candidates(c27, done)})
+    check("both at once, and a name that matches nothing changes nothing", [c.name for c in cat.open_candidates(c26, done, ["cyber_monday", "no_such_event"])] == [c.name for c in c26 if c.name not in ("black_friday", "cyber_monday")])
+
     print("[4] the pick becomes the calendar")
     picked = [c for c in cat.candidates("US", 2026) if c.name in ("black_friday", "cyber_monday")]
     f = Path(tmp_dir("event-catalogue-")) / "event_days.tsv"
