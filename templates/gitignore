@@ -22,6 +22,11 @@ secret
 /backups/
 /reports/
 
+# generated views: built on demand from the registries (tools/overview.py), never committed;
+# add the page your own script writes if it is not one of these two
+/docs/overview.html
+/docs/pipeline.html
+
 # Python and tools
 __pycache__/
 *.py[cod]

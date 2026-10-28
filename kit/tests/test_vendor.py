@@ -103,10 +103,10 @@ def main() -> int:
           (kd / "takes.py").is_file() and (kd / "retry.py").is_file()
           and (kd / "guards" / "ssot.py").is_file())
     (h / "skill-pack.toml").write_text((h / "skill-pack.toml").read_text()
-                                    + '\n[kit]\npacks = ["data"]\n')
+                                    + '\n[kit]\npacks = ["exchange"]\n')
     rc, out, err = capture(vendor.main, ["--skill-pack", str(h), "--kit"])
-    check("[kit] packs = [\"data\"]: base, data and testkit stay; the others go",
-          rc == 0 and "kit packs: base, data, testkit" in out
+    check("[kit] packs = [\"exchange\"]: base (retry with it), exchange and testkit stay; the others go",
+          rc == 0 and "kit packs: base, exchange, testkit" in out
           and (kd / "facts.py").is_file() and (kd / "retry.py").is_file()
           and (kd / "testing" / "suites.py").is_file()
           and not (kd / "takes.py").exists() and not (kd / "copylint.py").exists(),
@@ -133,7 +133,7 @@ def main() -> int:
           rc == 2 and "scripts/make_ad.py: imports kit.copylint (pack compliance)" in err
           and "scripts/make_ad.py: imports kit.takes (pack generation)" in err, err)
     (h / "skill-pack.toml").write_text((h / "skill-pack.toml").read_text().replace(
-        'packs = ["data"]', 'packs = ["data", "compliance", "generation"]'))
+        'packs = ["exchange"]', 'packs = ["exchange", "compliance", "generation"]'))
     rc, out, _ = capture(vendor.main, ["--skill-pack", str(h), "--kit"])
     check("adding the packs it imports brings the modules back",
           rc == 0 and (kd / "takes.py").is_file() and (kd / "copylint.py").is_file()
