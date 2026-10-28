@@ -71,6 +71,7 @@ compute_portfolio	creative	the portfolio document: the creatives by state, how l
 compute_review	creative	the review document: the week of the creatives for the people who read the feedback; the moves in the window, the states, the early reading, the fission scores
 compute_demand	creative	the demand document: how many creatives to ask the maker for, in whole batches, by the exploration money of the pacing plan and what a verdict costs
 export_demand	creative	the ads.demand/1 file: the demand document's request for the makers (a count, the day it is needed by, the window of a verdict); the pack writes it through kit.contracts
+export_results	creative	the ads.results/1 rows: the report's current rows with each creative's stage and, once it has a verdict, its fission score; the pack writes them through kit.contracts
 snapshot	ops	a client workspace packed into one package that restores it: the database by backup, no secret in it, a manifest with every sha256, older packages pruned
 guards.__init__	testkit	
 guards.boundary	testkit	
