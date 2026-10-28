@@ -12,7 +12,8 @@ What it guards:
         severity  error | warn
         note      why the term is banned, in the owner's words (optional)
         law_ref   the clause it rests on (optional)
-        status    pending | confirmed | retired (empty = pending)
+        status    pending | confirmed | retired | withdrawn (empty = pending;
+                  withdrawn is a confirmation taken back: it reads as pending)
     `texts` is [(where, text)]: every line the ad says or shows, with a
     label saying where it is. A row fires when its category is "all",
     "*" or `category`; a retired row never fires. A literal term fires
@@ -52,7 +53,7 @@ from kit.messages import msg
 
 MATCHES = ("literal", "regex")
 SEVERITIES = ("error", "warn")
-STATUSES = ("pending", "confirmed", "retired")
+STATUSES = ("pending", "confirmed", "retired", "withdrawn")
 ANY_CATEGORY = ("all", "*")
 
 CJK_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "兩": 2, "三": 3, "四": 4,
@@ -114,7 +115,7 @@ def _status(rule: str, raw) -> str:
     status = (raw or "").strip() or "pending"
     if status not in STATUSES:
         raise _field_invalid(rule, "status", raw, " | ".join(STATUSES))
-    return status
+    return "pending" if status == "withdrawn" else status
 
 
 def _rules(rows: Iterable[dict], category: str) -> list[tuple]:
