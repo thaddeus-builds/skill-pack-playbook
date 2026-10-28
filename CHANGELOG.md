@@ -13,6 +13,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [Unreleased]
 
 ### Kit
+- `kit.copylint` (issue #151, seen once in adcut): a rule or fact with status `withdrawn` (a confirmation taken back, the word `kit.decisions` already uses) is read as pending, so it fires as a draft; before, one such row made `facts()` and `banned()` refuse the whole lint (`copylint_rule_field_invalid`). A misspelt status is still refused. Tested in `kit/tests/test_copylint.py`.
+- Skill packs: nothing
 - `kit.autonomy.signed()` (issue #155, seen once in adcut): refuses a `client:<name>@relay` author, an empty user and a second `@`, as `docs/autonomy.md` rule 3 says ("a `client:` row never counts"); before, any of them read as a person's confirm and could open a mode. A real `<user>@tty|relay` row is unchanged. Tested in `kit/tests/test_autonomy.py`.
 - Skill packs: nothing (a pack that wrote its own full-match check around `signed()` can drop it at its next kit move)
 ### Other
