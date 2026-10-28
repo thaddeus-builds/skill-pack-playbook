@@ -60,7 +60,9 @@ module guards:
                      code confirm_code_required, params.confirm_code, the
                      `subject`, and next = the same command rerun with
                      `--code C --relay-user <sender_id> --relay-at
-                     <iso_time>` (kit.contract.failure_doc renders it).
+                     <iso_time>` (kit.contract.failure_doc renders it),
+                     plus ` --relay-quote <their_words>` when confirm()
+                     got need_quote=True.
   * stale_basis()    a proposal approved on one basis (a hash of the rows
                      its rule read) is stale once the basis moved: queue
                      and execute refuse it (prior art #10).
@@ -128,11 +130,15 @@ class Refused(SkillPackError):
 class CodeRequired(Refused):
     """confirm() off a TTY with the secret set and no --code yet: the
     refusal text, plus the challenge as data (`confirm_code`, `subject`)
-    for json_refusal()."""
+    for json_refusal(). `need_quote` says the rerun must carry
+    --relay-quote (the verb passes need_quote to relay_audit), so the
+    `next` hint names it."""
 
-    def __init__(self, message: Msg | str, *, confirm_code: str, subj: str):
+    def __init__(self, message: Msg | str, *, confirm_code: str, subj: str,
+                 need_quote: bool = False):
         super().__init__(message)
         self.confirm_code, self.subject = confirm_code, json.loads(subj)
+        self.need_quote = need_quote
 
 
 def now() -> str:
@@ -295,7 +301,8 @@ def check_code(subj: str, code: str, *, at: float | None = None) -> bool:
 
 
 def confirm(what: str, prompt: str, expected: str, *, subj: str,
-            code: str | None = None) -> Literal["tty", "relay"]:
+            code: str | None = None,
+            need_quote: bool = False) -> Literal["tty", "relay"]:
     """The human challenge, at a TTY or relayed. Returns the channel to
     record via changed_by(): "tty" or "relay".
 
@@ -303,7 +310,9 @@ def confirm(what: str, prompt: str, expected: str, *, subj: str,
     never consulted there. Off a TTY: secret unset = the confirm_needs_human
     refusal; set, with no `code` yet = CodeRequired carrying the current
     code and `prompt` as the summary to relay; the caller reruns with
-    --code once the human answers. A code issued for another payload, one
+    --code once the human answers (`need_quote`: and --relay-quote, so the
+    `next` hint says so; a verb that passes it here passes it to
+    relay_audit too). A code issued for another payload, one
     already used, or an expired one is refused like a mistyped value."""
     if stdin_is_tty():
         require_human(what, prompt, expected)
@@ -320,7 +329,8 @@ def confirm(what: str, prompt: str, expected: str, *, subj: str,
             f"  code: {issued}  (good for ~{TTL_MINUTES} more minutes)\n"
             f"Nothing was written.",
             what=what, summary=summary, confirm_code=issued,
-            ttl_minutes=TTL_MINUTES), confirm_code=issued, subj=subj)
+            ttl_minutes=TTL_MINUTES), confirm_code=issued, subj=subj,
+            need_quote=need_quote)
     if not check_code(subj, code):
         raise Refused(msg(
             "confirm_code_mismatch",
