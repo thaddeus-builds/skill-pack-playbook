@@ -36,7 +36,7 @@ flowchart TB
    - **the agent row**: status, blocking issue, **proof commands** (the mechanical DONE: each command with what it must print), data dependencies, and notes. The notes give the pillar, why, the smallest change, the files touched, the size, and any `owner pending: question? (recommended: answer)` or `BLOCKED on owner: …`.
 
    A plan document drifts from the registry within days. A row cannot, because tests read it.
-4. **A generated view, never hand-edited.** A script builds one read-only page from the two files: milestones in order, each story with its want, who acts, its status, its size and its open owner question. Collapse a milestone that is all done. Its `--check` mode exits 1 when the page is stale, and the docs test runs it. The owner reads the roadmap without opening a TSV.
+4. **A generated view, never hand-edited.** A script builds one read-only page from the two files: milestones in order, each story with its want, who acts, its status, its size and its open owner question. Collapse a milestone that is all done. The page is in `.gitignore`, never committed; its `--check` mode writes nothing and exits 1 when the files do not make a page, and the docs test runs it. The owner reads the roadmap without opening a TSV.
 5. **Tests hold the registry.** Every open story names a milestone. Every owner row has its agent row. A rejected story has no owner row, and a story merged into another names a live one. Ids are unique and never reused. An adopted proposal is cleared from the `proposed` cell.
 6. **Few milestones, ordered by what unblocks real use.** A milestone is also the unit that reaches main: a roadmap with `ROADMAP.md` rows keeps each open one as an `[M..]` row (items and closing proof), a story registry keeps it in the `priority` column. Keep three open milestones plus `later`. The first is small and stabilises what runs (registry truth, upgrades, backups, faster tests). The next ones follow the loop the clients use, so each milestone makes the one after it measurable. Collapse done milestones. *Seen once:* the first pass had six open milestones. The owner folded them into three the same day ("把里程碑缩成三段"): six were more segments than anyone tracked.
 7. **Batch the owner's questions, each with a recommended default.** One ask holds every open question. Each question sits in its story's notes with the answer the agent would pick. The implementer uses that answer unless the owner has given another, so an unanswered question never holds the plan ([rule 13](rules.md#human-in-the-loop-rules)). Only a question whose wrong answer cannot be undone (a new write kind, a new credential, personal data) is `BLOCKED`, and only that story waits.
@@ -77,8 +77,9 @@ Done when all three hold, and you paste their output in the merge request:
 2. {test command} ends RESULT with 0 failed;
 3. {host check} passes.
 
-Then set the agent row's status to done, regenerate the roadmap view, commit with
-the story id in the title, and open the merge request. Do not merge it.
+Then set the agent row's status to done, build the roadmap view to see it still builds (it is
+ignored: never commit it), commit the rows with the story id in the title, and open the
+merge request. Do not merge it.
 ```
 
 ## Feedback from production testers

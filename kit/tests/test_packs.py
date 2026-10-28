@@ -66,8 +66,12 @@ def main() -> int:
     check("absent: every pack", packs.chosen(h, KIT) == names)
     (h / "skill-pack.toml").write_text('[skill_pack]\nname = "p"\n[kit]\npacks = []\n')
     check("empty: base and testkit", packs.chosen(h, KIT) == set(packs.ALWAYS))
+    check("retry is in base and no pack is called data (kit 0.45.0)",
+          table.get("retry") == "base" and "data" not in names, (table.get("retry"), sorted(names)))
     for body, words in (('packs = ["video"]', "unknown pack: video"),
-                        ('packs = "data"', "must be a list")):
+                        ('packs = "data"', "must be a list"),
+                        ('packs = ["data"]', "retry moved to base"),
+                        ('packs = ["data", "compliance"]', "delete data from [kit] packs")):
         (h / "skill-pack.toml").write_text(f'[skill_pack]\nname = "p"\n[kit]\n{body}\n')
         try:
             packs.chosen(h, KIT)

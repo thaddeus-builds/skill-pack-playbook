@@ -1,7 +1,6 @@
 pack	status	since	until	consumers	counted	note
 compliance	shared	2026-10-05		ad-copy-skill-pack,adcut-skill-pack,geo-china-skill-pack,koc-script-skill-pack	2026-10-27	copylint has four importers; claimscope and phrasebook have one (adcut)
 generation	incubating	2026-10-05	2026-12-31	adcut-skill-pack	2026-10-27	product-keyframe-video still declares the pack and imports nothing from it
-data	incubating	2026-10-05	2026-12-31	video-ads-skill-pack	2026-10-27	retry alone; seven skill packs dropped the unused declaration on 2026-10-27, meta-ads and search-intel still declare it: decide whether retry belongs in base
 workbook	shared	2026-10-10		creator-program-skill-pack,koc-script-skill-pack	2026-10-27	ROADMAP P1 (no importer, 2026-10-23) is stale: creator-program imports all five modules, koc-script imports workbook
 learning	incubating	2026-10-12	2026-12-31	adcut-skill-pack	2026-10-27	
 pages	incubating	2026-10-13	2026-12-31	adcut-skill-pack	2026-10-27	
@@ -9,3 +8,4 @@ autonomy	incubating	2026-10-13	2026-12-31	adcut-skill-pack	2026-10-27
 exchange	shared	2026-10-23		adcut-skill-pack,sdr-skill-pack,video-ads-skill-pack	2026-10-27	outbound's main does not import it yet (branch leads-1-handoff does)
 ads-core	incubating	2026-10-24	2026-12-31		2026-10-27	lifted from video-ads and amazon-ppc for meta-ads, video-ads and google-ads (ROADMAP X12); meta-ads declares it
 creative	incubating	2026-10-25	2026-12-31		2026-10-27	lifted from video-ads for meta-ads, video-ads and google-ads (ROADMAP X12); meta-ads declares it
+ops	incubating	2026-10-27	2026-12-31		2026-10-27	lifted from the SEO skill pack (S71, scripts/_lib/snapshot.py) for every skill pack; ecommerce-seo-skill-pack is the first importer and has not re-vendored it yet
