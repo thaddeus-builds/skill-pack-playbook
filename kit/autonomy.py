@@ -199,9 +199,12 @@ def when(ts: str | None) -> datetime | None:
 
 def signed(by: str | None) -> bool:
     """True when a history row was signed by a person: `<user>@tty|relay`
-    (kit.human.changed_by); a client:<name> row, `@cli`, `@approval`,
-    `@auto` and `@undo` are no one's switch."""
-    return str(by or "").rsplit("@", 1)[-1] in HUMAN and "@" in str(by or "")
+    (kit.human.changed_by); a client:<name> row, an empty user, a second
+    `@`, `@cli`, `@approval`, `@auto` and `@undo` are no one's switch
+    (docs/autonomy.md rule 3)."""
+    by = str(by or "")
+    user, at, channel = by.partition("@")
+    return bool(user) and not user.startswith("client:") and at == "@" and channel in HUMAN
 
 
 def mode(history: list[dict], *, today: date, max_days: int, eligible_ids: Iterable[str],
