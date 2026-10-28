@@ -7,6 +7,7 @@
     python3 scaffold/new_hub.py add-pack --hub ../workspaces/northwind \\
         --skill-pack ../acme-skill-pack [--market HK] [--folder acme] \\
         [--link DIR] [--language "…"] [--dry-run]
+    python3 scaffold/new_hub.py init-facts --hub ../workspaces/northwind
 
 One client is served by several skill packs. The hub is the client's folder
 (a git repository; its content git-ignored): one CLIENT.md, one intake, one
@@ -34,8 +35,13 @@ owner console, and one folder per pack. What `new` writes, under <hub>/:
     hub/defs/fact_keys.tsv, seeded with the keys a client's packs share
     (currency, avg_order_value, incremental_factor, incremental_source,
     npr_includes_creator_fee, npr_roas; a market enters through the kit's
-    market door, `facts init`). The store hub/hub.db is made by the first
-    write. The console relays `hub facts confirm` before every pack's verbs;
+    market door, `facts init`). `new` then runs the hub's `facts init`
+    piped, once per market of --markets with every answer blank, so
+    hub/hub.db exists and each market's declaration waits PENDING for a
+    person to confirm on the console (the scaffold never confirms; no
+    scope is asked that --markets did not answer). `init-facts` does the
+    same for a hub that has no hub/hub.db yet and refuses one that has.
+    The console relays `hub facts confirm` before every pack's verbs;
   * CLAUDE.md: the brief of the agent working at the hub;
   * bin/console, bin/ask: the ONE console of this client (CONSOLE_DIR =
     <hub>/console), run from --console-home (default: this playbook's
@@ -75,7 +81,7 @@ decisions confirm,<cli> queue approve`), CLAUDE.md, adds the pack's deny rules t
 (and a port row for a linked workspace's own console) and its folder to
 .gitignore.
 
-`new` refuses a hub folder that exists and is not empty, a folder name that
+`init-facts` refuses a hub with a hub/hub.db. `new` refuses a hub folder that exists and is not empty, a folder name that
 is not a client id, a market that is not a plain word, and a path the
 console's --relay-cmd could not carry (white space, quotes, `$`, `\\`).
 `add-pack` refuses a folder that is not a hub, a pack (name, CLI word,
@@ -94,6 +100,7 @@ import os
 import re
 import socket
 import stat
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -571,6 +578,45 @@ def write(base: Path, out: dict[str, tuple[str, int]]) -> None:
         p.chmod(mode)
 
 
+def init_facts(hub: Path, markets: list[str]) -> list[str]:
+    """Make the hub's facts store: the hub's own `facts init`, piped, once
+    per market (once when it keeps none), every answer blank. A blank
+    answer records nothing, so the only rows are the markets' declarations,
+    pending: confirming one is a person's act on the console, never ours.
+    Returns the problems (empty = done)."""
+    wrapper = hub / "hub" / "bin" / "hub"
+    blanks = "\n" * (len(HUB_KEY_ROWS) + 2)          # the keys' questions, the source
+    env = {**os.environ, "HUB_PYTHON": os.environ.get("HUB_PYTHON") or sys.executable}
+    problems = []
+    for m in markets or [None]:
+        r = subprocess.run([str(wrapper), "facts", "init", "--json"],
+                           input=(f"{m}\n" if m else "") + blanks,
+                           capture_output=True, text=True, timeout=120, env=env)
+        if r.returncode != 0:
+            problems.append(f"{m or 'no market'}: {(r.stderr or r.stdout).strip()[:300]}")
+    return problems
+
+
+def cmd_init_facts(a) -> int:
+    hub = a.hub.expanduser().resolve()
+    try:
+        h = json.loads((hub / "hub.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise Refused(f"{hub} is not a hub (no readable hub.json): make one with "
+                      f"`new_hub.py new`")
+    if not (hub / "hub" / "bin" / "hub").is_file():
+        raise Refused(f"{hub} has no hub/bin/hub: not a hub made by `new_hub.py new`")
+    if (hub / "hub" / "hub.db").exists():
+        raise Refused(f"{hub / 'hub' / 'hub.db'} exists: the hub's facts store is "
+                      f"already made, and it is never touched here")
+    problems = init_facts(hub, list(h.get("markets") or []))
+    if problems:
+        raise Refused("the hub's `facts init` failed: " + "; ".join(problems))
+    print(f"made {hub / 'hub' / 'hub.db'}: each market's declaration is pending; "
+          f"a person confirms it on the console (`bin/hub hub pending --hub`)")
+    return 0
+
+
 def cmd_new(a) -> int:
     hub = a.hub.expanduser().resolve()
     if not CLIENT_RE.fullmatch(hub.name):
@@ -614,6 +660,11 @@ def cmd_new(a) -> int:
     if a.dry_run:
         return 0
     write(hub, out)
+    problems = init_facts(hub, markets)
+    if problems:
+        print(f"the hub is written, but its facts store is not: {'; '.join(problems)}; "
+              f"run `python3 {Path(__file__).resolve()} init-facts --hub {hub}`",
+              file=sys.stderr)
     print(f"next: fill the `<<fill: …>>` in {hub / 'CLIENT.md'}, `git init` the hub, "
           f"then `python3 {Path(__file__).resolve()} add-pack --hub {hub} --skill-pack DIR` "
           f"for each pack that serves the client")
@@ -770,9 +821,12 @@ def main(argv: list[str] | None = None) -> int:
                                      "added again for another market")
     add.add_argument("--language", help="default: the hub's")
     add.add_argument("--dry-run", action="store_true")
+    ini = sub.add_parser("init-facts", help="make the facts store of a hub that has none")
+    ini.add_argument("--hub", required=True, type=Path)
     a = ap.parse_args(argv)
     try:
-        return cmd_new(a) if a.verb == "new" else cmd_add_pack(a)
+        return {"new": cmd_new, "add-pack": cmd_add_pack,
+                "init-facts": cmd_init_facts}[a.verb](a)
     except Refused as e:
         print(f"refused: {e}", file=sys.stderr)
         return 2

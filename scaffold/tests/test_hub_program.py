@@ -138,12 +138,21 @@ def main() -> int:
           rc == 0 and doc["cli"] == "hub" and kinds.get("facts confirm")
           == "gated" and kinds.get("facts set") == "human"
           and kinds.get("pending") == "read", out)
+    check("the store is <hub>/hub/hub.db, made by `new` (no first write "
+          "needed)", (hub / "hub" / "hub.db").is_file()
+          and not (hub / "hub" / "defs" / "hub.db").exists())
+    rc, doc, out = hub_cli(hub, "facts", "list", "--json")
+    check("facts list answers (no no_db) and both markets' declarations "
+          "are pending, none confirmed",
+          rc == 0 and doc["pending_markets"] == ["DA", "DB"]
+          and doc["declared_markets"] == []
+          and all(f["is_assumption"] == 1 for f in doc["facts"])
+          and [f["key"] for f in doc["facts"]] == ["market_declared"] * 2, out)
     rc, doc, out = hub_cli(hub, "facts", "init", "--json",
                            stdin="DA\n\n\n\n\n\n\n\n")
-    check("facts init (piped): the declaration of DA, pending",
-          rc == 0 and doc["declaration"] == "pending", out)
-    check("the store is <hub>/hub/hub.db", (hub / "hub" / "hub.db").is_file()
-          and not (hub / "hub" / "defs" / "hub.db").exists())
+    check("a second facts init (piped) changes nothing: DA stays pending",
+          rc == 0 and doc["declaration"] == "pending"
+          and doc["written"] == [], out)
     rc, doc, out = hub_cli(hub, "pending", "--hub", "--json")
     a = (doc or {}).get("asks", [{}])[0]
     check("pending --hub: the ask id and gate verb start with `hub`",
@@ -173,11 +182,45 @@ def main() -> int:
     check("… and confirmed through the gate",
           rc == 0 and doc["confirmed"][0]["is_assumption"] == 0, out)
     rc, doc, out = hub_cli(hub, "doctor", "--strict", "--json")
+    check("doctor --strict warns while DB's declaration waits for a person",
+          rc != 0 and not doc["healthy"], out)
+    cmd = ["facts", "confirm", "market_declared", "--market", "DB",
+           "--reason", "owner", "--json"]
+    rc, doc, out = hub_cli(hub, *cmd, **sec)
+    code = ((doc or {}).get("params") or {}).get("confirm_code")
+    rc, doc, out = hub_cli(hub, *cmd, "--code", code, *RELAY, **sec)
+    rc, doc, out = hub_cli(hub, "doctor", "--strict", "--json")
     codes = [c["message_code"]["code"] for c in (doc or {}).get("checks", [])]
     check("doctor --strict is healthy (the data dir is outside the "
           "definitions folder)",
           rc == 0 and doc["healthy"] and "doctor_inside_repo" not in codes,
           out)
+    print("[4] init-facts: a hub that has no store")
+    r = subprocess.run([sys.executable, str(HUB_PY), "init-facts", "--hub",
+                        str(hub)], capture_output=True, text=True, timeout=120,
+                       env=env())
+    check("refused on a hub with a hub.db, which is left as it was",
+          r.returncode == 2 and "exists" in r.stderr, r.stdout + r.stderr)
+    for old_hub in (hub, flat):
+        db_file = old_hub / "hub" / "hub.db"
+        for p in db_file.parent.glob("hub.db*"):
+            p.unlink()
+        r = subprocess.run([sys.executable, str(HUB_PY), "init-facts", "--hub",
+                            str(old_hub)], capture_output=True, text=True,
+                           timeout=120, env=env())
+        rc, doc, out = hub_cli(old_hub, "facts", "list", "--json")
+        check(f"{old_hub.name}: made again, facts list answers",
+              r.returncode == 0 and db_file.is_file() and rc == 0, r.stdout
+              + r.stderr + out)
+    check("… the markets' declarations pending again, the flat hub has none "
+          "to declare", hub_cli(hub, "facts", "list", "--json")[1]
+          ["pending_markets"] == ["DA", "DB"]
+          and hub_cli(flat, "facts", "list", "--json")[1]["facts"] == [])
+    r = subprocess.run([sys.executable, str(HUB_PY), "init-facts", "--hub",
+                        str(root / "nothing")], capture_output=True, text=True,
+                       timeout=120, env=env())
+    check("refused on a folder that is not a hub", r.returncode == 2
+          and "not a hub" in r.stderr, r.stdout + r.stderr)
     return finish()
 
 

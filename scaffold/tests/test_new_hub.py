@@ -114,7 +114,8 @@ def snapshot(d: Path) -> dict:
 def texts(d: Path) -> dict:
     return {str(p.relative_to(d)): p.read_text(encoding="utf-8")
             for p in d.rglob("*") if p.is_file() and not p.is_symlink()
-            and ".git" not in p.relative_to(d).parts}
+            and ".git" not in p.relative_to(d).parts
+            and not p.name.startswith("hub.db")}       # the store `new` makes
 
 
 def main() -> int:
