@@ -119,6 +119,12 @@ def test_confirmed_flag() -> None:
     r = {"id": "N1", "category": "all", "term": "x", "severity": "error"}
     check("an empty status is pending (a draft)",
           copylint.banned([r], [("s", "x")], "")[0]["confirmed"] is False)
+    w = copylint.banned([{**r, "status": "withdrawn"}], [("s", "x")], "")
+    check("a withdrawn row is a draft that still fires, not a refusal of the whole lint",
+          len(w) == 1 and w[0]["confirmed"] is False, w)
+    check("a withdrawn fact is pending again: it fires as a draft",
+          copylint.facts({"dosage_per_day": {**DOSAGE["dosage_per_day"], "status": "withdrawn"}}, [("line", "每天一次")])[0]["confirmed"] is False)
+    check("a typo in a status is still refused", raises(lambda: copylint.banned([{**r, "status": "withdrwan"}], [("s", "x")], ""), SkillPackError))
 
 
 def test_owner_tsv() -> None:
