@@ -37,6 +37,16 @@ path in commit <sha>" (or "a tracked file path"), and a line hit in that
 file names it the same way.
 Exit 0: no hit; 1: a hit; 2: refused for want of a usable list or git.
 
+It is a floor, not a proof. Ignoring whitespace means a term also matches
+across a word break (two short ordinary words side by side can spell a
+listed term, and the push is blocked until the sentence is reworded; that
+is kept on purpose, a miss is worse than a rewording). It sees only the
+terms on the list: a client described without one passes, and so do issue
+text, a release note and chat, because it runs at push alone. So an agent
+(or a person) also reads the diff, the release note and the issue text for
+a description that identifies a client, and the list grows with each new
+client.
+
 Install, once per clone: kit/tools/pre-push.sample (its header says how).
 Seen in the video-ads skill pack, whose own guard this generalises (one list
 per client workspace, several clients beside one skill pack).
