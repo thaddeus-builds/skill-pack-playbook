@@ -34,6 +34,13 @@ not in these TSVs is refused where it is typed, with a coded message.
                         stored, reported in meta.assumed_thresholds) over
                         the market's CONFIRMED `threshold_<name>` fact over
                         the TSV default. A pending fact is not in effect.
+                        The engines' own default rows ship with the kit
+                        (kit/constants.d/<module>.tsv, vendored with the
+                        module that reads them): they are read first and the
+                        skill pack's file overrides a row by name, so a
+                        skill pack lists only what it changed. A row there
+                        names, in `reads`, the engine parameter it feeds
+                        (kit/tests/test_constants_d.py keeps the two true).
 
 Labels: one `label_<lang>` column per language of `[skill_pack].languages`.
 
@@ -80,6 +87,7 @@ from kit.contract import SkillPackError
 from kit.market import MARKET_KEY
 from kit.messages import Msg, msg
 
+KIT_CONSTANTS = Path(__file__).resolve().parent / "constants.d"
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 FACT_PREFIX = "threshold_"
 FACT_TYPES = ("number", "text", "date")      # and choice:a|b
@@ -589,35 +597,75 @@ class Thresholds:
     live on it and nowhere else."""
 
     def __init__(self, path: Path | str | None = None, *,
-                 superseded: dict[str, str] | None = None):
+                 superseded: dict[str, str] | None = None,
+                 defaults: Iterable[Path | str] | None = None):
+        """`defaults`: the engines' default-row files; None = every
+        `constants.d/*.tsv` this copy of the kit holds (the packs the skill
+        pack took), () = none. A row of the skill pack's own file replaces a
+        default row of the same name whole."""
         self.path = _source(path, "constants")
+        files = kit_defaults() if defaults is None else tuple(map(Path, defaults))
+        self._rows: dict[str, dict] = {}
+        self._from_kit: dict[str, Path] = {}
+        for f in files:
+            for r in self._default_rows(f):
+                name = r["name"]
+                if name in self._from_kit:
+                    raise _bad(f, f"{name}: also a default row of "
+                                  f"{self._from_kit[name].name}")
+                self._rows[name] = self._parse(f, r)
+                self._from_kit[name] = f
         rows = read_tsv(self.path, ["name", "default", "unit", "min", "max",
                                     "group", *_labels(), "explain", "why"],
                         id_col="name")
-        self._rows: dict[str, dict] = {}
         for r in rows:
-            name = r["name"]
-            if not KEY_RE.match(name):
-                raise _bad(self.path, f"name {name!r} is not snake_case")
-            lo = _bound(self.path, name, "min", r["min"])
-            hi = _bound(self.path, name, "max", r["max"])
-            d = _decimal(r["default"])
-            if d is None:
-                raise _bad(self.path, f"{name}: default {r['default']!r} is "
-                                      f"not a number")
-            if (lo is not None and d < lo) or (hi is not None and d > hi):
-                raise _bad(self.path, f"{name}: default {r['default']} is "
-                                      f"outside {_span(lo, hi)}")
-            _check_labels(self.path, name, r)
-            self._rows[name] = {**r, "_default": float(d), "_lo": lo,
-                                "_hi": hi}
+            self._rows[r["name"]] = self._parse(self.path, r)
         self.superseded = dict(superseded or {})
         self._assumed: dict[str, float] = {}
+
+    @staticmethod
+    def _default_rows(path: Path) -> list[dict[str, str]]:
+        """The rows of one default-row file. A label column of a language
+        the file lacks reads as its English one, so a skill pack may keep
+        languages the kit does not translate."""
+        rows = read_tsv(path, ["name", "default", "unit", "min", "max",
+                               "group", "label_en", "explain", "why"],
+                        id_col="name")
+        for r in rows:
+            for col in _labels():
+                r[col] = r.get(col) or r["label_en"]
+        return rows
+
+    @staticmethod
+    def _parse(path: Path, r: dict[str, str]) -> dict:
+        name = r["name"]
+        if not KEY_RE.match(name):
+            raise _bad(path, f"name {name!r} is not snake_case")
+        lo = _bound(path, name, "min", r["min"])
+        hi = _bound(path, name, "max", r["max"])
+        d = _decimal(r["default"])
+        if d is None:
+            raise _bad(path, f"{name}: default {r['default']!r} is not a "
+                             f"number")
+        if (lo is not None and d < lo) or (hi is not None and d > hi):
+            raise _bad(path, f"{name}: default {r['default']} is outside "
+                             f"{_span(lo, hi)}")
+        _check_labels(path, name, r)
+        return {**r, "_default": float(d), "_lo": lo, "_hi": hi, "_file": path}
 
     # -- the registry --
 
     def names(self) -> tuple[str, ...]:
         return tuple(self._rows)
+
+    def origin(self, name: str) -> str:
+        """Where the row in force comes from: `kit` (the engines' own
+        default), `pack` (the skill pack's own row) or `pack over kit` (the
+        skill pack changed an engine default)."""
+        r = self._row(name)
+        if name not in self._from_kit:
+            return "pack"
+        return "kit" if r["_file"] == self._from_kit[name] else "pack over kit"
 
     def keys(self) -> tuple[str, ...]:
         """The client fact key of each threshold: `threshold_<name>`."""
@@ -772,6 +820,7 @@ class Thresholds:
                 "default (outside min..max)" if pending == 0 and d is not None
                 and not self._within(name, d) else "default",
                 "group": r["group"], "explain": r["explain"],
+                "origin": self.origin(name),
                 **{c: r[c] for c in _labels()}})
         return out
 
@@ -815,6 +864,13 @@ class Thresholds:
             tuple(old)).fetchall()
         return [{"market": m, "key": k, "value": v, "is_assumption": a,
                  "new_key": old[k]} for m, k, v, a in rows]
+
+
+def kit_defaults() -> tuple[Path, ...]:
+    """The engines' default-row files this copy of the kit holds, sorted
+    (a skill pack that took only some packs holds only theirs)."""
+    return tuple(sorted(KIT_CONSTANTS.glob("*.tsv"))) \
+        if KIT_CONSTANTS.is_dir() else ()
 
 
 def add_assume_arg(parser: argparse.ArgumentParser) -> None:

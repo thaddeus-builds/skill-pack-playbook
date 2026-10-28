@@ -21,6 +21,11 @@
      is reported (assumed(), meta.assumed_thresholds, the ASSUMED
      warning); a bad --assume is refused with `next`; listing, bounds,
      superseded names.
+  4b. The engines' default rows (kit/constants.d) are read first and the
+     skill pack's file overrides by name: an empty pack file gets every
+     default, a pack row replaces one whole, a name in two default files or
+     a default outside its bounds is refused, a language the default file
+     lacks reads its English label, and a confirmed client fact still wins.
   5. The registries resolve their files from skill-pack.toml, with one
      label column per declared language.
   6. registry.py's msg() calls are closed over its fragment.
@@ -390,7 +395,8 @@ def dump(con: sqlite3.Connection) -> list[tuple]:
 
 def test_thresholds() -> None:
     print("[4] Thresholds")
-    th = Thresholds(CONSTS, superseded={"old_orders": "min_orders"})
+    th = Thresholds(CONSTS, superseded={"old_orders": "min_orders"},
+                    defaults=())
     con = facts_db()
     before, changes = dump(con), con.total_changes
     check("names/keys/overridable/bounds from the TSV",
@@ -546,6 +552,70 @@ def test_thresholds() -> None:
 
 # ---- 5 ---------------------------------------------------------------------
 
+def test_kit_defaults() -> None:
+    print("[4b] the engines' default rows")
+    head = "name default unit min max group label_en explain why"
+    base = tsv(head,
+               "step|t|0.1|t|share|t|0|t|1|t|alloc|t|step|t|e|t|w",
+               "days|t|14|t|days|t|1|t||t|alloc|t|days|t|e|t|w")
+    other = tsv(head, "weeks|t|8|t|weeks|t|1|t||t|pace|t|weeks|t|e|t|w")
+    empty = tsv(CONST_HEAD)
+    th = Thresholds(empty, defaults=[base, other])
+    check("an empty skill pack file gets every default, in file order",
+          th.names() == ("step", "days", "weeks")
+          and th.overridable() == {"step": 0.1, "days": 14.0, "weeks": 8.0}
+          and {th.origin(n) for n in th.names()} == {"kit"}, th.names())
+    check("a language the default file lacks reads its English label",
+          th.row("step")["label_zh"] == "step", th.row("step"))
+    mine = tsv(CONST_HEAD,
+               "step|t|0.05|t|share|t|0|t|0.5|t|alloc|t|my step|t|我的步长|t|e|t|w",
+               "own|t|2|t|n|t|0|t||t|own|t|own|t|自有|t|e|t|w")
+    th = Thresholds(mine, defaults=[base, other])
+    check("a skill pack row replaces the default row whole, in place",
+          th.names() == ("step", "days", "weeks", "own")
+          and th.get("step") == 0.05 and th.bounds("step") == (0, 0.5)
+          and th.row("step")["label_zh"] == "我的步长"
+          and th.get("days") == 14.0, th.names())
+    check("origin: kit, pack over kit, pack",
+          [th.origin(n) for n in th.names()]
+          == ["pack over kit", "kit", "kit", "pack"])
+    check("listing says where each row comes from",
+          [r["origin"] for r in th.listing(None, "US")]
+          == ["pack over kit", "kit", "kit", "pack"])
+    check("defaults=() reads the skill pack's file alone",
+          Thresholds(mine, defaults=()).names() == ("step", "own"))
+    check("a kit default is overridable by a confirmed client fact",
+          Thresholds(empty, defaults=[base]).get(
+              "days", sqlite_with("US", "threshold_days", "21"), "US") == 21.0)
+    check("--assume names a kit default too",
+          Thresholds(empty, defaults=[base]).assume_pairs(
+              ["threshold_days=7"]) == {"days": 7.0})
+    load_fails("a name in two default files", lambda: Thresholds(
+        empty, defaults=[base, tsv(head, "days|t|9|t|d|t|1|t||t|g|t|d|t|e|t|w")]))
+    load_fails("a default outside its bounds", lambda: Thresholds(
+        empty, defaults=[tsv(head, "x|t|5|t|d|t|0|t|1|t|g|t|x|t|e|t|w")]))
+    load_fails("a default file without label_en", lambda: Thresholds(
+        empty, defaults=[tsv("name default unit min max group explain why",
+                             "x|t|1|t|d|t|0|t||t|g|t|e|t|w")]))
+    kit = registry.kit_defaults()
+    check("this copy of the kit ships default rows, sorted",
+          kit and list(kit) == sorted(kit)
+          and all(f.parent.name == "constants.d" for f in kit), kit)
+    real = Thresholds(empty)
+    check("no defaults argument: the kit's own are read",
+          "campaign_window_days" in real.names()
+          and real.origin("campaign_window_days") == "kit"
+          and real.get("allocation_evidence_z") == 1.64)
+
+
+def sqlite_with(market: str, key: str, value: str) -> sqlite3.Connection:
+    con = sqlite3.connect(":memory:")
+    con.execute(FACTS_SQL)
+    con.execute("INSERT INTO client_facts (market, key, value, is_assumption, "
+                "source) VALUES (?, ?, ?, 0, 'test')", (market, key, value))
+    return con
+
+
 def test_skill_pack_paths() -> None:
     print("[5] files from skill-pack.toml; labels per language")
     check("FactKeys() reads the shop skill pack's [ssot].fact_keys",
@@ -609,7 +679,8 @@ def test_closure() -> None:
 def main() -> int:
     _shop.use()
     for fn in (test_read_tsv, test_fact_keys, test_decision_registry,
-               test_thresholds, test_skill_pack_paths, test_closure):
+               test_thresholds, test_kit_defaults, test_skill_pack_paths,
+               test_closure):
         fn()
     return finish()
 
