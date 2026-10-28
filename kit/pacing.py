@@ -4,7 +4,9 @@ the module returns the plan.
   * `plan()`: the money left of a month's target spread over the days left by the account's own weekday weights (flat until
     every weekday has `min_weeks` weeks of history), and the day's budget split into two wallets: *perform* takes what the result
     still to reach needs at the proven creatives' efficiency (never more than the day's budget), *explore* is the rest. Flags,
-    not floors: `shortfall`, `result_met`, `no_performance`, `flat`.
+    not floors: `shortfall`, `result_met`, `no_performance`, `flat`. An optional band (`explore_min_share`, `explore_max_share`
+    of each day's budget) is the one floor and ceiling: it clips the day's exploration money into the band and says so
+    (`explore_floor`, `explore_cap`) with the performance need it gave up.
   * `cap_status()`: a monthly cap against what is spent so far, at the recent run-rate: `ok`, `warn`, `projected_over`,
     `over_cap`, or `unknown` while the spend so far is only a lower bound (days missing: a crossing is proved, never its absence).
     `reach()` is the date a target is crossed at that rate.
@@ -49,10 +51,17 @@ def weekday_weights(daily_spend: dict[str, float], through: date, history_weeks:
 
 def plan(month: str, spend_target: float, result_target: float | None, daily_spend: dict[str, float],
          daily_conv: dict[str, float], last_day: date, efficiency: float | None, history_weeks: int, min_weeks: int,
-         day: date | None = None) -> dict:
+         day: date | None = None, explore_min_share: float = 0.0, explore_max_share: float = 1.0) -> dict:
     """The plan for `day` (default: the day after `last_day`) and the days left of the month.
 
-    efficiency: conversions per unit of money of the Performance creatives over their last 7 days, None when unknown."""
+    efficiency: conversions per unit of money of the Performance creatives over their last 7 days, None when unknown.
+    explore_min_share, explore_max_share: the band the share of a day's budget going to explore is kept in. The defaults (0 and 1)
+    are no band: nothing is clipped and the plan is what it was. The floor takes money from performance (the result may then
+    not be reached: the row says how much performance gave up); the cap gives money to performance, and only when there is a
+    proven efficiency to spend it at (with none, the day stays in explore and the flag `no_performance` says why)."""
+    if not 0.0 <= explore_min_share <= explore_max_share <= 1.0:
+        raise ValueError(f"bad exploration band: {explore_min_share} to {explore_max_share} (0 <= min <= max <= 1)")
+    can_perform = bool(efficiency and efficiency > 0)
     days = month_days(month)
     elapsed = [d for d in days if d <= last_day]
     left = [d for d in days if d > last_day]
@@ -66,12 +75,22 @@ def plan(month: str, spend_target: float, result_target: float | None, daily_spe
     perform_total = None
     if result_left is not None and efficiency and efficiency > 0:
         perform_total = result_left / efficiency
-    rows = []
+    rows, flags_clip = [], set()
     for d in left:
         budget = money_left * w[d] / wsum if wsum else 0.0
         need = 0.0 if perform_total is None else min(budget, perform_total * w[d] / wsum)
+        clip = gave_up = None
+        if budget - need < budget * explore_min_share - 1e-9:
+            clip, gave_up, need = "explore_floor", need - budget * (1 - explore_min_share), budget * (1 - explore_min_share)
+        elif can_perform and budget - need > budget * explore_max_share + 1e-9:
+            clip, need = "explore_cap", budget * (1 - explore_max_share)
         rows.append({"day": d.isoformat(), "weekday": d.strftime("%a"), "weight": round(w[d], 4),
                      "budget": round(budget, 2), "perform": round(need, 2), "explore": round(budget - need, 2)})
+        if clip:
+            rows[-1]["explore_clip"] = clip
+            if clip == "explore_floor":
+                rows[-1]["perform_given_up"] = round(gave_up, 2)
+            flags_clip.add(clip)
     even = spend_target * sum(w[d] for d in elapsed) / sum(w[d] for d in days) if elapsed else 0.0
     today = next((r for r in rows if day is None or r["day"] == day.isoformat()), None)
     flags = []
@@ -83,6 +102,7 @@ def plan(month: str, spend_target: float, result_target: float | None, daily_spe
         flags.append("no_performance")
     if kind == "flat":
         flags.append("flat")
+    flags.extend(sorted(flags_clip))
     return {"month": month, "last_day": last_day.isoformat(), "weights": [round(x, 4) for x in weights], "weights_kind": kind,
             "weekday_weeks": least, "spend_to_date": round(spent, 2), "result_to_date": round(conv, 4),
             "money_left": round(money_left, 2), "result_left": None if result_left is None else round(result_left, 4),

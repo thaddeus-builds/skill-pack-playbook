@@ -69,6 +69,38 @@ def main() -> int:
     check("no efficiency to read (a new account): no_performance, all explore",
           "no_performance" in p["flags"] and p["day"]["perform"] == 0.0 and p["perform_need_total"] is None, p)
 
+    print("[3b] the exploration band (issue #263)")
+    base = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.02, 8, 4)
+    check("no band (the defaults 0 and 1): the plan is what it was, with no clip key and no band flag",
+          pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.02, 8, 4, explore_min_share=0.0, explore_max_share=1.0) == base
+          and not any(("explore_clip" in r) for r in base["days"]) and not {"explore_floor", "explore_cap"} & set(base["flags"]), base)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.02, 8, 4, explore_min_share=0.2)
+    check("a result need that takes the whole day: the floor gives 20 % to exploration, says so, and says what performance gave up",
+          p["day"]["explore"] == 20.0 and p["day"]["perform"] == 80.0 and p["day"]["explore_clip"] == "explore_floor"
+          and p["day"]["perform_given_up"] == 20.0 and "explore_floor" in p["flags"] and "shortfall" in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.05, 8, 4, explore_min_share=0.1)
+    check("a floor already met (12.5 of 100 explores) changes nothing", p["day"]["explore"] == 12.5 and "explore_floor" not in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 30.0, ds, conv, date(2026, 10, 15), 0.05, 8, 4, explore_max_share=0.3)
+    check("a result already met (need zero): the cap leaves 30 % to exploration and moves 70 to performance, and says so",
+          p["day"]["explore"] == 30.0 and p["day"]["perform"] == 70.0 and p["day"]["explore_clip"] == "explore_cap"
+          and "explore_cap" in p["flags"] and "result_met" in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), None, 8, 4, explore_max_share=0.3)
+    check("no proven efficiency: the cap has nowhere to put the money, the day stays in exploration and no_performance says why",
+          p["day"]["explore"] == p["day"]["budget"] and "explore_cap" not in p["flags"] and "no_performance" in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), None, 8, 4, explore_min_share=0.2)
+    check("no proven efficiency and a floor: all explore already meets it", p["day"]["explore"] == p["day"]["budget"] and "explore_floor" not in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.02, 8, 4, explore_min_share=0.2)
+    check("the days of the month still add up to the money left, clipped or not",
+          abs(sum(r["budget"] for r in p["days"]) - p["money_left"]) < 0.05 and all(abs(r["perform"] + r["explore"] - r["budget"]) < 0.011 for r in p["days"]), p)
+    bad = []
+    for lo, hi in ((0.5, 0.2), (-0.1, 1.0), (0.0, 1.5)):
+        try:
+            pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.05, 8, 4, explore_min_share=lo, explore_max_share=hi)
+            bad.append((lo, hi))
+        except ValueError:
+            pass
+    check("a band that is not 0 <= min <= max <= 1 is refused", not bad, bad)
+
     print("[4] the pace")
     p = pacing.plan("2026-10", 3100.0, None, ds, {}, date(2026, 10, 15), None, 8, 4)
     check("15 of 31 even days = 1,500 of 3,100 against an even 1,500: pace 1.0", p["pace_ratio"] == 1.0, p["pace_ratio"])
