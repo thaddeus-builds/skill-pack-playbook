@@ -111,6 +111,10 @@ decision, warnings, story, owner, card, fold_row, expand_all, page = (STYLE.deci
 
 Its pages then draw the expand-all button with `expand_all()` (the script finds it by `data-expand`, not by an id) and its tests call `STYLE.problems()` beside their own.
 
+## A page drawn for you: the day's items
+
+`kit.daily_page.render(doc)` ([`kit/daily_page.py`](../kit/daily_page.py), same pack `pages`) draws the document `kit.daily.build()` returns (the day's advice of an ads skill pack, the audit's findings among it as `audit:<finding>` items) with this style, so a pack does not draw it again: tiles and the status bar first, the one decision (the first open item of the most severe kind, with the command that reports back and its hint), at most three warnings (the other open items of that kind, then the document's notes), one row per item that unfolds into its card, the owner's fold last. It reads the document as plain dicts and never imports `kit.daily` (`pages` imports only itself and `base`); the shape is written in the module's docstring. Severity is the state (`down`, `testing`, `untested`; an item somebody reported on is `closed`), so a pack gives its `Style` its own words for those four states; the other words are `WORDS_EN` or `WORDS_ZH` with the pack's `words_over`; the sentences are the items' coded messages in the style's language (`say=` replaces that for a pack with its own, Traditional Chinese for one). Seen once: the video-ads skill pack draws its own (`daily_page.py`, `audit_page.py`); the next ads skill pack's weekly page is the second reader. The pack's test runs `STYLE.problems()` on the page as on any other.
+
 ## What the skill pack supplies
 
 - **Its words and its lang:** the state words, the button words, the currency; where they are kept and who renames them.
