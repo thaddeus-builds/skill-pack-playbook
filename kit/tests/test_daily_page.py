@@ -80,8 +80,8 @@ def test_real() -> None:
     check("the registry's sentence is used for a registered code, filled with its params",
           "change its daily budget from 400.0 to 355.0" in page and "ask the maker for 10 creatives" in page, "move/request sentence")
     check("the hint says where to paste the command", "paste this in a terminal" in page)
-    check("the pacing note is the one warning; the page data lists the items in order",
-          page.count("<li>no target</li>") == 1 and [i["id"] for i in data_of(page)["items"]] == ids)
+    check("the pacing note is the one warning, in the registry's sentence for its code (the kit registers pacing_no_target since compute_pacing); the page data lists the items in order",
+          page.count("<li>2026-10: no spend target for the month: nothing to plan</li>") == 1 and [i["id"] for i in data_of(page)["items"]] == ids)
     check("severity order: high before medium before info", [i["severity"] for i in data_of(page)["items"]] == sorted((i["severity"] for i in d["items"]), key=daily.RANK.get))
 
 
