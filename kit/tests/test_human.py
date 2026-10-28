@@ -647,6 +647,23 @@ def test_json_refusal_and_console() -> None:
           and doc["next"] == [f"{shlex.join(cmd)} --code {e.confirm_code} "
                               "--relay-user <sender_id> --relay-at <iso_time>"]
           and doc == contract.failure_doc(e, cmd), doc)
+    with mock.patch.dict(os.environ, {SECRET: "s3cret"}), \
+            mock.patch.object(sys, "stdin", io.StringIO()):
+        q = raises(lambda: human.confirm(WHAT, "unit_cost = 4 ", "4",
+                                         subj=subj, need_quote=True),
+                   human.CodeRequired)
+    qdoc = human.json_refusal(q, cmd)
+    check("need_quote: confirm() passes it to CodeRequired; the hint ends "
+          "with --relay-quote; nothing else differs from the default",
+          q.need_quote is True and e.need_quote is False
+          and qdoc["next"] == [f"{shlex.join(cmd)} --code {q.confirm_code} "
+                               "--relay-user <sender_id> --relay-at "
+                               "<iso_time> --relay-quote <their_words>"]
+          and qdoc["subject"] == doc["subject"]
+          and qdoc["code"] == doc["code"] and list(qdoc) == list(doc)
+          and qdoc == contract.failure_doc(q, cmd)
+          and relay_parses(json.loads(json.dumps(qdoc))) == q.confirm_code,
+          qdoc)
     plain = human.json_refusal(human.Refused(messages.msg(
         "confirm_relay_audit_missing", "x")), cmd)
     check("a plain refusal: {error, next [], code, params}, no subject, not "
