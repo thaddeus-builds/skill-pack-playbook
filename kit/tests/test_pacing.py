@@ -101,6 +101,44 @@ def main() -> int:
             pass
     check("a band that is not 0 <= min <= max <= 1 is refused", not bad, bad)
 
+    print("[3c] event days (issue #265)")
+    wed = lambda d: 120.0 if d.weekday() == 2 else 100.0                      # noqa: E731
+    sale = date(2026, 8, 26)                                                  # a Wednesday inside the history
+    clean = {k: v for k, v in series(date(2026, 8, 3), 56, wed).items() if k != sale.isoformat()}
+    spiked = {**clean, sale.isoformat(): 400.0}
+    last = date(2026, 9, 27)
+    w_clean, _, _ = pacing.weekday_weights(clean, last, 8, 4)
+    w_event, kind_e, least_e = pacing.weekday_weights(spiked, last, 8, 4, {sale})
+    w_naive, _, _ = pacing.weekday_weights(spiked, last, 8, 4)
+    check("a sale Wednesday left out gives the other Wednesdays the weight they had without it", w_event == w_clean and kind_e == "weighted" and least_e == 7, (w_event, w_clean))
+    check("left in, the same sale would have lifted every Wednesday", w_naive[2] > w_clean[2] + 0.02, (w_naive[2], w_clean[2]))
+    no_event = pacing.plan("2026-10", 3100.0, None, spiked, {}, last, None, 8, 4)
+    check("no event days (None or empty): the plan is what it was, with no event key and no event flag",
+          pacing.plan("2026-10", 3100.0, None, spiked, {}, last, None, 8, 4, event_days=set()) == no_event
+          and not any(k.startswith("event") for k in no_event) and not any(("event" in r) for r in no_event["days"]), no_event)
+    oct14 = date(2026, 10, 14)                                                  # a Wednesday of the month planned
+    p = pacing.plan("2026-10", 3100.0, None, spiked, {}, last, None, 8, 4, event_days={sale, oct14})
+    rows = {r["day"]: r for r in p["days"]}
+    ordinary_wed = rows["2026-10-07"]
+    check("the account's earlier event day was 400 against an ordinary Wednesday of 120: a lift of 3.33, read from one event day",
+          abs(p["event_lift"] - 400.0 / 120.0) < 1e-3 and p["event_lift_days"] == 1 and p["event_days_in_month"] == ["2026-10-14"], p)
+    check("the event day is planned higher than the ordinary Wednesday beside it, and says it is an event",
+          rows["2026-10-14"]["event"] is True and abs(rows["2026-10-14"]["budget"] / ordinary_wed["budget"] - p["event_lift"]) < 0.02 and "event" not in ordinary_wed, (rows["2026-10-14"], ordinary_wed))
+    check("the other Wednesdays keep the weight they had without any event", ordinary_wed["weight"] == round(w_clean[2], 4), ordinary_wed)
+    check("the days still add up to the money left (to the cent, per day)", abs(sum(r["budget"] for r in p["days"]) - p["money_left"]) < 0.005 * len(p["days"]), p["money_left"])
+    check("with a lift read there is no flag to say there was none", "event_no_history" not in p["flags"], p["flags"])
+    p = pacing.plan("2026-10", 3100.0, None, clean, {}, last, None, 8, 4, event_days={oct14})
+    rows = {r["day"]: r for r in p["days"]}
+    check("no earlier event day: it is planned as an ordinary day, the lift is None and the flag says why",
+          p["event_lift"] is None and "event_no_history" in p["flags"] and rows["2026-10-14"]["event"] is True
+          and rows["2026-10-14"]["weight"] == rows["2026-10-07"]["weight"], p)
+    p = pacing.plan("2026-10", 3100.0, None, spiked, {}, last, None, 8, 4, event_days={sale})
+    check("event days outside the month are not planned: no lift is read and no flag is raised", p["event_days_in_month"] == [] and p["event_lift"] is None and "event_no_history" not in p["flags"], p)
+    flat = {k: v for k, v in series(date(2026, 9, 1), 20, lambda d: 100.0).items()}
+    flat[date(2026, 9, 12).isoformat()] = 300.0
+    p = pacing.plan("2026-10", 3100.0, None, flat, {}, date(2026, 9, 20), None, 8, 4, event_days={date(2026, 9, 12), date(2026, 10, 12)})
+    check("with too little history for weekday weights (flat) the lift is read against the mean ordinary day", p["weights_kind"] == "flat" and abs(p["event_lift"] - 3.0) < 1e-6, p)
+
     print("[4] the pace")
     p = pacing.plan("2026-10", 3100.0, None, ds, {}, date(2026, 10, 15), None, 8, 4)
     check("15 of 31 even days = 1,500 of 3,100 against an even 1,500: pace 1.0", p["pace_ratio"] == 1.0, p["pace_ratio"])
