@@ -44,9 +44,10 @@ dispatcher; its routing table became the verb table):
      verb's own --help: a group's --help stays the one-line listing.
 
 Built-ins: `<cli> doctor [--live] [--strict] [--json]` (kit.doctor, with the
-skill pack's own checks and platform-lock hook) and `<cli> verbs [--json]`
-(the verb table with kinds, for agents and guards). A refusal of the
-dispatcher itself is one coded failure document under --json
+skill pack's own checks, platform-lock hook and, optionally, flags of its own
+whose values its checks read as `ctx.args`: `doctor_flags`) and
+`<cli> verbs [--json]` (the verb table with kinds, for agents and guards). A
+refusal of the dispatcher itself is one coded failure document under --json
 (kit.contract.fail), else `error:` / `next:` on stderr.
 
 Test: kit/tests/test_cli.py.
@@ -98,14 +99,17 @@ def masked(cmd: list[str]) -> list[str]:
 class Dispatcher:
     """`Dispatcher(verbs, *, scripts_dir, epilog, doctor_checks)` per the
     SPEC; `spec` (the skill pack's SchemaSpec: doctor checks the DB's shape),
-    `platform_lock` (doctor's hook), `description` and `runner` are
-    additions. `runner` is `"uv"` or `"auto"` (kit.runner.RUNNERS) and stands
-    in for the KIT_RUNNER value of every script it starts; None, the default,
-    leaves that to the environment. Any other word is refused at once (a typo
-    would run every script under this interpreter)."""
+    `platform_lock` (doctor's hook), `description` and `runner` are additions,
+    and so is `doctor_flags(parser)`, which adds the skill pack's own options to
+    `<cli> doctor` (kit.doctor, "flags"). `runner` is `"uv"` or `"auto"`
+    (kit.runner.RUNNERS) and stands in for the KIT_RUNNER value of every script
+    it starts; None, the default, leaves that to the environment. Any other
+    word is refused at once (a typo would run every script under this
+    interpreter)."""
 
     def __init__(self, verbs: Iterable[Any], *, scripts_dir: Path | str,
                  epilog: str = "", doctor_checks: Iterable[Callable] = (),
+                 doctor_flags: Callable | None = None,
                  spec: Any = None, platform_lock: Callable | None = None,
                  description: str = "", runner: str | None = None):
         if runner is not None and runner not in RUNNERS:
@@ -115,6 +119,7 @@ class Dispatcher:
         self.scripts_dir = Path(scripts_dir).resolve()
         self.epilog = epilog
         self.doctor_checks = tuple(doctor_checks)
+        self.doctor_flags = doctor_flags
         self.spec = spec
         self.platform_lock = platform_lock
         self.description = description
@@ -223,7 +228,8 @@ class Dispatcher:
             return doctor.main(args[1:], checks=self.doctor_checks,
                                spec=self.spec, verbs=self.verbs,
                                scripts_dir=self.scripts_dir,
-                               platform_lock=self.platform_lock)
+                               platform_lock=self.platform_lock,
+                               flags=self.doctor_flags)
         if args[0] == "verbs":
             if set(args[1:]) & set(HELP):
                 print(f"usage: {self.cli} verbs [--json]")

@@ -10,6 +10,11 @@ from here, so what doctor reports is what the scripts use.
     the same way (data_dir_not_absolute). `~` is expanded.
   * `<P>_DB` overrides the DB file; a relative one sits under the data
     dir. Default: `<DATA_DIR>/<db_file>`.
+  * `<P>_RAW` overrides the raw store's root (`raw_dir()`, which `kit.raw`
+    saves under as `<root>/<source>/<name>`); a relative one sits under the
+    data dir. Default: `<DATA_DIR>/raw`. `resolve()` does not list it (its
+    output for a pack that never sets `<P>_RAW` stays as it was); doctor
+    reports it only when it is set.
   * `inside_repo(p)`: doctor warns when client data lives in the skill pack
     checkout (it would ship in a release or leak into a commit).
 
@@ -27,6 +32,8 @@ from pathlib import Path
 from kit.config import config
 from kit.contract import SkillPackError
 from kit.messages import msg
+
+RAW = "raw"      # the raw store's folder under the data dir (kit.raw.RAW)
 
 
 def data_dir() -> Path:
@@ -62,6 +69,15 @@ def db_path() -> Path:
         p = Path(override).expanduser()
         return p if p.is_absolute() else data_dir() / p
     return data_dir() / cfg.db_file
+
+
+def raw_dir() -> Path:
+    """`<P>_RAW` (relative = under the data dir), else <DATA_DIR>/raw."""
+    override = os.environ.get(config().env("RAW"), "").strip()
+    if override:
+        p = Path(override).expanduser()
+        return p if p.is_absolute() else data_dir() / p
+    return data_dir() / RAW
 
 
 def resolve() -> dict[str, str | None]:

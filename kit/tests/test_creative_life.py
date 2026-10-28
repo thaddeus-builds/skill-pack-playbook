@@ -9,6 +9,8 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import _shop  # noqa: E402
+from kit import messages  # noqa: E402
 from kit.creative_life import Day, Params, replay  # noqa: E402
 from kit.testing.check import check, finish  # noqa: E402
 
@@ -29,6 +31,7 @@ def path(life):
 
 
 def main() -> int:
+    _shop.use()
     print("[1] testing")
     life = replay(days([(10, 400, 5, 0)] * 3), P)
     check("1200 impressions in 3 days: learning, so nothing is waited for on reach", life.state == "learning", life.waiting)
@@ -121,6 +124,64 @@ def main() -> int:
     check("totals are the sums over the counted days", life.totals["conversions"] == 3 and life.totals["spend"] == 30
           and life.days_counted == 3, life.totals)
     check("the first day it was seen is when a creative started", replay([], P).state == "testing" and replay([], P).since is None)
+    print("[7] the last days are understated: read_cost")
+    SEEN = [0.7, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05]          # the share of a day's conversions visible, the oldest tail day first
+
+    def tail(true):
+        """A creative whose days are `true` conversions each, the last 7 seen at SEEN of it: (days, {date: share})."""
+        share = {}
+        rows = []
+        for i, t in enumerate(true):
+            f = SEEN[i - (len(true) - 7)] if i >= len(true) - 7 else 1.0
+            share[(START + timedelta(days=i)).isoformat()] = f
+            rows.append((100, 1000, 30, t * f))
+        return days(rows), share
+
+    def reader(share):
+        """What a pack builds from its curve: the window's conversions read at their share, the cost with a quarter either way while any day is unsettled."""
+        def read(window):
+            est = sum(d.conversions / share[d.date] for d in window)
+            if est <= 0:
+                return None
+            cost = sum(d.spend for d in window) / est
+            return (cost, cost, cost) if all(share[d.date] == 1.0 for d in window) else (cost, cost * 0.75, cost * 1.25)
+        return read
+    steady, share = tail([4] * 30)
+    seen = replay(steady, P)
+    check("a steady creative (a true cost of 25) is declining on its understated tail as it was seen", path(seen)[-1] == ("mature", "declining", "worse") and seen.moves[-1].date == steady[-1].date, path(seen))
+    read = replay(steady, P, read_cost=reader(share))
+    check("read on what the tail will come to it stays mature: no move after it learned", read.state == "mature" and path(read) == path(replay(steady[:-7], P)), path(read))
+    check("and it is the same life as the settled numbers give", read.state == replay(days([(100, 1000, 30, 4)] * 30), P).state)
+    old, _ = tail([4] * 20 + [1.5] * 10)
+    check("a cost that really rose, in days older than the unsettled ones, is declining with or without the function", path(replay(old, P, read_cost=reader(share)))[-1] == ("mature", "declining", "worse"), path(replay(old, P, read_cost=reader(share))))
+    new, sh2 = tail([4] * 23 + [0.4] * 7)
+    got = replay(new, P, read_cost=reader(sh2))
+    check("a rise that only the tail shows and that the interval backs (a true cost of 250 over the last 7 days, the line 37.5) is declining", path(got)[-1] == ("mature", "declining", "worse"), (path(got), got.moves[-1].read))
+    check("its move says the cost it was read at, which is the estimate and not the cost as seen", got.moves[-1].read["cost7"] < 400 and got.moves[-1].read["cost7"] > 100
+          and got.moves[-1].read["cost7"] != replay(new, P).moves[-1].read["cost7"], got.moves[-1].read)
+    mid, sh3 = tail([4] * 23 + [2.2] * 7)
+    check("a rise whose interval straddles the line (a true cost of 45.5 against 37.5, from 34 to 57) is no worse day: declining as seen, mature when read on the estimate",
+          path(replay(mid, P))[-1] == ("mature", "declining", "worse") and replay(mid, P, read_cost=reader(sh3)).state == "mature", (path(replay(mid, P)), path(replay(mid, P, read_cost=reader(sh3)))))
+    lucky_at = steady[27].date
+
+    def lucky(window):
+        return (10.0, 10.0, 40.0) if window[-1].date == lucky_at else None
+    flat = days([(100, 1000, 30, 4)] * 31)
+    check("a best cost is never set lower than the interval's high edge: one lucky reading (10, 10 to 40) does not make the later cost of 25 a decline",
+          replay(flat, P, read_cost=lucky).state == "mature", path(replay(flat, P, read_cost=lucky)))
+    check("a function with no answer reads the window as seen: the same moves as with none", [(m.date, m.frm, m.to, m.reason) for m in replay(steady, P, read_cost=lambda w: None).moves]
+          == [(m.date, m.frm, m.to, m.reason) for m in seen.moves])
+
+    def refused(fn):
+        try:
+            replay(steady, P, read_cost=fn)
+        except Exception as e:  # noqa: BLE001
+            f = messages.failure(e)
+            return f["code"], f["params"].get("part")
+        return None, None
+    bad = {"a number": lambda w: 25.0, "a cost outside its interval": lambda w: (25.0, 30.0, 40.0), "text": lambda w: ("a", "b", "c"), "a flag": lambda w: (True, True, True)}
+    got = {n: refused(f) for n, f in bad.items()}
+    check("an answer that is not None or (cost, low, high) with low <= cost <= high is refused, naming read_cost", all(v == ("compute_input_invalid", "read_cost") for v in got.values()), got)
     return finish()
 
 

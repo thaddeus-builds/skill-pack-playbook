@@ -63,11 +63,36 @@ then the skill pack's own checks: `check(ctx)` callables that call
 is theirs to use (`ctx.live`): the kit makes no network call. A check that
 raises is reported as a warning (doctor_check_crashed), never a traceback.
 
+A skill pack that has a doctor flag of its own, or a `--json` document older
+than the kit's, adds to this and replaces none of it (seen once, in the SEO
+skill pack, whose `doctor --json` carries thirteen keys and a `--health`
+flag that came before the kit's):
+
+  flags        `flags(parser)` (`Dispatcher(doctor_flags=...)`) adds the skill
+               pack's own options to doctor's parser, after the kit's three
+               (`--live`, `--strict`, `--json`); declaring one of those again
+               is argparse's own conflict error. What was parsed, the pack's
+               flags included, is `ctx.args` in every check (an empty
+               Namespace when `collect()` is called with none).
+  extra keys   a check stores a value as `ctx.extra[key] = value`; `--json`
+               carries it as a top-level key, after the kit's. A key the
+               document already has (`skill_pack`, `live`, `strict`,
+               `checks`, `summary`, `healthy`, `message`, `message_code`) is
+               refused when the document is built: doctor_extra_key_taken,
+               one coded failure under --json, so a skill pack's own test of
+               `doctor --json` is what catches it, as it would a key the kit
+               adds later that the pack already used. The text report prints
+               findings only, never extras: what a person must read is a
+               finding (`info`, with its fix in `next`).
+
+Neither changes a verdict, a finding or a key the kit has: with no flags and
+no extras the output is the kit's alone.
+
 Exit: 1 when any check failed (a `--live` probe that was rejected); with
 `--strict` any warning is fatal too (so `<cli> doctor --strict && <cli>
 ingest …` is a safe gate); else 0. Under --json: one document
 {skill pack, checks: [{check, level, message, message_code, next}], summary,
-healthy, live, strict, message, message_code}.
+healthy, live, strict, message, message_code} and the skill pack's extra keys.
 
 Reads only: the DB is opened read-only and never created.
 
@@ -119,6 +144,8 @@ class Context:
     spec: Any = None                   # the skill pack's kit.db.SchemaSpec
     verbs: list = field(default_factory=list)
     scripts_dir: Path | None = None
+    args: argparse.Namespace = field(default_factory=argparse.Namespace)
+    extra: dict[str, Any] = field(default_factory=dict)   # top-level --json keys
     findings: list[Finding] = field(default_factory=list)
     _con: Any = None
     _con_tried: bool = False
@@ -164,6 +191,7 @@ class Context:
 
 Check = Callable[[Context], None]
 PlatformLock = Callable[[Context], Any]
+Flags = Callable[[argparse.ArgumentParser], Any]
 
 
 def _open_db(spec: Any):
@@ -330,7 +358,10 @@ def check_data_dir(ctx: Context) -> None:
             f"any client that leaves it unset lands in this data dir)",
             var=var, file=home), [f"export {var}=/absolute/path/to/client-data",
                                   f"export {ch.paths_var}=none"])
-    for v, p in ((var, d), (cfg.env("DB"), paths.db_path())):
+    checked = [(var, d), (cfg.env("DB"), paths.db_path())]
+    if os.environ.get(cfg.env("RAW"), "").strip():       # listed only when set
+        checked.append((cfg.env("RAW"), paths.raw_dir()))
+    for v, p in checked:
         if v != var:
             ctx.ok("data_dir", msg("doctor_path", f"{v} -> {p}", var=v,
                                    path=str(p)))
@@ -603,11 +634,13 @@ def _crashed(ctx: Context, fn: Any, e: BaseException) -> None:
 def collect(ctx_checks: Iterable[Check] = (), *, live: bool = False,
             strict: bool = False, spec: Any = None, verbs: Iterable = (),
             scripts_dir: Path | str | None = None,
-            platform_lock: PlatformLock | None = None) -> Context:
+            platform_lock: PlatformLock | None = None,
+            args: argparse.Namespace | None = None) -> Context:
     """Run every built-in check, then the skill pack's; the Context holds the
-    findings."""
+    findings, and `args` (what main() parsed) for the skill pack's checks."""
     ctx = Context(live=live, strict=strict, spec=spec, verbs=list(verbs),
-                  scripts_dir=Path(scripts_dir) if scripts_dir else None)
+                  scripts_dir=Path(scripts_dir) if scripts_dir else None,
+                  args=argparse.Namespace() if args is None else args)
     steps: list[Callable[[Context], None]] = [
         *BUILTIN, lambda c: check_platform_lock(c, platform_lock),
         check_verbs, check_kit_tty, check_checkout, *ctx_checks]
@@ -646,13 +679,20 @@ def document(ctx: Context) -> dict:
     cfg = _config.config()
     from kit import __version__ as kit_version
     s = summary(ctx)
-    return {"skill_pack": {"name": cfg.name, "cli": cfg.cli,
-                        "version": contract.skill_pack_version(),
-                        "kit_version": kit_version, "root": str(cfg.root)},
-            "live": ctx.live, "strict": ctx.strict,
-            "checks": [f.as_dict() for f in ctx.findings],
-            "summary": s, "healthy": verdict(ctx) == 0,
-            **coded("message", _summary_msg(s))}
+    doc = {"skill_pack": {"name": cfg.name, "cli": cfg.cli,
+                       "version": contract.skill_pack_version(),
+                       "kit_version": kit_version, "root": str(cfg.root)},
+           "live": ctx.live, "strict": ctx.strict,
+           "checks": [f.as_dict() for f in ctx.findings],
+           "summary": s, "healthy": verdict(ctx) == 0,
+           **coded("message", _summary_msg(s))}
+    taken = sorted(k for k in ctx.extra if k in doc)
+    if taken:
+        raise SkillPackError(msg(
+            "doctor_extra_key_taken", f"ctx.extra uses key(s) the doctor "
+            f"document already has: {', '.join(taken)} — rename them in the "
+            f"check that sets them", keys=taken))
+    return {**doc, **ctx.extra}
 
 
 MARK = {"ok": "ok  ", "info": "    ", "warn": "WARN", "fail": "FAIL"}
@@ -673,12 +713,12 @@ def run(ctx_checks: Iterable[Check] = (), *, live: bool = False,
         strict: bool = False, spec: Any = None, verbs: Iterable = (),
         scripts_dir: Path | str | None = None,
         platform_lock: PlatformLock | None = None,
-        as_json: bool = False) -> int:
+        as_json: bool = False, args: argparse.Namespace | None = None) -> int:
     """Every check; prints the report (text, or one JSON document); returns
     the exit code (see the module docstring)."""
     ctx = collect(ctx_checks, live=live, strict=strict, spec=spec,
                   verbs=verbs, scripts_dir=scripts_dir,
-                  platform_lock=platform_lock)
+                  platform_lock=platform_lock, args=args)
     if as_json:
         contract.emit(document(ctx))
     else:
@@ -686,7 +726,7 @@ def run(ctx_checks: Iterable[Check] = (), *, live: bool = False,
     return verdict(ctx)
 
 
-def parser(cli: str) -> argparse.ArgumentParser:
+def parser(cli: str, flags: Flags | None = None) -> argparse.ArgumentParser:
     p = contract.Parser(
         prog=f"{cli} doctor",
         description="Is this install healthy: env and where each value came "
@@ -699,18 +739,21 @@ def parser(cli: str) -> argparse.ArgumentParser:
                    help="exit 1 on ANY warning, so `doctor --strict && …` is "
                         "a safe gate")
     contract.add_json_arg(p)
+    if flags is not None:
+        flags(p)
     return p
 
 
 def main(argv: list[str] | None = None, *, checks: Iterable[Check] = (),
          spec: Any = None, verbs: Iterable = (),
          scripts_dir: Path | str | None = None,
-         platform_lock: PlatformLock | None = None) -> int:
+         platform_lock: PlatformLock | None = None,
+         flags: Flags | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
     def go(argv: list[str]) -> int:
-        a = parser(_cli()).parse_args(argv)
+        a = parser(_cli(), flags).parse_args(argv)
         return run(checks, live=a.live, strict=a.strict, spec=spec,
                    verbs=verbs, scripts_dir=scripts_dir,
-                   platform_lock=platform_lock, as_json=a.json)
+                   platform_lock=platform_lock, as_json=a.json, args=a)
     return contract.run_main(go, argv, cmd=[_cli(), "doctor", *argv])

@@ -29,6 +29,14 @@ on the fake "shop" skill pack.
   [10] the hub's exchange folder: no hub named, no line; a hub without
       exchange/ warns with the mkdir; a stray path warns and names it; a
       tidy folder is ok with its counts
+  [11] a skill pack's own flags and keys: with no hook the parser, the
+      document and ctx are the kit's alone; a flag reaches a check as
+      ctx.args (and is listed by --help, a typo is still a usage error, a
+      kit flag declared again is refused); a check's ctx.extra is a
+      top-level --json key after the kit's, a key the document has is
+      refused (coded), text prints findings only; --strict fails only on
+      what a check warns; Dispatcher(doctor_flags=, doctor_checks=) passes
+      it all through
 """
 
 import os
@@ -45,6 +53,7 @@ os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 import _shop  # noqa: E402
 from kit import config, db, doctor, facts, raw  # noqa: E402
+from kit.cli import Dispatcher  # noqa: E402
 from kit.guards import json_contract  # noqa: E402
 from kit.messages import msg  # noqa: E402
 from kit.registry import FactKeys, Thresholds  # noqa: E402
@@ -72,7 +81,7 @@ def env(data: Path | str | None, **extra: str) -> dict:
 
 
 def run(data, *argv, checks=(), lock=None, verbs=VERBS, spec=SPEC,
-        root=None, load_chain=True, **extra):
+        root=None, load_chain=True, flags=None, **extra):
     """doctor.main in this process, after the env chain is loaded the way
     the dispatcher loads it: (rc, out, err, document-or-None)."""
     config.use(root or _shop.SHOP)
@@ -82,7 +91,8 @@ def run(data, *argv, checks=(), lock=None, verbs=VERBS, spec=SPEC,
             from kit import env as kenv
             kenv.chain().load_into_environ()
         return doctor.main(argv, checks=checks, spec=spec, verbs=verbs,
-                           scripts_dir=SCRIPTS, platform_lock=lock)
+                           scripts_dir=SCRIPTS, platform_lock=lock,
+                           flags=flags)
     try:
         rc, out, err = capture(go, list(argv), env=env(data, **extra))
     finally:
@@ -222,6 +232,22 @@ def test_paths() -> None:
     check("a data dir inside the checkout: a warning per path",
           codes(doc, "data_dir").count("doctor_inside_repo") == 2
           and found(doc, "data_dir", "warn"))
+    check("no SHOP_RAW: it is not listed",
+          all(c["message_code"]["params"].get("var") != "SHOP_RAW"
+              for c in found(doc, "data_dir")))
+    _, _, _, doc = run(inside.parent / "x", "--json",
+                       **{CFG.env("RAW"): str(inside)})
+    check("SHOP_RAW set inside the checkout: listed, and warned about",
+          [c["message_code"]["params"]["path"] for c in found(doc, "data_dir")
+           if c["message_code"]["params"].get("var") == "SHOP_RAW"]
+          == [str(inside)] * 2, codes(doc, "data_dir"))
+    out_raw = Path(tmp_dir("doc-r-"))
+    _, _, _, doc = run(Path(tmp_dir("doc-t-")), "--json",
+                       **{CFG.env("RAW"): str(out_raw)})
+    check("SHOP_RAW outside it: listed, no warning",
+          [c["message_code"]["params"]["path"] for c in found(doc, "data_dir")
+           if c["message_code"]["params"].get("var") == "SHOP_RAW"]
+          == [str(out_raw)] and codes(doc, "data_dir").count("doctor_inside_repo") == 0)
     _, _, _, doc = run(Path(tmp_dir("doc-t-")), "--json",
                        **{CFG.env("TOKEN_SOURCE"): "vault"})
     check("an unknown token source: a warning (auth_bad_token_source)",
@@ -649,6 +675,166 @@ def test_exchange() -> None:
           found(doc, "exchange") == [])
 
 
+# ------------------------------------------------------------------ [11]
+
+KIT_KEYS = ["skill_pack", "live", "strict", "checks", "summary", "healthy",
+            "message", "message_code"]
+
+
+def pack_flags(p) -> None:
+    p.add_argument("--health", action="store_true",
+                   help="the skill pack's own report")
+    p.add_argument("--depth", type=int, default=1)
+
+
+def pack_check(ctx) -> None:
+    """A skill pack's check: reads its own flags, attaches data to the
+    document, and under --health warns the way a pack's "behind" line does."""
+    a = ctx.args
+    seen = f"health={a.health} depth={a.depth}"      # the fake pack's codes
+    ctx.info("shop_args", msg("shop_price_missing", seen, sku=seen))
+    if a.health:
+        ctx.extra["health"] = {"depth": a.depth, "behind": 51}
+        ctx.extra["pack_version"] = "9.9.9"
+        ctx.warn("shop_behind", msg("shop_stock_low", "the checkout is 51 "
+                                    "commits behind origin/main",
+                                    sku="checkout", units=51), ["git pull"])
+
+
+def takes_kit_keys(ctx) -> None:
+    ctx.extra.update({"checks": [], "healthy": True, "mine": 1})
+
+
+def cli(data, *argv, **hooks):
+    """`shop doctor …` through the Dispatcher, in this process."""
+    config.use(_shop.SHOP)
+    d = Dispatcher(VERBS, scripts_dir=SCRIPTS, spec=SPEC, **hooks)
+    try:
+        rc, out, err = capture(d.main, ["doctor", *argv], env=env(data))
+    finally:
+        _shop.use()
+    return rc, out, err, one_doc(out)
+
+
+def test_pack_hooks() -> None:
+    print("\n[11] a skill pack's own flags and keys")
+    data = Path(tmp_dir("doc-pack-"))
+    rc, out, err, doc = run(data, "--json")
+    check("no hook: the document has the kit's keys and no others",
+          rc == 0 and list(doc) == KIT_KEYS, list(doc))
+    check("no hook: the parser has the kit's three options and no others",
+          vars(doctor.parser("shop").parse_args([]))
+          == {"live": False, "strict": False, "json": False})
+    box: dict = {}
+
+    def grab(_argv):
+        box["ctx"] = doctor.collect(spec=SPEC)
+        return 0
+    capture(grab, [], env=env(data))
+    check("collect() without args: ctx.args is an empty Namespace, ctx.extra "
+          "an empty dict", vars(box["ctx"].args) == {}
+          and box["ctx"].extra == {}, box["ctx"].args)
+    rc, out, err, doc = run(data, "--health", "--json")
+    check("a flag nobody declared is still a coded usage error",
+          rc == 2 and doc and doc["code"] == "usage", (out, err))
+
+    print("   -- flags")
+    rc, out, err, doc = run(data, "--json", "--health", "--depth", "3",
+                            checks=[pack_check], flags=pack_flags)
+    seen = found(doc, "shop_args")
+    check("a skill pack's flag reaches its check as ctx.args",
+          rc == 0 and len(seen) == 1
+          and seen[0]["message"] == "health=True depth=3"
+          and seen[0]["message_code"]["params"]
+          == {"sku": "health=True depth=3"}, (rc, seen))
+    _, _, _, doc = run(data, "--json", checks=[pack_check], flags=pack_flags)
+    check("… and its defaults when the flag is absent",
+          found(doc, "shop_args")[0]["message"] == "health=False depth=1")
+    rc, out, err, _ = run(data, "--help", flags=pack_flags)
+    check("--help lists the pack's flags beside the kit's, exit 0",
+          rc == 0 and all(w in out for w in ("--health", "--depth", "--live",
+                                              "--strict", "--json")), out)
+    rc, out, err, doc = run(data, "--healht", "--json", flags=pack_flags)
+    check("a typo is still a coded usage error with the pack's flags added",
+          rc == 2 and doc and doc["code"] == "usage", (out, err))
+    rc, out, err, doc = run(
+        data, "--json",
+        flags=lambda p: p.add_argument("--live", action="store_true"))
+    check("a pack that declares a kit flag again is refused, one document, "
+          "the flag named", rc == 1 and doc and "--live" in doc["error"]
+          and "conflicting" in doc["error"], (rc, out, err))
+
+    print("   -- extra keys")
+    rc, out, err, doc = run(data, "--json", "--health", "--depth", "2",
+                            checks=[pack_check], flags=pack_flags)
+    check("a check's ctx.extra is a top-level key after the kit's, the "
+          "kit's keys untouched",
+          list(doc) == KIT_KEYS + ["health", "pack_version"]
+          and doc["health"] == {"depth": 2, "behind": 51}
+          and doc["pack_version"] == "9.9.9" and doc["live"] is False
+          and doc["checks"][0]["check"] == "skill_pack", list(doc))
+    _, _, _, doc = run(data, "--json", checks=[pack_check], flags=pack_flags)
+    check("a key a check did not set is absent", list(doc) == KIT_KEYS)
+    rc, out, err, doc = run(data, "--json", checks=[takes_kit_keys])
+    check("a key the document has is refused: one coded failure, every "
+          "colliding key named, no partial document",
+          rc == 2 and doc and doc["code"] == "doctor_extra_key_taken"
+          and doc["params"] == {"keys": ["checks", "healthy"]}
+          and "skill_pack" not in doc and "mine" not in out, (rc, out))
+    rc, out, err, doc = run(data, "--health", checks=[pack_check],
+                            flags=pack_flags)
+    check("text prints findings, never extras, and the fix of a warning",
+          rc == 0 and doc is None and "the checkout is 51 commits behind "
+          "origin/main" in out and "next: git pull" in out
+          and "9.9.9" not in out, out)
+    rc, out, err, doc = run(data, checks=[takes_kit_keys])
+    check("text builds no document, so a colliding key is only refused "
+          "under --json (module docstring)", rc == 0 and "WARN" in out
+          and "doctor_extra_key_taken" not in out, (rc, out[-200:]))
+
+    print("   -- --strict")
+    init(data)
+    with closing(sqlite3.connect(data / "shop.db")) as c:
+        c.execute("UPDATE client_facts SET is_assumption = 0 WHERE key = "
+                  "'market_declared'")
+        c.commit()
+    rc, out, err, doc = run(data, "--json", "--strict", "--depth", "2",
+                            checks=[pack_check], flags=pack_flags)
+    check("a healthy install with the pack's flags and an info line still "
+          "passes --strict", rc == 0 and doc["healthy"]
+          and doc["summary"]["warn"] == 0, (rc, doc["summary"]))
+    rc, out, err, doc = run(data, "--json", "--health", checks=[pack_check],
+                            flags=pack_flags)
+    check("a pack's own warning is a warning: exit 0 without --strict, the "
+          "extra key still there", rc == 0 and doc["summary"]["warn"] == 1
+          and "health" in doc, (rc, doc["summary"]))
+    rc, out, err, doc = run(data, "--json", "--health", "--strict",
+                            checks=[pack_check], flags=pack_flags)
+    check("… and fatal with --strict, the document still whole",
+          rc == 1 and doc["healthy"] is False and "health" in doc
+          and doc["strict"] is True, (rc, doc["summary"]))
+
+    print("   -- Dispatcher")
+    d = Dispatcher(VERBS, scripts_dir=SCRIPTS, doctor_flags=pack_flags)
+    check("Dispatcher keeps the hook; None by default",
+          d.doctor_flags is pack_flags
+          and Dispatcher(VERBS, scripts_dir=SCRIPTS).doctor_flags is None)
+    rc, out, err, doc = cli(data, "--json", "--health", "--depth", "4",
+                            doctor_checks=[pack_check],
+                            doctor_flags=pack_flags)
+    check("`shop doctor --health` through the Dispatcher: the flag, the "
+          "check and the extra key all arrive",
+          rc == 0 and found(doc, "shop_args")[0]["message"]
+          == "health=True depth=4" and doc["health"]["depth"] == 4
+          and list(doc)[:len(KIT_KEYS)] == KIT_KEYS, (rc, out[:200], err))
+    rc, out, err, doc = cli(data, "--json", "--health")
+    check("a Dispatcher with no doctor_flags: the flag is a usage error, "
+          "the document the kit's", rc == 2 and doc["code"] == "usage", out)
+    rc, out, err, doc = cli(data, "--json")
+    check("… and without it the document is the kit's alone",
+          rc == 0 and list(doc) == KIT_KEYS)
+
+
 def main() -> int:
     test_fresh()
     test_writes()
@@ -660,6 +846,7 @@ def main() -> int:
     test_exit()
     test_checkout()
     test_exchange()
+    test_pack_hooks()
     return finish()
 
 
