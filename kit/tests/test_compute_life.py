@@ -103,6 +103,14 @@ def main() -> int:
     check("no creative at all: no rows, no as_of, said", none["rows"] == [] and none["as_of"] is None and codes(none) == ["life_no_creatives"] and none["params"] == {}, none)
     check("the pack's own coded warnings are kept", codes(cl.compute(cl.Source({}, warnings=[messages.msg("life_doubt_unknown", "x", have=1, need=5)]), k))[0] == "life_doubt_unknown")
 
+    ugly = {"U": {"days": [life.Day(date=(START + timedelta(days=i)).isoformat(), spend=0.123456, impressions=100, conversions=0.3333333) for i in range(7)]}}
+    u = cl.compute(cl.Source(ugly), k)["rows"][0]
+    check("the numbers a document feeds forward are not rounded: spend7 and conv7 are the sums of the days, not of their cents (golden comparison, 2026-10-28)",
+          u["spend7"] == sum([0.123456] * 7) and u["conv7"] == sum([0.3333333] * 7), (u["spend7"], u["conv7"]))
+    cents = {c: {"days": days(7, spend=0.004)} for c in "XYZ"}
+    check("the wallets are rounded to the cent once, after the sum (three creatives of 7 x 0.004 = 0.028 each are 0.08, not 3 x 0.03)",
+          cl.compute(cl.Source(cents), k)["wallets"]["explore"] + cl.compute(cl.Source(cents), k)["wallets"]["perform"] + cl.compute(cl.Source(cents), k)["wallets"]["other"] == 0.08, cl.compute(cl.Source(cents), k)["wallets"])
+
     print("[3] the filters, a person's word, a creative the platform no longer runs")
     check("--state keeps that state only", {r["state"] for r in cl.compute(cl.Source(creatives), k, state="mature")["rows"]} == {"mature"})
     check("--creative keeps one, by its id or its label", [r["creative"] for r in cl.compute(cl.Source(creatives), k, creative="DEMO-NEW")["rows"]] == ["DEMO-NEW"]
