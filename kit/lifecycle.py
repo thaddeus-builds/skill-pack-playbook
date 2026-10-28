@@ -21,6 +21,11 @@ The order the states are checked in (the first that holds):
 
 `hold()` keeps one week's noise from moving a state that status and time do not decide.
 
+A window that includes recent days is understated (`kit.maturity`). Given a `maturity.Reading`, `windows()` adds each window's matured reading and `judge()` reads the return on
+the estimate: a window whose visible share is under the threshold is *immature*, and a rule on its return (earning, declining, lagging) is decided only when the whole interval
+is on one side of its threshold; where it cannot tell the state is `unjudged` with the reason `immature`. A mature window is judged as it always was, and without a reading
+nothing changes.
+
 From the video-ads skill pack (`campaign`).
 
 Test: kit/tests/test_lifecycle.py.
@@ -30,6 +35,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+
+from kit import maturity
 
 FORCED = ("blocked", "ended", "setup", "learning")      # decided by status or by time, never by noise: entered and left at once
 STATES = ("blocked", "ended", "setup", "learning", "earning", "steady", "lagging", "declining", "fatigued", "unjudged")
@@ -95,11 +102,36 @@ def _sum(days: dict, lo: date, hi: date) -> dict:
     return {"spend": spend, "revenue": rev, "conversions": conv, "days": n, "roas": (rev / spend) if spend > 0 else None}
 
 
-def windows(days: dict, as_of: str, p: Params) -> tuple[dict, dict]:
-    """(the window ending at as_of, the one before it)."""
+def windows(days: dict, as_of: str, p: Params, reading: "maturity.Reading | None" = None) -> tuple[dict, dict]:
+    """(the window ending at as_of, the one before it). With a `reading` each carries `matured`: its return read on the estimate (`maturity.window_reading`), or None when it
+    spent nothing."""
     end = date.fromisoformat(as_of)
     mid = end - timedelta(days=p.window_days)
-    return (_sum(days, mid + timedelta(days=1), end), _sum(days, mid - timedelta(days=p.window_days - 1), mid))
+    spans = ((mid + timedelta(days=1), end), (mid - timedelta(days=p.window_days - 1), mid))
+    out = [_sum(days, lo, hi) for lo, hi in spans]
+    if reading is not None:
+        for w, (lo, hi) in zip(out, spans):
+            w["matured"] = maturity.window_reading(days, lo, hi, reading)
+    return out[0], out[1]
+
+
+def _band(w: dict) -> tuple[float | None, float | None]:
+    """(low, high) of a window's return for a rule to compare: the estimate's interval when the window is immature, else a point (the estimate when there is one, else the
+    observed return)."""
+    m = w.get("matured")
+    if m is None:
+        return w["roas"], w["roas"]
+    return (m["low"], m["high"]) if m["immature"] else (m["roas"], m["roas"])
+
+
+def _below(lo: float, hi: float, t_lo: float, t_hi: float) -> bool | None:
+    """Whether a return in [lo, hi] is under a threshold in [t_lo, t_hi]: True when all of it is, False when none of it is, None when the interval cannot tell. For a point and a
+    point it is the plain comparison."""
+    if hi < t_lo:
+        return True
+    if lo >= t_hi:
+        return False
+    return None
 
 
 def weekly_clicks(days: dict, as_of: str, weeks: int) -> list[tuple[float, float]]:
@@ -154,10 +186,11 @@ def fatigue(rel: list, p: Params) -> dict | None:
             "fatigued": now <= low and now <= peak * (1 - p.fatigue_ctr_drop)}
 
 
-def judge(c: Campaign, as_of: str, p: Params, benchmark: float | None) -> Verdict:
+def judge(c: Campaign, as_of: str, p: Params, benchmark: float | None, reading: "maturity.Reading | None" = None) -> Verdict:
     """The state of one campaign on `as_of` and the reason; `benchmark` the return it is compared with (its kind's, else the
-    account's), None when there is none to compare with (then nothing is `earning`)."""
-    cur, prev = windows(c.days, as_of, p)
+    account's), None when there is none to compare with (then nothing is `earning`). With a `reading` the return is read on the estimate (see the module's note); an
+    immature window that a rule cannot decide is `unjudged` for the reason `immature`."""
+    cur, prev = windows(c.days, as_of, p, reading)
     spent = sorted(d for d, x in c.days.items() if x[0] > 0 and d <= as_of)
     first = spent[0] if spent else None
     last = spent[-1] if spent else None
@@ -181,19 +214,32 @@ def judge(c: Campaign, as_of: str, p: Params, benchmark: float | None) -> Verdic
         return out("ended", "stopped_idle")
     if age < p.learning_days:
         return out("learning", "new")
-    if cur["spend"] < p.judge_spend or cur["conversions"] < p.min_conversions:
+    if cur["spend"] < p.judge_spend or cur["conversions"] < p.min_conversions:        # the evidence is what was seen: a graduation needs real conversions
         return out("unjudged", "thin")
     if fat and fat["fatigued"]:
         return out("fatigued", "ctr_worn_out")
-    above = bool(benchmark and cur["roas"] is not None and cur["roas"] >= benchmark * (1 + p.earn_margin))
-    if above:
-        return out("earning", "above_benchmark" if use is None or use >= p.use_share else "creative_limited")
-    if prev["spend"] >= p.judge_spend and prev["roas"] and cur["roas"] is not None and cur["roas"] < prev["roas"] * (1 - p.decline_drop):
-        return out("declining", "return_falling")
-    if not benchmark or cur["roas"] is None:
+    lo, hi = _band(cur)
+    if benchmark and lo is not None:
+        t = benchmark * (1 + p.earn_margin)
+        above = _below(lo, hi, t, t)
+        if above is False:
+            return out("earning", "above_benchmark" if use is None or use >= p.use_share else "creative_limited")
+        if above is None:
+            return out("unjudged", "immature")
+    if prev["spend"] >= p.judge_spend and _band(prev)[0] and lo is not None:
+        plo, phi = _band(prev)
+        fell = _below(lo, hi, plo * (1 - p.decline_drop), phi * (1 - p.decline_drop))
+        if fell is True:
+            return out("declining", "return_falling")
+        if fell is None:
+            return out("unjudged", "immature")
+    if not benchmark or lo is None:
         return out("steady", "no_benchmark")
-    if cur["roas"] < benchmark * (1 - p.earn_margin):
+    behind = _below(lo, hi, benchmark * (1 - p.earn_margin), benchmark * (1 - p.earn_margin))
+    if behind is True:
         return out("lagging", "below_benchmark")
+    if behind is None:
+        return out("unjudged", "immature")
     return out("steady", "near_benchmark")
 
 

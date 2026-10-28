@@ -32,7 +32,7 @@ FILES = registry.kit_defaults()
 TABLE = packs.table(KIT)
 COLUMNS = ["name", "default", "unit", "min", "max", "group", "label_en", "label_zh", "explain", "why", "reads"]
 
-# Params fields the pack derives from its own tables; the rows that feed that derivation ship with the compute that does it.
+# Params fields derived from the account's own history (`compute_life.derive` reads the `life_*` rows that feed that derivation); a row would be a second answer.
 DERIVED = {
     ("creative_life", "reach_impressions"): "from the account's reach history",
     ("creative_life", "reach_floor"): "a share of reach_impressions",

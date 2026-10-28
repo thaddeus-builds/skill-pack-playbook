@@ -70,8 +70,22 @@ Every text in an ask is a coded Msg: `about[i]` carries the
 {title,why,if_no,effect}_code of asks[i] (the console format has no room
 for codes inside the ask).
 
+A value the skill pack worked out from data it already holds (an account's id,
+its currency, a reference return) is posted with `facts set KEY VALUE --source
+"derived: <where>, <window>"` and named in the `derived=` hook: `{key: because}`
+or `{(market, key): because}`, the skill pack's own words for where it came from
+(clipped to the console's limit). Such a fact is ONE `confirm` ask whatever its
+registry type: the value is shown, not typed (no box to overtype by accident),
+its recommendation is `yes` with that `because`, and its gate binds the value
+shown. A person still confirms; nothing is in force without it. The derived
+facts of one market are one group (`Facts, M`), so the console's "answer all as
+suggested" confirms them with the values shown. To change one, the person
+answers no and says the right value; the agent sets it and a new question
+follows. A key not named in `derived=` is drawn as before.
+
 Deviation (SPEC §pending): the entry point is `main` (`pending_main` is
-an alias), with keyword hooks thresholds= (threshold_<name> facts) and
+an alias), with keyword hooks thresholds= (threshold_<name> facts),
+derived= (the facts the skill pack derived) and
 on_confirm= (the decisions hook, so its bound values are in `expect`);
 asks, about and warnings are also returned by `asks()` for skill pack code.
 
@@ -102,7 +116,7 @@ from kit.registry import (FACT_PREFIX, DecisionRegistry, FactKeys,
 LIMITS = {"id": 64, "kind": 40, "group": 60, "title": 120, "why": 400,
           "if_no": 200, "effect": 200, "label": 40, "value": 120,
           "source": 120, "caption": 80, "cell": 80, "option_label": 60,
-          "unit": 12, "evidence": 12, "rows": 30, "options": 8,
+          "unit": 12, "evidence": 12, "rows": 30, "options": 8, "because": 200,
           "expect": 2000, "answer": 500, "verb": 7}
 TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,79}\Z")
 FILL = ["recommend.because"]
@@ -326,7 +340,8 @@ def _about(ask_id: str, table: str, m: str, ref: dict, step: str,
 def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
               thresholds: Thresholds | None, relay_markets: list[str],
               confirmed: list[str], warnings: list[Msg],
-              hub: str | None = None) -> tuple[dict, dict]:
+              hub: str | None = None,
+              because: str | None = None) -> tuple[dict, dict]:
     m, key, value = r["market"], r["key"], r["value"]
     version = facts._last_id(con, m, key)
     subj = human.subject("facts confirm", m, "fact", {key: value}, version)
@@ -346,6 +361,8 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
                     f"the agent asks which markets are right.", market=m)
     else:
         shape, label, why_row = _fact_shape(key, keys, thresholds)
+        if because:
+            shape = {"step": "confirm"}          # derived: shown, not typed
         ask_id = _ask_id("fact", [m, key], subj, hub)
         title = msg("pending_title_fact",
                     f"{label} for {m}: is {value} right?", label=label,
@@ -376,6 +393,8 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
                      "fact registry")),
            "recommend": _recommend(shape, value), "if_no": if_no,
            **{k: v for k, v in shape.items() if k != "step"}}
+    if because:
+        ask["recommend"]["because"] = _clip(because, LIMITS["because"])
     gate = None
     if _reachable(ask_id, m, relay_markets, confirmed, not declared,
                   warnings):
@@ -386,9 +405,12 @@ def _fact_ask(con: sqlite3.Connection, r: dict, *, keys: FactKeys | None,
                      value_arg, warnings, _market_word(m, relay_markets), hub)
     if gate:
         ask["gate"] = gate
-    return ask, _about(ask_id, "client_facts", m, {"key": key},
-                       shape["step"], gate is not None, title=title, why=why,
-                       if_no=if_no)
+    about = _about(ask_id, "client_facts", m, {"key": key},
+                   shape["step"], gate is not None, title=title, why=why,
+                   if_no=if_no)
+    if because:
+        about["fill"] = []                       # the skill pack wrote it
+    return ask, about
 
 
 def _hub_conflict_ask(con: sqlite3.Connection, c: dict, *,
@@ -630,17 +652,38 @@ def _file_ask(f: dict, warnings: list[Msg],
 
 # ---- all of them -----------------------------------------------------------
 
+def _derived(derived: dict | None) -> dict:
+    """The `derived=` hook checked: `{key | (market, key): because}`, each a word or a pair of words and a sentence that is not empty."""
+    out = {}
+    for k, v in (derived or {}).items():
+        word = isinstance(k, str) and k.strip()
+        pair = (isinstance(k, tuple) and len(k) == 2
+                and all(isinstance(x, str) and x.strip() for x in k))
+        problem = (None if word or pair else "a key is a fact key or a (market, key) pair")
+        if problem is None and not (isinstance(v, str) and v.strip()):
+            problem = "its because is not a sentence"
+        if problem:
+            raise SkillPackError(msg(
+                "pending_derived_invalid", f"derived[{k!r}]: {problem}",
+                key=str(k), problem=problem))
+        out[k] = v
+    return out
+
+
 def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
          registry: DecisionRegistry | None,
          thresholds: Thresholds | None = None,
          on_confirm: Callable | None = None,
          market: str | None = None,
-         staged: Callable | None = None, hub: bool = False) -> dict:
+         staged: Callable | None = None, hub: bool = False,
+         derived: dict | None = None) -> dict:
     """{asks, about, warnings, message} for every row waiting on a human
     (of `market`, or of every market): declarations first, then facts,
     staged files (`staged(con)`, the skill pack's list of _file_ask's
     dicts), decisions and queue items. `hub`: for a client hub's one
-    console (the module doc, "Hub mode")."""
+    console (the module doc, "Hub mode"). `derived`: the facts the skill pack
+    worked out, `{key | (market, key): because}` (the module doc)."""
+    derived = _derived(derived)
     warnings: list[Msg] = []
     pack = _hub_word() if hub else None
     out: list[tuple[dict, dict]] = []
@@ -652,7 +695,9 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
     for r in rows:
         out.append(_fact_ask(con, r, keys=keys, thresholds=thresholds,
                              relay_markets=fact_markets, confirmed=confirmed,
-                             warnings=warnings, hub=pack))
+                             warnings=warnings, hub=pack,
+                             because=derived.get((r["market"], r["key"]))
+                             or derived.get(r["key"])))
     for c in facts.hub_conflicts(con, market):
         out.append(_hub_conflict_ask(con, c, keys=keys,
                                      relay_markets=fact_markets,
@@ -685,12 +730,13 @@ def asks(con: sqlite3.Connection, *, keys: FactKeys | None,
                  f"{n_files} file(s), {n_dec} decision(s), {n_q} queue "
                  f"item(s)", facts=n_facts, files=n_files, decisions=n_dec,
                  queue=n_q)
-    if out:
+    unfilled = sum(1 for _, b in out if b["fill"])
+    if unfilled:
         warnings.insert(0, msg(
             "pending_fill_because",
-            f"write recommend.because in each of the {len(out)} ask(s) (your "
+            f"write recommend.because in each of the {unfilled} ask(s) (your "
             f"argument, apart from the skill pack's evidence) before `ask.py "
-            f"add`; the console refuses an ask without it", count=len(out)))
+            f"add`; the console refuses an ask without it", count=unfilled))
     return {**coded("message", summary), "market": market, "hub": hub,
             "asks": [a for a, _ in out], "about": [b for _, b in out],
             **coded("warnings", warnings)}
@@ -700,9 +746,11 @@ def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
          keys: FactKeys | None, registry: DecisionRegistry | None,
          thresholds: Thresholds | None = None,
          on_confirm: Callable | None = None,
-         staged: Callable | None = None) -> int:
+         staged: Callable | None = None,
+         derived: dict | None = None) -> int:
     """`<cli> pending [--market M] [--hub] [--json]`; the exit code.
-    `staged(con)`: the skill pack's staged client files (see asks())."""
+    `staged(con)`: the skill pack's staged client files (see asks());
+    `derived`: the facts it derived (see asks())."""
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = config()
     cmd = [cfg.cli, "pending", *argv]
@@ -724,7 +772,7 @@ def main(argv: list[str] | None = None, *, spec: db.SchemaSpec,
         try:
             doc = asks(con, keys=keys, registry=registry,
                        thresholds=thresholds, on_confirm=on_confirm, market=m,
-                       staged=staged, hub=a.hub)
+                       staged=staged, hub=a.hub, derived=derived)
         finally:
             con.close()
         if a.json:

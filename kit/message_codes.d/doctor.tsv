@@ -33,6 +33,7 @@ doctor_verbs_no_examples	count,verbs	{count} verb(s) list no examples, so their 
 doctor_kit_tty	var	{var} is set: the human gate's test seam stands in for the terminal (tests only)	设置了 {var}：人工确认的测试替身正在代替终端（只应在测试中）
 doctor_checkout_differs	docs,docs_head,docs_dirty,runs,runs_head,runs_dirty	the cwd is in {docs} ({docs_head}; uncommitted: {docs_dirty}), not the checkout whose code runs ({runs}, {runs_head}; uncommitted: {runs_dirty}): the docs read there may not describe the code that runs. Read the docs of the checkout you run, or run that one	当前目录在 {docs}（{docs_head}；未提交：{docs_dirty}），不是正在运行的代码所在的副本（{runs}，{runs_head}；未提交：{runs_dirty}）：在那里读到的文档可能和运行的代码不一致。请读正在运行的那个副本的文档，或者改为运行这个副本
 doctor_check_crashed	check,detail	the check {check} crashed: {detail}	检查 {check} 出错：{detail}
+doctor_extra_key_taken	keys	ctx.extra uses key(s) the doctor document already has: {keys} — rename them in the check that sets them	ctx.extra 用了 doctor 报告里已有的键：{keys}——请在设置它们的检查里改名
 doctor_summary_warnings	warnings,failures	{warnings} warning(s), {failures} failure(s) — each names its fix above	{warnings} 个警告，{failures} 个失败——每项上面都写了修复方法
 doctor_summary_ok		OK — no warnings	正常——没有警告
 doctor_exchange_missing	hub,folder	hub {hub} has no exchange folder ({folder}): a skill pack cannot hand a document to another through it	客户中心 {hub} 没有交换文件夹（{folder}）：技能包之间无法通过它交换文件
