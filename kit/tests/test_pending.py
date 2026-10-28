@@ -21,6 +21,11 @@ one valid console ask, on the fake "shop" skill pack.
      than the console holds.
   5. Ask ids are stable while nothing moves and new when the value does;
      pending.tsv is closed over pending.py.
+  7. A derived fact (`derived=`): the skill pack names the facts it worked out
+     and why; each is one `confirm` ask whatever its registry type (the value
+     shown, not typed), recommending yes with the skill pack's own because (so
+     the console takes it as it is), gated on the value shown; the group's
+     asks can be answered together; a key not named is drawn as before.
   6. Hub mode (--hub): every ask id and every gate verb starts with the cli
      word and every group with the skill pack's name; the console takes them,
      a relayed confirm through a hub dispatcher (`<hub> <cli> <verb…>`)
@@ -60,7 +65,11 @@ FIX = Path(tmp_dir("pending-fixtures-"))
     "key\tgroup\ttype\tunit\tmin\tmax\tlabel_en\tlabel_zh\twhy\n"
     "unit_cost\tcost\tnumber\tUSD\t0\t50\tUnit cost\t单位成本\tmargin\n"
     "channel\tprofile\tchoice:web|store\t\t\t\tChannel\t渠道\trouting\n"
-    "launch_date\tprofile\tdate\t\t\t\tLaunch date\t上线日期\tage\n",
+    "launch_date\tprofile\tdate\t\t\t\tLaunch date\t上线日期\tage\n"
+    "ad_account\tprofile\ttext\t\t\t\tAd account\t广告账户\treports\n"
+    "account_currency\tprofile\tchoice:USD|HKD\t\t\t\tCurrency\t币种\treports\n"
+    "reference_return\tcost\tnumber\tx\t0\t100\tReference return\t参考回报\tbenchmark\n"
+    "break_even\tcost\tnumber\tx\t0\t100\tBreak-even return\t盈亏平衡回报\tstop rule\n",
     encoding="utf-8")
 (FIX / "constants.tsv").write_text(
     "name\tdefault\tunit\tmin\tmax\tgroup\tlabel_en\tlabel_zh\texplain\twhy\n"
@@ -530,9 +539,128 @@ def test_hub() -> None:
           b["gate"] and len(a["gate"]["verb"]) == 7, a.get("gate"))
 
 
+# ---- 7 ---------------------------------------------------------------------
+
+def pend_derived(derived) -> dict:
+    rc, out, err = capture(lambda a: pending.main(
+        a, spec=SPEC, keys=KEYS, registry=REG, thresholds=TH, derived=derived),
+        ["--json"], env=env())
+    assert rc == 0, (rc, out, err)
+    return one_doc(out)
+
+
+def refused_derived(derived):
+    try:
+        with closing(db.connect(SPEC, read_only=True)) as con:
+            pending.asks(con, keys=KEYS, registry=REG, thresholds=TH,
+                         derived=derived)
+    except Exception as e:  # noqa: BLE001
+        return messages.failure(e)
+    return None
+
+
+def test_derived() -> None:
+    print("[7] a derived fact is one confirm ask the skill pack has argued")
+    src = "derived: report export, 2026-09-01..2026-09-30"
+    def derive(k, v, source=src):
+        rc, out, err = capture(lambda a: facts.main(a, spec=SPEC, keys=KEYS,
+                                                    thresholds=TH),
+                               ["set", k, v, "--market", "US", "--source",
+                                source, "--reason", "worked out from the "
+                                "export", "--json"], env=env())
+        assert rc == 0, (k, out, err)
+    for k, v in (("ad_account", "ACC-1"), ("account_currency", "HKD"),
+                 ("reference_return", "2.4"), ("break_even", "1.8")):
+        derive(k, v, src if k != "break_even" else "agent_2026-09-28")
+    because = {"ad_account": "the id every row of the export carries",
+               "account_currency": "all 412 rows are in HKD",
+               "reference_return": "spend-weighted return of the last 30 days"}
+    plain = by_ref(pend())
+    doc = pend_derived({**because, ("CA", "break_even"): "not for US"})
+    refs = by_ref(doc)
+    mine = {k: refs[f"fact:{k}"] for k in because}
+    check("before the hook: a text and a number fact are typed (provide), a "
+          "choice is chosen, each waiting for the agent's because",
+          [plain[f"fact:{k}"][0]["step"] for k in because] ==
+          ["provide", "choose", "provide"]
+          and all(plain[f"fact:{k}"][1]["fill"] == ["recommend.because"]
+                  for k in because))
+    check("named in derived=, each is a confirm ask: the value is shown, not "
+          "typed (no input, no options)",
+          all(a["step"] == "confirm" and "input" not in a
+              and "options" not in a for a, _ in mine.values()),
+          {k: a["step"] for k, (a, _) in mine.items()})
+    check("it recommends yes with the skill pack's own because, so nothing is "
+          "left for the agent to fill", all(
+              a["recommend"] == {"value": "yes", "because": because[k]}
+              and b["fill"] == [] for k, (a, b) in mine.items()),
+          {k: a["recommend"] for k, (a, _) in mine.items()})
+    check("the source and the window stay in the text the owner reads", all(
+        src in a["why"] and any(e.get("value") == src for e in a["evidence"])
+        for a, _ in mine.values()), mine["ad_account"][0]["why"])
+    check("the gate binds the value shown, not a typed one",
+          all(a["gate"]["expect"]["items"] == {k: v}
+              and not a["gate"].get("value_arg")
+              for (k, v), (a, _) in zip((("ad_account", "ACC-1"),
+                                         ("account_currency", "HKD"),
+                                         ("reference_return", "2.4")),
+                                        mine.values())),
+          [a["gate"] for a, _ in mine.values()])
+    check("they are one group, which the console's answer-all button needs: "
+          "every ask suggests, none approves, every gate is a confirm",
+          len({a["group"] for a, _ in mine.values()}) == 1
+          and all(a["recommend"] and a["step"] != "approve"
+                  and a["gate"]["verb"][:2] == ["facts", "confirm"]
+                  for a, _ in mine.values()))
+    be, be_b = refs["fact:break_even"]
+    check("a key not named for this market (the CA pair) is drawn as before: "
+          "typed, and still waiting for the agent",
+          be["step"] == "provide" and be["recommend"]["because"] is None
+          and be_b["fill"] == ["recommend.because"])
+    unfilled = sum(1 for b in doc["about"] if b["fill"])
+    check("the fill warning counts only the asks that still need it",
+          [w["params"]["count"] for w in doc["warning_codes"]
+           if w["code"] == "pending_fill_because"] == [unfilled]
+          and unfilled == len(doc["asks"]) - 3, (unfilled, len(doc["asks"])))
+    got = console_add([a for a, _ in mine.values()])
+    check("the console takes the derived asks as they are, with no agent step",
+          got.get("ok") is True, got)
+    got = console_add([be])
+    check("and still refuses the one that waits for a because",
+          got.get("ok") is not True, got)
+    rel = relay(mine["account_currency"][0], "yes")
+    check("answering yes through the gate confirms exactly the value shown",
+          rel.get("ok") is True and fact_row("account_currency")[:2] ==
+          ("HKD", 0), (rel, fact_row("account_currency")))
+    derive("reference_return", "2.9")
+    now = by_ref(pend_derived(because))["fact:reference_return"][0]
+    check("a changed value is a new question: another id, the new value, "
+          "still a confirm ask a person must answer",
+          now["id"] != mine["reference_return"][0]["id"]
+          and now["step"] == "confirm" and "2.9" in now["title"]
+          and fact_row("reference_return")[:2] == ("2.9", 1), now["title"])
+    only = refused_derived({"account_currency": because["account_currency"]})
+    check("a confirmed fact named in derived= is just not asked again",
+          only is None)
+    long_ = pend_derived({"ad_account": "  a  " + "word " * 80})
+    c = by_ref(long_)["fact:ad_account"][0]["recommend"]["because"]
+    check("a long because is clipped to the console's limit, spaces "
+          "collapsed", len(c) == 200 and c.startswith("a word") and "  " not in c, c)
+    bad = {"an empty because": {"ad_account": " "},
+           "a because that is not text": {"ad_account": 3},
+           "a key that is a number": {7: "x"},
+           "a pair with an empty market": {("", "ad_account"): "x"}}
+    got = {n: refused_derived(d) for n, d in bad.items()}
+    check("a hook the skill pack wrote wrongly is refused by name "
+          "(pending_derived_invalid)", all(
+              f and f["code"] == "pending_derived_invalid" for f in got.values())
+          and "ad_account" in got["an empty because"]["params"]["key"], got)
+
+
 test_read_only()
 test_asks_and_relay()
 test_no_gate()
 test_ids_and_closure()
 test_hub()
+test_derived()
 raise SystemExit(finish())
