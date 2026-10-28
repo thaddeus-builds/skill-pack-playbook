@@ -44,7 +44,7 @@ A generated overview ([system-overview.md](../templates/system-overview.md)) can
 
 ## A page made for the owner must open for the owner (from the adcut skill pack, 2026-10-28)
 
-The owner asked for the overview and could not open it, and it kept happening. Two causes: the agent wrote the generated page in a checkout outside the session's folders (the app opens only files inside them), and deleted its copy after sending it, so the link was dead. The rule: **a page or file made for the owner is written in a folder of the session, sent as a file, and never deleted or replaced by a path outside the session.** A generated page that is not committed needs a command that says where it goes (`--out`), and the pack's contributing page says what to do on the owner's keyword. *Seen once:* adcut (`tools/overview.py --out`, `tests/test_overview.py`).
+The owner asked for the overview and could not open it, and it kept happening. Two causes: the agent wrote the generated page in a checkout outside the session's folders (the app opens only files inside them), and deleted its copy after sending it, so the link was dead. The rule: **a page or file made for the owner is written in a folder of the session, sent as a file, and never deleted or replaced by a path outside the session.** A generated page that is not committed needs a command that says where it goes (`--out`), and the pack's contributing page says what to do on the owner's keyword. *Seen once:* adcut (`tests/test_overview.py`; its `--out` is not yet on its main branch, 2026-10-28; the playbook's own `tools/overview_page.py` has it).
 
 ## Advice is recorded, then read back (from the video-ads skill pack, 2026-10-22)
 
