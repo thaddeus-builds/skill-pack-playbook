@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """kit.runner: one script runs another and reads its one JSON document.
 
-  * script_cmd: this interpreter, or `uv run` only when KIT_RUNNER=uv and
-    uv is on PATH;
+  * script_cmd: this interpreter, or `uv run` when KIT_RUNNER=uv (every
+    script) or KIT_RUNNER=auto (only a script that needs it) and uv is on
+    PATH; the `runner` argument stands in for the variable;
+  * needs_uv, the rule of auto: dependencies, a requires-python this
+    interpreter does not meet, a missing, repeated or unparsable block, an
+    unreadable file -> uv; a block with neither -> this interpreter;
   * run_json: a child's document on exit 0; a child's failure document ->
     ChildFailed carrying its error, next and code (and fail() reports the
     child's code); a crash -> its stderr's last line, unclassified; no
@@ -30,6 +34,170 @@ from kit.testing.check import (capture, check, finish, one_doc, raises,  # noqa:
 def child(d: Path, name: str, body: str) -> Path:
     p = d / name
     p.write_text("import json, sys\n" + body, encoding="utf-8")
+    return p
+
+
+def pep723(d: Path, name: str, block: str | None, newline: str = "\n") -> Path:
+    """A script at d/name with `block` (its lines, no `# ` prefix) as its
+    PEP 723 block; None = no block."""
+    lines = ["#!/usr/bin/env python3"]
+    if block is not None:
+        lines += ["# /// script", *[("# " + ln).rstrip() for ln in
+                                    block.splitlines()], "# ///"]
+    lines += ['"""A child."""', "print('{}')"]
+    p = d / name
+    p.write_bytes((newline.join(lines) + newline).encode())
+    return p
+
+
+def test_auto() -> None:
+    print("\n[3] needs_uv and KIT_RUNNER=auto")
+    d = Path(tmp_dir("pep723-"))
+    major, minor = sys.version_info[:2]
+    here = f"{major}.{minor}"
+    ahead = f"{major}.{minor + 1}"
+    behind = f"{major}.{minor - 1}"
+    plain = pep723(d, "plain.py", f'requires-python = ">={behind}"\n'
+                   "dependencies = []")
+    rows = {
+        "no dependencies, requires-python met": (plain, False),
+        "a block with no requires-python and no dependencies": (
+            pep723(d, "norequires.py", "dependencies = []"), False),
+        "dependencies": (pep723(d, "deps.py", f'requires-python = ">={behind}"'
+                                '\ndependencies = ["requests>=2"]'), True),
+        "dependencies on several lines": (pep723(
+            d, "deps2.py", 'dependencies = [\n  "requests>=2",\n  "yaml",\n]'),
+            True),
+        "requires-python above this interpreter": (pep723(
+            d, "ahead.py", f'requires-python = ">={ahead}"'), True),
+        "requires-python with an upper bound this interpreter is under": (
+            pep723(d, "range.py", f'requires-python = ">={behind},<{ahead}"'),
+            False),
+        "requires-python with an upper bound this interpreter is over": (
+            pep723(d, "over.py", f'requires-python = ">={behind},<{here}"'),
+            True),
+        "requires-python `>` and `<=` met": (pep723(
+            d, "gt.py", f'requires-python = ">{behind}.0, <={ahead}"'), False),
+        "requires-python written as three numbers": (pep723(
+            d, "triple.py", f'requires-python = ">={behind}.0"'), False),
+        "requires-python in a form that is not read (`==`)": (pep723(
+            d, "eq.py", f'requires-python = "=={here}.*"'), True),
+        "requires-python in a form that is not read (`~=`)": (pep723(
+            d, "compat.py", f'requires-python = "~={behind}"'), True),
+        "requires-python that is no version": (pep723(
+            d, "junk.py", 'requires-python = "recent"'), True),
+        "requires-python that is not a string": (pep723(
+            d, "num.py", "requires-python = 3.12"), True),
+        "no block at all (uv would read the project's dependencies)": (
+            pep723(d, "bare.py", None), True),
+        "a block that is not TOML": (pep723(d, "broken.py", "this is = = no"),
+                                     True),
+        "two script blocks": (_two_blocks(d), True),
+        "a block that is never closed": (_unclosed(d), True),
+        "only a block of another type": (_other_type(d), True),
+        "a file that is not there": (d / "nope.py", True),
+        "a file that is not UTF-8": (_not_utf8(d), True),
+        "CRLF line ends": (pep723(d, "crlf.py", f'requires-python = '
+                                  f'">={behind}"', "\r\n"), False),
+    }
+    for label, (path, want) in rows.items():
+        check(f"needs_uv {'is' if want else 'is not'} true: {label}",
+              runner.needs_uv(path) is want, runner.needs_uv(path))
+    check("needs_uv takes a str as well as a Path",
+          runner.needs_uv(str(plain)) is False)
+
+    fake_bin = Path(tmp_dir("bin-"))
+    uv = fake_bin / "uv"
+    uv.write_text("#!/bin/sh\nexit 0\n")
+    uv.chmod(uv.stat().st_mode | stat.S_IEXEC)
+    nodeps, deps = plain, d / "deps.py"
+    interp = lambda t, a=(): [sys.executable, str(t), *a]  # noqa: E731
+    via_uv = lambda t, a=(): [str(uv), "run", str(t), *a]  # noqa: E731
+    saved = {k: os.environ.get(k) for k in ("PATH", "KIT_RUNNER")}
+
+    def cmd(target, mode=None, *, path=str(fake_bin), arg=None):
+        if mode is None:
+            os.environ.pop("KIT_RUNNER", None)
+        else:
+            os.environ["KIT_RUNNER"] = mode
+        os.environ["PATH"] = path
+        return (runner.script_cmd(target, ["--json"]) if arg is None
+                else runner.script_cmd(target, ["--json"], runner=arg))
+
+    try:
+        check("KIT_RUNNER=auto: a script with nothing to install runs under "
+              "this interpreter, though uv is on PATH",
+              cmd(nodeps, "auto") == interp(nodeps, ["--json"]))
+        check("KIT_RUNNER=auto: a script with dependencies runs under uv",
+              cmd(deps, "auto") == via_uv(deps, ["--json"]))
+        check("KIT_RUNNER=auto: a script whose requires-python is ahead runs "
+              "under uv",
+              cmd(d / "ahead.py", "auto") == via_uv(d / "ahead.py", ["--json"]))
+        check("KIT_RUNNER=auto: a script with no block runs under uv",
+              cmd(d / "bare.py", "auto") == via_uv(d / "bare.py", ["--json"]))
+        check("KIT_RUNNER=auto: a script that cannot be read runs under uv",
+              cmd(d / "nope.py", "auto") == via_uv(d / "nope.py", ["--json"]))
+        check("KIT_RUNNER=auto without uv: this interpreter, as uv mode does",
+              cmd(deps, "auto", path=str(d)) == interp(deps, ["--json"])
+              and cmd(deps, "uv", path=str(d)) == interp(deps, ["--json"]))
+        check("KIT_RUNNER=auto: a str target routes the same",
+              cmd(str(deps), "auto") == via_uv(str(deps), ["--json"]))
+        check("unset: this interpreter for every script, uv on PATH or not",
+              cmd(deps) == interp(deps, ["--json"])
+              and cmd(nodeps) == interp(nodeps, ["--json"]))
+        check("KIT_RUNNER=uv: uv for every script, the one with nothing to "
+              "install too (unchanged)",
+              cmd(nodeps, "uv") == via_uv(nodeps, ["--json"])
+              and cmd(deps, "uv") == via_uv(deps, ["--json"]))
+        check("any other KIT_RUNNER word: this interpreter (unchanged)",
+              cmd(deps, "pip") == interp(deps, ["--json"])
+              and cmd(deps, "AUTO") == interp(deps, ["--json"])
+              and cmd(deps, "") == interp(deps, ["--json"]))
+        check("the runner argument stands in for the variable: auto with "
+              "KIT_RUNNER unset",
+              cmd(deps, None, arg="auto") == via_uv(deps, ["--json"])
+              and cmd(nodeps, None, arg="auto") == interp(nodeps, ["--json"]))
+        check("the runner argument wins over KIT_RUNNER, both ways",
+              cmd(nodeps, "uv", arg="auto") == interp(nodeps, ["--json"])
+              and cmd(nodeps, "auto", arg="uv") == via_uv(nodeps, ["--json"])
+              and cmd(deps, "uv", arg="pip") == interp(deps, ["--json"]))
+        check("the runner argument without uv: this interpreter",
+              cmd(deps, None, path=str(d), arg="auto") == interp(deps, ["--json"]))
+        check("the argv shape is the one uv mode always had",
+              cmd(deps, "auto")[:3] == [str(uv), "run", str(deps)])
+        check("RUNNERS: the two words that mean something",
+              runner.RUNNERS == ("uv", "auto"))
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    return None
+
+
+def _two_blocks(d: Path) -> Path:
+    p = d / "two.py"
+    p.write_text("# /// script\n# dependencies = []\n# ///\n\n"
+                 "# /// script\n# dependencies = []\n# ///\nprint('{}')\n")
+    return p
+
+
+def _unclosed(d: Path) -> Path:
+    p = d / "unclosed.py"
+    p.write_text("# /// script\n# dependencies = []\nprint('{}')\n")
+    return p
+
+
+def _other_type(d: Path) -> Path:
+    p = d / "other.py"
+    p.write_text("# /// tool\n# x = 1\n# ///\nprint('{}')\n")
+    return p
+
+
+def _not_utf8(d: Path) -> Path:
+    p = d / "latin.py"
+    p.write_bytes(b"# /// script\n# dependencies = []\n# ///\n# caf\xe9\n")
     return p
 
 
@@ -134,6 +302,7 @@ def main() -> int:
     check("the child inherits this process's env",
           runner.run_json(env_child, []) == "yes")
     del os.environ["SHOP_SEEN"]
+    test_auto()
     return finish()
 
 

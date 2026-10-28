@@ -67,7 +67,7 @@ Each module's docstring says what it guards and names its test; this is the map.
 | `contract.py` | One stdout document under `--json`, failures included; `SkillPackError`; coded usage errors (`Parser`); read verbs never create the DB; one `meta` shape | `test_contract.py` |
 | `dates.py` | One clock every layer reads, patchable in one place | `test_dates.py`, `test_clock.py` |
 | `atomic.py`, `single_instance.py` | A half-written file is never seen (the temp file is fsynced before the rename); a second scheduled run skips | `test_atomic.py` |
-| `runner.py` | How one script runs another and reads its one document; a child's failure keeps its code | `test_runner.py` |
+| `runner.py` | How one script runs another and reads its one document; a child's failure keeps its code; `KIT_RUNNER=uv` runs every script under `uv run`, `KIT_RUNNER=auto` (or `Dispatcher(runner="auto")`, which wins over the variable) only a script whose PEP 723 block lists dependencies or needs another Python (`needs_uv`), the others and every script on a host without uv under this interpreter | `test_runner.py`, `test_cli.py` |
 | `raw.py` | Raw only grows: write-once files, content-hash imports | `test_raw.py` |
 | `paths.py` | The data dir is required and absolute, never the cwd; one resolver for the DB | `test_paths.py` |
 | `env.py` | One env chain (process env → home file → `<DATA_DIR>/.env`), never the cwd; parsed, never sourced; a gate secret, the gate's test seam, the binding and loader variables are never loaded from a file (doctor names such a line) | `test_env.py` |

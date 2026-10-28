@@ -27,7 +27,10 @@ dispatcher; its routing table became the verb table):
      `<P>_DATA_DIR` (data_dir_unset / data_dir_not_absolute: never the
      cwd); asking the script for `-h/--help` always works.
   6. The script (`<scripts_dir>/<script>`) runs as kit.runner.script_cmd
-     runs it, with the verb's words after the first as the script's
+     runs it (`KIT_RUNNER`, or `Dispatcher(runner="auto")`, which a pack's
+     entry point sets so that no host has to export the variable: `uv run`
+     only for a script that needs it, the interpreter for the rest), with
+     the verb's words after the first as the script's
      sub-verb (`facts confirm X` -> facts.py confirm X), unless the script
      is named after the whole verb (`compute sales` -> compute_sales.py:
      none; kit.verbs.script_args), and every other argument as given; the
@@ -64,6 +67,7 @@ from kit import config as _config
 from kit import contract, runner, verbs as _verbs
 from kit.contract import SkillPackError
 from kit.messages import msg
+from kit.runner import RUNNERS
 
 HELP = ("-h", "--help")
 
@@ -95,15 +99,22 @@ def masked(cmd: list[str]) -> list[str]:
 class Dispatcher:
     """`Dispatcher(verbs, *, scripts_dir, epilog, doctor_checks)` per the
     SPEC; `spec` (the skill pack's SchemaSpec: doctor checks the DB's shape),
-    `platform_lock` (doctor's hook) and `description` are additions, and so
-    is `doctor_flags(parser)`, which adds the skill pack's own options to
-    `<cli> doctor` (kit.doctor, "flags")."""
+    `platform_lock` (doctor's hook), `description` and `runner` are additions,
+    and so is `doctor_flags(parser)`, which adds the skill pack's own options to
+    `<cli> doctor` (kit.doctor, "flags"). `runner` is `"uv"` or `"auto"`
+    (kit.runner.RUNNERS) and stands in for the KIT_RUNNER value of every script
+    it starts; None, the default, leaves that to the environment. Any other
+    word is refused at once (a typo would run every script under this
+    interpreter)."""
 
     def __init__(self, verbs: Iterable[Any], *, scripts_dir: Path | str,
                  epilog: str = "", doctor_checks: Iterable[Callable] = (),
                  doctor_flags: Callable | None = None,
                  spec: Any = None, platform_lock: Callable | None = None,
-                 description: str = ""):
+                 description: str = "", runner: str | None = None):
+        if runner is not None and runner not in RUNNERS:
+            raise ValueError(f"runner must be None or one of "
+                             f"{', '.join(RUNNERS)}, not {runner!r}")
         self.verbs = _verbs.check(verbs)
         self.scripts_dir = Path(scripts_dir).resolve()
         self.epilog = epilog
@@ -112,6 +123,7 @@ class Dispatcher:
         self.spec = spec
         self.platform_lock = platform_lock
         self.description = description
+        self.runner = runner
 
     # ---- help ---------------------------------------------------------------
 
@@ -250,7 +262,7 @@ class Dispatcher:
                     f"script at {script}", verb=v.command, script=v.script),
                 [f"{self.cli} doctor"]), argv)
         cmd = runner.script_cmd(script, [*_verbs.script_args(v, self.verbs),
-                                         *rest])
+                                         *rest], runner=self.runner)
         print(f"+ {shlex.join(masked(cmd))}", file=sys.stderr, flush=True)
         try:
             rc = subprocess.run(cmd, env=os.environ).returncode
