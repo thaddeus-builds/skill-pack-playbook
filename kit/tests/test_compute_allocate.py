@@ -107,6 +107,10 @@ def main() -> int:
     check("a weekly cap of 20 %: no campaign's budget is more than 20 % from what it was 7 days before, where without it two moves compound past it",
           free_week > 0.2 + 0.002 and cap_week <= 0.2 + 0.002, (free_week, cap_week))
 
+    steep = ca.compute(source(days={"A": campaign_days(2.0, 1.3, 0.0), "B": campaign_days(60.0, 0.3, 1.3)}), k, days=20, propose=True)
+    check("a campaign whose revenue grows faster than its spend (its elasticity reads above 1 and is held at the bound) no longer breaks the replay or the proposal (it divided by zero)",
+          steep["summary"]["campaigns"] == 2 and "proposal" in steep, steep["summary"])
+
     print("[3] tomorrow's proposal")
     p = ca.compute(source(), k, days=6, propose=True)["proposal"]
     mv = {m["campaign"]: m for m in p["moves"]}
