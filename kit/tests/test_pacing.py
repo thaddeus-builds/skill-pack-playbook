@@ -69,6 +69,76 @@ def main() -> int:
     check("no efficiency to read (a new account): no_performance, all explore",
           "no_performance" in p["flags"] and p["day"]["perform"] == 0.0 and p["perform_need_total"] is None, p)
 
+    print("[3b] the exploration band (issue #263)")
+    base = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.02, 8, 4)
+    check("no band (the defaults 0 and 1): the plan is what it was, with no clip key and no band flag",
+          pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.02, 8, 4, explore_min_share=0.0, explore_max_share=1.0) == base
+          and not any(("explore_clip" in r) for r in base["days"]) and not {"explore_floor", "explore_cap"} & set(base["flags"]), base)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.02, 8, 4, explore_min_share=0.2)
+    check("a result need that takes the whole day: the floor gives 20 % to exploration, says so, and says what performance gave up",
+          p["day"]["explore"] == 20.0 and p["day"]["perform"] == 80.0 and p["day"]["explore_clip"] == "explore_floor"
+          and p["day"]["perform_given_up"] == 20.0 and "explore_floor" in p["flags"] and "shortfall" in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.05, 8, 4, explore_min_share=0.1)
+    check("a floor already met (12.5 of 100 explores) changes nothing", p["day"]["explore"] == 12.5 and "explore_floor" not in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 30.0, ds, conv, date(2026, 10, 15), 0.05, 8, 4, explore_max_share=0.3)
+    check("a result already met (need zero): the cap leaves 30 % to exploration and moves 70 to performance, and says so",
+          p["day"]["explore"] == 30.0 and p["day"]["perform"] == 70.0 and p["day"]["explore_clip"] == "explore_cap"
+          and "explore_cap" in p["flags"] and "result_met" in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), None, 8, 4, explore_max_share=0.3)
+    check("no proven efficiency: the cap has nowhere to put the money, the day stays in exploration and no_performance says why",
+          p["day"]["explore"] == p["day"]["budget"] and "explore_cap" not in p["flags"] and "no_performance" in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), None, 8, 4, explore_min_share=0.2)
+    check("no proven efficiency and a floor: all explore already meets it", p["day"]["explore"] == p["day"]["budget"] and "explore_floor" not in p["flags"], p)
+    p = pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.02, 8, 4, explore_min_share=0.2)
+    check("the days of the month still add up to the money left, clipped or not",
+          abs(sum(r["budget"] for r in p["days"]) - p["money_left"]) < 0.05 and all(abs(r["perform"] + r["explore"] - r["budget"]) < 0.011 for r in p["days"]), p)
+    bad = []
+    for lo, hi in ((0.5, 0.2), (-0.1, 1.0), (0.0, 1.5)):
+        try:
+            pacing.plan("2026-10", 3100.0, 100.0, ds, conv, date(2026, 10, 15), 0.05, 8, 4, explore_min_share=lo, explore_max_share=hi)
+            bad.append((lo, hi))
+        except ValueError:
+            pass
+    check("a band that is not 0 <= min <= max <= 1 is refused", not bad, bad)
+
+    print("[3c] event days (issue #265)")
+    wed = lambda d: 120.0 if d.weekday() == 2 else 100.0                      # noqa: E731
+    sale = date(2026, 8, 26)                                                  # a Wednesday inside the history
+    clean = {k: v for k, v in series(date(2026, 8, 3), 56, wed).items() if k != sale.isoformat()}
+    spiked = {**clean, sale.isoformat(): 400.0}
+    last = date(2026, 9, 27)
+    w_clean, _, _ = pacing.weekday_weights(clean, last, 8, 4)
+    w_event, kind_e, least_e = pacing.weekday_weights(spiked, last, 8, 4, {sale})
+    w_naive, _, _ = pacing.weekday_weights(spiked, last, 8, 4)
+    check("a sale Wednesday left out gives the other Wednesdays the weight they had without it", w_event == w_clean and kind_e == "weighted" and least_e == 7, (w_event, w_clean))
+    check("left in, the same sale would have lifted every Wednesday", w_naive[2] > w_clean[2] + 0.02, (w_naive[2], w_clean[2]))
+    no_event = pacing.plan("2026-10", 3100.0, None, spiked, {}, last, None, 8, 4)
+    check("no event days (None or empty): the plan is what it was, with no event key and no event flag",
+          pacing.plan("2026-10", 3100.0, None, spiked, {}, last, None, 8, 4, event_days=set()) == no_event
+          and not any(k.startswith("event") for k in no_event) and not any(("event" in r) for r in no_event["days"]), no_event)
+    oct14 = date(2026, 10, 14)                                                  # a Wednesday of the month planned
+    p = pacing.plan("2026-10", 3100.0, None, spiked, {}, last, None, 8, 4, event_days={sale, oct14})
+    rows = {r["day"]: r for r in p["days"]}
+    ordinary_wed = rows["2026-10-07"]
+    check("the account's earlier event day was 400 against an ordinary Wednesday of 120: a lift of 3.33, read from one event day",
+          abs(p["event_lift"] - 400.0 / 120.0) < 1e-3 and p["event_lift_days"] == 1 and p["event_days_in_month"] == ["2026-10-14"], p)
+    check("the event day is planned higher than the ordinary Wednesday beside it, and says it is an event",
+          rows["2026-10-14"]["event"] is True and abs(rows["2026-10-14"]["budget"] / ordinary_wed["budget"] - p["event_lift"]) < 0.02 and "event" not in ordinary_wed, (rows["2026-10-14"], ordinary_wed))
+    check("the other Wednesdays keep the weight they had without any event", ordinary_wed["weight"] == round(w_clean[2], 4), ordinary_wed)
+    check("the days still add up to the money left (to the cent, per day)", abs(sum(r["budget"] for r in p["days"]) - p["money_left"]) < 0.005 * len(p["days"]), p["money_left"])
+    check("with a lift read there is no flag to say there was none", "event_no_history" not in p["flags"], p["flags"])
+    p = pacing.plan("2026-10", 3100.0, None, clean, {}, last, None, 8, 4, event_days={oct14})
+    rows = {r["day"]: r for r in p["days"]}
+    check("no earlier event day: it is planned as an ordinary day, the lift is None and the flag says why",
+          p["event_lift"] is None and "event_no_history" in p["flags"] and rows["2026-10-14"]["event"] is True
+          and rows["2026-10-14"]["weight"] == rows["2026-10-07"]["weight"], p)
+    p = pacing.plan("2026-10", 3100.0, None, spiked, {}, last, None, 8, 4, event_days={sale})
+    check("event days outside the month are not planned: no lift is read and no flag is raised", p["event_days_in_month"] == [] and p["event_lift"] is None and "event_no_history" not in p["flags"], p)
+    flat = {k: v for k, v in series(date(2026, 9, 1), 20, lambda d: 100.0).items()}
+    flat[date(2026, 9, 12).isoformat()] = 300.0
+    p = pacing.plan("2026-10", 3100.0, None, flat, {}, date(2026, 9, 20), None, 8, 4, event_days={date(2026, 9, 12), date(2026, 10, 12)})
+    check("with too little history for weekday weights (flat) the lift is read against the mean ordinary day", p["weights_kind"] == "flat" and abs(p["event_lift"] - 3.0) < 1e-6, p)
+
     print("[4] the pace")
     p = pacing.plan("2026-10", 3100.0, None, ds, {}, date(2026, 10, 15), None, 8, 4)
     check("15 of 31 even days = 1,500 of 3,100 against an even 1,500: pace 1.0", p["pace_ratio"] == 1.0, p["pace_ratio"])
