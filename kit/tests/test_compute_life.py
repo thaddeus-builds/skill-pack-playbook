@@ -143,11 +143,23 @@ def main() -> int:
            "two rows for one date": cl.Source({"X": {"days": [D(date="2026-09-01"), D(date="2026-09-01")]}}),
            "a day that is not a day": cl.Source({"X": {"days": [D(date="yesterday")]}}),
            "an override to no state": cl.Source({"X": {"days": [D(date="2026-09-01")], "overrides": [("2026-09-01", "dead")]}}),
-           "an override on no day": cl.Source({"X": {"days": [D(date="2026-09-01")], "overrides": [("then", "parked")]}})}
+           "an override on no day": cl.Source({"X": {"days": [D(date="2026-09-01")], "overrides": [("then", "parked")]}}),
+           "a read_cost that is not a function": cl.Source(creatives, read_cost="soon")}
     got = {name: refused(s, k) for name, s in bad.items()}
     check("each is compute_input_invalid", all(c == "compute_input_invalid" for c, _ in got.values()), got)
     check("and names the part", [p for _, p in got.values()] == ["until", "creatives[X]", "creatives[X].days", "creatives[X].days", "creatives[X].days", "creatives[X].days",
-                                                                 "creatives[X].overrides", "creatives[X].overrides"], got)
+                                                                 "creatives[X].overrides", "creatives[X].overrides", "read_cost"], got)
+    asked = []
+
+    def reads(window):
+        asked.append(window)
+        return None
+    winners = {f"M{i}": {"days": days(30, spend=20.0, imp=400, clicks=8, conv=3.0)} for i in range(6)}
+    plain = cl.compute(cl.Source(winners), k)
+    same = cl.compute(cl.Source(winners, read_cost=reads), k)
+    check("a read_cost is handed each mature creative's window of at most 7 days, and one that has no answer changes nothing in the document", asked and all(1 <= len(w) <= 7 and all(isinstance(d, life.Day) for d in w) for w in asked)
+          and same["rows"] == plain["rows"] and any(r["state"] == "mature" for r in plain["rows"]), len(asked))
+    check("a read_cost whose answer is not None or (cost, low, high) is refused naming read_cost", refused(cl.Source(winners, read_cost=lambda w: 5), k) == ("compute_input_invalid", "read_cost"))
     check("a state that is not one, asked for, is refused too", refused(cl.Source(creatives), k, state="dead") == ("compute_input_invalid", "state"))
     return finish()
 

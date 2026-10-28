@@ -51,10 +51,13 @@ class Source:
                 `overrides` a person's dated word [(date, state)]
     until       the last day to read (the pack has already cut its days there), or None: each creative's own last day
     warnings    coded messages the pack's own reading raised, kept in the document
+    read_cost   a function `window (the last 7 counted `Day`s) -> (cost, low, high) | None`: the 7-day cost per conversion of a mature creative's window read on what its unsettled
+                days will come to, as the pack builds it from `kit.maturity` (this module cannot import it: another pack), or None: every window as seen (`kit.creative_life`)
     """
     creatives: dict
     until: str | None = None
     warnings: list = field(default_factory=list)
+    read_cost: object = None
 
 
 def _bad(part: str, problem: str) -> SkillPackError:
@@ -70,6 +73,8 @@ def _day(part: str, value) -> date:
 
 def check(src: Source) -> None:
     """Refuse a `Source` the rules cannot read, naming the part (`compute_input_invalid`)."""
+    if src.read_cost is not None and not callable(src.read_cost):
+        raise _bad("read_cost", f"{src.read_cost!r}, which is not a function or None")
     if src.until is not None:
         _day("until", src.until)
     for cid, c in src.creatives.items():
@@ -185,7 +190,7 @@ def compute(src: Source, k: dict, *, state: str | None = None, creative: str | N
         if creative and creative not in (cid, label):
             continue
         days = pad_off_tail(c["days"], bool(c.get("off")), src.until or c["days"][-1].date) if c["days"] else []
-        lf = life.replay(days, p, list(c.get("overrides", ())))
+        lf = life.replay(days, p, list(c.get("overrides", ())), src.read_cost)
         if state and lf.state != state:
             continue
         accounts, entities = sorted(c.get("accounts", ())), sorted(c.get("entities", ()))
