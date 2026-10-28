@@ -42,14 +42,14 @@ packs = ["compliance"]      # base and testkit always come; no [kit] packs = eve
 | `ops` | `snapshot` | a skill pack that holds a client's state in a data dir and must be able to restore it: the database by backup, no secret in the package, a manifest with every sha256, older packages pruned; keeping a copy elsewhere is the operator's step ([docs/snapshot.md](../docs/snapshot.md)) |
 | `testkit` | `guards/`, `testing/`, `tools/` | every skill pack's own tests (keep it in `[release].internal`) |
 
-A module imports only `base` and its own pack, so any choice of packs imports cleanly (`tests/test_packs.py`). A module's message codes (`message_codes.d/<module>.tsv`) travel with it. `vendor.py` refuses to leave out a module the skill pack's own code imports: it names the file and the pack to add. `scaffold/new_skill_pack.py --packs exchange,compliance` writes the line for a new skill pack.
+A module imports only `base` and its own pack, so any choice of packs imports cleanly (`tests/test_packs.py`). A module's message codes (`message_codes.d/<module>.tsv`) and its default threshold rows (`constants.d/<module>.tsv`, below) travel with it. `vendor.py` refuses to leave out a module the skill pack's own code imports: it names the file and the pack to add. `scaffold/new_skill_pack.py --packs exchange,compliance` writes the line for a new skill pack.
 
 The skill pack declares itself once, in `skill-pack.toml` at its root ([templates/skill-pack.toml](../templates/skill-pack.toml)); every kit module reads names from it through `kit.config` and hard-codes none:
 
 | Section | What the kit reads |
 | --- | --- |
 | `[skill_pack]` | `name`, `cli` (the word in every `next` command), `env_prefix` (`<P>_DATA_DIR`, `<P>_DB`, `<P>_CONFIRM_CODE_SECRET`, `<P>_ALLOW_WRITES`, `<P>_KILL`, `<P>_AUTH_ENV_PATHS`, `<P>_TOKEN_SOURCE`), `db_file`, `scripts_dir`, `languages` (one `meaning_<lang>` per message row), `markets` (the closed set; `[]` = no partition), `home_env_file` |
-| `[ssot]` | `dir`, and the registries: `message_codes` (plus `<dir>/message_codes.d/*.tsv`), `fact_keys`, `decision_keys`, `constants`, `story_checks` |
+| `[ssot]` | `dir`, and the registries: `message_codes` (plus `<dir>/message_codes.d/*.tsv`), `fact_keys`, `decision_keys`, `constants` (the engines' own defaults are read first; list only what you change), `story_checks` |
 | `[release]` | `internal` (export-ignore), `must_ship`, `runtime` |
 | `[layers]` | `pull`, `ingest`, `compute`, `writer`, `writer_importers`, `clients`, `spawn_allowed`, `write_verbs`, `exempt` |
 | `[contract]`, `[auth]`, `[env]`, `[guards.*]` | optional: `no_db_next`, prose keys and data labels; token-command fields; default credential prefixes and `never_from_file` (the skill pack's own names an env file may not set, e.g. a test seam); the guards' parameters (`[guards.json_contract] args`: sample arguments per read verb) |
@@ -139,6 +139,7 @@ Each rule has a test that fails when it breaks.
 - **No domain words.** The kit names no platform, client or product (it still names `market` as its partition, a known leftover of the source project); everything domain-specific is a parameter in `skill-pack.toml` or a hook. *(tests/test_kit_rules.py)*
 - **Never imports the console, and the console never imports the kit.** They meet only in JSON: the gate challenge (`confirm_code_required`, `subject`) and the console's ask format. *(tests/test_kit_rules.py; tests/test_e2e_shop.py proves they still meet)*
 - **Every message coded.** A module owns one fragment, `message_codes.d/<module>.tsv`, en and zh, and emits every code in it. *(each module's test, `check_registry_closed`)*
+- **One answer to "what is the engines' default".** A threshold an engine reads has its default row in `constants.d/<module>.tsv` (name, default, unit, bounds, labels, and `reads`: the engine parameter it feeds). `Thresholds` reads those first and the skill pack's `ssot/constants.tsv` replaces a row by name, so a skill pack lists only what it changed. A row's default equals the engine's default in code, and a row nothing reads is a failure. *(tests/test_constants_d.py)*
 - **Every test file** runs alone (`python3 kit/tests/test_x.py`), uses `kit.testing.check`, and prints `RESULT: N passed`; `python3 kit/tests/run.py [filter]` fails a file without that line.
 
 ## Upgrades and drift
