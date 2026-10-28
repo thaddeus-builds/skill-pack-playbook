@@ -17,6 +17,12 @@ The rules alone. This module reads no database and names no platform, market or 
     testing, learning, doubt -> parked (stopped_unjudged)  switched off for `end_idle_days` days
     parked   -> testing    only a person's override; `park_review_due` says when to look at it again
 
+A pack may hand over `read_cost` (see `replay`): the last days of a creative are understated while the platform's numbers settle, and
+the 7-day cost per conversion of a window that includes them reads high. With the function, a day is `worse` by cost only when the
+whole interval of that window's cost is over the line; where the interval cannot tell, it is not a worse day (it neither counts
+toward the run nor ends it, the next replay on settled numbers counts it), and the best cost is never set lower than the interval's
+high edge. Without it, every number is read as it was seen.
+
 A day counts only when it is complete and not blocked: a blocked day stops every clock (it is not counted, not judged).
 A creative is ended only from a faded mature one or from a doubt with the evidence floor met. An override (a person's
 word, dated) sets the state on its day and the rules go on from it the next day.
@@ -29,6 +35,10 @@ Test: kit/tests/test_creative_life.py.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable
+
+from kit.contract import SkillPackError
+from kit.messages import msg
 
 STATES = ("testing", "learning", "doubt", "mature", "declining", "parked", "ended")
 WALLET = {"testing": "explore", "learning": "explore", "doubt": "explore", "mature": "perform", "declining": "perform",
@@ -109,8 +119,21 @@ def _cost(window: list[Day], minimum: float) -> float | None:
     return sum(d.spend for d in window) / conv if conv >= minimum else None
 
 
-def replay(days: list[Day], p: Params, overrides: list[tuple[str, str]] = ()) -> Life:
-    """Walk `days` (sorted by date) and return the creative's life. `overrides`: [(date, state)] from confirmed decisions."""
+def _read(read_cost: Callable | None, window: list[Day], seen: float | None) -> tuple[float | None, float | None, float | None]:
+    """(cost, low, high) of a window's cost per conversion: `read_cost(window)` when the pack gave one and it has an answer, else the cost as seen (low and high equal)."""
+    got = read_cost(window) if read_cost is not None and window else None
+    if got is None:
+        return seen, seen, seen
+    ok = isinstance(got, (tuple, list)) and len(got) == 3 and all(isinstance(x, (int, float)) and not isinstance(x, bool) and x == x for x in got)
+    if not ok or not got[1] <= got[0] <= got[2]:
+        raise SkillPackError(msg("compute_input_invalid", f"the pack's read_cost gave {got!r} for a window ending {window[-1].date}: it must be None or (cost, low, high) numbers with low <= cost <= high",
+                                 part="read_cost", problem=f"{got!r}, which is not None or (cost, low, high)"))
+    return float(got[0]), float(got[1]), float(got[2])
+
+
+def replay(days: list[Day], p: Params, overrides: list[tuple[str, str]] = (), read_cost: Callable | None = None) -> Life:
+    """Walk `days` (sorted by date) and return the creative's life. `overrides`: [(date, state)] from confirmed decisions. `read_cost(window)`: the pack's reading of
+    a window's 7-day cost per conversion on what the unsettled days will come to, `(cost, low, high)` or None to leave the window as seen (module doc)."""
     life = Life(since=days[0].date if days else None)
     over = {d: s for d, s in overrides}
     counted: list[Day] = []                       # complete, unblocked days, in order
@@ -202,9 +225,10 @@ def replay(days: list[Day], p: Params, overrides: list[tuple[str, str]] = ()) ->
                 life.waiting = {"extension_spend": [round(more, 2), extension]}
         elif life.state in ("mature", "declining"):
             st["peak_spend7"] = max(st["peak_spend7"], spend7)
-            if cost7 is not None and (st["best_cost7"] is None or cost7 < st["best_cost7"]):
-                st["best_cost7"] = cost7
-            worse = (cost7 is not None and st["best_cost7"] is not None and cost7 >= st["best_cost7"] * (1 + p.decline_rise)) \
+            cost7, cost_low, cost_high = _read(read_cost, window, cost7)
+            if cost7 is not None and (st["best_cost7"] is None or cost_high < st["best_cost7"]):
+                st["best_cost7"] = cost_high     # never a best the interval cannot back (as seen, the high edge is the cost)
+            worse = (cost_low is not None and st["best_cost7"] is not None and cost_low >= st["best_cost7"] * (1 + p.decline_rise)) \
                 or (st["peak_spend7"] > 0 and spend7 <= st["peak_spend7"] * (1 - p.decline_drop))
             r7 = {"spend7": round(spend7, 2), "cost7": None if cost7 is None else round(cost7, 2),
                   "peak_spend7": round(st["peak_spend7"], 2),
