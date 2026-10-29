@@ -72,6 +72,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -161,6 +162,7 @@ def parts(skill_pack: Path, playbook: Path) -> list[dict]:
     h = read_toml(skill_pack / "skill-pack.toml").get("skill_pack", {})
     scripts = str(h.get("scripts_dir") or "scripts")
     common = {"root": playbook}
+    common["skill_pack"] = skill_pack
     return [{**common, **p} for p in (
         {"label": "kit", "src": playbook / "kit", "src_rel": "kit",
          "dest": skill_pack / scripts / "kit", "version_file": "kit/VERSION", "skip": set()},
@@ -187,11 +189,30 @@ def manifest_edits(dest: Path) -> list[str] | None:
     return sorted(r for r in set(want) | set(have) if want.get(r) != have.get(r))
 
 
+def selected(part: dict, want: set[str]) -> set[str]:
+    """The playbook files this copy was asked to hold. A skill pack that takes some of the kit's packs (`[kit] packs`)
+    never holds the others; those files are not `missing`, they were not asked for (kit/tools/packs.py decides, as vendor.py does)."""
+    path = part["src"] / "tools" / "packs.py"
+    if part["label"] != "kit" or not path.is_file():
+        return want
+    try:
+        spec = importlib.util.spec_from_file_location("playbook_kit_packs", path)
+        packs = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(packs)
+        table = packs.table(part["src"])
+        taken = packs.chosen(part["skill_pack"], part["src"])
+    except Exception:                 # a table or a toml this tool cannot read: do not guess, list everything
+        return want
+    known = set(table)
+    return {rel for rel in want if (m := packs.module_of(rel, known)) is None or table.get(m) in taken}
+
+
 def compare(part: dict, history: History) -> dict | None:
     src, dest = part["src"], part["dest"]
     if not dest.is_dir():
         return None
     want = set(files(src, part["skip"]))
+    asked = selected(part, want)
     have = set(files(dest, part["skip"]))
     v, cur = dest / "VERSION", part["root"] / part["version_file"]
     version = v.read_text("utf-8").strip() if v.is_file() else None
@@ -202,7 +223,8 @@ def compare(part: dict, history: History) -> dict | None:
             continue                  # vendor.py's stamp, written when the playbook's folder has no VERSION (the console)
         path = f"{part['src_rel']}/{rel}"
         if rel not in have:
-            rows.append({"file": rel, "state": "missing"})
+            if rel in asked or rel not in want:
+                rows.append({"file": rel, "state": "missing"})
             continue
         data = (dest / rel).read_bytes()
         if rel in want and (src / rel).read_bytes() == data:
