@@ -34,7 +34,8 @@ file, for each file that is not the same (or only the FILEs named, as
 `update` brings each skill pack to this playbook's kit in a worktree of its
 own, so the pack's checkout is never touched: it asks `git remote show origin`
 for the default branch, fetches it, adds `<repo>_worktrees/kit-<version>` on
-branch `claude/kit-<version>` cut from `origin/<default>`, runs kit/tools/
+branch `claude/kit-<version>` cut from `origin/<default>` (the line says which
+remote and commit), runs kit/tools/
 vendor.py into it, runs the pack's suite (`[skill_pack].test_command` in its
 skill-pack.toml, else `python3 tests/run.py`; `--no-tests` skips it), adds one
 line under `## [Unreleased]` of its CHANGELOG.md when it has one, and commits
@@ -45,6 +46,12 @@ with the from and to versions and the suite result. One line per pack:
   * refused: the vendor tool said no (nothing is left behind);
   * exists: the worktree or branch is already there (nothing is touched);
   * current: the pack already holds this kit (nothing is left behind).
+
+`--remote NAME` (default `origin`) is the remote the pack's real default branch
+is on, for a pack whose `origin` is archived or stale. `update` refuses (nothing
+is left behind) when the checkout's own default branch has commits the remote's
+does not: that is what a stale remote looks like, and a branch cut from it would
+have to be moved by hand (issue #316).
 
 `--version X` names the train being taken and must equal this playbook's
 kit/VERSION (the vendor tool copies the checkout it is in). The vendor tool copies
@@ -282,9 +289,9 @@ def first_line(r: subprocess.CompletedProcess) -> str:
     return "; ".join(ln.strip() for ln in text[:3]) or f"exit {r.returncode}"
 
 
-def default_branch(pack: Path) -> str | None:
-    """The branch `git remote show origin` calls HEAD; None when it says (unknown) or fails."""
-    r = run(pack, "git", "remote", "show", "origin")
+def default_branch(pack: Path, remote: str = "origin") -> str | None:
+    """The branch `git remote show REMOTE` calls HEAD; None when it says (unknown) or fails."""
+    r = run(pack, "git", "remote", "show", remote)
     m = re.search(r"^\s*HEAD branch:\s*(\S+)", r.stdout, re.M) if r.returncode == 0 else None
     return m.group(1) if m and m.group(1) != "(unknown)" else None
 
@@ -339,7 +346,7 @@ def unreleased(playbook: Path) -> list[str] | None:
     return sorted(f for f in {*changed.splitlines(), *untracked.splitlines()} if f and not f.startswith("kit/tests/") and "__pycache__" not in f)
 
 
-def update(pack: Path, playbook: Path, version: str, tests: bool = True) -> dict:
+def update(pack: Path, playbook: Path, version: str, tests: bool = True, remote: str = "origin") -> dict:
     """Bring one skill pack to the playbook's kit. {pack, state, text, ...}; see the module docstring."""
     name = read_toml(pack / "skill-pack.toml").get("skill_pack", {}).get("name") or pack.name
     out = {"pack": name, "path": str(pack)}
@@ -350,17 +357,23 @@ def update(pack: Path, playbook: Path, version: str, tests: bool = True) -> dict
     top = run(pack, "git", "rev-parse", "--show-toplevel")
     if top.returncode != 0 or Path(top.stdout.strip()).resolve() != pack:
         return done("refused", "not the top of a git checkout")
-    branch = default_branch(pack)
+    branch = default_branch(pack, remote)
     if not branch:
-        return done("refused", "`git remote show origin` names no default branch")
+        return done("refused", f"`git remote show {remote}` names no default branch")
     work = pack.parent / f"{pack.name}_worktrees" / f"kit-{version}"
     new = f"claude/kit-{version}"
     if work.exists() or run(pack, "git", "rev-parse", "--verify", "-q", f"refs/heads/{new}").returncode == 0:
         return done("exists", f"worktree exists: {work} (branch {new}); remove it to start again")
-    fetched = run(pack, "git", "fetch", "-q", "origin", branch)
+    fetched = run(pack, "git", "fetch", "-q", remote, branch)
     if fetched.returncode != 0:
-        return done("refused", f"cannot fetch origin {branch}: {first_line(fetched)}")
-    added = run(pack, "git", "worktree", "add", "-q", "--no-track", "-b", new, str(work), f"origin/{branch}")
+        return done("refused", f"cannot fetch {remote} {branch}: {first_line(fetched)}")
+    base = f"{remote}/{branch}"
+    if run(pack, "git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0 \
+            and run(pack, "git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", f"refs/remotes/{base}").returncode != 0:
+        return done("refused", f"the checkout's own {branch} has commits that {base} does not: {remote} looks stale or unpushed; "
+                    f"push them, or name the remote the real {branch} is on with --remote NAME")
+    cut = (run(pack, "git", "rev-parse", "--short", f"refs/remotes/{base}").stdout.strip()) or "?"
+    added = run(pack, "git", "worktree", "add", "-q", "--no-track", "-b", new, str(work), f"refs/remotes/{base}")
     if added.returncode != 0:
         return done("refused", f"cannot add the worktree: {first_line(added)}")
 
@@ -400,7 +413,7 @@ def update(pack: Path, playbook: Path, version: str, tests: bool = True) -> dict
     if c.returncode != 0:
         return done("refused", f"vendored in {work} but the commit failed: {first_line(c)}", worktree=str(work))
     state = "red" if suite.startswith("red") else "green"
-    return done(state, f"{state}  kit {old} -> {version}, suite {suite}; branch {new} in {work}",
+    return done(state, f"{state}  kit {old} -> {version}, suite {suite}; branch {new} in {work}; cut from {base} at {cut}",
                 worktree=str(work), branch=new, failing=failing)
 
 
@@ -418,6 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     u.add_argument("skill_pack", nargs="+")
     u.add_argument("--version", help="the kit version being taken; must equal this playbook's kit/VERSION")
     u.add_argument("--no-tests", action="store_true", help="vendor and commit without running the suite")
+    u.add_argument("--remote", default="origin", help="the remote the pack's real default branch is on (default origin)")
     u.add_argument("--allow-unreleased", action="store_true", help="take a kit that differs from the commit that set kit/VERSION (its bytes are not the released ones)")
     args = ap.parse_args(argv)
     playbook = Path(args.playbook).resolve()
@@ -438,7 +452,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: this playbook's kit has {len(loose)} file(s) that are not in kit {current} ({', '.join(loose[:5])}{', ...' if len(loose) > 5 else ''}); "
                   f"update from the commit that set kit/VERSION, or pass --allow-unreleased", file=sys.stderr)
             return 2
-        results = [update(h, playbook, current, not args.no_tests) for h in skill_packs]
+        results = [update(h, playbook, current, not args.no_tests, args.remote) for h in skill_packs]
         for r in results:
             print(f"{r['pack']}: {r['text']}")
         return 0 if all(r["state"] in ("green", "current") for r in results) else 1

@@ -21,4 +21,8 @@ done
 stdin=$(cat)
 printf '%s\n' "$stdin" | "$py" "$guard" "$@" || exit $?
 tests=$(git config --get skillpack.prepush-tests)
-[ -z "$tests" ] || { cd "$top" && echo "pre-push: $tests" >&2 && sh -c "$tests" >&2; }
+# git sets GIT_DIR (the worktree's own) for a hook run from a linked worktree; a test that runs `git init`,
+# `commit` or `archive` in a temporary folder would act on this repository instead. Clear what names a repository.
+[ -z "$tests" ] || { cd "$top" && echo "pre-push: $tests" >&2 && (
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+  sh -c "$tests" >&2 ); }

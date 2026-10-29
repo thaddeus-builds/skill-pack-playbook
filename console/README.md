@@ -203,7 +203,7 @@ python3 console/tests/run.py serve    # only the files with "serve" in the name
 
 A file passes only if it exits 0 and prints `RESULT: N passed`; a test file that never ran is a failure. **Not covered by the tests: a real browser.** They fetch the pages and read the HTML; none runs `console.js` or draws the CSS. Before a release, `add` two examples with the same `group`, start the console and open it 375 px wide:
 
-1. One column, no sideways scroll, the first ask open; dark mode and `?lang=zh` both read well.
+1. One column, no sideways scroll, the first ask open; the default (dark) look, the light one (`data-theme="light"`) and `?lang=zh` all read well.
 2. `add` another ask: an untouched page reloads itself within 4 s and the tab title counts the open asks.
 3. Type a comment, then `add` one more: a banner offers the reload and the text stays.
 4. Double-click an answer button: one answer, a notice over the page, and the page stays where it was: the row is gone, and a comment typed in another row is still there.
