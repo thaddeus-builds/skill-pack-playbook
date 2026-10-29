@@ -4,7 +4,7 @@ A skill pack re-vendors the kit and reads this file to learn what changed, so a
 `kit/VERSION` bump without an entry is a defect. Checked: `## [Unreleased]` first,
 then one `## [X.Y.Z] - DATE` per release, versions strictly descending, dates never
 increasing, the newest heading equal to `kit/VERSION`, and the Zylos host version
-named in the file. From 0.45.0 on, each version also says what a skill pack has to do:
+named in the file, and no released version's section changed since the branch left main. From 0.45.0 on, each version also says what a skill pack has to do:
 a line `- Skill packs: nothing`, `- Skill packs: mechanical (...)` or `- Skill packs:
 judgement (...)`, so a pack's own session can act on it without asking (mechanical is
 one command, `python3 tools/fleet.py update`; judgement is the pack's call).
@@ -87,6 +87,47 @@ def test_kit_version_has_its_entry():
 def test_host_version_is_named():
     host = read("hosts/zylos/VERSION")
     assert f"hosts/zylos` {host}" in LOG, f"hosts/zylos {host} is not named in CHANGELOG.md"
+
+
+def sections(log: str) -> dict[str, str]:
+    """Each released version's section, heading to the next heading, trailing blank lines dropped."""
+    parts = re.split(r"^(## \[[^\]]+\].*)$", log, flags=re.M)
+    return {re.match(r"## \[([^\]]+)\]", h).group(1): (h + b).rstrip()
+            for h, b in zip(parts[1::2], parts[2::2]) if not h.startswith("## [Unreleased]")}
+
+
+def rewritten(base: str, now: str) -> list[str]:
+    """The versions `base` already had whose section is not byte for byte the same in `now`: a release note is never rewritten."""
+    after = sections(now)
+    return [v for v, s in sections(base).items() if after.get(v) != s]
+
+
+def test_a_release_note_is_never_rewritten():
+    base = "## [Unreleased]\n\n## [0.2.0] - 2026-11-03\n- b\n- Skill packs: nothing\n\n## [0.1.0] - 2026-10-01\n- a\n"
+    assert rewritten(base, base) == []
+    assert rewritten(base, base + "\n\n") == [], "blank lines at the end are not a rewrite"
+    grown = base.replace("## [Unreleased]\n", "## [Unreleased]\n- new\n- Skill packs: nothing\n")
+    assert rewritten(base, grown) == [], "an entry under [Unreleased] is the normal change"
+    released = grown.replace("## [Unreleased]\n- new\n- Skill packs: nothing\n", "## [Unreleased]\n\n## [0.3.0] - 2026-11-10\n- new\n- Skill packs: nothing\n")
+    assert rewritten(base, released) == [], "a new version on top leaves the old ones as they were"
+    for label, bad, who in (("an edited line", base.replace("- b\n", "- b, reworded\n"), ["0.2.0"]),
+                            ("an entry slipped under a released version", base.replace("- a\n", "- a\n- late\n"), ["0.1.0"]),
+                            ("a removed version", base.split("## [0.1.0]")[0], ["0.1.0"])):
+        assert rewritten(base, bad) == who, (label, rewritten(base, bad))
+
+
+def test_this_branch_leaves_the_released_notes_of_main_as_they_were():
+    """Against the merge base with origin/main; skipped where git has no origin/main (a shallow or detached checkout)."""
+    def git(*a):
+        return subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True)
+    base = git("merge-base", "HEAD", "origin/main")
+    if base.returncode != 0:
+        return
+    old = git("show", f"{base.stdout.strip()}:CHANGELOG.md")
+    if old.returncode == 0:
+        assert rewritten(old.stdout, LOG) == [], (
+            "released notes changed since this branch left main (an entry rebased under a version the release created "
+            "belongs under [Unreleased]; a note is never rewritten): " + ", ".join(rewritten(old.stdout, LOG)))
 
 
 def _git(cwd: str, *args: str) -> subprocess.CompletedProcess:
