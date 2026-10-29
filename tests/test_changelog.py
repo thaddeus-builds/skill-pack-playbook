@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _t  # noqa: E402
@@ -84,6 +87,53 @@ def test_kit_version_has_its_entry():
 def test_host_version_is_named():
     host = read("hosts/zylos/VERSION")
     assert f"hosts/zylos` {host}" in LOG, f"hosts/zylos {host} is not named in CHANGELOG.md"
+
+
+def _git(cwd: str, *args: str) -> subprocess.CompletedProcess:
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
+                          cwd=cwd, capture_output=True, text=True, env=env)
+
+
+def _two_branches(attributes: str | None) -> tuple[str, str]:
+    """A repository where `a` and `b` each add an entry (two lines) at the top of [Unreleased]; returns its path and the folder to clean."""
+    root = tempfile.mkdtemp(prefix="changelog-union-")
+    assert _git(root, "init", "-q", "-b", "main").returncode == 0
+    base = "## [Unreleased]\n\n### Kit\n- old\n- Skill packs: nothing\n"
+    if attributes is not None:
+        open(os.path.join(root, ".gitattributes"), "w", encoding="utf-8").write(attributes)
+    open(os.path.join(root, "CHANGELOG.md"), "w", encoding="utf-8").write(base)
+    _git(root, "add", "-A"), _git(root, "commit", "-qm", "base")
+    for name in ("a", "b"):
+        _git(root, "switch", "-q", "-c", name, "main")
+        open(os.path.join(root, "CHANGELOG.md"), "w", encoding="utf-8").write(
+            base.replace("### Kit\n", f"### Kit\n- entry {name}\n- Skill packs: judgement ({name})\n"))
+        _git(root, "commit", "-qam", name)
+    return root, root
+
+
+def test_two_pull_requests_adding_entries_at_the_top_do_not_conflict():
+    attributes = open(os.path.join(ROOT, ".gitattributes"), encoding="utf-8").read()
+    assert re.search(r"^CHANGELOG\.md\s+merge=union\s*$", attributes, re.M), attributes
+    pairs = ("- entry a\n- Skill packs: judgement (a)\n", "- entry b\n- Skill packs: judgement (b)\n")
+    for how in ("merge", "rebase"):
+        root, tmp = _two_branches(attributes)
+        try:
+            _git(root, "switch", "-q", "b")
+            r = _git(root, "merge", "-q", "a") if how == "merge" else _git(root, "rebase", "a")
+            log = open(os.path.join(root, "CHANGELOG.md"), encoding="utf-8").read()
+            assert r.returncode == 0, (how, r.stdout, r.stderr)
+            assert all(p in log for p in pairs) and "- old\n- Skill packs: nothing\n" in log, (how, log)
+            assert not re.search(r"^(<<<<<<<|=======|>>>>>>>)", log, re.M), (how, log)
+            assert todo_problems(log.replace("## [Unreleased]", "## [0.99.0] - 2099-01-01")) == [], (how, log)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    root, tmp = _two_branches(None)   # the premise: without the setting the same merge is a conflict
+    try:
+        _git(root, "switch", "-q", "b")
+        assert _git(root, "merge", "-q", "a").returncode != 0, "no conflict without the file: the test proves nothing"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
