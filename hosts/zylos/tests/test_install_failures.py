@@ -152,7 +152,7 @@ def test_console_warnings_caddy_block_and_public_host():
 BLOCK = ("# BEGIN zylos-component:shop-harness\nredir /shop /shop/ permanent\nhandle_path /shop/* {\n"
          "    reverse_proxy 127.0.0.1:1 {\n        header_up Host edited\n    }\n}\n"
          "# END zylos-component:shop-harness\n")
-SITES = "{\n    email a@b.test\n}\nagent.test {\n    respond / 200\n}\nother.test {\n}\n"
+SITES = "{\n    email a@example.test\n}\nagent.test {\n    respond / 200\n}\nother.test {\n}\n"
 
 
 def _caddy_host(host, *, validate_ok=True, reload_ok=True, saved=True, sites=SITES):
