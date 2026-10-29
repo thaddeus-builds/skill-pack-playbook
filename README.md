@@ -135,6 +135,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/maturity.md](docs/maturity.md) | Reading a recent day before it has settled: the curve of how much of a day's final number is visible at each age, the estimate with its interval, the verdict that waits |
 | [docs/solutions.md](docs/solutions.md) | Which skill packs serve which kind of client (five solutions), how they work together, and how to start a client on them |
 | [docs/channels.md](docs/channels.md) | Reusing a skill pack for other channels; generated creative and real people |
+| [docs/support-channel.md](docs/support-channel.md) | Working with a client's agents through the OpenMax bridge: send and read back, polling, who to ask, data rules; prompt templates in `templates/support-channel/` |
 | [docs/kit-and-tools.md](docs/kit-and-tools.md) | What this repository holds, the kit's admission rule, every template |
 | [docs/lessons.md](docs/lessons.md) | Lessons kept after their code was removed |
 | [docs/pattern-store.md](docs/pattern-store.md) | The `learning` pack: a per-client pattern store, what a client's outputs taught as closed rows and shrunk rates |
@@ -153,4 +154,4 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [`hosts/zylos/`](hosts/zylos/) | The host adapter, the worked example for any other host |
 | [`scaffold/`](scaffold/), [`build/`](build/), [`templates/`](templates/) | The generator, the build-time tools, the templates |
 | [`conformance/`](conformance/INVARIANTS.md) | The invariants every skill pack keeps, and a black-box check that drives a skill pack's CLI from an adapter kept here |
-| [`tools/`](tools/) | Playbook tooling: `fleet.py`, `consumers.py`, `overview_page.py` (the overview's diagram as one page to click through), `solutions_page.py` (which packs a kind of client needs, as one page) |
+| [`tools/`](tools/) | Playbook tooling: `fleet.py`, `consumers.py`, `overview_page.py` (the overview's diagram as one page to click through), `solutions_page.py` (which packs a kind of client needs, as one page), `mutate.py` (break a line on purpose and see whether a test notices) |
