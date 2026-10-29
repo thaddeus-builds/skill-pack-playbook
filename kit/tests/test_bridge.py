@@ -7,7 +7,10 @@
   * no id returned -> not sent, no resend; read-back failing or None -> not sent, no resend;
   * a full-width ＠ or an empty text is refused before any send;
   * the prompts name only the tool for the step and the parsers read the strict answers;
-  * a read-back reads the id the send returned, not the newest message.
+  * a read-back reads the id the send returned, not the newest message;
+  * `read_new` reads the newer messages twice and returns them only when both copies agree:
+    text kept to the character (line breaks, blank lines), NONE is an empty agreed read,
+    a changed character, a failed run or an answer with neither messages nor NONE is no read.
 """
 
 import sys
@@ -100,6 +103,38 @@ def main() -> int:
     r = bridge.send_and_verify(s, rd, t)
     check("runners: send with comm_send only, read with comm only",
           r.sent and calls == ["comm_send", "comm"], (r, calls))
+
+    print("[read_new]")
+    answer = ("noise from a shell\nID: 11\nSender: S1\nTime: 2026-10-29T09:17:23.983Z\n<<<BEGIN\nline one\n\n  line three {\"k\": 1}\nEND>>>\n"
+              "ID: 12\nSender: S2\nTime: 2026-10-29T09:18:00Z\n<<<BEGIN\nhello\nEND>>>\ndone")
+    seen = []
+
+    def same(tool, prompt):
+        seen.append((tool, prompt))
+        return answer
+    r = bridge.read_new(same, "DEMO-conv", "10")
+    check("two equal copies: agreed, both messages, text verbatim with blank lines and indentation",
+          r.agreed and [m.id for m in r.messages] == ["11", "12"] and r.messages[0].text == 'line one\n\n  line three {"k": 1}'
+          and r.messages[0].sender == "S1", r)
+    check("it asks twice, with the comm tool only, for the ids after the given one, and says not to send",
+          [t for t, _ in seen] == ["comm", "comm"] and "DEMO-conv" in seen[0][1] and "greater than 10" in seen[0][1]
+          and "Send nothing" in seen[0][1], seen)
+
+    outs = iter([answer, answer.replace("line one", "line 0ne")])
+    r = bridge.read_new(lambda tool, prompt: next(outs), "DEMO-conv", "10")
+    check("one changed character between the copies: not agreed, no messages", not r.agreed and r.reason == "reads_differ" and not r.messages, r)
+    outs = iter([answer, answer.replace("2026-10-29T09:17:23.983Z", "2026-10-29T09:17:23.98Z")])
+    check("a time printed differently is not a disagreement", bridge.read_new(lambda tool, prompt: next(outs), "c", "10").agreed)
+    check("NONE twice: agreed, empty", bridge.read_new(lambda tool, prompt: "shell noise\nNONE", "c", "10") == bridge.Read(True, ()))
+    r = bridge.read_new(lambda tool, prompt: "I could not read that conversation", "c", "10")
+    check("neither messages nor NONE: no read", not r.agreed and r.reason == "no_answer", r)
+
+    def down(tool, prompt):
+        raise TimeoutError("bridge")
+    r = bridge.read_new(down, "c", "10")
+    check("a failing run: no read, nothing raised", not r.agreed and r.reason == "read_failed", r)
+    check("a text that holds a ```json block with braces is kept as it is",
+          bridge.parse_messages("ID: 1\nSender: S\nTime: t\n<<<BEGIN\n```json\n{\"a\": [1, 2]}\n```\nEND>>>")[0].text == '```json\n{"a": [1, 2]}\n```')
     return finish()
 
 
