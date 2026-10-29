@@ -6,13 +6,14 @@
     {
       "count": 6,
       "format": "video_9x16",
+      "currency": "CNY",
       "needed_by": "2026-10-30",
       "note": "Two hooks on the dimming feature, four on the price.",
       "platform": "qianchuan",
       "product": "DEMO-LAMP",
       "request_id": "demand-2026-w43-1",
       "slot": "feed",
-      "unit_cost_cny": 800,
+      "unit_cost": 800,
       "window_days": 7
     }
   ]

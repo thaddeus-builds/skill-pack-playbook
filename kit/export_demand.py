@@ -1,7 +1,6 @@
 """The `ads.demand/1` file: the demand document's request for the makers. It is `kit.compute_demand`'s `demand` block as the body of a contract file, never a new
 rule: one request with the count (the number the exploration money can carry to a verdict, in whole batches), the day it is needed by (the first day of the plan
-plus the measured lead time), the window of a verdict in days, the cost of judging one creative in CNY when the client's money is CNY (never a converted figure; any
-other currency is said in the note, the contract has no field for it yet), and the batches with their daily budgets in the note. A request is a number wanted, never a
+plus the measured lead time), the window of a verdict in days, the cost of judging one creative with the currency it is in (`unit_cost` and `currency`, ISO 4217, when the client's money is known; never a converted figure), and the batches with their daily budgets in the note. A request is a number wanted, never a
 budget or a promise (the contract's rules). No database, no file, no clock, no platform: the pack hands over the demand document and the words of its platform, and
 writes what `compute()` returns.
 
@@ -42,7 +41,7 @@ class Source:
     format     the creative's format in the operator's words (for example video_9x16)
     start      the first day of the plan, or the day after the last day read: the lead time counts from it (needed when there is something to ask for)
     subject    what the request is about (a market, a platform): part of its id; default the platform
-    currency   the client's money (ISO 4217), or None when unknown: only CNY has a field in the file
+    currency   the client's money (ISO 4217, three capitals), or None when unknown: the cost of a verdict is written with it, and not at all without it
     product    optional: the sku the creatives are for
     slot       optional: the placement they are for
     """
@@ -87,6 +86,8 @@ def check(src: Source, day: str) -> None:
         v = getattr(src, name)
         if v is not None and (not isinstance(v, str) or not v.strip()):
             raise _bad(name, f"{v!r}, which is not a word or None")
+    if src.currency is not None and not (len(src.currency) == 3 and src.currency.isascii() and src.currency.isalpha() and src.currency.isupper()):
+        raise _bad("currency", f"{src.currency!r}, which is not an ISO 4217 code (three capitals) or None")
     block = src.document["demand"]
     if block is not None and not isinstance(block, dict):
         raise _bad("document.demand", f"{block!r}, which is not a block (a dict) or None")
@@ -116,7 +117,7 @@ def compute(src: Source, day: str) -> dict:
     for name in ("product", "slot"):
         if getattr(src, name):
             req[name] = getattr(src, name)
-    if src.currency == "CNY" and block.get("unit_cost"):
-        req["unit_cost_cny"] = block["unit_cost"]
+    if src.currency and block.get("unit_cost"):
+        req["unit_cost"], req["currency"] = block["unit_cost"], src.currency
     return {"body": {"producer": src.producer, "produced_at": f"{day}T00:00:00Z", "requests": [req]}, "count": req["count"],
             "request_id": req["request_id"], "needed_by": needed, **coded("warnings", [])}
