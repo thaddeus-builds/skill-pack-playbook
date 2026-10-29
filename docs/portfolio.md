@@ -89,7 +89,7 @@ TikTok is not added to `video-ads`: it is a pack of its own when a client needs 
 | cloud-gpu-skill-pack | `cloudgpu` | Platform, GPU jobs | 0.2.0, not on the kit | The one provider behind the kit's `generation` for self-hosted runs |
 | skill-pack-playbook | — | Platform | kit 0.33.1; client hub on a branch | Holds the contract schemas, the exchange folder and the engines |
 
-Not skill packs, or superseded (archive or leave):
+Not skill packs, or superseded (archive or leave): how a pack that has been split is retired is in [maintaining.md](maintaining.md), "Retiring a pack".
 - `amazon-ads-harness`: superseded by `amazon-ppc`.
 - `geo-china-harness`: superseded by `geo-china-skill-pack`.
 - `openmax-seo`: superseded by `seo-programmatic`'s case repository.
