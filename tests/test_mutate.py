@@ -120,7 +120,8 @@ def test_sigterm_and_ctrl_c_put_the_file_back():
         open(os.path.join(d, "mutants.txt"), "w", encoding="utf-8").write("x + 1\n=>>\nx + 1  # HANG\n")
         for sig in (signal.SIGTERM, signal.SIGINT):
             p = subprocess.Popen([sys.executable, TOOL, "m.py", "mutants.txt", "--test", f"{sys.executable} t.py", "--timeout", "60"],
-                                 cwd=d, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                 cwd=d, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                 preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))   # as a background job or cron starts it
             deadline = time.time() + 30
             while "HANG" not in open(path, encoding="utf-8").read():
                 assert time.time() < deadline and p.poll() is None, "the break was never written"
