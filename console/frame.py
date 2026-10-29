@@ -1,5 +1,5 @@
 """A skill pack's page, drawn inside the console's frame. Pure: a page document
-in, one HTML document out (the frame, the top navigation, light and dark, the
+in, one HTML document out (the frame, the top navigation, the tech look (light on `data-theme="light"`), the
 375 px layout and the safety headers are pages.py's and serve.py's, shared by
 every page); no I/O, no process, no clock.
 
