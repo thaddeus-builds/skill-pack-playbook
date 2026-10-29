@@ -74,7 +74,7 @@ def table_rows(text: str, heading_re: str) -> list[list[str]]:
 
 def test_files_and_names():
     found = schemas()
-    assert len(found) == 12, sorted(found)
+    assert len(found) == 13, sorted(found)
     for kind, s in found.items():
         assert s.get("x-contract") == kind, (kind, s.get("x-contract"))
         assert s.get("title") == kind, (kind, s.get("title"))

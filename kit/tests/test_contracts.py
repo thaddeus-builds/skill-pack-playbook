@@ -52,10 +52,10 @@ def main() -> int:
     here = {p.name: p.read_bytes() for p in contracts.SCHEMAS.glob("*.schema.json")}
     there = {p.name: p.read_bytes() for p in (PLAYBOOK / "contracts").glob("*.schema.json")}
     check("kit/contracts.d holds the playbook's contracts/ schemas, byte for byte",
-          here == there and len(here) == 12,
+          here == there and len(here) == 13,
           sorted(set(here) ^ set(there)) or [n for n in here if here[n] != there.get(n)])
     examples = sorted(EXAMPLES.iterdir())
-    check("an example for each of the twelve", len(examples) == 12, examples)
+    check("an example for each of the thirteen", len(examples) == 13, examples)
     bad = []
     for f in examples:
         kind, version, text = example(f.name)
@@ -159,6 +159,28 @@ def main() -> int:
         .replace("\t\n", "\t\tnew\n", 1)
     check("a TSV with a column of a later version in it is read, the column kept as text",
           contracts.parse(wide.encode(), kind, version).body[0].get("new_column") == "new")
+
+    print("\n[3b] ads.results/2: the same file with the money in the row's own currency")
+    k1, v1, t1 = kind, version, text
+    kind, version, text = example("ads.results-2.example.tsv")
+    doc2 = contracts.parse(text.encode(), kind, version)
+    s1, s2 = contracts.schema(k1, v1), contracts.schema(kind, version)
+    names = {"spend_cny": "spend", "gmv_cny": "gmv", "net_gmv_cny": "net_gmv", "cpa_cny": "cpa"}
+    check("the second version is the first with the four money columns renamed and `currency` after `restated`, nothing else moved",
+          [names.get(c, c) for c in s1["x-columns"]] == [c for c in s2["x-columns"] if c != "currency"]
+          and s2["x-columns"][s2["x-columns"].index("restated") + 1] == "currency" and "currency" in s2["required"]
+          and set(s2["required"]) == {*s1["required"], "currency"}, s2["x-columns"])
+    check("no column of the second version still says CNY", not [c for c in s2["x-columns"] if "cny" in c.lower()] and "currency" in s2["properties"])
+    check("a row reads its currency and its money as numbers", doc2.body[0]["currency"] == "CNY" and doc2.body[0]["spend"] == 1200.5 and doc2.body[1]["cpa"] is None, doc2.body[0])
+    tsv_refused(lambda ls: ls.__setitem__(2, cell(ls[2], "currency", "")), "a row without its currency")
+    tsv_refused(lambda ls: ls.__setitem__(2, cell(ls[2], "currency", "cny")), "a currency in lower case")
+    tsv_refused(lambda ls: ls.__setitem__(2, cell(ls[2], "currency", "RMB1")), "a currency of four letters")
+    tsv_refused(lambda ls: ls.__setitem__(2, cell(ls[2], "spend", "-3")), "a spend below 0")
+    usd = [dict(r, currency=c) for r, c in zip(doc2.body, ("USD", "HKD"))]
+    check("a file may hold rows of more than one currency, and is written and read back as given",
+          [r["currency"] for r in contracts.read(contracts.write(kind, version, usd, out / "multi.tsv"), kind, version, "multi").body] == ["USD", "HKD"])
+    check("the first version's example is not read as the second, nor the second as the first",
+          code(lambda: contracts.parse(t1.encode(), kind, version)) == "exchange_version_unknown" and code(lambda: contracts.parse(text.encode(), k1, v1)) == "exchange_version_unknown")
 
     print("\n[4] read: refused files are not saved, a valid one is saved as it came")
     cat = out / "x" / "catalog.json"
