@@ -128,7 +128,7 @@ class History:
         """{blob id: newest commit that had it} for `path`."""
         if path not in self._blobs:
             out: dict[str, str] = {}
-            text = git(self.playbook, "log", "--format=C %H", "--raw", "--no-abbrev",
+            text = git(self.playbook, "log", "-m", "--format=C %H", "--raw", "--no-abbrev",
                        "--no-renames", "--", path) if self.ok else None
             commit = None
             for line in (text or "").splitlines():
