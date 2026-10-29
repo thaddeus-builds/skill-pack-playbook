@@ -1,29 +1,33 @@
 /* The console's look. It styles semantic HTML first; a class exists only where
    a tag is not enough, and the list of them is in pages.py. One column, one
    accent colour, status colours for suggestion (green), approval (amber) and
-   refusal (red). Light and dark follow the system. */
+   refusal (red). The look is the "tech" one: near-black, hairline borders, one
+   cool accent, a glass bar. It is the default; `data-theme="light"` on <html>
+   is the light version of the same tokens. Text on its background is 4.5:1 or
+   more in both (console/tests/test_ui_rules.py). */
 
+/* tech: the default */
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
+  --bg: #0a0c12; --surface: #10131c; --sunk: #1a1f2b;
+  --ink: #e6eaf3; --ink2: #9aa5ba; --line: #252a38;
+  --accent: #7aa2ff; --on-accent: #0a0c12; --tint: #16203d;
+  --ok: #4ee0a8; --ok-bg: #0f2a22; --ok-line: #1f6b52;
+  --warn: #ffc76b; --warn-bg: #2a2110; --warn-line: #6b5220; --warn-solid: #ffc76b; --on-warn: #2a1c00;
+  --bad: #ff7b86; --bad-bg: #2c1618; --bad-line: #7a3a40;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei",
+          "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+/* light: the same tokens, for a page that sets data-theme="light" */
+:root[data-theme="light"] {
+  color-scheme: light;
   --bg: #f6f6f3; --surface: #fff; --sunk: #efefea;
   --ink: #1d1f23; --ink2: #575d66; --line: #dfdfd8;
   --accent: #4154d6; --on-accent: #fff; --tint: #eceefc;
   --ok: #17693f; --ok-bg: #e6f4ec; --ok-line: #a3d4b7;
   --warn: #7a4b00; --warn-bg: #fff3dc; --warn-line: #e6b24a; --warn-solid: #a35f00; --on-warn: #fff;
   --bad: #a3251d; --bad-bg: #fdeceb; --bad-line: #eeaea9;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei",
-          "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #121316; --surface: #1a1c20; --sunk: #24272c;
-    --ink: #ebecee; --ink2: #a3a9b2; --line: #2d3036;
-    --accent: #93a0ff; --on-accent: #0d1030; --tint: #232848;
-    --ok: #7fd6a2; --ok-bg: #16261d; --ok-line: #2f5c43;
-    --warn: #f0c46a; --warn-bg: #2a2110; --warn-line: #6b5220; --warn-solid: #f0c46a; --on-warn: #2a1c00;
-    --bad: #ff9e97; --bad-bg: #2c1615; --bad-line: #6e3431;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -32,6 +36,11 @@ body {
   margin: 0; background: var(--bg); color: var(--ink);
   font: 16px/1.55 var(--font); overflow-wrap: anywhere;
 }
+body {
+  background: radial-gradient(900px 420px at 12% -8%, rgba(92, 124, 255, .16), transparent 70%),
+    radial-gradient(700px 380px at 92% -4%, rgba(46, 230, 190, .09), transparent 70%), var(--bg) fixed;
+}
+:root[data-theme="light"] body { background: var(--bg); }
 main { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1rem 2rem; }
 h1 { margin: 0; font-size: 1.65rem; line-height: 1.2; font-weight: 650; letter-spacing: -.01em; }
 h2 { display: flex; align-items: center; gap: .5rem; margin: 2rem 0 .6rem; font-size: 1rem; font-weight: 650; }
@@ -46,8 +55,16 @@ summary::-webkit-details-marker { display: none; }
 
 /* top bar */
 .bar { position: sticky; top: 0; z-index: 10; background: var(--surface); border-bottom: 1px solid var(--line); }
+@supports (backdrop-filter: blur(1px)) {
+  :root:not([data-theme="light"]) .bar { background: rgba(10, 12, 18, .72); backdrop-filter: saturate(160%) blur(14px); }
+}
 .bar-in { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0 1rem; max-width: 46rem; margin: 0 auto; padding: 0 1rem; }
 .brand { display: inline-flex; align-items: center; min-height: 44px; font-weight: 650; color: var(--ink); text-decoration: none; }
+.brand::before {
+  content: ""; width: 8px; height: 8px; margin-right: .5rem; border-radius: 50%;
+  background: var(--ok); box-shadow: 0 0 10px 2px color-mix(in srgb, var(--ok) 60%, transparent);
+}
+:root[data-theme="light"] .brand::before { display: none; }
 .tabs { display: flex; gap: .25rem; min-width: 0; overflow-x: auto; }   /* a skill pack's pages may be many: the bar scrolls, the page never does */
 .tabs a { flex: 0 0 auto; white-space: nowrap; }
 .tabs a, .lang {
