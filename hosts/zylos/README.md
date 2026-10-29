@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.3.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.4.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -307,7 +307,7 @@ For the example manifest it prints:
 
 Validate, then reload: `~/zylos/bin/caddy validate --config ~/zylos/http/Caddyfile --adapter caddyfile && pm2 reload caddy`.
 
-Core never rewrites the block on upgrade (no routes are declared). A reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it: paste it again. post-install and post-upgrade warn when `users_file` has logins but the Caddyfile has no BEGIN marker, and name the copy pre-uninstall kept (`caddy-block.saved`, with the host's own edits); they never edit the Caddyfile.
+Core never rewrites the block on upgrade (no routes are declared), but a reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it, and every skill pack upgrade is a reinstall. So pre-uninstall keeps the block (with the host's own edits) in `<data dir>/caddy-block.saved`, and post-install / post-upgrade **put it back** when `users_file` has logins and the Caddyfile has no BEGIN marker (issue #215): the saved block goes just before the closing `}` of the first site block, into a candidate file `Caddyfile.candidate-<name>` that must pass `caddy validate`; the old file is kept as `Caddyfile.before-<name>`; then `pm2 reload caddy`, and if that fails the old file is put back. When any step cannot be done (no saved copy, no `~/zylos/bin/caddy`, validate refuses, no site block) the Caddyfile is left as it was and the warning names the copy to paste by hand.
 
 **Adding a person.** The logins are `<data dir>/<users_file>` (mode 0600), one `<username> <bcrypt hash>` per line, never in the repository. Caddy fails to start on a missing or empty list, so add the first person before pasting the block. Hash at a terminal so the password never goes through chat:
 
@@ -336,5 +336,5 @@ Then open the URL, log in, and check that the page names you.
 - **The console's secret sits in `<data dir>/console/secret`**, which the agent on a single-user host can read: the signature is then an accident guard, not a wall. To keep it out of the agent's reach, give only the pm2 app a `CONSOLE_SECRET` (16+ characters) in its environment and keep that out of the data dir.
 - **One client per host**, and one console per component: a second console for the same skill pack needs a second host.
 - **Windows is not supported.** Detached jobs rely on POSIX sessions and `sh`.
-- **The hooks never edit the Caddyfile**, and the scheduler's time zone is the host's; both are the host agent's job.
+- **The hooks edit the Caddyfile in one case only**: putting back the block pre-uninstall saved, validated first and undone if the reload fails. First installs, edits to an existing block and the scheduler's time zone are the host agent's job. Not yet seen under a real Caddy.
 - **Vendoring is by hand for now.** `kit/tools/vendor.py` copies `kit/` and `console/`; copy this folder (without `tests/` and the two templates) yourself and keep `VERSION` with it.
