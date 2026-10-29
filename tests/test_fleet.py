@@ -345,6 +345,37 @@ def test_update_refuses_when_another_remote_is_ahead_of_the_one_it_would_cut_fro
         assert ok.returncode == 0 and "cut from github/trunk" in ok.stdout, ok.stdout + ok.stderr
 
 
+def test_export_gives_the_remotes_default_branch_not_the_checkout():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        other = Path(tmp) / "other"           # the remote moves on; the checkout (a feature branch) does not
+        git(Path(tmp), "clone", "-q", str(Path(tmp) / "origin.git"), str(other))
+        (other / "NEWER.md").write_text("pushed to the remote only\n")
+        git(other, "add", "-A")
+        git(other, "commit", "-qm", "newer")
+        git(other, "push", "-q", "origin", "trunk")
+        out = Path(tmp) / "snap"
+        r = subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "export", str(pack), "--out", str(out)],
+                           capture_output=True, text=True)
+        assert r.returncode == 0 and "origin/trunk at" in r.stdout, r.stdout + r.stderr
+        assert (out / "acme" / "NEWER.md").read_text() == "pushed to the remote only\n", "the remote's file is in the export"
+        assert (out / "acme" / "scripts" / "kit" / "VERSION").is_file() and not (pack / "NEWER.md").exists(), "the checkout is as it was"
+        assert git(pack, "branch", "--show-current") == "feature" and git(pack, "status", "--porcelain") == ""
+        again = subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "export", str(pack), "--out", str(out)],
+                               capture_output=True, text=True)
+        assert again.returncode == 1 and "exists" in again.stdout, again.stdout
+        git(pack, "remote", "set-head", "origin", "trunk")     # what a clone records
+        git(pack, "remote", "set-url", "origin", str(Path(tmp) / "nowhere.git"))   # the server does not answer: the branch recorded at the last fetch is used
+        down = subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "export", str(pack), "--out", str(Path(tmp) / "snap0")],
+                              capture_output=True, text=True)
+        assert down.returncode == 0 and "origin/trunk at" in down.stdout and "fetch failed" in down.stdout, down.stdout + down.stderr
+        git(pack, "remote", "set-url", "origin", str(Path(tmp) / "origin.git"))
+        real_remote(pack, Path(tmp))          # the home moves to a second remote: the export says it is not the real main
+        warned = subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "export", str(pack), "--out", str(Path(tmp) / "snap2")],
+                                capture_output=True, text=True)
+        assert "WARNING: the remote github has" in warned.stdout, warned.stdout
+
+
 def test_update_with_a_remote_the_pack_does_not_have_is_refused_by_name():
     with _t.tmpdir() as tmp:
         pb, pack = make_pack(Path(tmp))

@@ -4,6 +4,7 @@
     python3 tools/fleet.py status SKILL_PACK... [--json]
     python3 tools/fleet.py diff SKILL_PACK [FILE...]
     python3 tools/fleet.py update SKILL_PACK... [--version X] [--no-tests]
+    python3 tools/fleet.py export SKILL_PACK... --out DIR [--remote NAME]
 
 For each skill pack it reads the kit (<scripts_dir>/kit/), the console
 (console/) and the Zylos adapter (zylos/), whichever it holds, and compares
@@ -55,6 +56,11 @@ have to be moved by hand (issue #316). It refuses too when another remote of the
 has commits on that branch the chosen remote's lacks (a pack whose home moved from one
 server to another and whose `origin` still names the old one).
 
+`export` writes each pack's default branch on its remote as plain files (`git archive`,
+the checkout untouched) into `--out DIR/<folder>`, and says how far the checkout is behind
+it. Read `status` and `tools/consumers.py` from those folders: a checkout is often behind
+its remote, and the census then describes the checkout, not the pack's main (2026-10-30).
+
 `--version X` names the train being taken and must equal this playbook's
 kit/VERSION (the vendor tool copies the checkout it is in). The vendor tool copies
 the files as they are, so a checkout whose kit differs from the commit that set
@@ -75,12 +81,14 @@ import argparse
 import difflib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
 import shlex
 import subprocess
 import sys
+import tarfile
 import tomllib
 from pathlib import Path
 
@@ -318,10 +326,15 @@ def first_line(r: subprocess.CompletedProcess) -> str:
 
 
 def default_branch(pack: Path, remote: str = "origin") -> str | None:
-    """The branch `git remote show REMOTE` calls HEAD; None when it says (unknown) or fails."""
+    """The branch `git remote show REMOTE` calls HEAD; when that cannot be asked (the server does not answer: git.coco.xyz often
+    does not), the one the checkout recorded at its last fetch (refs/remotes/REMOTE/HEAD); None when neither says."""
     r = run(pack, "git", "remote", "show", remote)
     m = re.search(r"^\s*HEAD branch:\s*(\S+)", r.stdout, re.M) if r.returncode == 0 else None
-    return m.group(1) if m and m.group(1) != "(unknown)" else None
+    if m and m.group(1) != "(unknown)":
+        return m.group(1)
+    kept = run(pack, "git", "symbolic-ref", "--short", f"refs/remotes/{remote}/HEAD")
+    name = kept.stdout.strip().removeprefix(f"{remote}/") if kept.returncode == 0 else ""
+    return name or None
 
 
 def suite_command(pack: Path) -> list[str]:
@@ -374,6 +387,45 @@ def unreleased(playbook: Path) -> list[str] | None:
     return sorted(f for f in {*changed.splitlines(), *untracked.splitlines()} if f and not f.startswith("kit/tests/") and "__pycache__" not in f)
 
 
+def other_remote_ahead(pack: Path, base: str, branch: str) -> str | None:
+    """A sentence naming a remote of the pack whose `branch` has commits that `base` (remote/branch) lacks; None when none has."""
+    for other in run(pack, "git", "remote").stdout.split():
+        ahead = run(pack, "git", "rev-list", "--count", f"refs/remotes/{base}..refs/remotes/{other}/{branch}")
+        if ahead.returncode == 0 and ahead.stdout.strip() not in ("", "0"):
+            return f"the remote {other} has {ahead.stdout.strip()} commit(s) on {branch} that {base} does not"
+    return None
+
+
+def export(pack: Path, out: Path, remote: str = "origin") -> dict:
+    """The pack's default branch on `remote`, as plain files in `out/<folder>`: what `status` and tools/consumers.py should read, since a
+    checkout is often behind its remote (2026-10-30: meta-ads was 110 commits behind and showed kit 0.41.0 where its main holds 0.47.0).
+    The checkout is not touched. {pack, state: exported | refused, text, path}."""
+    name = read_toml(pack / "skill-pack.toml").get("skill_pack", {}).get("name") or pack.name
+    done = lambda state, text, **more: {"pack": name, "path": str(pack), "state": state, "text": text, **more}
+    if run(pack, "git", "rev-parse", "--show-toplevel").returncode != 0:
+        return done("refused", "not a git checkout")
+    branch = default_branch(pack, remote)
+    if not branch:
+        return done("refused", f"`git remote show {remote}` names no default branch")
+    fetched = run(pack, "git", "fetch", "-q", remote, branch)
+    base = f"{remote}/{branch}"
+    note = f"; fetch failed, this is what was last fetched: {first_line(fetched)}" if fetched.returncode != 0 else ""
+    dest = out / pack.name
+    if dest.exists():
+        return done("refused", f"{dest} exists; remove it or choose another --out")
+    tar = subprocess.run(["git", "-C", str(pack), "archive", "--format=tar", f"refs/remotes/{base}"], capture_output=True)
+    if tar.returncode != 0:
+        return done("refused", f"cannot archive {base}: {tar.stderr.decode(errors='replace').strip()[:120]}")
+    dest.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(tar.stdout), mode="r:") as tf:
+        tf.extractall(dest, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))
+    sha = run(pack, "git", "rev-parse", "--short", f"refs/remotes/{base}").stdout.strip()
+    moved = other_remote_ahead(pack, base, branch)
+    behind = run(pack, "git", "rev-list", "--count", f"HEAD..refs/remotes/{base}").stdout.strip()
+    text = f"{base} at {sha} -> {dest}" + (f" (the checkout is {behind} commit(s) behind it)" if behind not in ("", "0") else "")
+    return done("exported", text + note + (f"; WARNING: {moved}, so this is not the pack's real main: use --remote" if moved else ""), dest=str(dest))
+
+
 def update(pack: Path, playbook: Path, version: str, tests: bool = True, remote: str = "origin") -> dict:
     """Bring one skill pack to the playbook's kit. {pack, state, text, ...}; see the module docstring."""
     name = read_toml(pack / "skill-pack.toml").get("skill_pack", {}).get("name") or pack.name
@@ -400,11 +452,9 @@ def update(pack: Path, playbook: Path, version: str, tests: bool = True, remote:
             and run(pack, "git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", f"refs/remotes/{base}").returncode != 0:
         return done("refused", f"the checkout's own {branch} has commits that {base} does not: {remote} looks stale or unpushed; "
                     f"push them, or name the remote the real {branch} is on with --remote NAME")
-    for other in run(pack, "git", "remote").stdout.split():
-        ahead = run(pack, "git", "rev-list", "--count", f"refs/remotes/{base}..refs/remotes/{other}/{branch}")
-        if ahead.returncode == 0 and ahead.stdout.strip() not in ("", "0"):
-            return done("refused", f"the remote {other} has {ahead.stdout.strip()} commit(s) on {branch} that {base} does not: the pack's home may have moved "
-                        f"(a migration); name the remote the real {branch} is on with --remote NAME, or reconcile them")
+    moved = other_remote_ahead(pack, base, branch)
+    if moved:
+        return done("refused", f"{moved}: the pack's home may have moved (a migration); name the remote the real {branch} is on with --remote NAME, or reconcile them")
     cut = (run(pack, "git", "rev-parse", "--short", f"refs/remotes/{base}").stdout.strip()) or "?"
     added = run(pack, "git", "worktree", "add", "-q", "--no-track", "-b", new, str(work), f"refs/remotes/{base}")
     if added.returncode != 0:
@@ -460,6 +510,10 @@ def main(argv: list[str] | None = None) -> int:
     d = sub.add_parser("diff", help="unified diffs, skill pack copy against the playbook")
     d.add_argument("skill_pack")
     d.add_argument("file", nargs="*", help="e.g. kit/facts.py; default every differing file")
+    e = sub.add_parser("export", help="each skill pack's default branch on its remote as plain files, for status and tools/consumers.py (a checkout is often behind)")
+    e.add_argument("skill_pack", nargs="+")
+    e.add_argument("--out", required=True, help="a folder; each pack goes to <out>/<its folder name>, which must not exist")
+    e.add_argument("--remote", default="origin", help="the remote the pack's real default branch is on (default origin)")
     u = sub.add_parser("update", help="vendor this playbook's kit into a worktree of each skill pack, test, commit")
     u.add_argument("skill_pack", nargs="+")
     u.add_argument("--version", help="the kit version being taken; must equal this playbook's kit/VERSION")
@@ -469,7 +523,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     playbook = Path(args.playbook).resolve()
     skill_packs = [Path(h).expanduser().resolve() for h in
-                 (args.skill_pack if args.cmd in ("status", "update") else [args.skill_pack])]
+                 (args.skill_pack if args.cmd in ("status", "update", "export") else [args.skill_pack])]
     for h in skill_packs:
         if not h.is_dir():
             print(f"error: {h} is not a directory", file=sys.stderr)
@@ -489,6 +543,11 @@ def main(argv: list[str] | None = None) -> int:
         for r in results:
             print(f"{r['pack']}: {r['text']}")
         return 0 if all(r["state"] in ("green", "current") for r in results) else 1
+    if args.cmd == "export":
+        results = [export(h, Path(args.out).expanduser().resolve(), args.remote) for h in skill_packs]
+        for r in results:
+            print(f"{r['pack']}: {r['text']}")
+        return 0 if all(r["state"] == "exported" for r in results) else 1
     if args.cmd == "diff":
         sys.stdout.write(diff(skill_packs[0], playbook, args.file))
         return 0
