@@ -222,6 +222,56 @@ def test_update_commits_the_new_kit_in_a_worktree_beside_the_pack():
         assert (pack / "scripts" / "kit" / "VERSION").read_text().strip() == "0.1.0"
 
 
+def real_remote(pack: Path, tmp: Path) -> str:
+    """The pack's real trunk moves on a second remote, `github`; `origin` is left as it was (archived, stale). Returns the new commit."""
+    git(pack, "checkout", "-q", "trunk")
+    (pack / "NOTES.md").write_text("work done after origin was archived\n")
+    git(pack, "add", "-A")
+    git(pack, "commit", "-qm", "real work")
+    git(tmp, "init", "-q", "--bare", "-b", "trunk", str(tmp / "github.git"))
+    git(pack, "remote", "add", "github", str(tmp / "github.git"))
+    git(pack, "push", "-q", "github", "trunk")
+    new = git(pack, "rev-parse", "HEAD")
+    git(pack, "checkout", "-q", "feature")
+    return new
+
+
+def test_update_says_which_remote_and_commit_it_cut_from():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        r = update(pb, str(pack))
+        short = git(pack, "rev-parse", "--short", "origin/trunk")
+        assert r.returncode == 0 and f"cut from origin/trunk at {short}" in r.stdout, r.stdout + r.stderr
+
+
+def test_update_refuses_a_stale_remote_and_takes_the_real_one_with_remote():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        real = real_remote(pack, Path(tmp))
+        r = update(pb, str(pack))
+        assert r.returncode == 1 and "has commits that origin/trunk does not" in r.stdout and "--remote NAME" in r.stdout, r.stdout + r.stderr
+        assert not (pack.parent / "acme_worktrees").exists() and git(pack, "branch", "--list", "claude/kit-0.2.0") == "", "nothing is left behind"
+        other = Path(tmp) / "other"           # someone pushes to github after the pack last looked: the update has to fetch
+        git(Path(tmp), "clone", "-q", str(Path(tmp) / "github.git"), str(other))
+        (other / "MORE.md").write_text("pushed since\n")
+        git(other, "add", "-A")
+        git(other, "commit", "-qm", "pushed since")
+        git(other, "push", "-q", "origin", "trunk")
+        real = git(other, "rev-parse", "HEAD")
+        r = update(pb, str(pack), "--remote", "github")
+        work = pack.parent / "acme_worktrees" / "kit-0.2.0"
+        assert r.returncode == 0 and "cut from github/trunk at " in r.stdout, r.stdout + r.stderr
+        assert git(work, "rev-parse", "HEAD~1") == real, "the re-vendor sits on the real trunk"
+        assert (work / "NOTES.md").is_file()
+
+
+def test_update_with_a_remote_the_pack_does_not_have_is_refused_by_name():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        r = update(pb, str(pack), "--remote", "nowhere")
+        assert r.returncode == 1 and "`git remote show nowhere` names no default branch" in r.stdout, r.stdout + r.stderr
+
+
 def test_update_commits_a_red_suite_and_names_the_failing_files():
     with _t.tmpdir() as tmp:
         pb, pack = make_pack(Path(tmp), suite=FAIL)
