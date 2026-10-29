@@ -173,6 +173,26 @@ def test_a_file_that_only_a_merge_commit_ever_had_is_older_not_local():
         assert "local changes" not in copy["verdict"], copy
 
 
+def test_a_pack_the_skill_pack_does_not_take_is_not_missing():
+    """Seen 2026-10-30: sdr and ecommerce-seo took four kit packs and were told 80 of 84 files were missing or changed."""
+    real = ROOT / "kit" / "tools" / "packs.py"
+    with _t.tmpdir() as tmp:
+        pb, h = setup(Path(tmp))
+        write(pb, {"kit/tools/packs.py": real.read_text(),
+                   "kit/packs.tsv": "module\tpack\tnote\na\tbase\tx\nb\textra\ty\n"})
+        sh(pb, "git", "add", "-A")
+        sh(pb, "git", "commit", "-qm", "a table of packs")
+
+        def states(toml: str) -> dict:
+            write(h, {"skill-pack.toml": '[skill_pack]\nname = "acme"\nscripts_dir = "scripts"\n' + toml})
+            [kit] = [c for c in json.loads(fleet(pb, "status", str(h), "--json").stdout)["skill_packs"][0]["copies"] if c["part"] == "kit"]
+            return {f["file"]: f["state"] for f in kit["files"]}
+        assert states("[kit]\npacks = []\n").get("b.py") is None, "b.py belongs to `extra`, which this pack does not take"
+        assert states("[kit]\npacks = [\"extra\"]\n").get("b.py") == "missing"
+        assert states("").get("b.py") == "missing", "no `[kit] packs` means every pack"
+        assert states("[kit]\npacks = [\"nonesuch\"]\n").get("b.py") == "missing", "a toml the tool cannot read is not guessed at"
+
+
 def test_diff_shows_the_skill_pack_copy_against_the_playbook():
     with _t.tmpdir() as tmp:
         pb, h = setup(Path(tmp))
