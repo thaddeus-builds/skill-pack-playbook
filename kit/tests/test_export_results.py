@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""kit.export_results: the `ads.results/1` rows from the report's current rows and the creatives' days, over the hand-made account of test_compute_demand (invented DEMO
+"""kit.export_results: the `ads.results/2` rows (and the first version, for one release) from the report's current rows and the creatives' days, over the hand-made account of test_compute_demand (invented DEMO
 ids, invented numbers). The cases are the video-ads skill pack's `export results`: one row per current report row, in the contract's columns, sorted by key; a creative's
 stage from the life document; a fission score only for a creative that has earned a verdict, against the account's proven ones; blank is unknown, never 0; the rows pass
 the playbook's schema and are written once; a part the file cannot be written from is refused by name.
@@ -25,7 +25,7 @@ SCHEMA = contracts.schema(er.KIND, er.VERSION)
 def row(code, nk, frm="2026-09-01", to="2026-09-30", **kw):
     r = {"creative_code": code, "platform": "meta", "account": "ACC-1", "ref_kind": "ad_id", "ref_value": f"ad-{code}", "unit_id": "", "placement": "", "date_from": frm,
          "date_to": to, "nk": nk, "exported_at": "2026-10-20T06:00:00+08:00", "complete": True, "settled": True, "restated": False,
-         "spend_cny": 600.0, "impressions": 12000.0, "clicks": 240.0, "conversions": 90.0, "gmv_cny": 5400.5, "ctr": 0.02, "roi": 9.0}
+         "currency": "CNY", "spend": 600.0, "impressions": 12000.0, "clicks": 240.0, "conversions": 90.0, "gmv": 5400.5, "ctr": 0.02, "roi": 9.0}
     r.update(kw)
     return r
 
@@ -33,6 +33,15 @@ def row(code, nk, frm="2026-09-01", to="2026-09-30", **kw):
 def refused(src, k, at=AT):
     try:
         er.compute(src, k, at=at)
+    except Exception as e:  # noqa: BLE001
+        f = messages.failure(e)
+        return f["code"], f["params"].get("part")
+    return None, None
+
+
+def refused_v(src, k, version, at=AT):
+    try:
+        er.compute(src, k, at=at, version=version)
     except Exception as e:  # noqa: BLE001
         f = messages.failure(e)
         return f["code"], f["params"].get("part")
@@ -61,7 +70,7 @@ def main() -> int:
           doc["counts"])
     first = next(r for r in out if r["creative_code"] == "DUD-0")
     check("flags are 1 and 0, a whole number has no point, a decimal keeps it, a count the platform did not give is blank (unknown, never 0)",
-          first["complete"] == "1" and first["restated"] == "0" and first["spend_cny"] == "600" and first["gmv_cny"] == "5400.5" and first["ctr"] == "0.02" and first["plays"] is None
+          first["complete"] == "1" and first["restated"] == "0" and first["spend"] == "600" and first["gmv"] == "5400.5" and first["currency"] == "CNY" and first["ctr"] == "0.02" and first["plays"] is None
           and first["net_conversions"] is None, first)
     check("the document is plain data and every warning has a code", json.dumps(doc) and len(doc["warnings"]) == len(doc["warning_codes"]))
 
@@ -91,7 +100,7 @@ def main() -> int:
     for r in read.body:
         byc.setdefault(r["creative_code"], r)
     check("a reader gets the rows back: a score as a number with its time, a creative without one blank, the counts as numbers",
-          len(read.body) == 21 and byc["WIN-0"]["fission"] == score["WIN-0"] and byc["WIN-0"]["scored_at"] == AT and byc["DUD-0"]["fission"] is None and byc["DUD-0"]["spend_cny"] == 600.0
+          len(read.body) == 21 and byc["WIN-0"]["fission"] == score["WIN-0"] and byc["WIN-0"]["scored_at"] == AT and byc["DUD-0"]["fission"] is None and byc["DUD-0"]["spend"] == 600.0
           and byc["DUD-0"]["plays"] is None and read.columns[-3:] == ("fission", "scored_at", "stage_reason"), (read.columns, byc["WIN-0"]))
     shuffled = list(rows)
     random.Random(99).shuffle(shuffled)
@@ -139,6 +148,46 @@ def main() -> int:
     check("a time that is not given is refused as the time", refused(er.Source([good]), k, at=" ") == ("compute_input_invalid", "at"))
     miss = [c for c in er.REQUIRED if refused(er.Source([{x: v for x, v in good.items() if x != c}]), k)[1] != "rows[0]"]
     check("every required column is named when it is missing", miss == [], miss)
+
+    print("[6] the currency, and the first version for the release in which a consumer has not moved")
+    bare = [{x: v for x, v in r.items() if x != "currency"} for r in rows]
+    own = er.compute(er.Source(bare, life, currency="HKD"), k, at=AT)["rows"]
+    check("a row with no currency of its own takes the Source's", {r["currency"] for r in own} == {"HKD"} and len(own) == len(rows), {r["currency"] for r in own})
+    two = er.compute(er.Source([{**bare[0], "currency": "USD"}, {**bare[1], "nk": "other"}], currency="HKD"), k, at=AT)["rows"]
+    check("a row with its own currency keeps it beside one that takes the Source's, so a file may hold more than one", sorted(r["currency"] for r in two) == ["HKD", "USD"], [r["currency"] for r in two])
+    check("the file with several currencies passes the schema and is read back as written",
+          [r["currency"] for r in contracts.read(contracts.write(er.KIND, er.VERSION, two, out_dir / "multi.tsv"), er.KIND, er.VERSION, "multi").body] == [r["currency"] for r in two])
+    nocur = [{x: v for x, v in r.items() if x != "currency"} for r in (good,)]
+    check("version 2 without a currency anywhere is refused, naming the row", refused(er.Source(nocur), k) == ("compute_input_invalid", "rows[0]"))
+    bad_cur = {"a Source currency in lower case": ("currency", er.Source([good], currency="cny")), "a Source currency that is a number": ("currency", er.Source([good], currency=156)),
+               "a Source currency of four letters": ("currency", er.Source([good], currency="RMBB")), "a row currency in lower case": ("rows[0].currency", one(currency="cny")),
+               "a row currency that is a word": ("rows[0].currency", one(currency="yuan")), "a blank row currency": ("rows[0]", one(currency=" "))}
+    got = {n: refused(s, k) for n, (_, s) in bad_cur.items()}
+    check("a currency that is not three capitals is compute_input_invalid, naming its part", all(c == "compute_input_invalid" for c, _ in got.values())
+          and [p for _, p in got.values()] == [x for x, _ in bad_cur.values()], got)
+
+    v1 = er.compute(er.Source(rows, life), k, at=AT, version=1)
+    S1 = contracts.schema(er.KIND, 1)
+    old = {"spend": "spend_cny", "gmv": "gmv_cny", "net_gmv": "net_gmv_cny", "cpa": "cpa_cny"}
+    check("version 1 is the first contract's columns exactly: the four money columns named for CNY, no currency", all(list(r) == [*S1["x-columns"], *er.OPTIONAL] for r in v1["rows"])
+          and not any("currency" in r for r in v1["rows"]), list(v1["rows"][0]))
+    check("... and the same rows as version 2 but for those names and the currency column", [{old.get(c, c): v for c, v in r.items() if c != "currency"} for r in out] == v1["rows"])
+    p1 = contracts.write(er.KIND, 1, v1["rows"], out_dir / "results-v1.tsv")
+    check("the first version is written and read as ads.results/1", contracts.read(p1, er.KIND, 1, "v1").body[0]["spend_cny"] == 600.0
+          and p1.read_text("utf-8").startswith("# ads.results/1\n") and path.read_text("utf-8").startswith("# ads.results/2\n"))
+    check("the other counts of the summary do not depend on the version", {x: v1[x] for x in ("counts", "scored", "scored_at", "benchmark", "unscored")}
+          == {x: doc[x] for x in ("counts", "scored", "scored_at", "benchmark", "unscored")})
+    unknown = er.compute(er.Source([{x: v for x, v in r.items() if x != "currency"} for r in rows], life), k, at=AT, version=1)
+    check("a pack that does not know its currency still gets version 1 as before (the file does not say which money it holds)", unknown["rows"] == v1["rows"])
+    cny = er.compute(er.Source(bare, currency="CNY"), k, at=AT, version=1)
+    check("a ledger that says CNY is written as version 1", len(cny["rows"]) == len(rows) and "spend_cny" in cny["rows"][0])
+    foreign = {"a Source in HKD": ("rows[0].currency", er.Source([{x: v for x, v in good.items() if x != "currency"}], currency="HKD")),
+               "a row in USD": ("rows[0].currency", one(currency="USD"))}
+    got = {n: refused_v(s, k, 1) for n, (_, s) in foreign.items()}
+    check("version 1 refuses money that is not CNY rather than naming it CNY", all(c == "compute_input_invalid" for c, _ in got.values())
+          and [p for _, p in got.values()] == [x for x, _ in foreign.values()], got)
+    check("a version that does not exist is refused as the version", refused_v(er.Source([good]), k, 3) == ("compute_input_invalid", "version")
+          and refused_v(er.Source([good]), k, "2") == ("compute_input_invalid", "version"))
     return finish()
 
 

@@ -142,6 +142,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | --- | --- | --- | --- |
 | `ads.creatives/1` (exists) | a maker | operators | creative id, files, the insight row it serves, the compliance state |
 | `ads.results/1` (exists) | an operator | makers, `measurement`, `creator-program` | per creative or entity: spend, outcomes, stage, whether the day is settled |
+| `ads.results/2` | an operator | makers, `measurement`, `creator-program` | `ads.results/1` with the money columns in the row's own currency (`currency`, ISO 4217) instead of `_cny`; both are written for one release |
 | `ads.demand/1` | an operator | makers | how many creatives, of which format and slot, by when |
 | `handoff.batch/1` | `asset-handoff` | operators | each creative's name across its sizes, its files, its UTM tags, its form rows, and whether the names match in the media library and the form |
 | `copy.proposals/1` | `ad-copy` | operators | candidate text per placement, its check result, the selling-point direction it tests |

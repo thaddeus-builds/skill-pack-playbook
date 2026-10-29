@@ -14,7 +14,7 @@ A contract is named `<name>/<version>`, for example `ads.results/1`. It has one 
 ## Two formats
 
 - **JSON** (every new contract): the first line, then one JSON document. The schema describes the document.
-- **TSV** (`ads.creatives/1` and `ads.results/1` only, because they were already in use): the first line, a header line, then one line per row, tab-separated. The schema describes **one row**: its columns are `properties`, each cell is text, `"type": "number"` means the cell parses as a finite decimal, and a blank cell of a column that is not in `required` means unknown, never 0. `x-columns` lists the columns the header must have, in the order they are written; `required` lists those whose cell may not be blank; a column in `properties` but not in `x-columns` is optional and written last. The two schemas state the existing formats and change nothing in them.
+- **TSV** (`ads.creatives/1`, `ads.results/1` and its second version `ads.results/2` only, because they were already in use): the first line, a header line, then one line per row, tab-separated. The schema describes **one row**: its columns are `properties`, each cell is text, `"type": "number"` means the cell parses as a finite decimal, and a blank cell of a column that is not in `required` means unknown, never 0. `x-columns` lists the columns the header must have, in the order they are written; `required` lists those whose cell may not be blank; a column in `properties` but not in `x-columns` is optional and written last. The two schemas state the existing formats and change nothing in them.
 
 ## The schema keywords
 
@@ -28,6 +28,7 @@ Every property has a `description` of one sentence.
 | --- | --- | --- | --- | --- | --- |
 | `ads.creatives/1` | in use | a maker (adcut) | operators (video-ads) | [schema](ads.creatives-1.schema.json) | [TSV](examples/ads.creatives-1.example.tsv) |
 | `ads.results/1` | in use | an operator (video-ads; any operator may) | makers (adcut), measurement, creator-program | [schema](ads.results-1.schema.json) | [TSV](examples/ads.results-1.example.tsv) |
+| `ads.results/2` | draft | an operator (video-ads; any operator may) | makers (adcut), measurement, creator-program | [schema](ads.results-2.schema.json) | [TSV](examples/ads.results-2.example.tsv) |
 | `creators.roster/1` | agreed | creator-program | video-ads | [schema](creators.roster-1.schema.json) | [JSON](examples/creators.roster-1.example.json) |
 | `ads.demand/1` | draft | an operator | makers | [schema](ads.demand-1.schema.json) | [JSON](examples/ads.demand-1.example.json) |
 | `handoff.batch/1` | draft | asset-handoff | operators | [schema](handoff.batch-1.schema.json) | [JSON](examples/handoff.batch-1.example.json) |
