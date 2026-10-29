@@ -15,6 +15,7 @@
   "x-rules": [
     "A request is a number of creatives wanted, not a promise to take that many: a maker answers with a plan of N, never padded.",
     "The budget stays with the operator: a request carries a count and the cost of judging one creative, never a budget or a cap.",
+    "unit_cost is written with its currency or not at all; a figure is never converted to another currency.",
     "An absent optional key means unknown, never null and never an empty string."
   ],
   "type": "object",
@@ -36,7 +37,8 @@
           "slot": {"description": "The placement the creative is for, when the platform has them.", "type": "string", "minLength": 1},
           "count": {"description": "How many creatives are wanted.", "type": "integer", "minimum": 1},
           "needed_by": {"description": "The day they are needed by, YYYY-MM-DD.", "$ref": "#/$defs/date"},
-          "unit_cost_cny": {"description": "What it takes to judge one creative, in CNY: the number above is the exploration money over this.", "type": "number", "minimum": 0},
+          "unit_cost": {"description": "What it takes to judge one creative, in `currency`: the number above is the exploration money over this. Never a converted figure; written with its currency or not at all.", "type": "number", "minimum": 0},
+          "currency": {"description": "The currency of unit_cost, ISO 4217 (CNY, USD, HKD). Present whenever unit_cost is.", "type": "string", "pattern": "^[A-Z]{3}$"},
           "window_days": {"description": "The days the count is meant to cover.", "type": "integer", "minimum": 1},
           "note": {"description": "Anything a person should read before making the creatives.", "type": "string", "minLength": 1}
         }

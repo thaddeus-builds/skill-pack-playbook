@@ -62,19 +62,24 @@ def main() -> int:
     batches = ", ".join(f"{b['size']} at {b['daily_budget']} a day" for b in blk["batches"])
     check("the note names the batches, the cost of one verdict in the client's money and says it is a count, not a budget",
           req["note"] == f"in 1 batch(es) of at most 5: {batches}; cost of one verdict {blk['unit_cost']} HKD (measured, {blk['verdicts']} verdicts). A count, not a budget.", req["note"])
-    check("a money that is not CNY has no cost field (the contract names CNY only): no converted figure", "unit_cost_cny" not in req, req)
+    check("the cost of a verdict is written in the client's money with its currency, as measured: no converted figure, no CNY field", req["unit_cost"] == blk["unit_cost"] > 0
+          and req["currency"] == "HKD" and not [x for x in req if x.endswith("_cny")], req)
     check("the producer is the pack's and produced_at is the day at 00:00 UTC", body["producer"] == "demo" and body["produced_at"] == f"{DAY}T00:00:00Z" and set(body) == {"producer", "produced_at", "requests"})
     check("the document is plain data and has no warning", json.dumps(out) and out["warnings"] == [] and out["count"] == 5 and out["request_id"] == req["request_id"])
     cny = ed.compute(ed.Source(doc, "demo", "qianchuan", "video_9x16", start=start, currency="CNY"), DAY)["body"]["requests"][0]
-    check("a client whose money is CNY gets the cost of one verdict as its own field, and a request id without a market from the platform", cny["unit_cost_cny"] == blk["unit_cost"] > 0
+    check("a client whose money is CNY gets the same two fields, and a request id without a market from the platform", cny["unit_cost"] == blk["unit_cost"] > 0 and cny["currency"] == "CNY"
           and cny["request_id"] == f"demand-qianchuan-{DAY}", cny)
     unk = ed.compute(ed.Source(doc, "demo", "meta", "video_9x16", start=start), DAY)["body"]["requests"][0]
-    check("a money that is not known is not named in the note, and leaves no double space", f"cost of one verdict {blk['unit_cost']} (measured, 9 verdicts). A count" in unk["note"], unk["note"])
+    check("a money that is not known is not named in the note, leaves no double space, and the figure is not written without its currency",
+          f"cost of one verdict {blk['unit_cost']} (measured, 9 verdicts). A count" in unk["note"] and "unit_cost" not in unk and "currency" not in unk, unk)
     more = ed.compute(ed.Source(doc, "demo", "meta", "image_1x1", start=start, product="DEMO-SKU", slot="feed"), DAY)["body"]["requests"][0]
     check("the product and the placement are written when the pack names them, and only then", more["product"] == "DEMO-SKU" and more["slot"] == "feed" and "product" not in req and "slot" not in req)
 
     print("[2] the body is a valid ads.demand/1, written once")
     check("it fits the playbook's schema", contracts.problems(ed.KIND, ed.VERSION, body) == [] and contracts.problems(ed.KIND, ed.VERSION, cny) != [], contracts.problems(ed.KIND, ed.VERSION, body))
+    lower = {**body, "requests": [{**req, "currency": "hkd"}]}
+    check("the schema holds the currency to three capitals, and has no `_cny` field any more", contracts.problems(ed.KIND, ed.VERSION, lower) != []
+          and "unit_cost_cny" not in contracts.schema(ed.KIND, ed.VERSION)["properties"]["requests"]["items"]["properties"], contracts.problems(ed.KIND, ed.VERSION, lower))
     out_dir = Path(tmp_dir("export-demand-"))
     path = contracts.write(ed.KIND, ed.VERSION, body, out_dir / "demand.json")
     again = ed.compute(src, DAY)["body"]
@@ -121,6 +126,8 @@ def main() -> int:
            "no platform": ("platform", ed.Source(doc, "demo", None, "video_9x16", start=start)),
            "no format": ("format", ed.Source(doc, "demo", "meta", " ", start=start)),
            "a currency that is a number": ("currency", ed.Source(doc, "demo", "meta", "video_9x16", start=start, currency=1)),
+           "a currency in lower case": ("currency", ed.Source(doc, "demo", "meta", "video_9x16", start=start, currency="hkd")),
+           "a currency of four letters": ("currency", ed.Source(doc, "demo", "meta", "video_9x16", start=start, currency="HKDD")),
            "a subject that is empty": ("subject", ed.Source(doc, "demo", "meta", "video_9x16", start=start, subject=""))}
     got = {name: refused(s) for name, (_, s) in bad.items()}
     check("each is compute_input_invalid, naming its part", all(c == "compute_input_invalid" for c, _ in got.values()) and [p for _, p in got.values()] == [x for x, _ in bad.values()], got)
