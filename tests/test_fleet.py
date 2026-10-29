@@ -147,6 +147,32 @@ def test_a_copy_equal_to_the_playbook_is_in_sync():
             assert copy["verdict"] == "in sync" and copy["files"] == [], copy
 
 
+def test_a_file_that_only_a_merge_commit_ever_had_is_older_not_local():
+    """Seen 2026-10-30: nine packs on kit 0.44.0 were all called `local` in README.md, VERSION and packs.tsv, because
+    the playbook had resolved a conflict in a merge commit and `git log --raw` shows no diff for a merge."""
+    with _t.tmpdir() as tmp:
+        pb, h = setup(Path(tmp))
+        sh(pb, "git", "checkout", "-q", "-b", "side")
+        write(pb, {"kit/a.py": "A = 'side'\n"})
+        sh(pb, "git", "commit", "-qam", "side")
+        sh(pb, "git", "checkout", "-q", "-")
+        write(pb, {"kit/a.py": "A = 'main'\n"})
+        sh(pb, "git", "commit", "-qam", "main")
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        merged = subprocess.run(["git", "merge", "-q", "side"], cwd=pb, capture_output=True, env=env)
+        assert merged.returncode != 0, "the merge must conflict, or the test proves nothing"
+        write(pb, {"kit/a.py": "A = 'resolved'\n"})
+        sh(pb, "git", "add", "-A")
+        sh(pb, "git", "commit", "-qm", "merge side")
+        write(pb, {"kit/a.py": "A = 3\n"})
+        sh(pb, "git", "commit", "-qam", "moved on")
+        write(h, {"scripts/kit/a.py": "A = 'resolved'\n"})
+        r = fleet(pb, "status", str(h), "--json")
+        [copy] = [c for c in json.loads(r.stdout)["skill_packs"][0]["copies"] if c["part"] == "kit"]
+        assert ("a.py", "older") in [(f["file"], f["state"]) for f in copy["files"]], copy
+        assert "local changes" not in copy["verdict"], copy
+
+
 def test_diff_shows_the_skill_pack_copy_against_the_playbook():
     with _t.tmpdir() as tmp:
         pb, h = setup(Path(tmp))
