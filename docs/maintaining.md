@@ -34,7 +34,7 @@ Why: on 2026-10-26 the kit had been bumped 52 times in four weeks while the skil
 Every pull request that matters to a skill pack adds its entry at the top of `[Unreleased]`, so two open pull requests always touch the same lines. `.gitattributes` sets `CHANGELOG.md merge=union`: git keeps both sides' lines, in the order of the merge, on `git merge` and `git rebase`, with no conflict to resolve by hand. An entry is two lines (the text and its `- Skill packs:` line) added together, so the pairs stay whole.
 
 - **GitHub's merge button does not read the setting.** A pull request may show "conflicts" there; rebase it on main locally (the setting applies) and push.
-- **After the release pull request, look at every open pull request.** The release moves the `[Unreleased]` heading below the new version's; an entry rebased over it lands under the new version without a conflict. Move it back to `[Unreleased]` before the pull request merges.
+- **After the release pull request, look at every open pull request.** The release moves the `[Unreleased]` heading below the new version's; an entry rebased over it lands under the new version without a conflict. Move it back to `[Unreleased]` before the pull request merges; `tests/test_changelog.py` fails on it (a released version's section differs from the merge base's).
 - `tests/test_changelog.py` merges and rebases two such branches and checks both pairs survive.
 
 ## Retiring a pack
