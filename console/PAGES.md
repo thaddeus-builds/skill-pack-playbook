@@ -1,6 +1,6 @@
 # A skill pack's pages, buttons and verbs
 
-The console is one place for the owner: the asks, and the pages the skill pack adds (its space, its next batch, its evidence). One frame (the top bar with a number on each tab, light and dark, the 375 px layout, the safety checks and the signed log) is the console's; **what the pages say, and what a button does, is the skill pack's.** The skill pack declares it in one file, the **manifest**; it writes no HTML and holds no secret.
+The console is one place for the owner: the asks, and the pages the skill pack adds (its space, its next batch, its evidence). One frame (the top bar with a number on each tab, the near-black "tech" look by default and a light one for `data-theme="light"`, the 375 px layout, the safety checks and the signed log) is the console's; **what the pages say, and what a button does, is the skill pack's.** The skill pack declares it in one file, the **manifest**; it writes no HTML and holds no secret.
 
 ```mermaid
 flowchart LR

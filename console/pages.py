@@ -264,7 +264,7 @@ def _shell(ctx: dict, t: _T, *, title: str, body: str, tab=None, st=None,
         who = f'<p>{t("foot.user", user=ctx["user"]) if ctx.get("user") else t("foot.ro")}</p>'
     return (f'<!doctype html>\n<html lang="{t.lang}"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-            f'<meta name="color-scheme" content="light dark">'
+            f'<meta name="color-scheme" content="dark">'
             f'<title>{title} · {_e(ctx.get("title"))}</title>'
             f'<link rel="stylesheet" href="static/console.css">'
             f'<script src="static/console.js" defer></script></head>\n'

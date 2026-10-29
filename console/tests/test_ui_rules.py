@@ -368,14 +368,18 @@ def test_u08_a_bar_with_many_pages_scrolls_inside_itself_and_the_page_never_does
     assert decls(".tabs a", "(max-width: 480px)")["flex"] == "1 0 auto"            # on a phone they share the row, and scroll past it
 
 
-def test_u08_the_stylesheet_defines_every_colour_it_uses_in_both_schemes():
+LIGHT = ':root[data-theme="light"]'
+
+
+def test_u08_the_stylesheet_defines_every_colour_it_uses_in_the_default_look_and_in_light():
     css = re.sub(r"/\*.*?\*/", "", read("static", "console.css"), flags=re.S)
     used = set(re.findall(r"var\((--[\w-]+)\)", css))
-    light = set(decls(":root"))
-    dark = set(decls(":root", "(prefers-color-scheme: dark)"))
-    assert used <= light, sorted(used - light)
-    assert (light - {"--font", "--mono", "color-scheme"}) == dark, sorted((light - dark) ^ (dark - light))
-    assert decls(":root")["color-scheme"] == "light dark"
+    tech = set(decls(":root"))
+    light = set(decls(LIGHT))
+    assert used <= tech, sorted(used - tech)
+    assert (tech - {"--font", "--mono"}) == light, sorted((tech - light) ^ (light - tech))
+    assert decls(":root")["color-scheme"] == "dark" and decls(LIGHT)["color-scheme"] == "light"
+    assert not decls(":root", "(prefers-color-scheme: dark)"), "the look does not depend on the system's scheme"
 
 
 def luminance(hex_):
@@ -391,8 +395,8 @@ def contrast(a, b):
     return (hi + .05) / (lo + .05)
 
 
-def test_u08_text_and_buttons_are_readable_in_both_schemes():
-    for scheme, tok in (("light", decls(":root")), ("dark", decls(":root", "(prefers-color-scheme: dark)"))):
+def test_u08_text_and_buttons_are_readable_in_the_default_look_and_in_light():
+    for scheme, tok in (("tech", decls(":root")), ("light", decls(LIGHT))):
         pairs = [("--ink", "--bg"), ("--ink", "--surface"), ("--ink2", "--surface"), ("--ink2", "--sunk"),
                  ("--accent", "--surface"), ("--on-accent", "--accent"), ("--on-warn", "--warn-solid"),
                  ("--ok", "--ok-bg"), ("--warn", "--warn-bg"), ("--bad", "--bad-bg"), ("--ink", "--tint")]
