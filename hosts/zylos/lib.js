@@ -798,9 +798,9 @@ function ecosystem() {
   };
 }
 
-// Hooks never edit the Caddyfile (a bad one takes down every host site);
-// they warn when people have logins but the block is gone, as after
-// uninstall + add. Missing or unreadable files: no warning.
+// The hooks warn when people have logins but the block is gone, as after
+// uninstall + add (restoreCaddyBlock below puts it back when it can do so
+// safely). Missing or unreadable files: no warning.
 function hasLogins() {
   try { return fs.readFileSync(USERS_FILE, 'utf8').trim() !== ''; } catch { return false; }
 }
@@ -832,6 +832,61 @@ function saveCaddyBlock() {
 // People have logins but the console would refuse the public Host (421).
 function allowHostMissing() {
   return hasLogins() && !allowHosts().length && !M.console.args.some((a) => a.startsWith('--allow-host'));
+}
+
+// post-install / post-upgrade after uninstall + add (issue #215): put the
+// block pre-uninstall kept back, so the route answers with no manual paste.
+// A bad Caddyfile takes down every host site, so the edit is cautious: only
+// when the block is missing and a saved copy exists; into the first site
+// block (not the global options or a snippet); the candidate is written
+// beside the Caddyfile and must pass `caddy validate`; the old file stays as
+// Caddyfile.before-<name>; if the reload fails the old file is put back.
+// Returns {done} or {skip: why the caller should say it left it to the owner}.
+function sitesBlockEnd(lines) {
+  let depth = 0;
+  let inSite = false;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].replace(/#.*$/, '').trim();
+    if (!t) continue;
+    if (depth === 0 && t.endsWith('{') && !t.startsWith('{') && !t.startsWith('(')) inSite = true;
+    for (const c of t) depth += c === '{' ? 1 : c === '}' ? -1 : 0;
+    if (depth < 0) return -1;
+    if (depth === 0 && inSite) return i;
+  }
+  return -1;
+}
+
+function restoreCaddyBlock() {
+  if (!caddyBlockMissing()) return null;
+  if (!fs.existsSync(CADDY_SAVED)) return { skip: `no saved copy at ${CADDY_SAVED}` };
+  const caddy = path.join(ZYLOS_DIR, 'bin', 'caddy');
+  if (!fs.existsSync(caddy)) return { skip: `${caddy} is missing, so the candidate cannot be validated` };
+  const old = fs.readFileSync(CADDYFILE, 'utf8');
+  const lines = old.split('\n');
+  const end = sitesBlockEnd(lines);
+  if (end < 0) return { skip: `no site block in ${CADDYFILE} to put it in` };
+  const block = fs.readFileSync(CADDY_SAVED, 'utf8').trimEnd().split('\n').map((l) => `    ${l}`);
+  const next = [...lines.slice(0, end), ...block, ...lines.slice(end)].join('\n');
+  const candidate = `${CADDYFILE}.candidate-${NAME}`;
+  const before = `${CADDYFILE}.before-${NAME}`;
+  const sh = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', timeout: 60_000 });
+  try {
+    fs.writeFileSync(candidate, next);
+    const v = sh(caddy, ['validate', '--config', candidate, '--adapter', 'caddyfile']);
+    if (v.status !== 0) return { skip: `caddy validate refused the Caddyfile with the saved block (${tail(v, 3)})` };
+    fs.copyFileSync(CADDYFILE, before);
+    fs.renameSync(candidate, CADDYFILE);
+    const r = sh('pm2', ['reload', 'caddy']);
+    if (r.status !== 0) {
+      fs.copyFileSync(before, CADDYFILE);
+      return { skip: `pm2 reload caddy failed (${tail(r, 3)}); the old Caddyfile is back` };
+    }
+    return { done: before };
+  } catch (e) {
+    return { skip: `could not edit ${CADDYFILE} (${e.code || e.message})` };
+  } finally {
+    try { fs.rmSync(candidate, { force: true }); } catch { /* gone */ }
+  }
 }
 
 // Caddyfile.snippet with this host's values filled in.
@@ -992,7 +1047,7 @@ module.exports = {
   renderPrompt, unresolved, tasksNamed, addTask, updateTask, removeTask, readTaskState, requiredKeys,
   reconcileTask, reconcileAll, removeAllTasks,
   procStart, pidAlive, readJob, jobAlive, stopJobs,
-  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, saveCaddyBlock, allowHostMissing, caddyBlock,
+  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock,
   skillProblems, checkProblems,
 };
 
