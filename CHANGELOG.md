@@ -39,6 +39,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (default behaviour is byte for byte what it was; ecommerce-seo can pass `runner="auto"` when its entry point moves onto `kit.cli.Dispatcher`, and a pack that sets `KIT_RUNNER=uv` because most of its scripts declare dependencies may choose `auto` for the few that do not)
 
 ### Other
+- `tools/fleet.py update` refuses when another remote of the pack has commits on the default branch that the remote it would cut from lacks (a pack whose home moved from GitLab to GitHub while `origin` still names the old server), and names the remote to pass with `--remote`; #316 caught only a local branch that was ahead.
+- Skill packs: nothing (the playbook's own tool)
 - `tools/fleet.py status` no longer lists as `missing`, nor counts in the verdict, the kit files of a pack the skill pack does not take (`[kit] packs`, decided by `kit/tools/packs.py` as `vendor.py` does): sdr and ecommerce-seo, on four packs each, were told 80 of 84 files were missing or changed since.
 - Skill packs: nothing (the playbook's own tool)
 - `tools/fleet.py status` read the playbook's history without its merge commits, so a file the playbook had only through a conflict resolution in a merge (the kit's `README.md`, `VERSION` and `packs.tsv` at 0.44.0) was called `local`: nine packs on 0.44.0 were told they had local changes when they had none. It reads merges now (`git log -m`).
