@@ -47,7 +47,11 @@ with the from and to versions and the suite result. One line per pack:
   * current: the pack already holds this kit (nothing is left behind).
 
 `--version X` names the train being taken and must equal this playbook's
-kit/VERSION (the vendor tool copies the checkout it is in). The commit needs a
+kit/VERSION (the vendor tool copies the checkout it is in). The vendor tool copies
+the files as they are, so a checkout whose kit differs from the commit that set
+kit/VERSION would label unreleased bytes with the released number: `update`
+refuses it (exit 2, the files named) unless `--allow-unreleased`; a playbook git
+cannot read is not checked. The commit needs a
 git identity: `git config`, or GIT_AUTHOR_* and GIT_COMMITTER_* in the
 environment. Exit 0 only when every pack is green or current.
 
@@ -320,6 +324,21 @@ def add_changelog(path: Path, line: str) -> bool:
     return True
 
 
+def unreleased(playbook: Path) -> list[str] | None:
+    """The kit files (tests aside) that differ from the commit that last set kit/VERSION, uncommitted edits included; None when git cannot say."""
+    top = git(playbook, "rev-parse", "--show-toplevel")
+    if top is None or Path(top.strip()).resolve() != playbook.resolve():
+        return None                          # not a checkout of its own: nothing to compare with
+    commit = (git(playbook, "log", "-1", "--format=%H", "--", "kit/VERSION") or "").strip()
+    if not commit:
+        return None
+    changed = git(playbook, "diff", "--name-only", commit, "--", "kit")
+    untracked = git(playbook, "ls-files", "--others", "--exclude-standard", "--", "kit")
+    if changed is None or untracked is None:
+        return None
+    return sorted(f for f in {*changed.splitlines(), *untracked.splitlines()} if f and not f.startswith("kit/tests/") and "__pycache__" not in f)
+
+
 def update(pack: Path, playbook: Path, version: str, tests: bool = True) -> dict:
     """Bring one skill pack to the playbook's kit. {pack, state, text, ...}; see the module docstring."""
     name = read_toml(pack / "skill-pack.toml").get("skill_pack", {}).get("name") or pack.name
@@ -399,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
     u.add_argument("skill_pack", nargs="+")
     u.add_argument("--version", help="the kit version being taken; must equal this playbook's kit/VERSION")
     u.add_argument("--no-tests", action="store_true", help="vendor and commit without running the suite")
+    u.add_argument("--allow-unreleased", action="store_true", help="take a kit that differs from the commit that set kit/VERSION (its bytes are not the released ones)")
     args = ap.parse_args(argv)
     playbook = Path(args.playbook).resolve()
     skill_packs = [Path(h).expanduser().resolve() for h in
@@ -412,6 +432,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.version and args.version != current:
             print(f"error: this playbook is at kit {current}, not {args.version}; "
                   f"check out the version to take first", file=sys.stderr)
+            return 2
+        loose = None if args.allow_unreleased else unreleased(playbook)
+        if loose:
+            print(f"error: this playbook's kit has {len(loose)} file(s) that are not in kit {current} ({', '.join(loose[:5])}{', ...' if len(loose) > 5 else ''}); "
+                  f"update from the commit that set kit/VERSION, or pass --allow-unreleased", file=sys.stderr)
             return 2
         results = [update(h, playbook, current, not args.no_tests) for h in skill_packs]
         for r in results:

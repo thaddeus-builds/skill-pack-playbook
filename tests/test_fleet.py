@@ -276,6 +276,57 @@ def test_update_takes_only_the_version_the_playbook_is_at():
         assert update(pb, str(pack), "--version", "0.2.0").returncode == 0
 
 
+def commit_playbook(pb: Path) -> None:
+    git(pb, "init", "-q")
+    git(pb, "add", "-A")
+    git(pb, "commit", "-qm", "0.2.0")
+
+
+def test_update_refuses_a_kit_that_is_not_the_released_one_and_says_which_files():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        commit_playbook(pb)
+        assert update(pb, str(pack)).returncode == 0, "a checkout that is the release is taken"
+        drop(pack)
+        (pb / "kit" / "zz_unreleased.py").write_text("X = 1\n")                      # a merge after the train, not yet committed
+        r = update(pb, str(pack))
+        assert r.returncode == 2 and "kit/zz_unreleased.py" in r.stderr and "not in kit 0.2.0" in r.stderr, r.stderr
+        assert not (pack.parent / "acme_worktrees" / "kit-0.2.0").exists(), "nothing is left behind"
+        git(pb, "add", "-A")
+        git(pb, "commit", "-qm", "a merge after the train")
+        assert update(pb, str(pack)).returncode == 2, "committed after the train is still not the release"
+        (pb / "kit" / "a_changed.py").write_text("X = 2\n")
+        assert "a_changed.py" in update(pb, str(pack)).stderr
+        assert update(pb, str(pack), "--allow-unreleased").returncode == 0, "the owner may take it on purpose"
+        drop(pack)
+        (pb / "kit" / "zz_unreleased.py").unlink()
+        (pb / "kit" / "a_changed.py").unlink()
+        git(pb, "add", "-A")
+        git(pb, "commit", "-qm", "back")
+        assert update(pb, str(pack)).returncode == 0, "the files gone again, it is the release"
+
+
+def test_update_does_not_count_the_kit_tests_and_does_not_guess_without_a_checkout():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        commit_playbook(pb)
+        (pb / "kit" / "tests").mkdir(exist_ok=True)
+        (pb / "kit" / "tests" / "test_new.py").write_text("t\n")                       # a test is not a vendored byte
+        r = update(pb, str(pack))
+        assert r.returncode == 0, r.stderr
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))                                                # a folder that is no git checkout
+        (pb / "kit" / "zz_unreleased.py").write_text("X = 1\n")
+        assert update(pb, str(pack)).returncode == 0
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))                                                # a folder inside someone else's checkout
+        git(Path(tmp), "init", "-q")
+        git(Path(tmp), "add", "playbook")
+        git(Path(tmp), "commit", "-qm", "outer")
+        (pb / "kit" / "zz_unreleased.py").write_text("X = 1\n")
+        assert update(pb, str(pack)).returncode == 0, "the outer repository's history is not this playbook's release"
+
+
 def test_the_changelog_line_goes_first_under_unreleased_in_each_shape():
     spec = importlib.util.spec_from_file_location("fleet_tool", FLEET)
     tool = importlib.util.module_from_spec(spec)
