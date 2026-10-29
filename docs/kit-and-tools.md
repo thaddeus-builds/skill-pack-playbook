@@ -60,6 +60,7 @@ Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/p
 | [`templates/design-first.md`](../templates/design-first.md) | 7, 10 | Before a feature an owner steers: research, one design page with the asks and what it stores, a synthetic demo drawn by the skill pack's own renderer, the owner's yes, then the code |
 | [`templates/owner-review-loop.md`](../templates/owner-review-loop.md) | 7, 10 | One published page the owner decides on per item, read back by the next session |
 | [`templates/session-handoff.md`](../templates/session-handoff.md) | all | Each session closes one turn and leaves the next one ready |
+| [`templates/support-channel/`](../templates/support-channel/) | all | Reaching a client's agents through the OpenMax bridge: config example, read-only check, send, read-back ([guide](support-channel.md)) |
 | [`templates/skill-pack.toml`](../templates/skill-pack.toml) | 3 | The skill pack declares itself once: names, languages, scopes, layers, what a release ships |
 | [`templates/gitlab-ci.yml`](../templates/gitlab-ci.yml) | 3, 9 | The short form of that CI, the one the scaffolder renders into every skill pack: secret scan, story id in the title, changelog line, and the RESULT-gated test job as a manual one, each with its rules |
 | [`templates/gitignore`](../templates/gitignore) | 3 | Secrets, the console's log and client data never enter the repository |
