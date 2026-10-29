@@ -11,7 +11,8 @@ another module that is imported pulls in is `via` that module. Modules of the
 `testkit` pack are left out: every skill pack's tests reach them.
 
 Only merged code counts (docs/history/restructure-2026-10.md, decision 4): point it at a checkout of
-the skill pack's main branch, not a feature branch. A skill pack that does not
+the skill pack's main branch, not a feature branch, and not one that is behind its remote:
+`python3 tools/fleet.py export SKILL_PACK... --out DIR` writes each pack's remote main as plain files. A skill pack that does not
 vendor the kit has no imports to count and says so.
 
 Read-only. Stdlib only. Test: tests/test_consumers.py.
