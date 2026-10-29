@@ -37,6 +37,19 @@ Every pull request that matters to a skill pack adds its entry at the top of `[U
 - **After the release pull request, look at every open pull request.** The release moves the `[Unreleased]` heading below the new version's; an entry rebased over it lands under the new version without a conflict. Move it back to `[Unreleased]` before the pull request merges.
 - `tests/test_changelog.py` merges and rebases two such branches and checks both pairs survive.
 
+## Retiring a pack
+
+A pack ends when its pieces have moved: engines to the kit, a channel to a pack of its own (video-ads first: its Meta side to `meta-ads`, its engines to the kit, 千川 and 腾讯 to a pack of their own). Archiving is the last step, not the first; the repository is read-only afterwards, and GitLab and GitHub both undo it, but a client wrapper pointing at it is not undone by that. In this order:
+
+1. **Every piece has a new home that runs** (its own tests, a golden diff of 0 against the old one, and the first client's numbers equal on both sides for the days that matter). Until then the old pack keeps running; nothing is deleted from it first.
+2. **One last release of the old pack** whose `CHANGELOG` says, piece by piece, where it went (`pull_meta` → `meta-ads`, `scripts/_lib/pacing.py` → `kit.pacing`), and whose `README.md` and `SKILL.md` start with the same list. It is the pointer anyone arriving from an old link reads.
+3. **The roadmap rows move with their ids kept in the text** (`[X63]` stays findable by search), to the pack that now owns the work; the old roadmap ends with a table of where each went.
+4. **Everything that names the old pack is changed:** client wrappers and `_env.sh`, data folders and `*_DATA_DIR` names (copy the data to the new pack's folder, check it there, leave the original in place), hub and portfolio links, `tools/adoption.tsv`, `tools/pack_status.tsv` and `kit/packs.tsv` rows, and CI or scheduled jobs. `grep -r` the old name in the client folders and the playbook; zero hits that are not a pointer.
+5. **Archive** the repository when 1 to 4 hold and no merge request is open (close or move each). The portfolio's "Not skill packs, or superseded" lists it with the date and the new homes.
+6. **Leave the client's data folder alone** until the owner says it can go; the playbook never deletes client data.
+
+No test enforces this list: the first pack that follows it corrects it (issue #227).
+
 ## Where the agent starts and stops
 
 - **Start of a session:** read [ROADMAP.md](../ROADMAP.md), fetch every remote, look at the open pull requests, do the one turn "Now" names.
