@@ -46,8 +46,8 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 TIMEOUT_S = 120
 DEFAULT_VALUES = ("HUMAN-VALUE-1", "AGENT-VALUE-2")
-FIX_MARK = re.compile(r"->|→")
-WARN = re.compile(r"^\s*(?:⚠\s*)?WARNING\b")  # a warning line starts with the word; a "3 warning(s)" summary does not
+FIX_MARK = re.compile(r"->|→|\bnext:")  # an arrow, or the kit doctor's own `next:` line
+WARN = re.compile(r"^\s*(?:⚠\s*)?WARN(?:ING)?\b")  # a warning line starts with the word (the kit doctor's is `WARN`); a "3 warning(s)" summary does not
 
 
 def fill(s: str, **kw: str) -> str:
@@ -131,7 +131,7 @@ def c2_doctor_names_a_fix(cfg: dict, root: str) -> str | None:
         lines = (r.stdout + r.stderr).splitlines()
         warns = [i for i, ln in enumerate(lines) if WARN.match(ln)]
         if not warns and r.returncode:
-            return f"doctor exits {r.returncode} but prints no WARNING line"
+            return f"doctor exits {r.returncode} but prints no WARN or WARNING line"
         for i in warns:
             if not any(FIX_MARK.search(x) for x in lines[i + 1:i + 3]):
                 return f"warning without a fix line: {lines[i].strip()[:100]!r}"

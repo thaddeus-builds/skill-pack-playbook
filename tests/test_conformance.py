@@ -26,20 +26,21 @@ spec.loader.exec_module(ck)
 FAKE = '''
 import json, os, sys
 mode, verb, *rest = sys.argv[1:]
+good, kit = mode.split("-")[0] == "good", mode.endswith("-kit")  # "-kit": the doctor prints the kit's own format
 state = os.path.join(os.environ["FAKE_DIR"], "s.json")
 db = json.load(open(state)) if os.path.exists(state) else {}
 if verb == "set":
     value, by = rest
-    if db.get("by") == "human" and by != "human" and mode == "good":
+    if db.get("by") == "human" and by != "human" and good:
         sys.exit("confirmed: an agent may not change it")
     db.update(value=value, by=by)
     json.dump(db, open(state, "w"))
 elif verb == "get":
     print(db.get("value"))
 elif verb == "doctor":
-    print("  WARNING thing is off")
-    if mode == "good":
-        print("          -> fix it with: fake set")
+    print("  WARN  thing is off" if kit else "  WARNING thing is off")
+    if good:
+        print("          next: fake set" if kit else "          -> fix it with: fake set")
 '''
 
 
@@ -74,6 +75,22 @@ def test_a_skill_pack_that_breaks_the_rules_fails_both_checks():
 def test_a_skill_pack_that_keeps_the_rules_passes():
     rc, out = run("good")
     assert rc == 0 and "RESULT: 2 passed" in out and "FAIL" not in out, out
+
+
+def test_the_kit_doctors_own_format_is_read():
+    """#321: the kit's doctor prints `WARN` and puts the fix on `next:` lines; check.py must judge it, not say it cannot tell."""
+    rc, out = run("good-kit")
+    assert rc == 0 and "PASS  C2" in out, out
+    rc, out = run("bad-kit")
+    assert "FAIL  C2" in out and "warning without a fix line" in out, out
+
+
+def test_the_marks_are_the_kit_doctors():
+    """If the kit doctor changes its marks, this fails here and not in a skill pack's adoption proof."""
+    sys.path.insert(0, REPO)
+    from kit import doctor
+    assert ck.WARN.match(f"  {doctor.MARK['warn']}  x") and not ck.WARN.match(f"  {doctor.MARK['info']}  x")
+    assert ck.FIX_MARK.search("          next: sdr doctor --fix")
 
 
 def test_a_missing_section_is_a_skip_not_a_pass():
