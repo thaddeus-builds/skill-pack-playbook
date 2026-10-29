@@ -29,6 +29,14 @@ Why: on 2026-10-26 the kit had been bumped 52 times in four weeks while the skil
 - **Every skill pack reaches the train with `fleet.py update`.** For each path it makes a worktree beside the pack (`<repo>_worktrees/kit-<version>`, branch `claude/kit-<version>`, cut from the default branch), vendors into it, runs the pack's suite (`[skill_pack].test_command` in `skill-pack.toml`, else `python3 tests/run.py`) and commits. It prints one line per pack: green, red with the failing files, refused by the vendor tool, worktree exists. The pack's own checkout is never touched. **Run it from the commit that set `kit/VERSION`, not from main after later merges:** the vendor tool copies the files as they are, so a main with unreleased kit changes would put those bytes in the pack under the released number (it happened once, at 0.47.0, and was redone); `update` refuses such a checkout and names the files, and `--allow-unreleased` takes it on purpose. The owner or the agent then opens a merge request for each green one.
 - **A pack that falls more than two minor versions behind says so** in its own suite (`behind: kit X, playbook Y`) when its `skill-pack.toml` has `[kit] playbook = "<path to this checkout>"`. It never fails on it.
 
+## Merging CHANGELOG.md
+
+Every pull request that matters to a skill pack adds its entry at the top of `[Unreleased]`, so two open pull requests always touch the same lines. `.gitattributes` sets `CHANGELOG.md merge=union`: git keeps both sides' lines, in the order of the merge, on `git merge` and `git rebase`, with no conflict to resolve by hand. An entry is two lines (the text and its `- Skill packs:` line) added together, so the pairs stay whole.
+
+- **GitHub's merge button does not read the setting.** A pull request may show "conflicts" there; rebase it on main locally (the setting applies) and push.
+- **After the release pull request, look at every open pull request.** The release moves the `[Unreleased]` heading below the new version's; an entry rebased over it lands under the new version without a conflict. Move it back to `[Unreleased]` before the pull request merges.
+- `tests/test_changelog.py` merges and rebases two such branches and checks both pairs survive.
+
 ## Where the agent starts and stops
 
 - **Start of a session:** read [ROADMAP.md](../ROADMAP.md), fetch every remote, look at the open pull requests, do the one turn "Now" names.
