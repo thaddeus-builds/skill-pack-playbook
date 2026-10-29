@@ -332,6 +332,19 @@ def test_update_refuses_a_stale_remote_and_takes_the_real_one_with_remote():
         assert (work / "NOTES.md").is_file()
 
 
+def test_update_refuses_when_another_remote_is_ahead_of_the_one_it_would_cut_from():
+    """The migration case (2026-10-30): sdr's `origin` was the old server, 63 commits behind its new one, and the checkout had no local trunk to show it."""
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        real_remote(pack, Path(tmp))
+        git(pack, "branch", "-f", "trunk", "origin/trunk")      # the checkout itself holds nothing the remotes lack
+        r = update(pb, str(pack))
+        assert r.returncode == 1 and "the remote github has 1 commit(s) on trunk that origin/trunk does not" in r.stdout, r.stdout + r.stderr
+        assert not (pack.parent / "acme_worktrees").exists() and git(pack, "branch", "--list", "claude/kit-0.2.0") == "", "nothing is left behind"
+        ok = update(pb, str(pack), "--remote", "github")
+        assert ok.returncode == 0 and "cut from github/trunk" in ok.stdout, ok.stdout + ok.stderr
+
+
 def test_update_with_a_remote_the_pack_does_not_have_is_refused_by_name():
     with _t.tmpdir() as tmp:
         pb, pack = make_pack(Path(tmp))

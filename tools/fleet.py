@@ -51,7 +51,9 @@ with the from and to versions and the suite result. One line per pack:
 is on, for a pack whose `origin` is archived or stale. `update` refuses (nothing
 is left behind) when the checkout's own default branch has commits the remote's
 does not: that is what a stale remote looks like, and a branch cut from it would
-have to be moved by hand (issue #316).
+have to be moved by hand (issue #316). It refuses too when another remote of the pack
+has commits on that branch the chosen remote's lacks (a pack whose home moved from one
+server to another and whose `origin` still names the old one).
 
 `--version X` names the train being taken and must equal this playbook's
 kit/VERSION (the vendor tool copies the checkout it is in). The vendor tool copies
@@ -398,6 +400,11 @@ def update(pack: Path, playbook: Path, version: str, tests: bool = True, remote:
             and run(pack, "git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", f"refs/remotes/{base}").returncode != 0:
         return done("refused", f"the checkout's own {branch} has commits that {base} does not: {remote} looks stale or unpushed; "
                     f"push them, or name the remote the real {branch} is on with --remote NAME")
+    for other in run(pack, "git", "remote").stdout.split():
+        ahead = run(pack, "git", "rev-list", "--count", f"refs/remotes/{base}..refs/remotes/{other}/{branch}")
+        if ahead.returncode == 0 and ahead.stdout.strip() not in ("", "0"):
+            return done("refused", f"the remote {other} has {ahead.stdout.strip()} commit(s) on {branch} that {base} does not: the pack's home may have moved "
+                        f"(a migration); name the remote the real {branch} is on with --remote NAME, or reconcile them")
     cut = (run(pack, "git", "rev-parse", "--short", f"refs/remotes/{base}").stdout.strip()) or "?"
     added = run(pack, "git", "worktree", "add", "-q", "--no-track", "-b", new, str(work), f"refs/remotes/{base}")
     if added.returncode != 0:
