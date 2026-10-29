@@ -193,6 +193,9 @@ def compare(part: dict, history: History) -> dict | None:
         return None
     want = set(files(src, part["skip"]))
     have = set(files(dest, part["skip"]))
+    v, cur = dest / "VERSION", part["root"] / part["version_file"]
+    version = v.read_text("utf-8").strip() if v.is_file() else None
+    current = cur.read_text("utf-8").strip() if cur.is_file() else None
     rows = []
     for rel in sorted(want | have):
         if rel == "VERSION" and rel not in want:
@@ -210,19 +213,20 @@ def compare(part: dict, history: History) -> dict | None:
             row.update(state="older" if rel in want else "extra",
                        note=f"as the playbook had it from {part['label']} {history.version(commit, part['version_file'])}"
                             f" ({commit[:10]})" + ("" if rel in want else ", removed since"))
+            if rel in want and version == current:
+                row["note"] = f"as the playbook released it in {part['label']} {version}; its main changed it since with no version bump (unreleased)"
         else:
             row["state"] = "local" if rel in want else "extra"
             if rel not in want:
                 row.update(own=True, note="not in the playbook's history: a file of the skill pack's own")
         rows.append(row)
-    v, cur = dest / "VERSION", part["root"] / part["version_file"]
-    version = v.read_text("utf-8").strip() if v.is_file() else None
-    current = cur.read_text("utf-8").strip() if cur.is_file() else None
     local = [r["file"] for r in rows if r.pop("own", False) or r["state"] == "local"]
     if not rows and version == current:
         verdict = "in sync"
     elif local:
         verdict = f"local changes in {len(local)} file(s): upstream or drop each, then re-vendor"
+    elif version == current:
+        verdict = f"same version, but the playbook's main has {len(rows)} file(s) changed since, unreleased: the next train carries them, nothing local is lost"
     else:
         verdict = "behind: re-vendor, nothing local is lost"
     return {"part": part["label"], "dir": str(dest), "version": version, "playbook_version": current,

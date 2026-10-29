@@ -114,6 +114,27 @@ def test_a_change_no_playbook_version_had_is_local_and_named():
         assert "edited after vendoring: a.py, mine.py" in r.stdout, r.stdout
 
 
+def test_a_file_the_playbook_changed_without_a_version_bump_is_unreleased_not_local():
+    """#321: a pack on the released version, the playbook's main moved on in a file: that is not the pack's edit."""
+    with _t.tmpdir() as tmp:
+        pb, h = setup(Path(tmp))
+        kit = h / "scripts" / "kit"
+        subprocess.run(["rm", "-rf", str(kit)], check=True)
+        vendor(pb / "kit", kit)
+        write(pb, {"kit/a.py": "A = 3\n"})
+        sh(pb, "git", "add", "-A")
+        sh(pb, "git", "commit", "-qm", "a change on main, no bump")
+        r = fleet(pb, "status", str(h), "--json")
+        [copy] = [c for c in json.loads(r.stdout)["skill_packs"][0]["copies"] if c["part"] == "kit"]
+        assert [(f["file"], f["state"]) for f in copy["files"]] == [("a.py", "older")], copy
+        assert "unreleased" in copy["files"][0]["note"] and "local changes" not in copy["verdict"], copy
+        assert copy["verdict"].startswith("same version") and "unreleased" in copy["verdict"], copy
+        write(h, {"scripts/kit/a.py": "A = 'forked'\n"})
+        r = fleet(pb, "status", str(h), "--json")
+        [copy] = [c for c in json.loads(r.stdout)["skill_packs"][0]["copies"] if c["part"] == "kit"]
+        assert copy["verdict"].startswith("local changes in 1"), "a real edit is still local"
+
+
 def test_a_copy_equal_to_the_playbook_is_in_sync():
     with _t.tmpdir() as tmp:
         pb, h = setup(Path(tmp))
