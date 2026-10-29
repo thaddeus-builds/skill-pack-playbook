@@ -149,6 +149,58 @@ def test_console_warnings_caddy_block_and_public_host():
             assert r.returncode == 0 and said_caddy == warns_caddy and said_host == warns_host, (label, r.stdout)
 
 
+BLOCK = ("# BEGIN zylos-component:shop-harness\nredir /shop /shop/ permanent\nhandle_path /shop/* {\n"
+         "    reverse_proxy 127.0.0.1:1 {\n        header_up Host edited\n    }\n}\n"
+         "# END zylos-component:shop-harness\n")
+SITES = "{\n    email a@b.test\n}\nagent.test {\n    respond / 200\n}\nother.test {\n}\n"
+
+
+def _caddy_host(host, *, validate_ok=True, reload_ok=True, saved=True, sites=SITES):
+    """users + a Caddyfile without the block + the copy pre-uninstall kept + a
+    fake caddy (validate passes only if the candidate holds the block) and pm2."""
+    host.write(os.path.join(host.data, "console.users"), "alice $2a$hash\n")
+    host.write(os.path.join(host.zylos, "http", "Caddyfile"), sites)
+    if saved:
+        host.write(os.path.join(host.data, "caddy-block.saved"), BLOCK)
+    ok = "0" if validate_ok else "1"
+    host.write(os.path.join(host.zylos, "bin", "caddy"),
+               f"#!/bin/sh\nif [ \"$1\" = validate ]; then echo \"$3\" >> '{host.home}/caddy.log'; exit {ok}; fi\nexit 0\n", mode=0o755)
+    host.write(os.path.join(host.bin, "pm2"),
+               f"#!/bin/sh\necho \"$*\" >> '{host.home}/pm2.log'\nexit {0 if reload_ok else 1}\n", mode=0o755)
+    return os.path.join(host.zylos, "http", "Caddyfile")
+
+
+def test_a_missing_caddy_block_is_restored_validated_and_reloaded():
+    with Host(scheduler=False) as host:
+        cf = _caddy_host(host)
+        r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+        text = open(cf).read()
+        assert r.returncode == 0 and "restored the Caddy block" in r.stdout and "no route" not in r.stdout, r.stdout
+        assert text.count("# BEGIN zylos-component:shop-harness") == 1 and "header_up Host edited" in text
+        lines = text.splitlines()
+        assert lines.index("agent.test {") < lines.index("    # BEGIN zylos-component:shop-harness") < lines.index("other.test {"), \
+            "inside the first site block, not the global options and not the last site"
+        assert open(cf + ".before-shop-harness").read() == SITES, "the old file kept"
+        assert open(os.path.join(host.home, "pm2.log")).read().strip() == "reload caddy"
+        assert "Caddyfile.candidate-shop-harness" in open(os.path.join(host.home, "caddy.log")).read()
+        assert not os.path.exists(cf + ".candidate-shop-harness")
+        again = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+        assert open(cf).read() == text and "restored" not in again.stdout, "idempotent: nothing to do when it is there"
+
+
+def test_a_block_that_does_not_validate_or_reload_leaves_the_caddyfile_as_it_was():
+    for label, kw in [("validate fails", {"validate_ok": False}), ("reload fails", {"reload_ok": False}),
+                      ("no saved copy", {"saved": False}), ("no site block", {"sites": "{\n}\n"})]:
+        with Host(scheduler=False) as host:
+            cf = _caddy_host(host, **kw)
+            before = open(cf).read()
+            r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+            assert r.returncode == 0 and open(cf).read() == before, (label, r.stdout)
+            assert "WARNING" in r.stdout and "no route" in r.stdout, (label, "the owner is still told", r.stdout)
+            assert not os.path.exists(cf + ".candidate-shop-harness"), label
+            assert label == "no saved copy" or "not put back" in r.stdout, (label, r.stdout)
+
+
 def test_a_missing_console_entry_is_a_note():
     with Host() as host:
         os.remove(os.path.join(host.skill, "console", "serve.py"))

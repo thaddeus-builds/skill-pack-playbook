@@ -27,7 +27,12 @@ function consoleNotes() {
           + '(manifest console.entry; vendor the playbook console into the release)');
   }
   const C = h.M.console;
-  if (h.caddyBlockMissing()) {
+  const restored = h.restoreCaddyBlock();
+  if (restored?.done) {
+    h.log(`restored the Caddy block kept by the last uninstall into ${h.CADDYFILE} (validated, Caddy reloaded; `
+          + `the file as it was: ${restored.done})`);
+  } else if (h.caddyBlockMissing()) {
+    if (restored) h.log(`note: the saved Caddy block was not put back: ${restored.skip}`);
     h.log(`WARNING: ${h.USERS_FILE} has logins but ${h.CADDYFILE} has no "${h.CADDY_MARKER}" block, `
           + `so ${C.base_path} has no route (uninstall + add removes it). `
           + (fs.existsSync(h.CADDY_SAVED) ? `Paste the copy kept at ${h.CADDY_SAVED} (it has your edits), or print a fresh block with `
