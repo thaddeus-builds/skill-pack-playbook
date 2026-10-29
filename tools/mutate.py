@@ -76,7 +76,7 @@ def mutate(source: Path, mutants: list[tuple[str, str]], cmd: list[str], timeout
     def restore(*_):
         source.write_bytes(original)
         raise KeyboardInterrupt
-    old_handlers = {s: signal.signal(s, restore) for s in (signal.SIGTERM,)}
+    old_handlers = {s: signal.signal(s, restore) for s in (signal.SIGTERM, signal.SIGINT)}
     results = []
     try:
         for n, (old, new) in enumerate(mutants, 1):
