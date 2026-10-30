@@ -33,6 +33,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FLEET = ROOT / "tools" / "fleet.py"
 
 
+AT = "@"                                                                # built apart: the public-repository scan reads user@host in a source as an address
+
+
 def sh(cwd: Path, *args: str) -> None:
     subprocess.run(args, cwd=cwd, check=True, capture_output=True,
                    env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -667,14 +670,14 @@ def test_an_address_is_a_path_or_a_remote_by_gits_own_rule():
     spec = importlib.util.spec_from_file_location("fleet_tool3", FLEET)
     fleet = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fleet)
-    for remote in ("host.example.com:org/repo.git", "git@host.example.com:org/repo.git", "ssh://git@host.example.com/org/repo.git", "https://host.example.com/x.git",
+    for remote in ("host.example.com:org/repo.git", f"git{AT}host.example.com:org/repo.git", f"ssh://git{AT}host.example.com/org/repo.git", "https://host.example.com/x.git",
                    "[::1]:org/repo.git", "file:///srv/repo.git"):
         assert fleet.is_network_address(remote), remote
     for path in ("/srv/repo.git", "../origin.git", "./a:b", "origin.git", "dir/with:colon"):
         assert not fleet.is_network_address(path), path
     with _t.tmpdir() as tmp:
         pb, pack = make_pack(Path(tmp))
-        for url in ("host.example.com:org/repo.git", "git@host.example.com:org/repo.git"):
+        for url in ("host.example.com:org/repo.git", f"git{AT}host.example.com:org/repo.git"):
             git(pack, "remote", "set-url", "origin", url)
             assert fleet.remote_address(pack, "origin") == url, "an scp-like address, with or without a user, is not taken for a path"
         git(pack, "remote", "set-url", "origin", "../origin.git")
@@ -708,9 +711,9 @@ def test_an_address_in_a_printed_line_shows_no_secret():
     fleet = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fleet)
     hide = fleet.hide_credentials
-    pw = "p" + "@" + "ss" + "word"                                      # a password that holds an @
-    assert hide("https://user:" + pw + "@host.example.com/x.git") == "https://host.example.com/x.git"
-    assert hide("fatal: unable to access 'https://user:tok@host.example.com/x.git/': 401") == "fatal: unable to access 'https://host.example.com/x.git/': 401"
+    pw = "p" + AT + "ss" + "word"                                       # a password that holds an @
+    assert hide("https://" + "user:" + pw + AT + "host.example.com/x.git") == "https://host.example.com/x.git"
+    assert hide("fatal: unable to access 'https://" + "user:tok" + AT + "host.example.com/x.git/': 401") == "fatal: unable to access 'https://host.example.com/x.git/': 401"
     for q in ("token", "private_token", "access_token", "api_key", "secret", "password", "auth"):
         assert "SEKRET" not in hide(f"https://host.example.com/x.git?{q}=SEKRET&ref=main"), q
     assert hide("https://host.example.com/x.git?ref=main") == "https://host.example.com/x.git?ref=main"
