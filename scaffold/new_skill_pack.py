@@ -67,6 +67,8 @@ sys.path.insert(0, str(PLAYBOOK))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import markets as iso_markets  # noqa: E402
 from kit.tools import packs as kit_packs, vendor  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import add_zylos  # noqa: E402
 
 # the pre-push hook the next steps install (kit/tools/leak_guard.py)
 HOOK = "scripts/kit/tools/pre-push.sample"
@@ -398,6 +400,9 @@ def parser() -> argparse.ArgumentParser:
                    "CLAUDE.md; without it CLAUDE.md keeps a <<fill: …>>)")
     p.add_argument("--host", choices=sorted(HOSTS), default="github",
                    help="where the repository lives: its CI and CODEOWNERS are written for it (default github)")
+    p.add_argument("--no-zylos", action="store_true",
+                   help="leave out the Zylos host adapter (scaffold/add_zylos.py adds it later); "
+                        "by default it is copied, with its manifest, the SKILL.md keys and the ecosystem file")
     p.add_argument("--dry-run", action="store_true",
                    help="print the file list, write nothing")
     p.add_argument("--update-kit", action="store_true",
@@ -424,6 +429,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  write    {rel}")
         print("  write    .gitattributes (from skill-pack.toml and ssot/index.tsv)")
         print(f"  vendor   {'scripts/kit/'} and console/ (kit/tools/vendor.py)")
+        if not a.no_zylos:
+            print("  zylos    zylos/, ecosystem.config.cjs and the SKILL.md keys (scaffold/add_zylos.py)")
         print(f"dry run: {len(files) + 1} files and two vendored copies "
               f"for {d}; nothing written")
         return 0
@@ -433,9 +440,15 @@ def main(argv: list[str] | None = None) -> int:
     if rc != 0:
         return rc
     write(d, {".gitattributes": gitattributes(d)})
+    if not a.no_zylos:
+        add_zylos.add(d)
+        code, out = add_zylos.check(d)
+        if code != 0:
+            print(out, file=sys.stderr)
+            return code
     fills = sorted(r for r, t in files.items() if "<<fill:" in t)
     print(f"{values['name']}: {len(files) + 1} files written to {d}, the kit "
-          f"and the console vendored")
+          f"and the console vendored{'' if a.no_zylos else ', the Zylos adapter set up'}")
     print(f"  still to fill by the build (B2, B8): {', '.join(fills)}")
     for line in next_steps(d, values):
         print(line)
