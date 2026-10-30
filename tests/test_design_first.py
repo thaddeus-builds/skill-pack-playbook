@@ -42,7 +42,7 @@ STEPS = ("Research first.", "One design page, in the owner's language.", "A clic
          "Wait for the owner's yes.", "Then the code, and the skill pack draws the demo.")
 PARTS = ("What it is.", "How it decides.", "The asks.", "What it stores.", "The traps.")
 GUARDS = ("A synthetic marker.", "DEMO ids.", "No client term.", "The skill pack's own renderer.",
-          "Never in a client's data.", "Shared privately.")
+          "Before the code exists.", "When no demo is needed.", "Never in a client's data.", "Shared privately.")
 CHECKLIST = ("The prior-art scan is dated",
              "The design page says what it is, how it decides, the asks",
              "Every append-only column is proven on a scratch copy of real data",
@@ -53,7 +53,8 @@ CHECKLIST = ("The prior-art scan is dated",
 WORDS = {"The steps": ("](prior-art-scan.md)",),
          "The design page": ("recommended answer", "append-only", "scratch copy of real data"),
          "The demo": ("`DEMO`", "fails closed", "kit.pagestyle", "kit/tools/leak_guard.py", "first `<header>`",
-                      "page data's JSON escapes", "command patterns", "every client's data folder")}
+                      "page data's JSON escapes", "command patterns", "every client's data folder",
+                      "stand-alone generator", "nothing new to draw", "worked example")}
 PY = re.compile(r"^```python\n(.*?)^```", re.M | re.S)
 
 
