@@ -293,7 +293,7 @@ def _read_request(req: dict, state, env, urlopen, now: float) -> list:
             why = _matches(m, req)
             if why:
                 out.append(bridge.Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")),
-                                        bridge._text_of(m.get("content")), _LABEL[why]))
+                                        bridge._text_of(m.get("content")), _LABEL[why], bridge._attachments_of(m)))
             req["cursor"] = max(req["cursor"], m["seq"])
         if len(page) < 100:
             break
@@ -304,7 +304,7 @@ def _read_request(req: dict, state, env, urlopen, now: float) -> list:
         req["held"] = held
         return []
     req["held"] = []
-    replies = [bridge.Reply(**x) for x in held]
+    replies = [bridge.Reply(**{**x, "attachments": tuple(bridge.Attachment(**a) for a in x.get("attachments", ()))}) for x in held]
     try:                                                          # best effort: what was handed over is marked read
         authed("POST", f"{prefix}/conversations/{req['conversation_id']}/read", {"read_until_seq": max(r.seq for r in replies)})
     except Exception as e:
