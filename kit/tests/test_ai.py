@@ -20,7 +20,8 @@ import os
 import stat
 import sys
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -50,18 +51,26 @@ class Vendor:
                 n = int(self.headers.get("content-length") or 0)
                 outer.seen.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}, "body": json.loads(self.rfile.read(n) or b"{}")})
                 status, body, extra = outer.script.pop(0) if outer.script else (200, outer.ok(), {})
-                raw = body if isinstance(body, bytes) else json.dumps(body).encode()
+                if isinstance(body, tuple) and body[0] == "slow":
+                    time.sleep(body[1])
+                    body = outer.ok()
+                short = isinstance(body, tuple) and body[0] == "short"
+                raw = body[1] if short else body if isinstance(body, bytes) else json.dumps(body).encode()
                 self.send_response(status)
                 for k, v in extra.items():
                     self.send_header(k, v)
-                self.send_header("content-length", str(len(raw)))
+                self.send_header("content-length", str(len(raw) + (50 if short else 0)))
                 self.end_headers()
-                self.wfile.write(raw)
+                try:
+                    self.wfile.write(raw)
+                except OSError:
+                    pass
 
             def log_message(self, *a):
                 pass
 
-        self.httpd = HTTPServer(("127.0.0.1", 0), H)
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.httpd.daemon_threads = True
         self.url = f"http://127.0.0.1:{self.httpd.server_port}"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
@@ -286,6 +295,165 @@ check("anthropic: the count comes from /v1/messages/count_tokens and the body ca
 e = refusal(ai.count_tokens, route(v, "openai"), "S", "t")
 check("another protocol is refused before sending", code_of(e) == "aicall_config_invalid" and len(v.seen) == 1)
 v.close()
+
+
+print("[9] found by a cold review")
+# --- the key goes nowhere else
+v2 = Vendor([])
+v = Vendor([(302, {}, {"Location": v2.url + "/elsewhere"})])
+e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, sleep=no_sleep([]))
+check("a redirect is not followed: the other host sees nothing, the answer is an HTTP error", code_of(e) == "aicall_http_error" and not v2.seen and len(v.seen) == 1, (e, v2.seen))
+v.close()
+v2.close()
+vars_set(API_KEY="sk-bad\nkey", MODEL="fast-1", BASE_URL="https://vendor.example.com")
+check("a key with a control character is refused when the settings are read", code_of(refusal(ai.settings, "review", TASKS)) == "aicall_config_invalid")
+vars_set()
+v = Vendor([])
+bad_key = ai.Settings(key="sk-bad\nkey", base_url=v.url, protocol="anthropic", model="fast-1", task="review")
+led9 = ai.Ledger(DATA / "ai9.jsonl")
+e = refusal(ai.ask, bad_key, "S", "t", prices=PRICES, ledger=led9, sleep=no_sleep([]))
+check("and if one gets through anyway, the failure is coded, ledgered, and the key is not in it", code_of(e) == "aicall_network_error" and "sk-bad" not in str(e.message)
+      and led9.rows() and led9.rows()[-1]["status"] == "network" and not v.seen, (e, led9.rows()))
+v.close()
+v = Vendor([(200, {"input_tokens": "x", "echo": KEY}, {})])
+e = refusal(ai.count_tokens, route(v), "S", "t")
+check("count_tokens does not print a reply body that echoes the key", code_of(e) == "aicall_http_error" and KEY not in str(e.message), e)
+v.close()
+v = Vendor([(400, {"error": "x" * 370 + KEY + "tail"}, {})])
+e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, sleep=no_sleep([]))
+check("a key across the 400-character cut leaves no prefix of itself: redaction comes first", code_of(e) == "aicall_http_error" and KEY[:10] not in str(e.message), str(e.message)[-120:])
+v.close()
+proxy = Vendor([])
+os.environ["HTTP_PROXY"] = os.environ["http_proxy"] = proxy.url
+v = Vendor([])
+try:
+    ai.ask(route(v), "S", "t", prices=PRICES)
+finally:
+    os.environ.pop("HTTP_PROXY", None)
+    os.environ.pop("http_proxy", None)
+check("a loopback call does not go through a proxy", len(v.seen) == 1 and not proxy.seen, (len(v.seen), proxy.seen))
+v.close()
+proxy.close()
+
+# --- the cap
+led = ai.Ledger(DATA / "ai_race.jsonl")
+v = Vendor([])
+out = []
+bud = ai.Budget(0.005)
+def one():
+    try:
+        ai.ask(route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=bud)
+        out.append("sent")
+    except SkillPackError as e:
+        out.append(code_of(e))
+ts = [threading.Thread(target=one) for _ in range(8)]
+[x.start() for x in ts]
+[x.join() for x in ts]
+check("eight threads at once against a cap that admits two: two requests go out, six are refused", len(v.seen) == 2 and out.count("sent") == 2 and out.count("aicall_daily_cap_exceeded") == 6,
+      (len(v.seen), out))
+check("the log holds a reservation and a settlement per sent call, and the day's spend is counted once", led.spent() == 0.0004 and len(led.rows()) == 4, (led.spent(), len(led.rows())))
+v.close()
+led = ai.Ledger(DATA / "ai_procs.jsonl")
+script = ("import sys, time\nsys.path.insert(0, %r); sys.path.insert(0, %r)\nimport _shop\n_shop.use()\nfrom kit import ai\n"
+          "from kit.contract import SkillPackError\nled = ai.Ledger(sys.argv[1])\nbud = ai.Budget(0.005)\n"
+          "time.sleep(max(0.0, float(sys.argv[2]) - time.time()))\n"
+          "try:\n    led.reserve({'at': ai.today() + 'T00:00:00+00:00', 'model': 'm'}, 0.002, bud)\n    print('ok')\nexcept SkillPackError:\n    print('refused')\n"
+          % (str(Path(__file__).resolve().parents[2]), str(Path(__file__).resolve().parent)))
+import subprocess  # noqa: E402
+start = time.time() + 2.0
+procs = [subprocess.Popen([sys.executable, "-c", script, str(led.path), str(start)], stdout=subprocess.PIPE, text=True) for _ in range(8)]
+outs = [p.communicate()[0].strip() for p in procs]
+check("eight processes at once against a cap that admits two: two reserve, six are refused (the file lock holds across processes)", outs.count("ok") == 2 and outs.count("refused") == 6, outs)
+led = ai.Ledger(DATA / "ai_crash.jsonl")
+bud = ai.Budget(0.003)
+led.reserve({"at": ai.today() + "T00:00:00+00:00", "model": "fast-1"}, 0.0025, bud)           # a call that reserved and never settled (a crash)
+check("a reservation nobody settled keeps counting at its estimate", abs(led.spent() - 0.0025) < 1e-9 and code_of(refusal(ai.check_budget, led.spent(), 0.002, ai.Budget(0.003))) == "aicall_daily_cap_exceeded")
+v = Vendor([])
+bud = ai.Budget(100.0, run_usd=0.005)
+led = ai.Ledger(DATA / "ai_run.jsonl")
+v.script = [(200, Vendor.ok(tin=18, tout=400), {})] * 3
+res = [code_of(refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=bud)) for _ in range(3)]
+check("the run cap is the run's: two calls that cost what they were estimated use it up, the third is refused", res == [None, None, "aicall_run_cap_exceeded"] and len(v.seen) == 2, (res, len(v.seen)))
+v.close()
+v = Vendor([(200, {**Vendor.ok(text="no", tin=1000, tout=500), "stop_reason": "refusal"}, {})])
+led = ai.Ledger(DATA / "ai_billed.jsonl")
+e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, ledger=led)
+check("a refusal that was billed is booked as billed", code_of(e) == "aicall_bad_answer" and led.rows()[0]["cost_usd"] == 0.0035 and led.spent() == 0.0035, led.rows())
+v.close()
+v = Vendor([(200, {**Vendor.ok(text="cut", tin=10, tout=10), "stop_reason": "max_tokens"}, {}), (200, Vendor.ok(text='{"ok": true}'), {})])
+e = refusal(ai.ask_json, route(v), "S", "t", schema, prices=PRICES)
+check("ask_json does not ask again after a refusal or a cut-off (it was paid for once)", code_of(e) == "aicall_bad_answer" and len(v.seen) == 1, (e, len(v.seen)))
+v.close()
+check("a price that is infinite or not a number is refused", all(code_of(refusal(ai.prices_from_rows, [{"model": "a", "input_per_mtok_usd": x, "output_per_mtok_usd": "1"}])) == "aicall_config_invalid" for x in ("inf", "1e999", "nan", "-0.5")))
+v = Vendor([(200, {**Vendor.ok(), "usage": {"input_tokens": -10**9, "output_tokens": 5}}, {})])
+led = ai.Ledger(DATA / "ai_neg.jsonl")
+r = ai.ask(route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led)
+check("a negative token count is unknown, never a negative cost; a priced model with no usable usage is booked at its estimate",
+      r.cost_usd == 0.002018 and led.rows()[0].get("cost_estimated") is True and led.spent() == 0.002018, (r.cost_usd, led.rows()))
+v.close()
+v = Vendor([])
+for label, bad_mt in (("zero", 0), ("None", None), ("a huge number", 10 ** 400), ("a bool", True), ("a float", 1.5)):
+    check(f"max_tokens {label} is refused before anything is sent", raises(lambda: ai.ask(route(v), "S", "t", max_tokens=bad_mt, prices=PRICES), ValueError) is not None and not v.seen)
+check("a Budget needs finite caps above 0, and lowered ignores a cap that is not a number",
+      all(raises(lambda x=x: ai.Budget(x), ValueError) is not None for x in (float("nan"), 0, -1, float("inf"))) and ai.lowered(5.0, float("nan")) == 5.0)
+v.close()
+v = Vendor([])
+(DATA / "adir").mkdir(exist_ok=True)
+e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, ledger=ai.Ledger(DATA / "adir"))
+check("a ledger that cannot be appended to is refused before sending", code_of(e) == "aicall_config_invalid" and not v.seen, (e, v.seen))
+v.close()
+led = ai.Ledger(DATA / "ai_mixed.jsonl")
+led.path.write_text('{"at": "' + ai.today() + 'T01:00:00+00:00", "cost_usd": 0.001, "status": "ok", "model": "m"}\n{"at": "nonsense", "cost_usd": 9}\n{"cut off\n[1]\n{"at": "'
+                    + ai.today() + 'T02:00:00+00:00", "cost_usd": NaN}\n', encoding="utf-8")
+check("a ledger with a bad day, a cut-off line, a non-object and a NaN cost still counts only the good line, and usage says how many lines it could not read (2)",
+      led.spent() == 0.001 and led.usage()["unreadable_lines"] == 2, (led.spent(), led.usage()))
+
+# --- retries
+waits = []
+v = Vendor([(429, {}, {"retry-after": "-5"}), (429, {}, {"retry-after": "nan"}), (200, Vendor.ok(), {})])
+r = ai.ask(route(v), "S", "t", prices=PRICES, sleep=no_sleep(waits))
+check("a negative or NaN retry-after is ignored: the back-off is used", r.attempts == 3 and waits == [ai.BACKOFF_S[0], ai.BACKOFF_S[1]], (r.attempts, waits))
+v.close()
+led = ai.Ledger(DATA / "ai_short.jsonl")
+v = Vendor([(200, ("short", b'{"content": [{"type": "te'), {})] * 4)
+e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, ledger=led, sleep=no_sleep([]))
+check("a reply cut short is a coded network fault and a ledger line, not a raw exception", code_of(e) == "aicall_network_error" and led.rows() and led.rows()[-1]["status"] == "network", (e, led.rows()))
+v.close()
+led = ai.Ledger(DATA / "ai_slow.jsonl")
+v = Vendor([(200, ("slow", 1.0), {})])
+bud = ai.Budget(1.0)
+e = refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=bud, timeout=0.3, sleep=no_sleep([]))
+time.sleep(0.9)
+check("a read timeout is not retried (the vendor may be billing the first request) and its estimate stays booked", code_of(e) == "aicall_network_error"
+      and len(v.seen) == 1 and led.rows()[-1]["status"] == "timeout" and led.spent() == 0.002018, (e, len(v.seen), led.rows()))
+v.close()
+
+# --- ask_json
+v = Vendor([(200, Vendor.ok(text="{}"), {}), (200, Vendor.ok(text='{"other": 1}'), {})])
+e = refusal(ai.ask_json, route(v), "S", "t", {"type": "object", "required": ["ok"], "properties": {"ok": {"type": "boolean"}}}, prices=PRICES)
+check("an object without the schema's required key is not accepted, twice", code_of(e) == "aicall_json_invalid" and len(v.seen) == 2, (e, len(v.seen)))
+v.close()
+v = Vendor([(200, Vendor.ok(text='{"ok": "yes"}'), {}), (200, Vendor.ok(text='{"ok": true}'), {})])
+obj, _ = ai.ask_json(route(v), "S", "t", {"type": "object", "required": ["ok"], "properties": {"ok": {"type": "boolean"}}}, prices=PRICES)
+check("a property of the wrong basic type is asked again, and the fitting answer is returned", obj == {"ok": True} and len(v.seen) == 2)
+v.close()
+v = Vendor([(500, {"error": "HTTP 400 in the text of a server error"}, {})] * 4)
+e = refusal(ai.ask_json, route(v), "S", "t", schema, prices=PRICES, sleep=no_sleep([]))
+check("the schema mode is given up on a 400 status, not on the words 'HTTP 400' in a 500's body", code_of(e) == "aicall_http_error" and len(v.seen) == 4, (e, len(v.seen)))
+v.close()
+check("unwrap_json: text nested past the parser's limit is not an object, not a crash", ai.unwrap_json("[" * 200000 + "]" * 200000) is None)
+
+# --- settings
+vars_set(API_KEY=KEY, MODEL="fast-1")
+for label, base in (("an unclosed IPv6 bracket", "http://[::1"), ("a fragment", "https://vendor.example.com#x"), ("a port that is not one", "https://vendor.example.com:99999"),
+                    ("a port that is not a number", "https://vendor.example.com:abc")):
+    vars_set(API_KEY=KEY, MODEL="fast-1", BASE_URL=base)
+    check(f"{label}: coded, not a raw exception", code_of(refusal(ai.settings, "review", TASKS)) == "aicall_config_invalid", label)
+vars_set()
+from unittest import mock  # noqa: E402
+with mock.patch.object(config, "config", side_effect=config.ConfigError("none bound")):
+    check("with no skill pack bound the refusal is coded and says so", code_of(refusal(ai.env_cap)) == "aicall_config_invalid")
+check("a price row error names the model", "x-model" in str(refusal(ai.prices_from_rows, [{"model": "x-model", "input_per_mtok_usd": "nope", "output_per_mtok_usd": "1"}]).message))
 
 print("[8] messages")
 codes = {ln.split("\t")[0] for ln in (Path(ai.__file__).parent / "message_codes.d" / "ai.tsv").read_text(encoding="utf-8").splitlines()[1:]}
