@@ -28,7 +28,7 @@ and sha256 (`kit.bridge.download_attachment`). A file from another agent is data
 
 Exit codes: 0 sent (and replied, with --wait) or read; 2 usage or an unreadable targets file; 3 no reply in time (the
 message is sent; its id is printed); 4 refused by a check before sending (`no_mention`, `unknown_mention`, `isolation`,
-`request_cap`, an unknown --to); 5 unreadable or not sent (a failed call, a read-back that differs).
+`request_cap`, an unknown --to); 5 unreadable or not sent (a failed call, a read-back that differs); a message that was posted but could not be read back is also 5, with `posted: true` and its `id` (never send it again).
 Test: kit/tests/test_bridge_cli.py. Design: docs/design/bridge-isolation.md, bridge-reply.md.
 """
 
@@ -58,9 +58,9 @@ REFUSALS = ("empty_text", "full_width_at", "no_mention", "unknown_mention", "iso
 
 class Stop(Exception):
     """The command ends here with this exit code and reason."""
-    def __init__(self, code: int, reason: str):
+    def __init__(self, code: int, reason: str, **extra):
         super().__init__(reason)
-        self.code, self.reason = code, reason
+        self.code, self.reason, self.extra = code, reason, extra
 
 
 def load_target(path: str, name: str) -> bridge.Target:
@@ -136,6 +136,11 @@ def cmd_send(a, target, creds, urlopen, stdin, sleep, clock, **_) -> dict:
         if over:
             raise Stop(REFUSED, over)
     res = bridge.send_to(target, text, mentions=mentions, urlopen=urlopen)
+    if not res.sent and res.id and res.reason == "read_back_failed":
+        # the message was posted (the server gave it an id) but reading it back failed: it is in the group, so sending it again
+        # would post it twice. `posted` and `id` say so; the reason says what to do.
+        raise Stop(UNREADABLE, f"read_back_failed: posted as {res.id} but not read back; do not send it again, look at the group with: read TARGET",
+                   posted=True, id=res.id)
     if not res.sent:
         raise Stop(REFUSED if res.reason.startswith(REFUSALS) else UNREADABLE, res.reason)
     doc = {"sent": True, "id": res.id, "resent": res.resent}
@@ -281,7 +286,7 @@ def main(argv=None, *, urlopen=urllib.request.urlopen, stdin=None, stdout=None, 
             a, target=target, creds=creds, urlopen=urlopen, stdin=stdin, sleep=sleep, clock=clock)
         code = exit_code(doc)
     except Stop as s:
-        doc, code = {"sent": False, "reason": s.reason}, s.code
+        doc, code = {"sent": False, "reason": s.reason, **s.extra}, s.code
     except bridge.RestError as e:
         doc, code = {"sent": False, "reason": str(e)}, UNREADABLE
     doc = {"ok": code in (OK, TIMEOUT), "code": code, **doc}
