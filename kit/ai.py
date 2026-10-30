@@ -23,26 +23,28 @@ Variables, with the pack's `env_prefix` P:
 
 What it guards (each is a test in kit/tests/test_ai.py; the last review of it was a cold one, and every finding is a case there):
 
-  * Nothing is sent when a setting is missing or bad, when the model has no price, when `max_tokens` is not a whole number of at least 1, when the
-    ledger cannot be appended to, or when a cap would be passed; each refusal is coded and names the variable or the file to change. The base URL is
+  * Nothing is sent when a setting is missing or bad, when the model has no price, when `max_tokens` is not a whole number of at least 1, when `timeout`
+    is not a number above 0, when the ledger is not a regular file that can be appended to, or when a cap would be passed; each refusal is coded and names
+    the variable or the file to change. The base URL is
     https (or a loopback host, for a gateway or a test), holds no credentials, no query, no fragment and a real port.
   * The key goes to the host in the base URL and nowhere else: a redirect is never followed (a 3xx is an error), a loopback call does not go through a
     proxy, and a key that is not printable ASCII is refused (it could not be sent as a header and would leak through the exception).
   * A model with no price is refused by default (`unpriced="refuse"`): the cap could not count it. A pack that wants the call anyway says
     `unpriced="log"`; the call is then logged with a null cost, counted as nothing, and `usage()` says how many calls were unpriced.
   * The cap is counted from the ledger for the UTC day, and holds under threads and processes: before it sends, a call takes a lock on the ledger file
-    itself (so a link or a relative path to it takes the same one), checks the day's cost plus its estimate (the prompt counted high, an image at a flat
-    1600 tokens, the answer at `max_tokens`) and writes a reservation of that estimate; the reply settles it. A reservation nobody settled (a crash)
+    itself (so a link or a relative path to it takes the same one), checks the day's cost plus its estimate (the prompt counted high, a schema counted as text, an
+    image at a flat 1600 tokens, the answer at `max_tokens`) and writes a reservation of that estimate; the reply settles it. A reservation nobody settled (a crash)
     keeps counting, and a ledger whose last line was cut off still takes the next one on a line of its own. `run_usd` is per `Budget` object, so one
     object is one run, not one call, and the object's own lock makes the check and the charge one step.
   * A reply that was billed is booked as billed: a refusal or a cut-off carries its usage, a priced model whose reply has none is booked at the estimate.
     A number that is not finite, or a token count below 0 or past a trillion, is never believed: a price is refused (a bad price passed to `ask` is a
-    ValueError), a count is treated as unknown. A reply that cannot be booked in the ledger afterwards is still returned, with `booked` False.
+    ValueError), a count is treated as unknown. A reply that cannot be booked in the ledger afterwards is still returned, with `booked` False. A ledger line is
+    ASCII and ends at `\n` only, and a short write is finished or refused.
   * Every call, a failed one too, ends in one ledger line: time, task, model, protocol, host, status, tokens, cost (null when unpriced: never guessed),
     milliseconds, attempts, the prompt's sha256 and length (the text is not kept) and the images' sha256. The file is 0600.
   * 429, 5xx and a refused or dropped connection are retried (`BACKOFF_S`, a finite `retry-after` between 0 and `MAX_RETRY_AFTER_S` honoured); any other
-    4xx stops at once. A read timeout, a 2xx whose body does not arrive, and a Ctrl-C while waiting are not retried and keep the call's estimate booked
-    (the vendor may have done, and billed, the work). A cut-off error body is still the error its status says. The key is replaced, in the forms a
+    4xx stops at once. A read timeout, a 2xx whose body does not arrive, a connection dropped after the request was written, and a Ctrl-C while waiting are
+    not retried and keep the call's estimate booked, with a ledger and no `Budget` too (the vendor may have done, and billed, the work). A cut-off error body is still the error its status says. The key is replaced, in the forms a
     message or a JSON encoder writes it, in every message that leaves this module, before a text is cut.
   * `ask_json` asks for the schema mode where the protocol has one; a vendor that refuses it (HTTP 400) or answers with text that is not one JSON
     object is asked once more, with the instruction in words; a reply that stopped on a refusal or the token limit is not asked again. The object must
@@ -55,12 +57,16 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import base64 as _b64
 import hashlib
+import html
+import http.client
 import json
 import math
 import mimetypes
 import os
 import re
+import stat
 import threading
 import time
 import urllib.error
@@ -93,6 +99,7 @@ UNPRICED = ("refuse", "log")
 STOPPED = "it stopped with"
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}")
+MAX_PRICE = 1_000_000.0                      # USD per million tokens: a price above this is a typo, and a larger one could overflow a cost to infinity
 MAX_COUNT = 10 ** 12                         # a token count above this is not believed: no call is that big, and a larger int would overflow a float
 IMAGE_TOKENS = 1600                          # what an image adds to the estimate: about the most a vendor charges for a large one
 
@@ -168,6 +175,9 @@ def redact(text, key: str | None = None) -> str:
         return s
     forms = {k, k.encode("unicode_escape").decode("ascii"), repr(k)[1:-1], json.dumps(k)[1:-1]}        # as typed, and as a message or a JSON encoder escapes it
     forms |= {f.replace("/", "\\/") for f in forms}                                                   # PHP's encoder escapes the slash too
+    forms |= {urllib.parse.quote(k, safe=""), urllib.parse.quote_plus(k), html.escape(k)}               # a url, a form, a page
+    for raw in (k, "Bearer " + k):                                                                      # the key as a header would carry it, encoded
+        forms |= {_b64.b64encode(raw.encode()).decode().rstrip("="), _b64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")}
     for form in sorted(forms, key=len, reverse=True):
         s = s.replace(form, "<key>")
     return s
@@ -275,8 +285,8 @@ def prices_from_rows(rows: Iterable[Mapping[str, str]]) -> dict[str, tuple[float
             a, b = float(pin), float(pout)
         except ValueError:
             a = b = -1.0
-        if not (_finite(a) and _finite(b) and a >= 0 and b >= 0):
-            raise _fail(msg("aicall_config_invalid", f"the price row of {model} holds a number that is not a finite price (USD per million tokens, 0 or more)",
+        if not (_finite(a) and _finite(b) and 0 <= a <= MAX_PRICE and 0 <= b <= MAX_PRICE):
+            raise _fail(msg("aicall_config_invalid", f"the price row of {model} holds a number that is not a finite price (USD per million tokens, 0 to a million)",
                             var="model prices", detail=f"{model}: a finite number 0 or more"))
         out[model] = (a, b)
     return out
@@ -288,7 +298,7 @@ def _count(v) -> int | None:
 
 
 def _price_ok(p) -> bool:
-    return isinstance(p, (tuple, list)) and len(p) == 2 and all(_finite(x) and x >= 0 for x in p)
+    return isinstance(p, (tuple, list)) and len(p) == 2 and all(_finite(x) and 0 <= x <= MAX_PRICE for x in p)
 
 
 def cost_usd(prices: Mapping[str, tuple[float, float]] | None, model: str, tokens_in, tokens_out) -> float | None:
@@ -314,8 +324,14 @@ class Ledger:
         self._tlock = threading.Lock()
 
     def _open(self) -> int:
+        """The ledger, opened for appending. A file that is not a regular one (a FIFO would block the call; /dev/null would count nothing, so no cap would
+        ever trip) is refused as an OSError."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        return os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NONBLOCK, 0o600)
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            os.close(fd)
+            raise OSError(22, "not a regular file")
+        return fd
 
     @contextlib.contextmanager
     def _locked(self):
@@ -343,7 +359,7 @@ class Ledger:
             raise self.unwritable(e) from None
 
     def append(self, entry: dict) -> None:
-        line = (json.dumps(entry, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n").encode()
+        line = (json.dumps(entry, sort_keys=True, allow_nan=False) + "\n").encode()      # ascii: no character in it can end a line, and none can fail to encode
         fd = self._open()
         try:
             try:
@@ -354,7 +370,9 @@ class Ledger:
                             line = b"\n" + line                       # the last line was cut off (a crash): this one starts a line of its own
             except OSError:
                 pass
-            os.write(fd, line)
+            view = memoryview(line)
+            while view:                                                  # a short write (a quota, a nearly full disk) goes on, or raises: never a cut line
+                view = view[os.write(fd, view):]
         finally:
             os.close(fd)
 
@@ -378,7 +396,7 @@ class Ledger:
         if not self.path.is_file():
             return [], 0
         rows, bad = [], 0
-        for ln in self.path.read_text(encoding="utf-8", errors="replace").splitlines():      # a multibyte character cut mid-write is a cut line
+        for ln in self.path.read_text(encoding="utf-8", errors="replace").split("\n"):      # a multibyte character cut mid-write is a cut line; only \n ends one
             if not ln.strip():
                 continue
             try:
@@ -421,7 +439,7 @@ class Ledger:
         rows, bad = self._read()
         per: dict[str, dict] = {}
         for r in (r for r in self._settled(rows) if isinstance(r.get("at"), str) and r["at"][:10] == day):
-            m = per.setdefault(r.get("model", ""), {"calls": 0, "failed": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "unpriced_calls": 0})
+            m = per.setdefault(str(r.get("model", "")), {"calls": 0, "failed": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "unpriced_calls": 0})
             m["calls"] += 1
             m["failed"] += r.get("status") not in ("ok", "reserved")
             m["input_tokens"] += _count(r.get("input_tokens")) or 0
@@ -443,10 +461,11 @@ def tokens_in_text(text: str) -> int:
     return -(-ascii_chars // 4) + (len(text) - ascii_chars) + 8
 
 
-def estimate(s: Settings, system: str, text: str, max_tokens: int, prices: Mapping[str, tuple[float, float]] | None, images: int = 0) -> tuple[int, float | None]:
-    """(input tokens, USD) of one call: the prompt counted high, each image at IMAGE_TOKENS, the answer at its cap; the USD is None for a model with no
-    price."""
-    tin = tokens_in_text(system) + tokens_in_text(text) + IMAGE_TOKENS * images
+def estimate(s: Settings, system: str, text: str, max_tokens: int, prices: Mapping[str, tuple[float, float]] | None, images: int = 0,
+             schema: dict | None = None) -> tuple[int, float | None]:
+    """(input tokens, USD) of one call: the prompt counted high, a schema counted as text (it is billed as input), each image at IMAGE_TOKENS, the answer at
+    its cap; the USD is None for a model with no price."""
+    tin = tokens_in_text(system) + tokens_in_text(text) + IMAGE_TOKENS * images + (tokens_in_text(json.dumps(schema, default=str)) if schema else 0)
     return tin, cost_usd(prices, s.model, tin, max_tokens)
 
 
@@ -467,6 +486,8 @@ def check_budget(spent: float, est_usd: float | None, budget: Budget) -> None:
 # ---------------- the protocols ----------------
 
 def _image(path) -> tuple[str, str, str]:
+    if not isinstance(path, (str, os.PathLike)):
+        raise _fail(msg("aicall_image_unreadable", f"{path!r} is not the path of an image file; nothing was sent", path=repr(path)[:80]))
     p = Path(path)
     try:
         data = p.read_bytes()
@@ -571,6 +592,10 @@ def _once(s: Settings, url: str, headers: dict, body: dict, timeout: float):
         return e.code, detail, ra
     except TimeoutError:
         return -1, "the read timed out", None
+    except http.client.InvalidURL as e:
+        return 0, redact(f"InvalidURL: {e}", s.key)[:200], None
+    except (ConnectionError, http.client.HTTPException) as e:        # raised after the request was written (a refused connection arrives as a URLError): the work may be done and billed
+        return -2, type(e).__name__, None
     except urllib.error.URLError as e:
         if isinstance(getattr(e, "reason", None), TimeoutError):
             return -1, "the connection timed out", None
@@ -614,6 +639,10 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         raise ValueError(f"max_tokens is a whole number from 1 to {MAX_TOKENS_LIMIT}, not {max_tokens!r}")
     if budget is not None and ledger is None:
         raise ValueError("a budget needs the ledger it is counted from")
+    if not (_finite(timeout) and timeout > 0):
+        raise ValueError(f"timeout is a number of seconds above 0, not {timeout!r}")
+    if not (isinstance(system, str) and isinstance(text, str)):
+        raise ValueError("system and text are text")
     images = list(images)
     known = s.model in (prices or {})
     if known and not _price_ok(prices[s.model]):
@@ -630,7 +659,7 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
     entry = {"at": _dates.now().isoformat(timespec="seconds"), "task": s.task, "model": s.model, "protocol": s.protocol,
              "host": s.host, "prompt_sha256": hashlib.sha256((system + "\n" + text).encode("utf-8", "replace")).hexdigest(),
              "prompt_chars": len(system) + len(text), "images": [_image(p)[2] for p in images]}
-    est = estimate(s, system, text, max_tokens, prices, len(images))[1] or 0.0
+    est = estimate(s, system, text, max_tokens, prices, len(images), schema)[1] or 0.0
     rid = None
     if ledger is not None:
         ledger.check_writable()
@@ -646,7 +675,7 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         if ledger is not None:
             try:
                 ledger.append(row)
-            except OSError:              # the reply is still the caller's; a reservation, if there is one, keeps counting at its estimate
+            except OSError:                  # the reply is still the caller's; a reservation, if there is one, keeps counting at its estimate
                 booked = False
         if budget is not None and rid is not None:
             budget.settle(est, actual)
@@ -658,7 +687,7 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
     try:
         status, doc, attempts, ms = _send(s, url, headers, body, timeout, sleep)
     except BaseException:                # Ctrl-C in a back-off wait, say: the request may have gone out, so its estimate stays booked
-        held = est if budget is not None else 0.0
+        held = est if known else 0.0
         settle({**entry, "id": rid, "status": "interrupted", "input_tokens": None, "output_tokens": None, "cost_usd": held or None}, held)
         raise
     entry.update(ms=ms, attempts=attempts, id=rid)
@@ -667,12 +696,12 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         why, what = {0: ("network", "no answer"), -1: ("timeout", "timed out"), -2: ("cut_off", "the reply was cut off")}[status]
         hint = "is the base URL right?" if status == 0 else "the vendor may have billed it"
         raise fail(_fail(msg("aicall_network_error", f"{s.host}: {what} after {attempts} {'try' if attempts == 1 else 'tries'} ({doc}); {hint}",
-                             detail=str(doc), host=s.host)), why, billed=est if status < 0 and budget is not None else 0.0)       # a timed-out request may still be billed
+                             detail=str(doc), host=s.host)), why, billed=est if status < 0 and known else 0.0)       # a timed-out request may still be billed
     if status != 200:
         raise fail(_fail(msg("aicall_http_error", f"{s.host} answered HTTP {status}: {doc}", status=status, detail=str(doc), host=s.host)), f"http_{status}")
     if doc is None:
         raise fail(_fail(msg("aicall_bad_answer", f"{s.host} answered 200 with a body that is not JSON", detail="not JSON")), "bad_reply",
-                   billed=est if budget is not None else 0.0)
+                   billed=est if known else 0.0)
     try:
         out, tin, tout, stop = parse_response(s, doc)
     except SkillPackError as e:
@@ -688,12 +717,18 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
                  booked=booked)
 
 
+def _no_constant(name: str):
+    raise ValueError(name)                                              # NaN and Infinity are not JSON
+
+
 def unwrap_json(text: str):
     """The JSON object in a reply: strict, but a fenced block is unwrapped. None when it is not one object."""
     t = text.strip()
-    m = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", t, re.S)
+    if len(t) >= 6 and t.startswith("```") and t.endswith("```"):
+        t = t[3:-3]
+        t = (t[4:] if t.startswith("json") else t).strip()
     try:
-        v = json.loads(m.group(1) if m else t)
+        v = json.loads(t, parse_constant=_no_constant)
     except (ValueError, RecursionError):
         return None
     return v if isinstance(v, dict) else None
@@ -769,6 +804,8 @@ def count_tokens(s: Settings, system: str, text: str, images=(), *, timeout: flo
         proto_var = _name("PROTOCOL")
         raise _fail(msg("aicall_config_invalid", f"count_tokens is Anthropic's endpoint; {proto_var} must be anthropic for it; nothing was sent", var=proto_var,
                         detail="anthropic for count_tokens"))
+    if not (_finite(timeout) and timeout > 0):
+        raise ValueError(f"timeout is a number of seconds above 0, not {timeout!r}")
     url, headers, body = build_request(s, system, text, list(images), 1)
     status, doc, _, _ = _send(s, url + "/count_tokens", headers, {k: body[k] for k in ("model", "system", "messages")}, timeout, sleep)
     if status != 200 or not isinstance(doc, dict) or _count(doc.get("input_tokens")) is None:

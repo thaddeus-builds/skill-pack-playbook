@@ -11,8 +11,11 @@ nothing else:
     and no `msg()` call in the sources emits it; a code of the kit is never touched, and no file inside the kit's folder is (the kit's own closure test
     owns those);
   * a fragment left with only its header is deleted; the pack's main registry file keeps its header;
-  * the sources are globs relative to the root, `**` recursive; default: every `.py` file under the root (hidden folders aside), tests included, so a
-    pack whose code lives outside its scripts folder is read whole and a code is pruned only when nothing anywhere emits it. Name fewer to prune more;
+  * the sources are globs relative to the root, `**` recursive; default: every `.py` file under the root (hidden names aside), tests included, so a
+    pack whose code lives outside its scripts folder is read whole and a code is pruned only when nothing anywhere emits it. Name fewer to prune more.
+    The files are found by a walk that enters each real folder once (two links back to the root are not a loop that hangs), follows links to folders,
+    and skips, with a line on stderr, a virtual environment (a folder holding `pyvenv.cfg`), `node_modules` and `site-packages`: a folder that is only
+    *named* `venv` is the pack's own code and is read. A folder reached by two names is read under the first;
   * the scan must be trustworthy or nothing is deleted (exit 2): a source that matches no file (a mistyped folder would make every code look unemitted), a
     source file that cannot be read or does not parse (a byte-order mark or a coding cookie too: the kit's own scan reads plain UTF-8), or a `msg()` call
     whose code is not a literal is refused. Folders named `venv`, `node_modules` and `site-packages` are not read (nothing in them emits the pack's
@@ -30,8 +33,9 @@ Test: kit/tests/test_prune_codes.py.
 from __future__ import annotations
 
 import argparse
-import glob
 import os
+import posixpath
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -42,24 +46,87 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from kit import config, messages  # noqa: E402
 
 
-SKIP_DIRS = frozenset({"venv", "node_modules", "site-packages"})
+SKIP_DIRS = frozenset({"node_modules", "site-packages"})            # dependencies, by name; a virtual environment is told by its pyvenv.cfg
 
 
 class Refused(Exception):
     """The scan cannot be trusted, so nothing is deleted; the message says why."""
 
 
+def py_files(root: Path) -> list[str]:
+    """Every .py file under `root` as a posix path relative to it: each real folder is entered once (a link back to a parent is not followed again),
+    hidden names and __pycache__ are passed over silently, and a virtual environment, `node_modules` and `site-packages` are skipped with a line on stderr."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for here, dirs, files in os.walk(root, followlinks=True):
+        real = os.path.realpath(here)
+        if real in seen:
+            dirs[:] = []
+            continue
+        seen.add(real)
+        keep = []
+        for d in sorted(dirs, key=lambda d: (os.path.islink(os.path.join(here, d)), d)):          # a real folder before a link to one
+            full = os.path.join(here, d)
+            if d.startswith(".") or d == "__pycache__":
+                continue
+            if d in SKIP_DIRS or os.path.isfile(os.path.join(full, "pyvenv.cfg")):
+                print(f"note: {Path(full).relative_to(root).as_posix()}/ is not read (a virtual environment or dependencies)", file=sys.stderr)
+                continue
+            keep.append(d)
+        dirs[:] = keep
+        out += [Path(os.path.join(here, f)).relative_to(root).as_posix() for f in files if f.endswith(".py") and not f.startswith(".") and os.path.isfile(os.path.join(here, f))]
+    return sorted(out)
+
+
+def glob_re(pattern: str) -> re.Pattern:
+    """The regular expression of a source glob: `*` and `?` stay inside a folder, `**/` is any number of folders, `[a-c]` and `[!a-c]` are sets."""
+    out, i = [], 0
+    while i < len(pattern):
+        c = pattern[i]
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif c == "*":
+            out.append("[^/]*")
+            i += 1
+        elif c == "?":
+            out.append("[^/]")
+            i += 1
+        elif c == "[" and pattern.find("]", i + 2) != -1:
+            j = pattern.find("]", i + 2)
+            body = pattern[i + 1:j]
+            neg = body.startswith("!")
+            out.append("[" + ("^" if neg else "") + (body[1:] if neg else body).replace("\\", "\\\\") + "]")
+            i = j + 1
+        else:
+            out.append(re.escape(c))
+            i += 1
+    return re.compile("".join(out) + r"\Z")
+
+
 def sources_read(root: Path, sources: list[str]) -> list[Path]:
-    """The .py files the sources name. A glob that matches no file is refused (a mistyped folder would otherwise read nothing and so find every code
-    unemitted), and so is a root whose own name holds a glob character that is not escaped."""
-    found: list[Path] = []
+    """The .py files the sources name. A source that matches no file is refused (a mistyped folder would otherwise read nothing and so find every code
+    unemitted), and so is one that names a place outside the root."""
+    files = py_files(root)
+    found: list[str] = []
     for s in sources:
-        hits = sorted(Path(p) for p in glob.glob(str(Path(glob.escape(str(root))) / s), recursive=True)
-                      if p.endswith(".py") and Path(p).is_file() and not SKIP_DIRS & set(Path(p).relative_to(root).parts))
+        rel = posixpath.normpath(s.replace("\\", "/"))
+        if posixpath.isabs(rel):
+            try:
+                rel = Path(rel).relative_to(root).as_posix()
+            except ValueError:
+                raise Refused(f"the source {s!r} is outside {root}: nothing is pruned (the scan reads the skill pack)") from None
+        if rel == ".." or rel.startswith("../"):
+            raise Refused(f"the source {s!r} leaves {root}: nothing is pruned (the scan reads the skill pack)")
+        rx = glob_re(rel)
+        hits = [f for f in files if rx.match(f)]
         if not hits:
             raise Refused(f"the source {s!r} matches no .py file under {root}: nothing is pruned (a mistyped folder would make every code look unemitted)")
         found += hits
-    return sorted(set(found))
+    return sorted({root / f for f in found})
 
 
 def unemitted(root: Path, sources: list[str]) -> dict[str, list[str]]:
@@ -102,6 +169,8 @@ def write_whole(path: Path, data: bytes) -> None:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
         os.chmod(name, mode)
         os.replace(name, path)
     except BaseException:
@@ -122,17 +191,18 @@ def prune(root: Path, sources: list[str], *, dry_run: bool = False) -> dict[str,
             raw = path.read_bytes().decode("utf-8")
         except FileNotFoundError:                                       # another run took the fragment out first
             continue
-        eol = "\r\n" if "\r\n" in raw else "\n"
-        lines = raw.replace("\r\n", "\n").split("\n")
+        lines = raw.split("\n")                                          # a line keeps its own ending: a \r stays on the line it ended
         kept = [ln for i, ln in enumerate(lines) if i == 0 or ln.split("\t")[0].strip() not in gone]
         body = [ln for ln in kept[1:] if ln.strip()]
         try:
             if not body and path.parent.name == messages.SKILL_PACK_FRAGMENTS and kept[0].split("\t")[0].strip() == "code":
                 path.unlink(missing_ok=True)
             else:
-                write_whole(path, eol.join(kept).encode("utf-8"))
+                write_whole(path, "\n".join(kept).encode("utf-8"))
         except OSError as e:
             raise Refused(f"{path} cannot be written ({e.strerror}); files before it are done, run again once it can") from None
+    if found:
+        messages._clear()                                               # the registry in memory is the old one
     return found
 
 
@@ -147,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     sources = a.sources or ["**/*.py"]
     try:
         found = prune(root, sources, dry_run=a.dry_run)
-    except Refused as e:
+    except (Refused, ValueError) as e:                                  # ValueError: a registry that is not valid (a duplicate code, a file that is not UTF-8)
         print(f"error: {e}", file=sys.stderr)
         return 2
     for file, codes in sorted(found.items()):

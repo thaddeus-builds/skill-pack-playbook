@@ -100,6 +100,8 @@ import tomllib
 from pathlib import Path
 
 PLAYBOOK = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PLAYBOOK))
+from kit.testing.run_tests import GIT_LOCAL_ENV  # noqa: E402                the variables that name one repository (a hook or `git rebase --exec` hands them down)
 SKIP_DIRS = {"tests", "__pycache__"}
 SKIP_FILES = {"MANIFEST.sha256", ".DS_Store"}
 # The adapter files a skill pack does not copy (hosts/zylos/README.md), and the
@@ -127,8 +129,14 @@ def blob_sha(data: bytes) -> str:
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
+def clean_env(extra: dict | None = None) -> dict:
+    """Our environment without the variables that name one repository (GIT_DIR and the rest): every git call here names its folder, and a hook that
+    runs this tool would otherwise point them all at the repository that is pushing; plus `extra`."""
+    return {**{k: v for k, v in os.environ.items() if k not in GIT_LOCAL_ENV}, **(extra or {})}
+
+
 def git(playbook: Path, *args: str) -> str | None:
-    r = subprocess.run(["git", "-C", str(playbook), *args], capture_output=True, text=True)
+    r = subprocess.run(["git", "-C", str(playbook), *args], capture_output=True, text=True, env=clean_env())
     return r.stdout if r.returncode == 0 else None
 
 
@@ -202,19 +210,19 @@ def git_env(cwd: Path | None = None) -> dict[str, str]:
     is left alone when the caller has one of their own (`GIT_SSH_COMMAND`, `GIT_SSH`, or `core.sshCommand` as `cwd` sees it): theirs may name a key or a port."""
     env = {k: v for k, v in NETWORK_ENV.items() if k not in os.environ}
     if not any(k in os.environ for k in ("GIT_SSH_COMMAND", "GIT_SSH")):
-        own = subprocess.run(["git", "config", "--get", "core.sshCommand"], cwd=cwd, capture_output=True, text=True, errors="replace")
+        own = subprocess.run(["git", "config", "--get", "core.sshCommand"], cwd=cwd, capture_output=True, text=True, errors="replace", env=clean_env())
         if not own.stdout.strip():
             env["GIT_SSH_COMMAND"] = SSH_COMMAND
     return env
 
 
-SECRET_QUERY = re.compile(r"([?&][^=&\s]*(?:token|key|secret|pass|auth|sig)[^=&\s]*=)[^&\s]+", re.I)
+SECRET_QUERY = re.compile(r"([?&](?:[^=&\s]*(?:token|key|secret|pass|pwd|auth|sig|code|jwt|bearer)[^=&\s]*|t)=)[^&\s]+", re.I)
 
 
 def hide_credentials(text: str) -> str:
-    """`text` (an address, or a line a git error printed) without the user and password of an address and without the value of a query parameter that
-    looks like a secret (`?token=...`)."""
-    return SECRET_QUERY.sub(r"\1<hidden>", re.sub(r"(://)[^/\s]*@", r"\1", text))
+    """`text` (an address, or a line a git error printed) without the user and password of an address, the value of a query parameter that looks like a
+    secret (`?token=...`) and the fragment of an address."""
+    return SECRET_QUERY.sub(r"\1<hidden>", re.sub(r"(://[^\s#]*)#\S*", r"\1", re.sub(r"(://)[^/\s]*@", r"\1", text)))
 
 
 def is_network_address(address: str) -> bool:
@@ -246,6 +254,23 @@ def inside(out: Path, pack: Path) -> bool:
         here = here.parent
 
 
+COPIED_CONFIG = re.compile(r"^(user\.|core\.sshcommand$|credential\.|http\.|url\.)")
+
+
+def copy_config(pack: Path, dest: Path) -> None:
+    """What the checkout's own git configuration gives a command and the clone would lack: who commits (as the checkout sees it, includes and the global
+    file too), the ssh command, credential helpers, http settings and address rewrites. Copied into the clone's own config; nothing is printed."""
+    for key in ("user.name", "user.email"):
+        value = run(pack, "git", "config", "--get", key).stdout.strip()
+        if value:
+            run(dest, "git", "config", "--local", key, value)
+    listed = run(pack, "git", "config", "--local", "-z", "--list").stdout
+    for entry in listed.split("\0"):
+        key, _, value = entry.partition("\n")
+        if COPIED_CONFIG.match(key.lower()) and not key.lower().startswith("user."):
+            run(dest, "git", "config", "--local", "--add", key, value)
+
+
 def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = "origin") -> dict:
     """A trial of `update` before a train, on a clone: the pack's checkout is only read. The clone has the checkout's remotes under the checkout's own
     names (so `update` sees another remote that is ahead, whichever one `remote` names), the remote-tracking refs the checkout recorded, its own default
@@ -253,7 +278,6 @@ def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = 
     Cloned into `out/<folder>`, which must not exist; a trial that cannot start, or is interrupted, leaves no folder behind.
     {pack, state, text} as `update` returns it."""
     name = pack.name
-    env = git_env(pack)
 
     def refused(text: str) -> dict:
         return {"pack": name, "state": "refused", "text": text}
@@ -263,6 +287,8 @@ def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = 
         return refused(f"the checkout has no remote named {remote}")
     shown = hide_credentials(address)
     dest = out / name
+    worktrees = out / f"{name}_worktrees"
+    had_worktrees = worktrees.exists()                                  # `update` makes it in the clone's neighbourhood; an interrupted trial must not leave it
     try:
         if out.exists() and not out.is_dir():
             return refused(f"{out} is a file; --out names a folder")
@@ -281,6 +307,7 @@ def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = 
 
     def build() -> None:
         need(run(out, "git", "clone", "-q", "--no-hardlinks", str(pack), str(dest), timeout=FETCH_S), "cannot clone the checkout")
+        copy_config(pack, dest)
         branch = default_branch(pack, remote)
         run(dest, "git", "checkout", "-q", "--detach")
         for b in run(dest, "git", "for-each-ref", "--format=%(refname:short)", "refs/heads").stdout.split():
@@ -298,6 +325,7 @@ def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = 
         need(run(dest, "git", "fetch", "-q", str(pack), "+refs/remotes/*:refs/remotes/*"), "cannot copy the checkout's remote-tracking refs")
         for other in run(dest, "git", "remote").stdout.split():
             run(dest, "git", "remote", "set-head", other, "-d")
+        env = git_env(dest)
         for attempt in range(3):                                       # a remote that drops a connection is tried again
             fetched = run(dest, "git", "fetch", "-q", remote, env=env, timeout=FETCH_S)
             if fetched.returncode == 0:
@@ -312,8 +340,10 @@ def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = 
     except Stop as e:
         shutil.rmtree(dest, ignore_errors=True)
         return refused(str(e))
-    except BaseException:                                                # Ctrl-C in the middle of a clone must not poison the next trial
+    except BaseException:                                                # Ctrl-C in the middle of a clone or of the suite must not poison the next trial
         shutil.rmtree(dest, ignore_errors=True)
+        if not had_worktrees:
+            shutil.rmtree(worktrees, ignore_errors=True)
         raise
 
 
@@ -451,7 +481,7 @@ UNRELEASED = re.compile(r"^## \[Unreleased\]", re.I | re.M)
 def run(cwd: Path, *cmd: str, env: dict | None = None, timeout: float | None = None) -> subprocess.CompletedProcess:
     try:
         return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, errors="replace",
-                              env={**os.environ, **(env or {})}, timeout=timeout)
+                              env=clean_env(env), timeout=timeout)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(cmd, 124, "", f"timed out after {int(timeout or 0)} s")
 
@@ -549,10 +579,13 @@ def export(pack: Path, out: Path, remote: str = "origin") -> dict:
     dest = out / pack.name
     if dest.exists():
         return done("refused", f"{dest} exists; remove it or choose another --out")
-    tar = subprocess.run(["git", "-C", str(pack), "archive", "--format=tar", f"refs/remotes/{base}"], capture_output=True)
+    tar = subprocess.run(["git", "-C", str(pack), "archive", "--format=tar", f"refs/remotes/{base}"], capture_output=True, env=clean_env())
     if tar.returncode != 0:
         return done("refused", f"cannot archive {base}: {tar.stderr.decode(errors='replace').strip()[:120]}")
-    dest.mkdir(parents=True)
+    try:
+        dest.mkdir(parents=True)
+    except OSError as e:
+        return done("refused", f"cannot use --out {out.name[:60]}: {e.strerror}")
     with tarfile.open(fileobj=io.BytesIO(tar.stdout), mode="r:") as tf:
         tf.extractall(dest, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))
     sha = run(pack, "git", "rev-parse", "--short", f"refs/remotes/{base}").stdout.strip()
