@@ -309,7 +309,7 @@ def test_a_suite_does_not_inherit_the_repository_a_git_hook_points_at():
         assert code == 0, out
 
 
-def test_the_list_of_git_variables_is_the_one_git_gives_when_git_is_here():
+def test_the_list_of_git_variables_covers_the_ones_git_gives_when_git_is_here():
     try:
         r = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True,
                            env={k: v for k, v in os.environ.items() if k not in run_all.GIT_LOCAL_ENV})
@@ -317,7 +317,7 @@ def test_the_list_of_git_variables_is_the_one_git_gives_when_git_is_here():
         return                                                  # no git here: nothing to compare with
     if r.returncode != 0 or not r.stdout.split():
         return
-    assert sorted(r.stdout.split()) == sorted(run_all.GIT_LOCAL_ENV), (sorted(set(r.stdout.split()) ^ set(run_all.GIT_LOCAL_ENV)))
+    assert set(r.stdout.split()) <= set(run_all.GIT_LOCAL_ENV), sorted(set(r.stdout.split()) - set(run_all.GIT_LOCAL_ENV))   # a newer git may list more: add them
 
 
 NO_NAME = {"USER": None, "LOGNAME": None, "LNAME": None, "USERNAME": None}     # what getpass.getuser() reads, all unset
@@ -410,7 +410,7 @@ def test_the_zylos_suite_fails_when_node_is_not_on_path():
     assert len(zylos) == 1 and "node" in zylos[0].needs, zylos
     with _t.tmpdir() as empty, env(PATH=empty):
         code, out = go(REPO, run_all.SUITES, "zylos", not_suites=run_all.NOT_SUITES)
-    assert code == 1 and "required tool not on PATH: node" in line_of(out, "zylos"), out
+    assert code == 1 and "required tool not on PATH:" in line_of(out, "zylos") and "node" in line_of(out, "zylos"), out      # git is named too: the runner asks it
     assert out.splitlines()[-1].startswith("RESULT: 0 passed, 1 failed"), out
 
 
@@ -559,7 +559,7 @@ WANTS = {"node": re.compile(r"""which\(\s*["']node["']\s*\)"""),                
 
 def test_the_real_list_keeps_the_zylos_suite_and_names_the_tools_the_tests_need():
     by = {s.name: s for s in run_all.SUITES}
-    assert by["zylos"].run == "hosts/zylos/tests/run.py" and by["zylos"].needs == ("node",)   # the host every skill pack is adapted to
+    assert by["zylos"].run == "hosts/zylos/tests/run.py" and by["zylos"].needs == ("git", "node")   # the host every skill pack is adapted to
     assert os.path.isfile(os.path.join(REPO, "hosts", "zylos", "tests", "run.py"))
     assert all(s.covers for s in run_all.SUITES)
     for name, tool in (("console", "node"), ("workflows", "node"), ("scaffold", "node"), ("kit", "git"), ("scaffold", "git"), ("golden", "git"),

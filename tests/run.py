@@ -30,6 +30,18 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULT_RE = re.compile(r"^RESULT: (\d+) passed$", re.M)
 TIMEOUT = 120
+
+
+def git_local_names() -> set[str]:
+    """The variables git says name one repository (`git rev-parse --local-env-vars`): a pre-push hook hands them down, and a test's own `git init` would
+    then act on the checkout that was pushing. Asked of git, so the list is never out of date; none when there is no git."""
+    try:
+        return set(subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split())
+    except OSError:
+        return set()
+
+
+GIT_LOCAL = git_local_names()
 WORKERS = 4
 
 
@@ -37,7 +49,7 @@ def run_one(path: str) -> dict:
     """{name, ok, secs, count, why, out}: one test file, one process."""
     name = os.path.basename(path)
     t0 = time.monotonic()
-    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    env = {**{k: v for k, v in os.environ.items() if k not in GIT_LOCAL}, "PYTHONDONTWRITEBYTECODE": "1"}
     try:
         p = subprocess.run([sys.executable, path], capture_output=True,
                            text=True, errors="replace", timeout=TIMEOUT,
