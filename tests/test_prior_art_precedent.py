@@ -53,5 +53,46 @@ def test_the_owners_design_question_is_a_trigger_and_the_quick_scan_reads_the_si
     assert "tools/research.py" not in section(text.replace("`python3 tools/research.py` over the sibling skill packs (the same", "x (the same"), QUICK)
 
 
+SKILL = "skills/research/SKILL.md"
+DESCRIPTION_LIMIT = 1536      # Claude Code cuts a skill's description (with when_to_use) at this many characters
+TRIGGERS = ("research", "prior art", "how professional teams", "调研", "看看业界怎么做", "Do NOT use")
+STEPS = ("docs/research/README.md", "tools/research.py", "A design question from the owner", "[documented]", "[inference]",
+         "what could not be read", "docs/research/YYYY-MM-DD-topic.md", "templates/research-index.md", "templates/design-first.md")
+LINKS = ("../../templates/prior-art-scan.md", "../../templates/research-index.md", "../../templates/design-first.md")
+
+
+def skill_problems(text: str) -> list[str]:
+    head, _, body = text.removeprefix("---\n").partition("\n---\n")
+    fields = {k: v for k, _, v in (ln.partition(": ") for ln in head.splitlines() if ln and not ln.startswith(" "))}
+    desc = fields.get("description", "")
+    out = []
+    if fields.get("name") != "research":
+        out.append("name")
+    out += [f"description lacks {w!r}" for w in TRIGGERS if w not in desc]
+    if len(desc) > DESCRIPTION_LIMIT:
+        out.append(f"description is {len(desc)} characters")
+    out += [f"body lacks {w!r}" for w in STEPS if w not in body]
+    out += [f"link {w}" for w in LINKS if f"]({w})" not in body or not os.path.exists(os.path.join(ROOT, "skills", "research", w))]
+    return out
+
+
+ROOT = os.path.abspath(os.path.join(HERE, ".."))
+
+
+def test_the_research_skill_has_a_trigger_description_and_the_short_path():
+    text = doc(SKILL)
+    assert skill_problems(text) == [], skill_problems(text)
+    lines = text.split("\n")
+    at = next(n for n, ln in enumerate(lines) if ln.startswith("description: "))
+    for w in TRIGGERS:                                       # each broken copy fails on exactly its own word
+        broken = "\n".join(lines[:at] + [lines[at].replace(w, "x")] + lines[at + 1:])
+        assert skill_problems(broken) == [f"description lacks {w!r}"], w
+    assert skill_problems(text.replace("name: research", "name: x")) == ["name"]
+    assert skill_problems(text.replace("tools/research.py", "x")) == ["body lacks 'tools/research.py'"]
+    assert skill_problems(text.replace("](../../templates/design-first.md)", "](../../templates/nope.md)")) == ["link ../../templates/design-first.md"]
+    long = text.replace("Do NOT use for", "Do NOT use " + "x" * DESCRIPTION_LIMIT + " for")
+    assert any(p.startswith("description is") for p in skill_problems(long))
+
+
 if __name__ == "__main__":
     _t.main(globals())
