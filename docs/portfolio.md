@@ -73,7 +73,7 @@ What a repository is and where it sits in the layers. Whether a client has used 
 | video-ads-skill-pack | `vads` | Operator, paid push: 千川, 腾讯 (Meta leaves it, see below) | earned | R43 rewritten; engines to `ads-core` and `creative` (its X63), then the Meta side to `meta-ads` |
 | ecommerce-seo-skill-pack | `seo` | Operator, organic pull, Google organic | earned | Owns website content fields; reads `intel/1` for new demand work |
 | ecommerce-seo-skill-pack-plugins | — | Distribution of `seo` (web audit, app, MCP) | distribution of `seo` | None |
-| seo-programmatic-skill-pack | `pseo` | Operator, organic pull, page sets | shell (no row in the table yet) | Reads its page list from `seo` (its S07) |
+| seo-programmatic-skill-pack | `pseo` | Operator, organic pull, page sets | shell | Reads its page list from `seo` (its S07) |
 | seo-tools-harness | `seoh` | Operator, organic pull, free tools | frozen | Demand checks move to `search-intel` when it next changes |
 | geo-china-skill-pack | `geo` | Operator, organic pull, AI answers (China) | earned | Global AI answers become the same pack with a market, or a sibling (open, not urgent) |
 | koc-script-skill-pack | `kos` | Operator, earned push, creator briefs | built | Its claims check moves to the kit's `compliance` |
@@ -87,7 +87,7 @@ What a repository is and where it sits in the layers. Whether a client has used 
 | search-intel-skill-pack | `intel` | Truth: demand and competitors | shell | Publishes `intel/1` for paid and organic search |
 | adcut-skill-pack | `adcut` | Maker, video | earned | Writes `ads.creatives/1`, reads `ads.results/1` from any operator; the insight matrix is the messaging source (open decision 3) |
 | ad-copy-skill-pack | `adcopy` | Maker, text | built | Publishes `copy.proposals/1`; `gads`, `mads` and `vads` read its placement checks instead of building their own |
-| product-keyframe-video | `keyframe` | Maker, product images | built | Hands frames with `ads.creatives/1` when it has a consumer |
+| product-keyframe-video | `keyframe` | Maker, product images, then the storyboard and intro that follow | built | The product in every frame is a real cutout and a model draws only the empty place (its M3, 2026-10-31); hands frames with `ads.creatives/1` when it has a consumer; its intro video would be a `filmkit.film/1` spec |
 | proofcut-skill-pack | `proof` | Maker, video from the client's own footage | shell | The first client class is B2B exporters (solution D): a story spine, facts that carry their source quote, a release step for people on camera, TikTok first. Renders through `filmkit`; adcut is untouched |
 | cloud-gpu-skill-pack | `cloudgpu` | Platform, GPU jobs | library | The one provider behind the kit's `generation` for self-hosted runs |
 | filmkit | `filmkit` | Platform, render | library | The engine under `proofcut`: one JSON film spec (`filmkit.film/1`) in, a finished film out, with static checks first. Needs numpy, Pillow, scipy and ffmpeg, so a pack runs it as a program from a vendored copy; adcut keeps its own composer until a second maker needs this one |
