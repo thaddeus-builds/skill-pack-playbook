@@ -34,7 +34,7 @@ Why: on 2026-10-26 the kit had been bumped 52 times in four weeks while the skil
 Every pull request that matters to a skill pack adds its entry at the top of `[Unreleased]`, so two open pull requests always touch the same lines. `.gitattributes` sets `CHANGELOG.md merge=union`: git keeps both sides' lines, in the order of the merge, on `git merge` and `git rebase`, with no conflict to resolve by hand. An entry is two lines (the text and its `- Skill packs:` line) added together, so the pairs stay whole.
 
 - **GitHub's merge button does not read the setting.** A pull request may show "conflicts" there; rebase it on main locally (the setting applies) and push.
-- **After the release pull request, look at every open pull request.** The release moves the `[Unreleased]` heading below the new version's; an entry rebased over it lands under the new version without a conflict. Move it back to `[Unreleased]` before the pull request merges.
+- **After the release pull request, look at every open pull request.** The release moves the `[Unreleased]` heading below the new version's; an entry rebased over it lands under the new version without a conflict. Move it back to `[Unreleased]` before the pull request merges; `tests/test_changelog.py` fails on it (a released version's section differs from the merge base's).
 - `tests/test_changelog.py` merges and rebases two such branches and checks both pairs survive.
 
 ## Retiring a pack
@@ -55,7 +55,7 @@ No test enforces this list: the first pack that follows it corrects it (issue #2
 - **Start of a session:** read [ROADMAP.md](../ROADMAP.md), fetch every remote, look at the open pull requests, do the one turn "Now" names.
 - **End of a session:** tests green, everything pushed, ROADMAP updated (done rows with a reference, the next turn in Now, what needs the owner as a Waiting row). A session ends with one screen for the owner: what to look at, what the agent needs, what the next session does.
 - **Checking a pull request** (the agent does this for any pull request, its own or another's): one concern; a test that fails without it; no channel code in `kit/`, `console/`, `build/`, `scaffold/`; the version, manifest and changelog if vendored bytes changed; merges cleanly with main; the whole suite passes on the merged result, not only the branch.
-- **Once a month, or before a decision about a module:** `python3 tools/consumers.py SKILL_PACK_PATH...` on each skill pack's main branch says which kit modules its own code imports; `python3 tools/fleet.py status SKILL_PACK_PATH...` says which kit version each holds and whether anyone edited a vendored copy (the day after a train, run `update`, not `status`). A module nobody imports for two minor versions is deleted, unless the owner parks it in the ROADMAP.
+- **Once a month, or before a decision about a module:** first `python3 tools/fleet.py export SKILL_PACK_PATH... --out DIR`, because a checkout is often behind its remote (2026-10-30: one was 110 commits behind and showed kit 0.41.0 where its main holds 0.47.0); then `python3 tools/consumers.py DIR/PACK...` on the exported main branches says which kit modules its own code imports; `python3 tools/fleet.py status DIR/PACK...` says which kit version each holds and whether anyone edited a vendored copy (the day after a train, run `update`, not `status`). A module nobody imports for two minor versions is deleted, unless the owner parks it in the ROADMAP.
 
 ## Access: what to give the agent
 

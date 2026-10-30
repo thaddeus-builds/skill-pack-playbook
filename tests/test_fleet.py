@@ -147,6 +147,52 @@ def test_a_copy_equal_to_the_playbook_is_in_sync():
             assert copy["verdict"] == "in sync" and copy["files"] == [], copy
 
 
+def test_a_file_that_only_a_merge_commit_ever_had_is_older_not_local():
+    """Seen 2026-10-30: nine packs on kit 0.44.0 were all called `local` in README.md, VERSION and packs.tsv, because
+    the playbook had resolved a conflict in a merge commit and `git log --raw` shows no diff for a merge."""
+    with _t.tmpdir() as tmp:
+        pb, h = setup(Path(tmp))
+        sh(pb, "git", "checkout", "-q", "-b", "side")
+        write(pb, {"kit/a.py": "A = 'side'\n"})
+        sh(pb, "git", "commit", "-qam", "side")
+        sh(pb, "git", "checkout", "-q", "-")
+        write(pb, {"kit/a.py": "A = 'main'\n"})
+        sh(pb, "git", "commit", "-qam", "main")
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        merged = subprocess.run(["git", "merge", "-q", "side"], cwd=pb, capture_output=True, env=env)
+        assert merged.returncode != 0, "the merge must conflict, or the test proves nothing"
+        write(pb, {"kit/a.py": "A = 'resolved'\n"})
+        sh(pb, "git", "add", "-A")
+        sh(pb, "git", "commit", "-qm", "merge side")
+        write(pb, {"kit/a.py": "A = 3\n"})
+        sh(pb, "git", "commit", "-qam", "moved on")
+        write(h, {"scripts/kit/a.py": "A = 'resolved'\n"})
+        r = fleet(pb, "status", str(h), "--json")
+        [copy] = [c for c in json.loads(r.stdout)["skill_packs"][0]["copies"] if c["part"] == "kit"]
+        assert ("a.py", "older") in [(f["file"], f["state"]) for f in copy["files"]], copy
+        assert "local changes" not in copy["verdict"], copy
+
+
+def test_a_pack_the_skill_pack_does_not_take_is_not_missing():
+    """Seen 2026-10-30: sdr and ecommerce-seo took four kit packs and were told 80 of 84 files were missing or changed."""
+    real = ROOT / "kit" / "tools" / "packs.py"
+    with _t.tmpdir() as tmp:
+        pb, h = setup(Path(tmp))
+        write(pb, {"kit/tools/packs.py": real.read_text(),
+                   "kit/packs.tsv": "module\tpack\tnote\na\tbase\tx\nb\textra\ty\n"})
+        sh(pb, "git", "add", "-A")
+        sh(pb, "git", "commit", "-qm", "a table of packs")
+
+        def states(toml: str) -> dict:
+            write(h, {"skill-pack.toml": '[skill_pack]\nname = "acme"\nscripts_dir = "scripts"\n' + toml})
+            [kit] = [c for c in json.loads(fleet(pb, "status", str(h), "--json").stdout)["skill_packs"][0]["copies"] if c["part"] == "kit"]
+            return {f["file"]: f["state"] for f in kit["files"]}
+        assert states("[kit]\npacks = []\n").get("b.py") is None, "b.py belongs to `extra`, which this pack does not take"
+        assert states("[kit]\npacks = [\"extra\"]\n").get("b.py") == "missing"
+        assert states("").get("b.py") == "missing", "no `[kit] packs` means every pack"
+        assert states("[kit]\npacks = [\"nonesuch\"]\n").get("b.py") == "missing", "a toml the tool cannot read is not guessed at"
+
+
 def test_diff_shows_the_skill_pack_copy_against_the_playbook():
     with _t.tmpdir() as tmp:
         pb, h = setup(Path(tmp))
@@ -284,6 +330,50 @@ def test_update_refuses_a_stale_remote_and_takes_the_real_one_with_remote():
         assert r.returncode == 0 and "cut from github/trunk at " in r.stdout, r.stdout + r.stderr
         assert git(work, "rev-parse", "HEAD~1") == real, "the re-vendor sits on the real trunk"
         assert (work / "NOTES.md").is_file()
+
+
+def test_update_refuses_when_another_remote_is_ahead_of_the_one_it_would_cut_from():
+    """The migration case (2026-10-30): sdr's `origin` was the old server, 63 commits behind its new one, and the checkout had no local trunk to show it."""
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        real_remote(pack, Path(tmp))
+        git(pack, "branch", "-f", "trunk", "origin/trunk")      # the checkout itself holds nothing the remotes lack
+        r = update(pb, str(pack))
+        assert r.returncode == 1 and "the remote github has 1 commit(s) on trunk that origin/trunk does not" in r.stdout, r.stdout + r.stderr
+        assert not (pack.parent / "acme_worktrees").exists() and git(pack, "branch", "--list", "claude/kit-0.2.0") == "", "nothing is left behind"
+        ok = update(pb, str(pack), "--remote", "github")
+        assert ok.returncode == 0 and "cut from github/trunk" in ok.stdout, ok.stdout + ok.stderr
+
+
+def test_export_gives_the_remotes_default_branch_not_the_checkout():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        other = Path(tmp) / "other"           # the remote moves on; the checkout (a feature branch) does not
+        git(Path(tmp), "clone", "-q", str(Path(tmp) / "origin.git"), str(other))
+        (other / "NEWER.md").write_text("pushed to the remote only\n")
+        git(other, "add", "-A")
+        git(other, "commit", "-qm", "newer")
+        git(other, "push", "-q", "origin", "trunk")
+        out = Path(tmp) / "snap"
+        r = subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "export", str(pack), "--out", str(out)],
+                           capture_output=True, text=True)
+        assert r.returncode == 0 and "origin/trunk at" in r.stdout, r.stdout + r.stderr
+        assert (out / "acme" / "NEWER.md").read_text() == "pushed to the remote only\n", "the remote's file is in the export"
+        assert (out / "acme" / "scripts" / "kit" / "VERSION").is_file() and not (pack / "NEWER.md").exists(), "the checkout is as it was"
+        assert git(pack, "branch", "--show-current") == "feature" and git(pack, "status", "--porcelain") == ""
+        again = subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "export", str(pack), "--out", str(out)],
+                               capture_output=True, text=True)
+        assert again.returncode == 1 and "exists" in again.stdout, again.stdout
+        git(pack, "remote", "set-head", "origin", "trunk")     # what a clone records
+        git(pack, "remote", "set-url", "origin", str(Path(tmp) / "nowhere.git"))   # the server does not answer: the branch recorded at the last fetch is used
+        down = subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "export", str(pack), "--out", str(Path(tmp) / "snap0")],
+                              capture_output=True, text=True)
+        assert down.returncode == 0 and "origin/trunk at" in down.stdout and "fetch failed" in down.stdout, down.stdout + down.stderr
+        git(pack, "remote", "set-url", "origin", str(Path(tmp) / "origin.git"))
+        real_remote(pack, Path(tmp))          # the home moves to a second remote: the export says it is not the real main
+        warned = subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "export", str(pack), "--out", str(Path(tmp) / "snap2")],
+                                capture_output=True, text=True)
+        assert "WARNING: the remote github has" in warned.stdout, warned.stdout
 
 
 def test_update_with_a_remote_the_pack_does_not_have_is_refused_by_name():
