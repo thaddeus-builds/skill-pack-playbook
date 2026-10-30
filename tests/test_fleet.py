@@ -19,6 +19,7 @@ import hashlib
 import importlib.util
 import json
 import os
+from unittest import mock
 import shlex
 import shutil
 import subprocess
@@ -529,7 +530,7 @@ def test_rehearse_tries_the_update_on_a_clone_and_leaves_the_checkout_alone():
         assert git(out / "acme", "remote", "get-url", "origin") == git(pack, "remote", "get-url", "origin"), "the clone fetches the pack's own remote"
 
 
-def test_rehearse_takes_the_remote_default_branch_not_the_checkouts_local_one():
+def test_rehearse_takes_the_remote_default_branch_and_refuses_where_update_refuses():
     with _t.tmpdir() as tmp:
         pb, pack = make_pack(Path(tmp))
         other = Path(tmp) / "other"                     # someone pushes to the real trunk after the checkout last looked
@@ -539,13 +540,80 @@ def test_rehearse_takes_the_remote_default_branch_not_the_checkouts_local_one():
         git(other, "commit", "-qm", "pushed since")
         git(other, "push", "-q", "origin", "trunk")
         newest = git(other, "rev-parse", "HEAD")
-        git(pack, "checkout", "-q", "trunk")           # an unpushed local commit on the checkout's own trunk must not make the trial refuse
-        (pack / "LOCAL.md").write_text("not pushed\n")
-        git(pack, "add", "-A")
-        git(pack, "commit", "-qm", "local only")
         r = rehearse(pb, Path(tmp) / "trial", str(pack))
         assert r.returncode == 0, r.stdout + r.stderr
         assert git(Path(tmp) / "trial" / "acme_worktrees" / "kit-0.2.0", "rev-parse", "HEAD~1") == newest, "cut from the remote's newest trunk"
+        git(pack, "checkout", "-q", "trunk")           # an unpushed local commit on the checkout's own trunk, while it sits on another branch:
+        (pack / "LOCAL.md").write_text("not pushed\n")      # the train refuses it, so the trial does
+        git(pack, "add", "-A")
+        git(pack, "commit", "-qm", "local only")
+        git(pack, "checkout", "-q", "feature")
+        real = update(pb, str(pack))
+        trial = rehearse(pb, Path(tmp) / "trial2", str(pack))
+        assert real.returncode == 1 and "has commits that origin/trunk does not" in real.stdout, real.stdout
+        assert trial.returncode == 1 and "has commits that origin/trunk does not" in trial.stdout, trial.stdout + trial.stderr
+
+
+def test_rehearse_sees_a_remote_that_is_ahead_like_update_does():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        real_remote(pack, Path(tmp))                   # github/trunk is ahead of origin/trunk, as the checkout recorded it
+        git(pack, "branch", "-f", "trunk", "origin/trunk")   # and the checkout's own trunk is back where origin has it, so only the other remote differs
+        real = update(pb, str(pack))
+        trial = rehearse(pb, Path(tmp) / "trial", str(pack))
+        assert real.returncode == 1 and "the remote github has 1 commit(s) on trunk that origin/trunk does not" in real.stdout, real.stdout
+        assert trial.returncode == 1 and "the remote github has 1 commit(s) on trunk that origin/trunk does not" in trial.stdout, trial.stdout + trial.stderr
+        ok = rehearse(pb, Path(tmp) / "trial3", str(pack), "--remote", "github")
+        assert ok.returncode == 0, ok.stdout + ok.stderr
+
+
+def test_rehearse_leaves_nothing_in_the_checkout_and_keeps_to_its_own_folder():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        before = (git(pack, "status", "--porcelain"), git(pack, "branch", "--list"), (pack / ".git" / "config").read_text())
+        r = rehearse(pb, pack / "trial", str(pack))
+        assert r.returncode == 2 and "inside the skill pack" in r.stderr, r.stdout + r.stderr
+        assert not (pack / "trial").exists() and before == (git(pack, "status", "--porcelain"), git(pack, "branch", "--list"), (pack / ".git" / "config").read_text())
+        a_file = Path(tmp) / "afile"
+        a_file.write_text("x")
+        r = rehearse(pb, a_file, str(pack))
+        assert r.returncode == 1 and "is a file" in r.stdout and "Traceback" not in r.stderr, r.stdout + r.stderr
+
+
+def test_rehearse_hides_a_credential_removes_a_failed_clone_and_resolves_a_relative_address():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        origin = git(pack, "remote", "get-url", "origin")
+        git(pack, "remote", "set-url", "origin", "https://" + "user:SECRETTOKEN123" + "@127.0.0.1:1/x.git")
+        out = Path(tmp) / "trial"
+        r = rehearse(pb, out, str(pack))
+        assert r.returncode == 1 and "SECRETTOKEN123" not in r.stdout + r.stderr and "cannot fetch https://127.0.0.1:1/x.git" in r.stdout, r.stdout + r.stderr
+        assert not (out / "acme").exists(), "a trial that cannot start leaves no folder, so the next one is not poisoned"
+        rel = os.path.relpath(origin, pack)
+        git(pack, "remote", "set-url", "origin", rel)
+        again = rehearse(pb, out, str(pack))
+        assert again.returncode == 0 and os.path.isabs(git(out / "acme", "remote", "get-url", "origin")), again.stdout + again.stderr
+
+
+def test_rehearse_does_not_inherit_origin_head_from_the_checkouts_branch():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))                  # the checkout is left on `feature`, which the remote has never seen
+        r = rehearse(pb, Path(tmp) / "trial", str(pack))
+        assert r.returncode == 0, r.stdout + r.stderr
+        probe = subprocess.run(["git", "-C", str(Path(tmp) / "trial" / "acme"), "symbolic-ref", "-q", "refs/remotes/origin/HEAD"], capture_output=True, text=True)
+        assert probe.stdout.strip() in ("", "refs/remotes/origin/trunk"), f"origin/HEAD follows the remote's default branch only, not the checkout's: {probe.stdout}"
+
+
+def test_a_git_call_is_kept_from_hanging_or_asking():
+    spec = importlib.util.spec_from_file_location("fleet_tool2", FLEET)
+    fleet = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fleet)
+    env = fleet.git_env()
+    assert env["GIT_TERMINAL_PROMPT"] == "0" and "ConnectTimeout" in env["GIT_SSH_COMMAND"] and env["GIT_HTTP_LOW_SPEED_TIME"] == "30", env
+    with mock.patch.dict(os.environ, {"GIT_TERMINAL_PROMPT": "1"}):
+        assert "GIT_TERMINAL_PROMPT" not in fleet.git_env(), "a value the caller set wins"
+    slow = fleet.run(Path("."), sys.executable, "-c", "import time; time.sleep(5)", timeout=0.3)
+    assert slow.returncode == 124 and "timed out" in slow.stderr, slow
 
 
 def test_rehearse_says_red_for_a_failing_suite_and_refuses_a_folder_that_exists():
