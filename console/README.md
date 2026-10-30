@@ -162,7 +162,7 @@ An ask whose gate verb is not allowed, or any gated ask when there is no relay, 
 
 ## Pages and buttons
 
-A skill pack registers its own pages in the same top bar, with buttons the console relays to its gate, and says in one manifest which verbs a click may run (`--manifest`); `ask.py add` refuses a gated ask whose verb is not among them. How to write one: [PAGES.md](PAGES.md).
+A skill pack registers its own pages in the same top bar, with buttons the console relays to its gate, and says in one manifest which verbs a click may run (`--manifest`); `ask.py add` refuses a gated ask whose verb is not among them (a console started with `--relay-verbs` and no manifest is told the same list by the same flag of the agent's command). How to write one: [PAGES.md](PAGES.md).
 
 ## Safety
 
