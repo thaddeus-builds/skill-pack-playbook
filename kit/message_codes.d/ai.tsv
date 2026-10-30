@@ -1,0 +1,11 @@
+code	params	meaning_en	meaning_zh
+ai_config_missing	var	Set {var} for the model call; nothing was sent	请设置 {var}（模型调用所需）；没有发送任何内容
+ai_config_invalid	var,detail	{var} is not usable (it must be: {detail}); nothing was sent	{var} 不可用（要求：{detail}）；没有发送任何内容
+ai_model_unpriced	model	{model} has no price, so the cap could not count it; nothing was sent	{model} 没有价格，上限无法计算；没有发送任何内容
+ai_run_cap_exceeded	estimated_usd,cap_usd	This run is estimated at ${estimated_usd}, over the run cap ${cap_usd}; nothing was sent	本次运行预计 ${estimated_usd}，超过单次上限 ${cap_usd}；没有发送任何内容
+ai_daily_cap_exceeded	spent_usd,estimated_usd,cap_usd	Today cost ${spent_usd} and this call about ${estimated_usd} more; the daily cap is ${cap_usd}; nothing was sent	今天已花 ${spent_usd}，本次约再花 ${estimated_usd}；每日上限 ${cap_usd}；没有发送任何内容
+ai_network_error	detail,host	No answer from {host} ({detail})	{host} 没有响应（{detail}）
+ai_http_error	status,detail,host	{host} answered HTTP {status}: {detail}	{host} 返回 HTTP {status}：{detail}
+ai_bad_answer	detail	The vendor reply is not what the protocol says: {detail}	厂商的回复不符合协议：{detail}
+ai_image_unreadable	path	{path} is not a readable image; nothing was sent	{path} 不是可读的图片；没有发送任何内容
+ai_json_invalid	detail	The reply is not one JSON object ({detail})	回复不是一个 JSON 对象（{detail}）
