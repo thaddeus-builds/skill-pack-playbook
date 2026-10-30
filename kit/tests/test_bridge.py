@@ -15,6 +15,8 @@
     an older one, a stranger's unrelated one and a message with no link are not; a quiet group ends in
     "timeout" at the limit; reads that keep failing end in "unreadable"; the sent message is the anchor
     and "us" is its sender; next_round stops at three and wants a reason;
+  * a group message with no mention is refused (`no_mention`), before any send; a DM is not; the headless path
+    wants an ASCII @name in the text, REST wants member ids to mention; a mid-word @ (an address) is no mention;
   * check_isolation names a missing, world-readable or key-less config, a wrong organization, a data dir
     shared by two configs, and one config used with two data dirs.
 """
@@ -58,6 +60,7 @@ class Fake:
 
 
 KEY = "DEMO-secret-key-not-real"
+M = ["DEMO-member"]          # who a REST message mentions
 
 
 class FakeServer:
@@ -152,7 +155,7 @@ def rest_tests(t: str) -> None:
         srv = FakeServer()
         cfg = write_config(d, "a.json", srv.url)
         tg = bridge.Target(cfg, os.path.join(d, "data-a"), "DEMO-conv", "DEMO-org")
-        r = bridge.send_to(tg, t)
+        r = bridge.send_to(tg, t, mentions=M)
         sent_body = srv.log[0][1]
         check("REST: sent, read back by id, no resend", r.sent and r.id == "M1" and not r.resent, r)
         check("REST: the typed body, a fresh client id, the exchanged token",
@@ -166,7 +169,7 @@ def rest_tests(t: str) -> None:
 
         srv = FakeServer(store_empty=1)
         tg = bridge.Target(write_config(d, "b.json", srv.url), os.path.join(d, "data-b"), "DEMO-conv", "DEMO-org")
-        r = bridge.send_to(tg, t)
+        r = bridge.send_to(tg, t, mentions=M)
         sends = [x for x in srv.log if x[1] is not None]
         check("REST: a message stored empty -> one resend with a new client id, then sent",
               r.sent and r.resent and len(sends) == 2 and sends[0][1]["client_msg_id"] != sends[1][1]["client_msg_id"], (r, srv.log))
@@ -174,13 +177,13 @@ def rest_tests(t: str) -> None:
 
         srv = FakeServer(expire=True)
         tg = bridge.Target(write_config(d, "c.json", srv.url), os.path.join(d, "data-c"), "DEMO-conv", "DEMO-org")
-        r = bridge.send_to(tg, t)
+        r = bridge.send_to(tg, t, mentions=M)
         check("REST: an expired token is exchanged again once, not a resend", r.sent and not r.resent and srv.exchanges == 2, (r, srv.exchanges))
         srv.close()
 
         srv = FakeServer(fail_send=True)
         tg = bridge.Target(write_config(d, "e.json", srv.url), os.path.join(d, "data-e"), "DEMO-conv", "DEMO-org")
-        r = bridge.send_to(tg, t)
+        r = bridge.send_to(tg, t, mentions=M)
         sends = [x for x in srv.log if x[1] is not None]
         check("REST: a failed send is not sent, not resent, and says the status",
               not r.sent and r.reason.startswith("no_id_returned") and "HTTP 500" in r.reason and len(sends) == 1, (r, srv.log))
@@ -196,13 +199,51 @@ def rest_tests(t: str) -> None:
         srv.close()
 
         down = bridge.Target(write_config(d, "g.json", "http://127.0.0.1:9"), os.path.join(d, "data-g"), "DEMO-conv", "DEMO-org")
-        r = bridge.send_to(down, t)
+        r = bridge.send_to(down, t, mentions=M)
         check("REST: a server that is not there -> not sent, no key shown", not r.sent and KEY not in r.reason, r)
 
         a = bridge.Target(write_config(d, "h1.json", "https://api.example.test"), os.path.join(d, "dh1"), "C1", "DEMO-org")
-        bad = bridge.send_to(bridge.Target(a.config, a.data_dir, "C1", "OTHER-org"), t)
+        bad = bridge.send_to(bridge.Target(a.config, a.data_dir, "C1", "OTHER-org"), t, mentions=M)
         check("send_to: refuses before any call when the isolation check fails", not bad.sent and bad.reason.startswith("isolation:"), bad)
 
+
+def mention_tests(t: str) -> None:
+    calls = []
+    f = Fake([])
+    def send(x):
+        calls.append(x)
+        return f.send(x)
+    r = bridge.send_and_verify(send, f.read, "please confirm the DEMO time zone")
+    check("a group message with no mention is refused before any send", not r.sent and r.reason == "no_mention" and not calls, r)
+    for ok in ("@DEMO-agent hi", "hi @DEMO-agent", "@E-commercial Bot hi", "@\u5ba2\u670d hi"):
+        f = Fake([ok])
+        check(f"an ASCII @name counts as a mention: {ok[:14]!r}", bridge.send_and_verify(f.send, f.read, ok).sent)
+    for no in ("mail me" + "@" + "demo", "a @ b", "email@"):
+        f = Fake([no])
+        r = bridge.send_and_verify(f.send, f.read, no)
+        check(f"not a mention: {no!r}", r.reason == "no_mention", r)
+    f = Fake(["hello"])
+    check("a DM needs no mention", bridge.send_and_verify(f.send, f.read, "hello", dm=True).sent)
+    f = Fake(["hello"])
+    check("mention_ok=True (REST sent mention objects) lets a plain text through",
+          bridge.send_and_verify(f.send, f.read, "hello", mention_ok=True).sent)
+    f = Fake(["@DEMO-agent hi"])
+    check("mention_ok=False refuses even a text with an @ (REST has no conversion)",
+          bridge.send_and_verify(f.send, f.read, "@DEMO-agent hi", mention_ok=False).reason == "no_mention")
+    with tempfile.TemporaryDirectory() as d:
+        srv = FakeServer()
+        cfg = write_config(d, "m.json", srv.url)
+        tg = bridge.Target(cfg, os.path.join(d, "dm"), "DEMO-conv", "DEMO-org")
+        r = bridge.send_to(tg, "@DEMO-agent " + t)
+        check("send_to: a group message without member ids to mention is refused, nothing sent",
+              not r.sent and r.reason == "no_mention" and not [x for x in srv.log if x[1] is not None] and srv.exchanges == 0, (r, srv.log))
+        r = bridge.send_to(tg, t, mentions=M)
+        check("send_to: with member ids it is sent and they ride as mention objects",
+              r.sent and srv.log[0][1]["mentions"] == [{"type": "member", "member_id": "DEMO-member"}], (r, srv.log))
+        dmt = bridge.Target(cfg, os.path.join(d, "dm"), "DEMO-dm", "DEMO-org", dm=True)
+        r = bridge.send_to(dmt, "hello, no mention here")
+        check("send_to: a DM target is sent with no mention", r.sent, r)
+        srv.close()
 
 def reply_tests(t: str) -> None:
     A = bridge.Anchor("S1", 10, "ME")
@@ -263,7 +304,7 @@ def reply_tests(t: str) -> None:
         srv = FakeServer()
         cfg = write_config(d, "w.json", srv.url)
         tg = bridge.Target(cfg, os.path.join(d, "dw"), "DEMO-conv", "DEMO-org")
-        sent = bridge.send_to(tg, t)
+        sent = bridge.send_to(tg, t, mentions=M)
         srv.add("OTHER", "not for us")
         srv.add("AGENT", "here are the numbers", mentions=["ME"])
         w = bridge.wait_for_reply_to(tg, sent.id, timeout=0)
@@ -363,6 +404,7 @@ def main() -> int:
     check("runners: send with comm_send only, read with comm only",
           r.sent and calls == ["comm_send", "comm"], (r, calls))
     rest_tests(t)
+    mention_tests(t)
     reply_tests(t)
     isolation_tests()
     return finish()
