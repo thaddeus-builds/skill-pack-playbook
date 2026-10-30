@@ -151,6 +151,8 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `messages/1` | the messaging owner | makers, `ad-copy`, `gads` (search ad assets), `kos` (briefs) | segment, pain, objection, sayable facts, the claims scope |
 | `truth/1` | `measurement` | operators | coefficient per campaign type, break-even ROAS, trust per campaign type; confirmed values go into the hub's facts |
 | `intel/1` | `search-intel` | `gads`, `ppc`, `seo`, `pseo` | keyword demand, trends, competitors seen, with sources and dates |
+| `ads.spend/1` | an operator | `meas`, the other operators | spend and its return per entity and day on the platform's numbers, money or index, settled or not |
+| `ads.status/1` | an operator | the daily page, the console | one day's status: freshness, spend, sections ready or not, what waits for a person |
 | `intel.ads/1` | `search-intel` | `adcopy`, `gads`, `ppc` | the ads competitors were seen running on search pages: words as published, first and last day seen, times seen |
 | `leads/1` | `outbound` | `sdr` | company, contacts, source, evidence |
 | `inquiries/1` | any operator that receives an inquiry (`seo` for site forms, `gads` and `meta-ads` for lead ads) | `sdr` | who wrote, from which company, the words as written, the page, the consent box text |
