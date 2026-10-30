@@ -30,6 +30,6 @@ Researched 2026-10-31. Asked by the owner: think hard about how the clients' bus
 
 ## Kinds of claim and where it is used
 
-[documented] verdicts 1, 2 (rule), 3 (tentative), 4, 5, 6, 7; [ours] verdicts 3, 6 (counts from the pack exports of 2026-10-31); [inference] verdicts 2 (mapping), 7. Used by docs/design/cut-by-use.md (the next change).
+[documented] verdicts 1, 2 (rule), 3 (tentative), 4, 5, 6, 7; [ours] verdicts 3, 6 (counts from the pack exports of 2026-10-31); [inference] verdicts 2 (mapping), 7. Used by [docs/design/cut-by-use.md](../design/cut-by-use.md).
 
 Sources: [HashiCorp provider design principles](https://developer.hashicorp.com/terraform/plugin/best-practices/hashicorp-provider-design-principles); [Airbyte protocol](https://docs.airbyte.com/platform/understanding-airbyte/airbyte-protocol); [Anthropic, Building effective agents](https://www.anthropic.com/research/building-effective-agents); [Anthropic, skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices); [Fowler, MonolithFirst](https://www.martinfowler.com/bliki/MonolithFirst.html); [Fowler, BoundedContext](https://martinfowler.com/bliki/BoundedContext.html); [Google Meridian, calibrate treatment priors](https://developers.google.com/meridian/docs/advanced-modeling/roi-priors-and-calibration).
