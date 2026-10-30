@@ -13,7 +13,9 @@
   6. ask_json: the schema mode first; a vendor that refuses it, or text that is not one object, is asked once more in words; twice is refused.
   7. count_tokens is Anthropic's alone.
   8. ai.py's msg() calls are closed over its fragment.
-  9, 10. Cold reviews: each finding is a case. The second: a 2xx whose body does not arrive and Ctrl-C keep the estimate booked, the lock is on the ledger
+  9 to 11. Cold reviews: each finding is a case. The third: a dropped connection and a cut-off reply keep the estimate booked with or without a Budget, a short
+     write is finished or refused, the schema is in the estimate, the ledger is one ASCII line per call and a regular file, bad arguments are refused, more
+     forms of the key are hidden, `unwrap_json` cannot be made quadratic. The second: a 2xx whose body does not arrive and Ctrl-C keep the estimate booked, the lock is on the ledger
      itself, a cut-off error body, huge numbers, a bad price, a damaged ledger, the key in a JSON encoder's forms, `fits` on odd schemas.
 """
 
@@ -53,6 +55,9 @@ class Vendor:
                 n = int(self.headers.get("content-length") or 0)
                 outer.seen.append({"method": self.command, "path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}, "body": json.loads(self.rfile.read(n) or b"{}")})
                 status, body, extra = outer.script.pop(0) if outer.script else (200, outer.ok(), {})
+                if isinstance(body, tuple) and body[0] == "drop":
+                    self.close_connection = True                         # the request was read and the connection is closed without a word
+                    return
                 if isinstance(body, tuple) and body[0] == "slow":
                     time.sleep(body[1])
                     body = outer.ok()
@@ -686,6 +691,196 @@ check("fits: 1.0 is an integer; 1.5, true, NaN and a 400-digit int are not; NaN 
       ai.fits({"a": 1.0}, one("integer")) and not any(ai.fits({"a": x}, one("integer")) for x in (1.5, True, float("nan"), 10 ** 400)) and not any(ai.fits({"a": x}, one("number")) for x in (True, float("nan"), 10 ** 400)))
 check("fits: nested objects and the items of an array are checked", not ai.fits({"a": {"b": 1}}, {"properties": {"a": {"type": "object", "required": ["c"]}}})
       and not ai.fits({"a": [1, "x"]}, {"properties": {"a": {"type": "array", "items": {"type": "integer"}}}}) and ai.fits({"a": [1, 2]}, {"properties": {"a": {"type": "array", "items": {"type": "integer"}}}}))
+
+
+print("[11] found by the third cold review")
+import errno  # noqa: E402
+import subprocess as _sp  # noqa: E402
+
+# --- a connection dropped after the request was read: possibly billed, never sent again
+led = ai.Ledger(DATA / "ai_dropped.jsonl")
+bud = ai.Budget(1.0)
+v = Vendor([(200, ("drop",), {})] * 4)
+e = refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=bud, sleep=no_sleep([]))
+est = ai.estimate(route(v), "S", "t", 400, PRICES)[1]
+check("a connection closed after the request was read: one request, 'cut_off', the estimate stays booked (it used to be four requests booked as free)",
+      code_of(e) == "aicall_network_error" and len(v.seen) == 1 and led.rows()[-1]["status"] == "cut_off" and led.spent() == round(est, 6), (e, len(v.seen), led.rows()[-1:]))
+v.close()
+dead = ai.Settings(key=KEY, base_url="http://127.0.0.1:1", protocol="anthropic", model="fast-1", task="review")
+waits = []
+e = refusal(ai.ask, dead, "S", "t", prices=PRICES, sleep=no_sleep(waits), timeout=2)
+check("a connection that was refused is still a network fault: retried, nothing was sent so nothing is booked", code_of(e) == "aicall_network_error" and len(waits) == 3)
+
+# --- with a ledger and no Budget, a call that may have been billed is still booked at its estimate
+for label, script in (("a connection dropped", [(200, ("drop",), {})]), ("a reply cut short", [(200, ("short", b'{"con'), {})]), ("a body that is not JSON", [(200, b"nope", {})])):
+    led = ai.Ledger(DATA / ("ai_nb_" + label.split()[1] + ".jsonl"))
+    v = Vendor(script * 4)
+    refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, sleep=no_sleep([]))
+    check(f"{label}, ledger but no Budget: booked at the estimate, so a Budget on the same ledger counts it", led.spent() == round(est, 6), (led.rows()[-1:], led.spent()))
+    v.close()
+led = ai.Ledger(DATA / "ai_nb_int.jsonl")
+v = Vendor([(503, {}, {})])
+try:
+    ai.ask(route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, sleep=ctrl_c)
+except KeyboardInterrupt:
+    pass
+check("Ctrl-C, ledger but no Budget: booked at the estimate too", led.spent() == round(est, 6), led.rows()[-1:])
+v.close()
+led = ai.Ledger(DATA / "ai_unusable.jsonl")
+v = Vendor([(200, {"content": [], "usage": {}}, {})])
+refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=ai.Budget(1.0))
+check("a priced model's unusable reply with no usage is booked at the estimate (it was billed)", led.spent() == round(est, 6) and led.rows()[-1]["status"] == "bad_reply", led.rows()[-1:])
+check("the ledger line names the host", led.rows()[-1]["host"] == route(v).host, led.rows()[-1])
+v.close()
+
+# --- the ledger line is whole, ASCII and one line
+real_write = os.write
+
+
+def half_then_rest(fd, data):
+    return real_write(fd, bytes(data)[: max(1, len(data) // 2)])
+
+
+led = ai.Ledger(DATA / "ai_short_write.jsonl")
+with mock.patch.object(os, "write", half_then_rest):
+    led.append({"at": ai.today() + "T00:00:00+00:00", "cost_usd": 0.001, "status": "ok", "model": "m"})
+check("a write that takes only part of the line goes on until the line is whole", led.spent() == 0.001 and led.usage()["unreadable_lines"] == 0 and led.path.read_bytes().endswith(b"}\n"), led.path.read_bytes())
+calls = []
+
+
+def fills_up(fd, data):
+    calls.append(1)
+    if len(calls) > 1:
+        raise OSError(errno.ENOSPC, "No space left on device")
+    return real_write(fd, bytes(data)[:5])
+
+
+led = ai.Ledger(DATA / "ai_enospc.jsonl")
+v = Vendor([])
+with mock.patch.object(os, "write", fills_up):
+    e = refusal(ai.ask, route(v), "S", "t", max_tokens=10, prices=PRICES, ledger=led, budget=ai.Budget(1.0))
+check("a reservation that cannot be written whole is refused before sending, as a coded line (it used to leave a cut line the cap never counted)", code_of(e) == "aicall_config_invalid" and not v.seen, (e, v.seen))
+v.close()
+weird = "m x\u0085y"
+led = ai.Ledger(DATA / "ai_ls.jsonl")
+v = Vendor([(200, Vendor.ok(tin=500, tout=500), {})] * 4)             # each call costs 0.003 against a cap of 0.005
+prices_w = {weird: (1.0, 5.0)}
+outs = []
+bud = ai.Budget(0.005)
+for _ in range(4):
+    try:
+        ai.ask(route(v, model=weird), "S", "t", max_tokens=400, prices=prices_w, ledger=led, budget=bud)
+        outs.append("sent")
+    except SkillPackError as ex:
+        outs.append(code_of(ex))
+check("a model name with U+2028 and U+0085 in it does not split the ledger line: the cap counts the first call, the other three are refused, no unreadable line",
+      outs.count("sent") == 1 and led.usage()["unreadable_lines"] == 0 and led.spent() == 0.003, (outs, led.usage()["unreadable_lines"], led.spent()))
+v.close()
+led = ai.Ledger(DATA / "ai_surrogate.jsonl")
+v = Vendor([])
+r = ai.ask(route(v, model="m\udc80"), "S", "t", prices={"m\udc80": (1.0, 5.0)}, ledger=led, budget=ai.Budget(1.0), max_tokens=10)
+check("a model name that holds a lone surrogate (an undecodable byte in the environment) is booked, not a UnicodeEncodeError after the vendor was paid", r.text == "hello" and r.booked and len(led.rows()) == 2, r)
+v.close()
+check("a finite price big enough to overflow a cost is refused: ValueError from ask, a coded refusal from prices_from_rows",
+      raises(lambda: ai.ask(route(Vendor([])), "S", "t", prices={"fast-1": (1e308, 1.0)}), ValueError) is not None
+      and raises(lambda: ai.ask(route(Vendor([])), "S", "t", prices={"fast-1": (ai.MAX_PRICE + 1, 1.0)}), ValueError) is not None
+      and code_of(refusal(ai.prices_from_rows, [{"model": "a", "input_per_mtok_usd": "1e308", "output_per_mtok_usd": "1"}])) == "aicall_config_invalid")
+
+spaced = ai.Settings(key=KEY, base_url="http://127.0.0.1:9/a b", protocol="anthropic", model="fast-1", task="review")
+waits = []
+e = refusal(ai.ask, spaced, "S", "t", prices=PRICES, ledger=ai.Ledger(DATA / "ai_spaced.jsonl"), sleep=no_sleep(waits))
+check("an address http.client refuses before writing anything is a network fault that costs nothing: retried, booked as free", code_of(e) == "aicall_network_error" and len(waits) == 3
+      and ai.Ledger(DATA / "ai_spaced.jsonl").spent() == 0.0, (e, waits))
+led = ai.Ledger(DATA / "ai_hand.jsonl")
+led.path.write_text('{"at": "' + day + 'T01:00:00+00:00", "model": "a\u2028b", "cost_usd": 0.004, "status": "ok"}\n'.replace("\\u2028", "\u2028"), encoding="utf-8")
+check("a line edited by hand with U+2028 inside a string is one line, not two", led.spent() == 0.004 and led.usage()["unreadable_lines"] == 0, (led.spent(), led.usage()["unreadable_lines"]))
+
+# --- the schema is billed as input
+big = {"type": "object", "properties": {f"k{i}": {"type": "string", "description": "x" * 40} for i in range(8000)}}
+check("a schema is in the estimate: a large one costs more than none", ai.estimate(route(Vendor([])), "S", "t", 10, PRICES, 0, big)[1] > 50 * ai.estimate(route(Vendor([])), "S", "t", 10, PRICES)[1])
+v = Vendor([])
+e = refusal(ai.ask, route(v), "S", "t", max_tokens=10, schema=big, prices=PRICES, ledger=ai.Ledger(DATA / "ai_bigschema.jsonl"), budget=ai.Budget(0.01))
+check("a large schema against a small cap is refused before sending", code_of(e) == "aicall_daily_cap_exceeded" and not v.seen, (e, v.seen))
+v.close()
+
+# --- the ledger is a regular file
+check("/dev/null as the ledger is refused (it would count nothing, so no cap would ever trip)", code_of(refusal(ai.Ledger("/dev/null").check_writable)) == "aicall_config_invalid")
+fifo = DATA / "ai_fifo"
+os.mkfifo(fifo)
+v = Vendor([])
+t0 = time.monotonic()
+e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, ledger=ai.Ledger(fifo))
+check("a FIFO as the ledger is refused at once, not waited on", code_of(e) == "aicall_config_invalid" and time.monotonic() - t0 < 5 and not v.seen, (e, time.monotonic() - t0))
+v.close()
+
+# --- arguments
+v = Vendor([])
+for label, kw in (("a timeout of -1", dict(timeout=-1)), ("a timeout of 0", dict(timeout=0)), ("a timeout of NaN", dict(timeout=float("nan"))), ("a timeout that is a string", dict(timeout="5")),
+                  ("a system prompt that is None", dict(system=None))):
+    args = dict(system="S", text="t", prices=PRICES, sleep=no_sleep([]))
+    args.update(kw)
+    sysm = args.pop("system")
+    check(f"{label}: ValueError at once, nothing sent, no retries", raises(lambda a=args, sm=sysm: ai.ask(route(v), sm, a.pop("text"), **a), ValueError) is not None and not v.seen, label)
+check("an image that is not a path is a coded refusal", code_of(refusal(ai.ask, route(v), "S", "t", [5], prices=PRICES)) == "aicall_image_unreadable" and not v.seen)
+check("count_tokens takes the same timeout rule", raises(lambda: ai.count_tokens(route(v), "S", "t", timeout=-1), ValueError) is not None)
+v.close()
+
+# --- redaction and parsing
+k2 = "sk-a/b+c=d"
+import base64, html as _html, urllib.parse as _up  # noqa: E402
+echoes = [_up.quote(k2, safe=""), _up.quote_plus(k2), _html.escape(k2), base64.b64encode(k2.encode()).decode().rstrip("="), base64.b64encode(("Bearer " + k2).encode()).decode().rstrip("="),
+          base64.urlsafe_b64encode(k2.encode()).decode().rstrip("=")]
+check("redact also hides the key url-encoded, form-encoded, html-escaped and base64 (alone or as a Bearer header)", all(k2 not in ai.redact("x " + f + " y", k2) and f not in ai.redact("x " + f + " y", k2) for f in echoes),
+      [ai.redact("x " + f + " y", k2) for f in echoes])
+t0 = time.monotonic()
+check("unwrap_json cannot be made quadratic by a fence and a long run of blanks", ai.unwrap_json("```" + " " * 200000 + "x") is None and time.monotonic() - t0 < 2, time.monotonic() - t0)
+check("unwrap_json is strict about NaN and Infinity, and still unwraps a fence", ai.unwrap_json('{"a": NaN}') is None and ai.unwrap_json('{"a": Infinity}') is None and ai.unwrap_json('```json\n{"a": 1}\n```') == {"a": 1}
+      and ai.unwrap_json('```{"a": 1}```') == {"a": 1})
+led = ai.Ledger(DATA / "ai_oddrows.jsonl")
+led.path.write_text('{"at": "' + day + 'T01:00:00+00:00", "model": ["a"], "cost_usd": 0.001, "status": "ok"}\n{"at": "' + day + 'T01:00:00+00:00", "model": {"a": 1}, "cost_usd": 0.001, "status": "ok"}\n', encoding="utf-8")
+check("a row whose model is not text does not break usage()", led.usage()["calls"] == 2 and led.spent() == 0.002, led.usage())
+
+# --- the Budget's check and charge are one step (a call held between them: a second ledger file must wait, not pass)
+A2, B2 = ai.Ledger(DATA / "ai_step_a.jsonl"), ai.Ledger(DATA / "ai_step_b.jsonl")
+shared = ai.Budget(100.0, run_usd=0.003)
+inside, gate, order = threading.Event(), threading.Event(), []
+real_check = ai.check_budget
+
+
+def held_between_check_and_charge(spent, est_usd, budget):
+    real_check(spent, est_usd, budget)
+    if not order:
+        order.append("first")
+        inside.set()
+        gate.wait(5)
+
+
+def try_reserve(led, results):
+    try:
+        led.reserve({"at": ai.today() + "T00:00:00+00:00", "model": "m"}, 0.002, shared)
+        results.append(1)
+    except SkillPackError:
+        results.append(0)
+
+
+results = []
+with mock.patch.object(ai, "check_budget", held_between_check_and_charge):
+    t1 = threading.Thread(target=try_reserve, args=(A2, results))
+    t1.start()
+    inside.wait(5)
+    t2 = threading.Thread(target=try_reserve, args=(B2, results))
+    t2.start()
+    time.sleep(0.3)                                                      # the second call either waits for the Budget's lock or runs through the check
+    gate.set()
+    t1.join(10)
+    t2.join(10)
+check("one Budget, two ledger files, the first call held between the check and the charge: the second waits, sees the charge and is refused (exactly one admitted)", sorted(results) == [0, 1], results)
+
+# --- guards the tests did not pin
+led = ai.Ledger(DATA / "ai_zero.jsonl")
+led.append({"at": ai.today() + "T01:00:00+00:00", "model": "free-1", "status": "ok", "cost_usd": 0.01})
+e = refusal(led.reserve, {"at": ai.today() + "T02:00:00+00:00", "model": "free-1"}, 0.0, ai.Budget(0.01))
+check("a free model at a cap that is already reached is refused (the day's cost counts, not only the estimate)", code_of(e) == "aicall_daily_cap_exceeded", e)
 
 
 print("[8] messages")
