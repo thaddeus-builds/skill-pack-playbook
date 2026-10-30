@@ -75,7 +75,14 @@ class FakeServer:
                 self.end_headers()
                 self.wfile.write(raw)
 
+            def _blocked(self):
+                if self.headers.get("User-Agent", "").startswith("Python-urllib"):
+                    self._reply(403, {"error": "error code: 1010"})     # what the real edge does
+                    return True
+
             def do_POST(self):
+                if self._blocked():
+                    return
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
                 auth = self.headers.get("Authorization", "")
                 if self.path == "/auth/agent/token":
@@ -97,10 +104,13 @@ class FakeServer:
                 self._reply(200, {"data": {"id": mid}})
 
             def do_GET(self):
+                if self._blocked():
+                    return
                 mid = self.path.rsplit("/", 1)[1]
                 outer.log.append((self.path, None, self.headers.get("Authorization", "")))
                 if mid in outer.msgs:
-                    return self._reply(200, {"data": outer.msgs[mid]})
+                    m = outer.msgs[mid]                       # the real shape: content beside the message
+                    return self._reply(200, {"data": {"message": {"id": m["id"], "type": "AGENT_TEXT"}, "content": m["content"]}})
                 self._reply(404, {"error": "none"})
         self.httpd = HTTPServer(("127.0.0.1", 0), H)
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
@@ -129,6 +139,7 @@ def rest_tests(t: str) -> None:
         check("REST: the typed body, a fresh client id, the exchanged token",
               sent_body["type"] == "AGENT_TEXT" and sent_body["content"]["body"]["text"] == t
               and sent_body["client_msg_id"] and srv.log[0][2] == "Bearer tok-1" and srv.exchanges == 1, srv.log)
+        check("REST: a User-Agent of its own (the edge refuses Python's default)", all(x for x in [srv.exchanges >= 1]) and r.sent)
         check("REST: the read-back asks for the id the send returned", srv.log[1][0].endswith("/messages/M1"), srv.log)
         check("REST: the key is in no result, reason or repr",
               KEY not in repr(r) and KEY not in repr(bridge.load_credentials(cfg, "DEMO-org")))
