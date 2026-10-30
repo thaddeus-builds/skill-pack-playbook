@@ -59,6 +59,16 @@ reports them through kit.testing.check. A generated test is
                 is `## Never`, whose table names exactly the verbs only a
                 person runs (every gated verb, and [guards.evals].extra),
                 and its planted self-test
+  upload_copy   SKILL.md is one the upload (claude.ai, the Skills API) takes:
+                a name of at most 64 characters of lowercase letters, digits
+                and single hyphens, without a reserved word, and a description
+                of at most 1024 characters without an XML tag
+                (kit.tools.skill_upload.problems, the check `skill_upload.py
+                --check` runs). A description that still holds the build's
+                fill marker is read once the docs are signed (B8) or on a
+                release tag, as the release suite reads it. Opt-in, like
+                page_links: a skill pack adds `run(upload_copy(ROOT))` to a
+                test of its own (no generated skill pack runs it by default)
 
 Test: kit/tests/test_suites.py (every suite green on a generated skill pack,
 and each one failing on a planted violation).
@@ -702,6 +712,42 @@ def never_table(root: Path | str) -> Results:
              "runs", g.check_never_table(root))]
 
 
+# ---- upload_copy ---------------------------------------------------------------------
+
+def _fills_due(root: Path) -> bool:
+    """True once a fill marker is a fault: the B8 row of the stages file is
+    signed, or this is a release tag (CI_COMMIT_TAG)."""
+    stages = root / _config.load(root).ssot.get("dir", "ssot") / STAGES
+    b8 = stages.is_file() and any(
+        r.get("stage") == "B8" and r.get("status") == "signed"
+        for r in _tsv(stages))
+    return b8 or bool(os.environ.get("CI_COMMIT_TAG"))
+
+
+def upload_copy(root: Path | str) -> Results:
+    """SKILL.md is one the upload takes. The description is read as it stands
+    only when it holds no fill marker, or once the docs are signed: a fresh
+    skill pack's placeholder is a sentence about what to write, not the text
+    that ships."""
+    from kit.tools import skill_upload as su
+    bind(root)
+    root = Path(root)
+    path = root / su.NAME
+    if not path.is_file():
+        return [(f"{su.NAME} is one the upload takes", [f"{su.NAME} is missing"])]
+    text = path.read_text(encoding="utf-8")
+    found = su.problems(text)
+    try:
+        desc = su.fields(su.split(text)[0]).get("description") or ""
+    except su.Refused:
+        desc = ""
+    if FILL in desc and not _fills_due(root):
+        found = [f for f in found if not f.startswith("description:")]
+    return [(f"{su.NAME} is one the upload takes (a name of at most "
+             f"{su.NAME_MAX} lowercase characters; a description of at most "
+             f"{su.DESCRIPTION_MAX} without an XML tag)", found)]
+
+
 # ---- release -------------------------------------------------------------------------
 
 def release(root: Path | str) -> Results:
@@ -709,11 +755,7 @@ def release(root: Path | str) -> Results:
     from kit.guards import release as g
     root = Path(root)
     got = g.shipped(root)
-    stages = root / _config.load(root).ssot.get("dir", "ssot") / STAGES
-    b8 = stages.is_file() and any(
-        r.get("stage") == "B8" and r.get("status") == "signed"
-        for r in _tsv(stages))
-    due = b8 or bool(os.environ.get("CI_COMMIT_TAG"))
+    due = _fills_due(root)
     fills = []
     if got is not None:
         _, ships = got
