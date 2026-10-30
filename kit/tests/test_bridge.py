@@ -11,6 +11,10 @@
   * REST (against a local fake server): a token is exchanged for the org, the typed body is sent, the
     read-back is by id; an empty stored message is resent once; an expired token is exchanged again once;
     a failed send is never resent; the api key is in no result, reason or repr;
+  * wait_for_reply: a message under ours, one that mentions us, or one from an asked agent is a reply; our own,
+    an older one, a stranger's unrelated one and a message with no link are not; a quiet group ends in
+    "timeout" at the limit; reads that keep failing end in "unreadable"; the sent message is the anchor
+    and "us" is its sender; next_round stops at three and wants a reason;
   * check_isolation names a missing, world-readable or key-less config, a wrong organization, a data dir
     shared by two configs, and one config used with two data dirs.
 """
@@ -100,21 +104,36 @@ class FakeServer:
                 if outer.store_empty > 0:
                     outer.store_empty -= 1
                     text = ""
-                outer.msgs[mid] = {"id": mid, "content": {"content_type": "text", "body": {"text": text}}}
+                outer.msgs[mid] = {"id": mid, "seq": len(outer.msgs) + 1, "sender_id": "ME",
+                                   "content": {"content_type": "text", "body": {"text": text}}}
                 self._reply(200, {"data": {"id": mid}})
 
             def do_GET(self):
                 if self._blocked():
                     return
-                mid = self.path.rsplit("/", 1)[1]
                 outer.log.append((self.path, None, self.headers.get("Authorization", "")))
+                if self.path.endswith("limit=100"):             # newest first, as the real list is
+                    return self._reply(200, {"data": sorted(outer.msgs.values(), key=lambda m: -m["seq"])})
+                mid = self.path.rsplit("/", 1)[1]
                 if mid in outer.msgs:
                     m = outer.msgs[mid]                       # the real shape: content beside the message
-                    return self._reply(200, {"data": {"message": {"id": m["id"], "type": "AGENT_TEXT"}, "content": m["content"]}})
+                    return self._reply(200, {"data": {"message": {"id": m["id"], "seq": m["seq"], "sender_id": m["sender_id"],
+                                                                  "type": "AGENT_TEXT"}, "content": m["content"]}})
                 self._reply(404, {"error": "none"})
         self.httpd = HTTPServer(("127.0.0.1", 0), H)
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def add(self, sender, text, parent_id=None, mentions=()):
+        """A message from someone else, as the real list shows it: content a plain string, mentions by id."""
+        mid = f"M{len(self.msgs) + 1}"
+        m = {"id": mid, "seq": len(self.msgs) + 1, "sender_id": sender, "content": text}
+        if parent_id:
+            m["parent_id"] = parent_id
+        if mentions:
+            m["mentions"] = [{"mentioned_id": x, "is_mention_all": False} for x in mentions]
+        self.msgs[mid] = m
+        return mid
 
     def close(self):
         self.httpd.shutdown()
@@ -183,6 +202,79 @@ def rest_tests(t: str) -> None:
         a = bridge.Target(write_config(d, "h1.json", "https://api.example.test"), os.path.join(d, "dh1"), "C1", "DEMO-org")
         bad = bridge.send_to(bridge.Target(a.config, a.data_dir, "C1", "OTHER-org"), t)
         check("send_to: refuses before any call when the isolation check fails", not bad.sent and bad.reason.startswith("isolation:"), bad)
+
+
+def reply_tests(t: str) -> None:
+    A = bridge.Anchor("S1", 10, "ME")
+    ok = lambda **k: {"seq": 11, "sender_id": "AGENT", **k}      # noqa: E731
+
+    for name, m, want in (
+        ("under our message", ok(id="a", parent_id="S1", content="x"), True),
+        ("mentions us", ok(id="a", mentions=[{"mentioned_id": "ME"}], content="x"), True),
+        ("our own", ok(id="a", sender_id="ME", parent_id="S1"), False),
+        ("older than ours", ok(id="a", seq=9, parent_id="S1"), False),
+        ("a stranger's, unrelated", ok(id="a", content="x", mentions=[{"mentioned_id": "SOMEONE"}]), False),
+        ("under another message", ok(id="a", parent_id="S0"), False),
+    ):
+        w = bridge.wait_for_reply(lambda m=m: [m], A, timeout=0, poll=1)
+        check(f"reply? {name} -> {want}", (w.state == "replied") == want, w)
+
+    w = bridge.wait_for_reply(lambda: [ok(id="a", content="no link")], A, from_ids=["AGENT"], timeout=0)
+    check("reply? an asked agent's message with no mention or parent counts", w.state == "replied", w)
+
+    msgs = [ok(id="b", seq=13, parent_id="S1", content={"body": {"text": "second"}}), ok(id="a", parent_id="S1", content="first")]
+    w = bridge.wait_for_reply(lambda: msgs, A, timeout=0)
+    check("replies come oldest first, text from a string or a typed body",
+          [r.text for r in w.replies] == ["first", "second"] and w.replies[0].seq == 11, w)
+
+    clock = [0.0]
+    sleeps = []
+    def sleep(n):
+        sleeps.append(n)
+        clock[0] += n
+    polls = []
+    def fetch():
+        polls.append(clock[0])
+        return [ok(id="a", parent_id="S1", content="late")] if len(polls) == 3 else []
+    w = bridge.wait_for_reply(fetch, A, timeout=100, poll=10, sleep=sleep, clock=lambda: clock[0])
+    check("waits and polls until a reply comes", w.state == "replied" and sleeps == [10, 10], (w, sleeps))
+
+    clock[0], sleeps[:] = 0.0, []
+    w = bridge.wait_for_reply(lambda: [], A, timeout=25, poll=10, sleep=sleep, clock=lambda: clock[0])
+    check("a quiet group -> timeout at the limit, never past it", w.state == "timeout" and sum(sleeps) <= 25, (w, sleeps))
+
+    def down():
+        raise OSError("net")
+    w = bridge.wait_for_reply(down, A, timeout=100, poll=0, sleep=lambda n: None)
+    check("reads that keep failing -> unreadable, with the kind and no more", w.state == "unreadable" and w.reason == "OSError", w)
+    flaky = iter([OSError("x"), [ok(id="a", parent_id="S1", content="back")]])
+    def once():
+        v = next(flaky)
+        if isinstance(v, Exception):
+            raise v
+        return v
+    check("one failed read is tried again", bridge.wait_for_reply(once, A, timeout=100, poll=0, sleep=lambda n: None).state == "replied")
+
+    check("next_round: the second request is allowed with a reason", bridge.next_round(1, "the amounts are missing") == bridge.Round(True, 2))
+    check("next_round: the fourth is refused", bridge.next_round(3, "still missing").reason == "round_limit")
+    check("next_round: no reason, no round", bridge.next_round(1, "  ").reason == "no_reason" and not bridge.next_round(1, "").allowed)
+
+    with tempfile.TemporaryDirectory() as d:
+        srv = FakeServer()
+        cfg = write_config(d, "w.json", srv.url)
+        tg = bridge.Target(cfg, os.path.join(d, "dw"), "DEMO-conv", "DEMO-org")
+        sent = bridge.send_to(tg, t)
+        srv.add("OTHER", "not for us")
+        srv.add("AGENT", "here are the numbers", mentions=["ME"])
+        w = bridge.wait_for_reply_to(tg, sent.id, timeout=0)
+        check("REST: the anchor is the sent message, we are its sender, the reply is found and the stranger's is not",
+              w.state == "replied" and [r.text for r in w.replies] == ["here are the numbers"], w)
+        check("REST: the key is in no wait result", KEY not in repr(w))
+        w = bridge.wait_for_reply_to(tg, "NOPE", timeout=0)
+        check("REST: a sent id that cannot be read -> unreadable, says anchor", w.state == "unreadable" and w.reason.startswith("anchor"), w)
+        srv.close()
+        bad = bridge.wait_for_reply_to(bridge.Target(os.path.join(d, "none.json"), "x", "C", "DEMO-org"), "S", timeout=0)
+        check("REST: isolation is checked before any call", bad.state == "unreadable" and bad.reason.startswith("isolation"), bad)
 
 
 def isolation_tests() -> None:
@@ -271,6 +363,7 @@ def main() -> int:
     check("runners: send with comm_send only, read with comm only",
           r.sent and calls == ["comm_send", "comm"], (r, calls))
     rest_tests(t)
+    reply_tests(t)
     isolation_tests()
     return finish()
 
