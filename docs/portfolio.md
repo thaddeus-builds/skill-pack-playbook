@@ -78,7 +78,7 @@ TikTok is not added to `video-ads`: it is a pack of its own when a client needs 
 | creator-program-skill-pack | `crp` | Operator, earned push, creator economics and affiliate | Work on branch `m1-roster` | Publishes `creators.roster/1`; takes affiliate commissions |
 | social-marketing-harness | `smh` | Operator, own social (RedNote) | Dormant since 2026-10-01 | Keep; its browser reader is the model for a kit browser module |
 | outbound-skill-pack | `obd` | Operator, sales-led, sourcing | 0.1.0, untagged | Hands `leads/1` to `sdr` (open decision 2) |
-| sdr-skill-pack | `sdr` | Operator, sales-led, pipeline | 0.1.0, installed | Reads `leads/1` through its provider contract (P10) |
+| sdr-skill-pack | `sdr` | Operator, sales-led, pipeline | 0.2.0 on main, installed 0.1.0 | Reads `leads/1` (companies another pack found) and `inquiries/1` (what people wrote to the client); a first email in a country that needs consent goes out only with the recipient's own message as evidence, so an inquiry is the lawful way in |
 | product-feed-skill-pack | `feed` | Truth: catalog | Scaffold | Publishes `catalog/1`; owns the merchant-feed override fields |
 | measurement-skill-pack | `meas` | Truth: outcomes | M1 on local main (ROAS maturity, conversion-rate basis), no remote | Publishes `truth/1`; reads `ads.results/1` and `ads.changes/1` |
 | asset-handoff-skill-pack | `handoff` | Truth: a creative's identity and tags | M1 on local main, read-only, no remote | Publishes `handoff.batch/1`; writes nothing outside: the upload to a media library is the platform operator's write |
