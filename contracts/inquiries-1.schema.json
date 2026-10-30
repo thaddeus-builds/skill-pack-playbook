@@ -15,7 +15,7 @@
     "An inquiry is what a person wrote to the client, kept as written: the words are never summarised, translated or tidied.",
     "An inquiry_id is stable: the same message has the same id in every document, so the reader never records it twice.",
     "The producer sends what the person gave and nothing it looked up: no enrichment, no guessed company, no inferred country.",
-    "The reader keeps each inquiry as received before it uses it; a person's message is the evidence of their consent to be answered by the channel they used, and only that.",
+    "The reader keeps each inquiry as received before it uses it. A message that came from the person's own mailbox (channel email) or from a form whose address they confirmed (email_confirmed true) is the evidence of their consent to be answered at that address, and only that; a form nobody confirmed proves nothing about the address typed into it.",
     "An absent optional key means unknown, never null and never an empty string."
   ],
   "type": "object",
@@ -56,7 +56,8 @@
           "message": {"description": "What they wrote, as written.", "type": "string", "minLength": 1},
           "page_url": {"description": "The page they wrote from, when there is one.", "type": "string", "minLength": 1},
           "campaign": {"description": "The campaign or tag the visit came from, as the producer recorded it.", "type": "string", "minLength": 1},
-          "agreement_text": {"description": "The words of the consent box they ticked, when the form had one.", "type": "string", "minLength": 1}
+          "agreement_text": {"description": "The words of the consent box they ticked, when the form had one.", "type": "string", "minLength": 1},
+          "email_confirmed": {"description": "True when the person proved the address is theirs (they followed a link sent to it, or wrote from it); absent means nobody checked.", "type": "boolean"}
         }
       }
     }
