@@ -19,10 +19,10 @@ An agent loads [skills/build-skill-pack/SKILL.md](skills/build-skill-pack/SKILL.
 | B4 Data chain | Per source: puller, raw fixtures, ingest, cache tables, tests | B1 | yes: one agent per data source | CI · rows in = rows out, ingest twice = same rows; tests/test_layering.py |
 | B5 Human data | The scope declared; stated numbers loaded pending, then confirmed | B3, B4 | no: the integrator | client owner confirms each number through the gate · tests/test_human_tables.py, tests/test_gate.py |
 | B6 Reports | Per story: one read-only report and its check row | B4, B5 | yes: one agent per story | CI · tests/test_json_contract.py; the story's check green on fixtures |
-| B7 Gate and money path | Queue, approve, execute as a dry run; an empty allowlist; writes off | B6 | no: the risky list | owner merges (CODEOWNERS) · tests/test_gate.py, tests/test_layering.py |
+| B7 Gate and money path | Queue, approve, execute as a dry run; an empty allowlist; writes off | B6 | no: the risky list | a cold read by a second agent, then the integrator merges · tests/test_gate.py, tests/test_layering.py |
 | B8 Agent docs and evals | SKILL.md, README.md, references/workflows.md, evals | B6 | yes: one agent per doc | builder owner reads the scope · each eval fails when its rule is removed |
 | B9 Release | A tag, its archive, a host install and the host's report | B7, B8 | no: one release owner | client owner types "confirm vX" in chat · tests/test_release.py; the host checklist |
-| B10 Operate | Scheduled pulls, nightly story checks, the owner queue, triaged issues | B9 | yes: one agent per issue | CI signs lane 3; the owner merges the risky list · the full suite, every merge |
+| B10 Operate | Scheduled pulls, nightly story checks, the owner queue, triaged issues | B9 | yes: one agent per issue | CI signs lane 3; the risky list gets a cold read, then the integrator merges · the full suite, every merge |
 
 The same rows, with their status and the reference that signed each, are the skill pack's `ssot/stages.agent.tsv` ([template](templates/ssot/stages.agent.tsv)).
 
@@ -105,7 +105,7 @@ One agent per story, with the story id and its message-code prefix given:
 
 ## B7 · Gate and money path
 
-Only when a story's human step is approve. The integrator builds it; the owner merges it.
+Only when a story's human step is approve. The integrator builds it, a second agent reads it cold, and the integrator merges it; the owner's part is the client contract and the first approve.
 
 - `<cli> queue add` snapshots a report's proposals; `queue approve` passes the gate; an approval expires after `approval_ttl_hours`.
 - `<cli> execute apply` is a dry run that prints the whole plan unless `--apply`.
@@ -131,7 +131,7 @@ Only when a story's human step is approve. The integrator builds it; the owner m
 
 - Scheduled pulls with freshness checks. Each night `<cli> compute stories --json` becomes one line for the owner: "37 green, 1 red: S0x".
 - `<cli> pending --json` feeds the console, at most 10 open per owner.
-- Issues are triaged into the three lanes of decision rights. Lane 3 merges on green CI; the risky list waits for the owner.
+- Issues are triaged into the three lanes of decision rights. Lane 3 merges on green CI; the risky list merges on green CI after a cold read by a second agent.
 - A fix to the kit or the console goes to the playbook first, then `scaffold/new_skill_pack.py --update-kit`.
 - CI runs by itself only the few-second checks (secret scan, story id, changelog); the suite and the adapter checks are manual jobs (`when: manual`, `allow_failure: true`) and run before each push through the pre-push hook: `git config skillpack.prepush-tests "python3 scripts/<cli>.py test"`, once per clone (the scaffold's next steps print it). A click on the manual job is the clean-environment run. A skill pack scaffolded earlier makes the same two changes by hand.
 - `--update-kit` does not rewrite the CI file (`.github/workflows/ci.yml`, or `.gitlab-ci.yml` for a pack scaffolded with `--host gitlab`). A skill pack scaffolded before every job of [templates/gitlab-ci.yml](templates/gitlab-ci.yml) stated its `rules:` has jobs with none, and a job with no `rules:` never runs in a merge request pipeline: such a merge request can turn green with only its `story id` job run and no test. Add `rules:` with `- when: on_success` to the secret scan, the test job and any other job of that file by hand, as the template does.

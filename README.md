@@ -43,9 +43,9 @@ What runs in production feeds back as issues and at most ten owner asks, which s
 
 ## Who decides what
 
-Write these three lanes into the repository on day one, not into an agent's memory.
+Write these lanes into the repository on day one, not an agent's memory.
 
-**Always the owner:** meaning · numbers · money · the client contract · risky merges · release.
+**Always the owner:** meaning · numbers · money · the client contract · the release. Technical choices, pushing and merging included, are the agent's.
 
 ```mermaid
 flowchart TB
@@ -57,12 +57,12 @@ flowchart TB
       direction LR
       c1["issue filed<br/>by an agent"] --> c2["triage against<br/>house rules"] --> c3["fix + tests in<br/>its own worktree"] --> c4["local suite green:<br/>merge"]
     end
-    OM["Owner merges"]:::risky
+    OM["Cold read,<br/>then merge"]:::risky
     L3 -. "touches the risky list" .-> OM
     classDef risky stroke:#e37400,stroke-width:2px
 ```
 
-**The risky list:** the human gate, the write path, contract removals or renames, owner files, threshold values and human-data tables. A fix that touches it waits for the owner's merge. Paid data calls and widening what may be written count only when the owner types them in chat. Template: [`templates/decision-rights.md`](templates/decision-rights.md).
+**The risky list:** the human gate, the write path, contract removals or renames, owner files, threshold values and human-data tables. A fix touching it is read cold by a second agent, then merged. Paid data calls and widening what may be written count only when the owner types them in chat. Template: [`templates/decision-rights.md`](templates/decision-rights.md).
 
 ---
 
@@ -112,7 +112,8 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 2. B1 scaffolds it: `python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack --name acme-skill-pack --cli acme --prefix ACME --packs data`. It vendors the kit packs the skill pack takes ([kit/README.md](kit/README.md), "Packs"), the console, and the thirteen day-one tests, and is green before its first feature.
 3. For a skill pack that already exists, `python3 tools/fleet.py status PATH…` says where its vendored copies stand against this playbook, and `python3 kit/tools/vendor.py --skill-pack PATH` brings them up to date.
 4. To show the owner how the project is going on one page, an agent loads [skills/progress-page/SKILL.md](skills/progress-page/SKILL.md); the handoff runs it at the end of each session.
-5. To show what a skill pack can do and how it works on one page, the skill pack draws its own overview from its registries ([templates/system-overview.md](templates/system-overview.md)); the pipeline above is the same for every skill pack and stays here.
+5. To research a question or look at prior art, an agent loads [skills/research/SKILL.md](skills/research/SKILL.md); only its description is in context until a task matches.
+6. To show what a skill pack can do and how it works on one page, the skill pack draws its own overview from its registries ([templates/system-overview.md](templates/system-overview.md)); the pipeline above is the same for every skill pack and stays here.
 
 **Check the whole playbook with one command.** [`run_all.py`](run_all.py) runs every test suite in the repository and ends with one `RESULT:` line; it exits 1 if any suite fails. `python3 run_all.py --list` names the suites and `python3 run_all.py kit console` runs some. The pre-push hook runs it before every push; [CI](.github/workflows/ci.yml) runs it only when started by hand.
 
