@@ -80,7 +80,7 @@ class FakeServer:
         self.store_empty, self.expire, self.fail_send = store_empty, expire, fail_send
         self.msgs, self.log, self.exchanges, self.tokens = {}, [], 0, ["tok-1", "tok-2"]
         self.conv_type = "GROUP"
-        self.blobs, self.downloads = {}, []
+        self.blobs, self.downloads, self.resolve_to = {}, [], None      # resolve_to: a download link to force
         self.members = [{"member_id": "ME", "display_name": "DEMO-me", "kind": "agent"},
                         {"member_id": "AGENT", "display_name": "DEMO-agent", "kind": "agent"},
                         {"member_id": "DEMO-member", "display_name": "Demo Member", "kind": "human"}]
@@ -114,7 +114,7 @@ class FakeServer:
                     return self._reply(200, {"data": {"access_token": outer.tokens[min(outer.exchanges, 2) - 1]}})
                 outer.log.append((self.path, body, auth))
                 if self.path.endswith("/artifacts/resolve"):
-                    return self._reply(200, {"data": {"resolved": {u: {"download_url": f"{outer.url}/dl/{u.split('://', 1)[1]}"}
+                    return self._reply(200, {"data": {"resolved": {u: {"download_url": outer.resolve_to or f"{outer.url}/dl/{u.split('://', 1)[1]}"}
                                                                    for u in body["uris"] if u.split("://", 1)[1] in outer.blobs}}})
                 if self.path.endswith("/read"):
                     return self._reply(200, {"data": {}})
@@ -433,6 +433,11 @@ def attachment_tests() -> None:
         refused("a name that is only '..'", message={**msg, "attachments": [{"file_name": "..", "artifact_id": att.artifact_id}]},
                 attachment=bridge.Attachment("..", att.artifact_id))
         refused("a file larger than the limit", max_bytes=len(raw) - 1)
+        for link in ("file:///etc/hosts", "http://downloads.example.test/x?sig=1", "ftp://downloads.example.test/x"):
+            srv.resolve_to = link
+            refused(f"a download link that is not https and not the API's own address ({link.split(':')[0]})", dest_dir=Path(d) / "elsewhere")
+        srv.resolve_to = None
+        check("nothing was written for those links", not (Path(d) / "elsewhere").exists(), list(Path(d).iterdir()))
         (out / "DEMO-export.csv").write_bytes(b"other")
         refused("a different file of that name already there")
         check("the file that was there is untouched", (out / "DEMO-export.csv").read_bytes() == b"other")
