@@ -1,5 +1,0 @@
-code	params	meaning_en	meaning_zh
-snapshot_out_inside	out	{out} is inside the workspace: a package there would be packed into the next one. Name a folder outside it. Nothing was written	{out} 在工作区里面：放在这里的包会被打进下一个包。请选工作区外的文件夹。未写入任何内容
-snapshot_keep_invalid	keep	keep {keep}: keep at least one package. Nothing was written	保留数 {keep} 无效：至少保留一个包。未写入任何内容
-snapshot_integrity	detail	The copy of the database fails the integrity check ({detail}). No package was written	数据库副本未通过完整性检查（{detail}）。未生成快照包
-snapshot_secret_found	n,files	{n} file(s) hold a secret value or a token ({files}). No package was written; remove it from the file or exclude the file	有 {n} 个文件含有密钥或令牌（{files}）。未生成快照包；请从文件中删除，或把该文件排除

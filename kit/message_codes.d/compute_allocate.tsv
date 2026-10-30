@@ -1,3 +1,0 @@
-code	params	meaning_en	meaning_zh
-allocate_replay_only		a replay: it shows what the rule does, not what the moves would have earned (the data has no counterfactual)	这是回放：它只显示规则怎么动，不显示这些调整本来会带来什么（数据里没有对照）
-allocate_proposal_draft		a proposal, not an instruction: the allocation_* thresholds are drafts the owner has not confirmed, and the evidence is a day-to-day relationship, not the effect of a budget change	这是建议，不是指令：allocation_* 阈值还是老板没确认的草稿，证据只是每天之间的关系，不是预算调整的效果

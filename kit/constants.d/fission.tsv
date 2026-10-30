@@ -1,3 +1,0 @@
-name	default	unit	min	max	group	label_en	label_zh	explain	why	reads
-fission_benchmark_min	3	proven creatives	3		fission	proven creatives (mature, declining, faded) needed to set a benchmark	设基准所需的已证明素材数	below it only the weak-creative zeros are scored	a draft until a person confirms it for a client	fission.benchmark.minimum fission.scores.minimum
-fission_window_days	14	days	7		fission	counted days a creative's cost and volume are read over for its fission score	裂变分所看的最近天数	a score follows what the creative earns now, so a fading one falls	a draft until a person confirms it for a client	fission.scores.window_days

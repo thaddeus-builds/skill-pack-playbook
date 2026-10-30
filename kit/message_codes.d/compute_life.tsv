@@ -1,5 +1,0 @@
-code	params	meaning_en	meaning_zh
-life_move	creative,frm,to,reason	{creative}: {frm} -> {to} ({reason})	{creative}：{frm} → {to}（{reason}）
-life_history_insufficient	name,have,need	{name}: {have} creative(s) in the history, {need} needed: its cold start is used and labelled	{name}：历史只有 {have} 条素材、需要 {need} 条：改用冷启动值并标明
-life_doubt_unknown	have,need	doubt_spend is unknown: {have} creative(s) with 5 or more conversions, {need} needed; the spend-without-conversion check is off	存疑线未知：转化达 5 次以上的素材只有 {have} 条、需要 {need} 条；“花钱无转化”的检查已关闭
-life_no_creatives		no creative has a day to read	没有任何素材有可读的日数

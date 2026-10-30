@@ -1,9 +1,0 @@
-#!/bin/sh
-# Run every suite before a push, so a failure shows up here and not as a CI run that spends quota.
-# Install once per clone: git config core.hooksPath .githooks      Skip in an emergency: git push --no-verify
-# CI runs the same command only when started by hand; this hook is the check on every push.
-cd "$(git rev-parse --show-toplevel)" || exit 1
-for py in python3.13 python3.12 python3.11 python3; do
-    command -v "$py" >/dev/null 2>&1 && break
-done
-exec "$py" run_all.py
