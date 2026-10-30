@@ -114,6 +114,11 @@ def deliver_tests():
         check("turn: the key is nowhere in it", KEY not in out)
         check("turn: each message is handed over once", h.deliver(env, now=t0 + 120) == "")
 
+        srv.add("AGENT", "", files={"totals.csv": b"a,b\n1,2\n"})
+        out = h.deliver(env, now=t0 + 150)
+        check("turn: a file the asked agent sent is handed over as an attached file, not as an empty message",
+              "(attached file: totals.csv)" in out and "(empty)" not in out, out)
+
         reads = len(srv.log)
         srv.add("AGENT", "step 2 done")
         check("turn: a read is not repeated inside the poll interval", h.deliver(env, now=t0 + 125) == "" and len(srv.log) == reads)

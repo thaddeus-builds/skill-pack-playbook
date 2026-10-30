@@ -10,6 +10,9 @@
       is reported with its name
   [3] edge cases: CRLF, a byte order mark, blank sections, a comment under
       Updated, a Waiting row that unblocks several rows, an empty file
+  [4] an archive (issue #354): `Archive: <file>` names a file of old Done and
+      Parked rows; ids stay unique across both, a reference resolves in either,
+      a missing or outside file, a foreign section and a bad row are reported
 """
 
 import re
@@ -105,11 +108,42 @@ def test_edges() -> None:
     check("a line that is not an item is not read", roadmap.problems(prose) == [], roadmap.problems(prose))
 
 
+def test_archive() -> None:
+    print("\n[4] an archive")
+    live, arch = roadmap.WITH_ARCHIVE, roadmap.ARCHIVE_TEXT
+    check("archive_name reads the line before the first section, and nothing else",
+          roadmap.archive_name(live) == "ROADMAP-ARCHIVE.md" and roadmap.archive_name(roadmap.SOUND) is None
+          and roadmap.archive_name(roadmap.SOUND.replace("## Links", "## Links\nArchive: x.md")) is None)
+    root = skill_pack_at(Path(tmp_dir()) / "a")
+    (root / "ROADMAP.md").write_text(live, encoding="utf-8")
+    got = roadmap.check_roadmap(root)
+    check("a named archive that is not there is a problem, by name", len(got) == 1 and "ROADMAP-ARCHIVE.md is not a file" in got[0], got)
+    (root / "ROADMAP-ARCHIVE.md").write_text(arch, encoding="utf-8")
+    check("with the archive beside it the roadmap is clean, and its reference to an archived row resolves",
+          roadmap.check_roadmap(root) == [], roadmap.check_roadmap(root))
+    (root / "ROADMAP-ARCHIVE.md").write_text(arch.replace("[D0]", "[D1]"), encoding="utf-8")
+    got = roadmap.check_roadmap(root)
+    check("an id in both files is reported", any("[D1] is used twice (in the roadmap and its archive)" in x for x in got), got)
+    (root / "ROADMAP-ARCHIVE.md").write_text("# Demo roadmap archive\n", encoding="utf-8")
+    got = roadmap.check_roadmap(root)
+    check("a reference to a row that is in neither file is reported", any("D0, which is not a row of this file" in x for x in got), got)
+    (root / "ROADMAP.md").write_text(live.replace("Archive: ROADMAP-ARCHIVE.md", "Archive: ../elsewhere.md"), encoding="utf-8")
+    (root.parent / "elsewhere.md").write_text(arch, encoding="utf-8")
+    got = roadmap.check_roadmap(root)
+    check("an archive outside the roadmap's folder is refused", len(got) == 1 and "not a file next to the roadmap" in got[0], got)
+    (root / "ROADMAP.md").write_text(roadmap.SOUND, encoding="utf-8")
+    check("a roadmap without the line is read as before, whatever file is beside it", roadmap.check_roadmap(root) == [], roadmap.check_roadmap(root))
+    mile = roadmap.SOUND_MILESTONES.replace("Updated: 2026-10-01\n", "Updated: 2026-10-01\nArchive: ROADMAP-ARCHIVE.md\n")
+    check("a milestone may include an archived Done row",
+          roadmap.problems(mile.replace("X1, D1", "X1, D0"), arch) == [], roadmap.problems(mile.replace("X1, D1", "X1, D0"), arch))
+
+
 def main() -> None:
     test_rules()
     test_template()
     test_skill_pack_file()
     test_edges()
+    test_archive()
 
 
 if __name__ == "__main__":
