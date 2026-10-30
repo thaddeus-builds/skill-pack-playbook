@@ -13,4 +13,4 @@ plain string (the @names are plain text, no mention objects, no content array):
 Do nothing else. Answer with the id comm_send returned.
 ```
 
-Use an ASCII `@name`: a full-width character is not a mention. Keep the id it returned for the read-back. Over REST the body is typed (`type`, `content.body.text`), not a string. Never use `comm` with `method: send`. Then run the read-back; do not report "sent" before it.
+A message to a **group** must @-mention the agent it is for, or no agent is woken (`kit.bridge` refuses it); a direct message needs none. Use an ASCII `@name`: a full-width character is not a mention. Keep the id it returned for the read-back. Over REST the body is typed (`type`, `content.body.text`), not a string. Never use `comm` with `method: send`. Then run the read-back; do not report "sent" before it.
