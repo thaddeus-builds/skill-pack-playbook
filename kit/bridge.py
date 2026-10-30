@@ -294,6 +294,24 @@ def _unwrap(raw):
     return raw["data"] if isinstance(raw, dict) and isinstance(raw.get("data"), (dict, list)) else raw
 
 
+READ_RETRIES = 2                 # extra tries for a read that failed in transit (a dropped connection, a timeout)
+READ_BACKOFF = 0.5               # seconds before the first retry, doubling
+
+
+def _open(urlopen, req, timeout: float):
+    """`urlopen(req)`, asked again after a transport failure. Reads and the token exchange only: a send that failed in
+    transit may have been posted, and asking again would post it twice (the caller reads it back instead)."""
+    for attempt in range(READ_RETRIES + 1):
+        try:
+            return urlopen(req, timeout=timeout)
+        except urllib.error.HTTPError:
+            raise                                    # the server answered: not a transport failure
+        except (urllib.error.URLError, OSError):
+            if attempt == READ_RETRIES:
+                raise
+            time.sleep(READ_BACKOFF * 2 ** attempt)
+
+
 def _client(creds: Credentials, urlopen, timeout: float):
     """`authed(method, path, body)` for the API: a token is exchanged once, held in memory, and exchanged
     again once when a call answers 401."""
@@ -308,8 +326,9 @@ def _client(creds: Credentials, urlopen, timeout: float):
             req.add_header(k, v)
         req.add_header("Authorization", f"Bearer {bearer}")
         where = path.split("?")[0].rsplit("/", 1)[0]
+        idempotent = method == "GET" or path.endswith("/auth/agent/token")      # a read or a token: safe to ask again; never the send
         try:
-            with urlopen(req, timeout=timeout) as resp:
+            with (_open(urlopen, req, timeout) if idempotent else urlopen(req, timeout=timeout)) as resp:
                 text = resp.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             raise RestError(f"{method} {where}: HTTP {e.code}") from None
