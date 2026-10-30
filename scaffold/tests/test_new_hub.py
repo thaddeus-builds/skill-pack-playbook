@@ -187,6 +187,26 @@ def main() -> int:
     check("bin/ask is pinned to the hub's console/",
           r.stdout.strip() == str(hub / "console"), r.stdout + r.stderr)
 
+    print("[2b] bin/ask refuses a gate the console would not relay (issue #362), with the playbook's own console")
+    real = root / "realhub"
+    rc, out, err = run(HUB_PY, "new", "--hub", str(real), "--title", "Real Tea", "--console-home", str(PLAYBOOK / "console"))
+    check("a hub whose console home is the playbook's", rc == 0 and (real / "bin" / "ask").is_file(), out + err)
+    example = json.loads((PLAYBOOK / "console" / "examples" / "provide-number.json").read_text(encoding="utf-8"))
+
+    def post(verb):
+        f = real / f"ask-{verb[0]}.json"
+        f.write_text(json.dumps({**example, "gate": {**example["gate"], "verb": verb}}), encoding="utf-8")
+        r = subprocess.run([str(real / "bin" / "ask"), "add", str(f)], capture_output=True, text=True, timeout=60, env=clean_env())
+        return json.loads(r.stdout or "{}")
+    refused_ask = post(["facts", "confirm", "unit_cost"])
+    codes = [(e["field"], e["code"]) for e in (refused_ask.get("params") or {}).get("errors", [])]
+    check("a gate with no pack word in front is refused when it is posted, not drawn without an answer box",
+          refused_ask.get("ok") is False and refused_ask.get("code") == "invalid_ask" and ("gate.verb", "not_allowed") in codes, refused_ask)
+    check("the same gate through the hub's word is posted", post(["hub", "facts", "confirm", "unit_cost"]).get("posted") == ["cost-sencha-tin"])
+    check("bin/ask carries the list bin/console relays",
+          'ask.py --relay-verbs "hub facts confirm"' in (real / "bin" / "ask").read_text(encoding="utf-8")
+          and '--relay-verbs "hub facts confirm"' in (real / "bin" / "console").read_text(encoding="utf-8"))
+
     print("[3] add-pack (a folder written here)")
     rc, out, err = run(HUB_PY, "add-pack", "--hub", str(hub), "--skill-pack", str(pa))
     pf = hub / "demoa"
@@ -266,6 +286,7 @@ def main() -> int:
     check("the console relays every pack's confirm / approve verbs through bin/hub",
           f'--relay-cmd "$root/bin/hub" --relay-verbs "{want}"' in t["bin/console"],
           t["bin/console"])
+    check("bin/ask is told the same list after add-pack (issue #362)", f'ask.py --relay-verbs "{want}"' in t["bin/ask"], t["bin/ask"])
     deny = json.loads(t[".claude/settings.json"])["permissions"]["deny"]
     missing = [f"Bash({c} {g}:*)" for cli in GATED for g in GATED[cli]
                for c in (f"./bin/hub {cli}", f"bin/hub {cli}", f"{hub}/bin/hub {cli}",

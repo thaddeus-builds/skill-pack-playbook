@@ -117,6 +117,8 @@ def main() -> int:
     check("the console relays confirm / approve / answer, not restore",
           '--relay-verbs "facts confirm,plan answer,queue approve"'
           in texts[f / "bin" / "console"], texts[f / "bin" / "console"])
+    check("bin/ask is told the same list, so `add` refuses a gate the console would not relay (issue #362)",
+          'ask.py --relay-verbs "facts confirm,plan answer,queue approve"' in texts[f / "bin" / "ask"], texts[f / "bin" / "ask"])
     console = texts[f / "bin" / "console"]
     check("the console's confirm-code secret lives in its own process env, "
           "never in workspace/.env (the kit never loads it from a file)",
