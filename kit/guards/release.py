@@ -31,14 +31,19 @@ bare suffix such as ".agent.tsv" for a file name (the vendored kit holds
 one); .gitattributes is compared by its export-ignore entries, so other
 attributes may share the file.
 
+`python3 -m kit.guards.release [--write] [ROOT]` prints the .gitattributes the config implies, or with
+`--write` writes it to ROOT (default: the current folder); run it from the folder that holds `kit/` on the path.
+
 Test: kit/tests/test_guards.py.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from kit.config import SkillPackConfig
@@ -224,3 +229,23 @@ def check_release_archive(root: Path | str | None = None) -> bool:
                       [])
     return report("release: git archive ships exactly what the config says",
                   check_release(root))
+
+
+def main(argv: list[str] | None = None, out=None) -> int:
+    ap = argparse.ArgumentParser(prog="python3 -m kit.guards.release",
+                                 description="The .gitattributes the skill pack's config implies.")
+    ap.add_argument("root", nargs="?", default=".", help="the skill pack's root (default: the current folder)")
+    ap.add_argument("--write", action="store_true", help=f"write {ATTRS} in the root instead of printing it")
+    a = ap.parse_args(argv)
+    out = out or sys.stdout
+    text = render_gitattributes(a.root)
+    if a.write:
+        (Path(a.root) / ATTRS).write_text(text, encoding="utf-8")
+        out.write(f"wrote {ATTRS}\n")
+    else:
+        out.write(text)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
