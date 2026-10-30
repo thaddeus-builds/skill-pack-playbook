@@ -32,6 +32,8 @@ uv run tests/golden/engine.py compare main HEAD --strict --data DIR  # a copy of
 uv run tests/golden/engine.py compare main HEAD --keep ~/golden-out  # keep both snapshots
 ```
 
+Run it from a tree that has the skill pack's dependencies installed. A new git worktree has none of them (a skill pack with a TypeScript part has no `ts/node_modules` there), and the run stops at the first case. The tool compares git revisions, so any tree of the same repository gives the same answer: run it from the main checkout, or install the dependencies in the worktree first.
+
 A refactor runs `--strict` (an added key fails too) and shows `0 differ` on fixtures and on a copy of real data. A feature may add keys and cases; it may not remove or change one.
 
 | Verdict | Means |

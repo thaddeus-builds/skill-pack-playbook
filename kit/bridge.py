@@ -41,6 +41,9 @@ message, or a time limit passes; `next_round` caps the follow-ups at three and
 asks for a reason each time. Whether the answer is complete is the agent's call,
 not this module's. design: docs/design/bridge-reply.md.
 
+A reply can be a file (a client agent's export arrives as an attached csv under a message with no text):
+`Reply.attachments` names each one, and `download_attachment` saves it exactly as stored, over REST.
+
 `check_isolation(targets)` names what would make two bridges share state before
 anything is sent. No client name, group or id lives here.
 Test: kit/tests/test_bridge.py.
@@ -48,14 +51,17 @@ Test: kit/tests/test_bridge.py.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Iterable
 
 FULL_WIDTH_AT = "＠"
@@ -432,12 +438,20 @@ class Anchor:
 
 
 @dataclass(frozen=True)
+class Attachment:
+    """A file on a message, as the server lists it. `file_name` is the sender's word: a name to show, not a path."""
+    file_name: str
+    artifact_id: str
+
+
+@dataclass(frozen=True)
 class Reply:
     id: str
     seq: int
     sender_id: str
     text: str
     label: str = ""                  # who it is, when known ("a person", "the agent asked"); else the sender id
+    attachments: tuple = ()          # the files on the message, as `Attachment`s; a file reply has an empty `text`
 
 
 @dataclass(frozen=True)
@@ -453,6 +467,17 @@ def _text_of(content) -> str:
     body = content.get("body") if isinstance(content, dict) else None
     text = body.get("text") if isinstance(body, dict) else None
     return text if isinstance(text, str) else ""
+
+
+def _attachments_of(m: dict) -> tuple:
+    """The files on a message dict (`attachments`, each with `file_name` and `artifact_id`); an entry without both is left out."""
+    raw = m.get("attachments")
+    if not isinstance(raw, list):
+        content = m.get("content")
+        raw = content.get("attachments") if isinstance(content, dict) else None
+    return tuple(Attachment(a["file_name"], a["artifact_id"]) for a in (raw if isinstance(raw, list) else [])
+                 if isinstance(a, dict) and isinstance(a.get("file_name"), str) and a["file_name"]
+                 and isinstance(a.get("artifact_id"), str) and a["artifact_id"])
 
 
 def _is_reply(m: dict, anchor: Anchor, from_ids: frozenset) -> bool:
@@ -487,7 +512,7 @@ def wait_for_reply(fetch: Callable[[], list], anchor: Anchor, *, from_ids: Itera
         if found:
             found.sort(key=lambda m: m["seq"])
             return Wait("replied", tuple(Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")),
-                                               _text_of(m.get("content"))) for m in found))
+                                               _text_of(m.get("content")), attachments=_attachments_of(m)) for m in found))
         if clock() + poll > deadline:
             return Wait("timeout")
         sleep(poll)
@@ -522,6 +547,57 @@ def wait_for_reply_to(target: Target, sent_id: str, *, from_ids: Iterable[str] =
     except (OSError, ValueError, RestError) as e:
         return Wait("unreadable", reason=f"anchor: {e}")
     return wait_for_reply(fetch, anchor, from_ids=from_ids, timeout=timeout, poll=poll, sleep=sleep, clock=clock)
+
+
+MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class Downloaded:
+    path: Path
+    sha256: str
+    size: int
+
+
+def download_attachment(creds: Credentials, conversation_id: str, message: dict, attachment: Attachment, dest_dir,
+                        *, urlopen=urllib.request.urlopen, timeout: float = 60.0, max_bytes: int = MAX_DOWNLOAD_BYTES) -> Downloaded:
+    """Save one attachment of `message` into `dest_dir`, byte for byte as the server holds it, and return where it went
+    with its sha256 (the pack records the hash with the file it imports). The attachment must be one of the message's
+    and the message must belong to `conversation_id`. The server is asked for a download link with the token; the link
+    is fetched with no credential at all (and only if it is https or the API's own address: a `file://` link would read a local file), and neither it nor the token is put in a result or a reason. The file is named
+    by the last part of `file_name`; a name that is empty, `.` or `..`, or a file already there with other bytes, is
+    refused (`RestError`), the same bytes are left as they are. Nothing is decoded."""
+    if attachment not in _attachments_of(message):
+        raise RestError("download: the attachment is not on that message")
+    if message.get("conversation_id") not in (None, conversation_id):
+        raise RestError("download: the message is from another conversation")
+    name = os.path.basename(attachment.file_name.replace("\\", "/"))
+    if name in ("", ".", ".."):
+        raise RestError("download: the file name is not usable")
+    uri = "artifact://" + attachment.artifact_id
+    d = _unwrap(_client(creds, urlopen, timeout)("POST", f"{creds.prefix}/artifacts/resolve", {"uris": [uri], "inline": False}))
+    item = (d.get("resolved") or {}).get(uri) if isinstance(d, dict) else None
+    link = item.get("download_url") if isinstance(item, dict) else None
+    if not isinstance(link, str) or not link:
+        raise RestError("download: no download link")
+    if urllib.parse.urlsplit(link).scheme != "https" and urllib.parse.urlsplit(link)[:2] != urllib.parse.urlsplit(creds.base_url)[:2]:
+        raise RestError("download: the download link is not https")      # file:// and ftp:// would read a local file or a stranger's host
+    req = urllib.request.Request(link, headers={"User-Agent": USER_AGENT})
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            data = resp.read(max_bytes + 1)
+    except urllib.error.HTTPError as e:
+        raise RestError(f"download: HTTP {e.code}") from None
+    except (urllib.error.URLError, OSError) as e:
+        raise RestError(f"download: {type(e).__name__}") from None
+    if len(data) > max_bytes:
+        raise RestError("download: the file is larger than the limit")
+    out = Path(dest_dir) / name
+    if out.exists() and out.read_bytes() != data:
+        raise RestError("download: a different file of that name is already there")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(data)
+    return Downloaded(out, hashlib.sha256(data).hexdigest(), len(data))
 
 
 @dataclass(frozen=True)
@@ -575,6 +651,10 @@ def wrap_untrusted(replies: Iterable[Reply], *, request: str = "") -> str:
     for r in replies:
         label = getattr(r, "label", "") or r.sender_id
         lines.append(f"--- seq {r.seq}, from {label} ---")
-        lines.append(redact_secrets(r.text).strip() or "(empty)")
+        text = redact_secrets(r.text).strip()
+        if text or not r.attachments:
+            lines.append(text or "(empty)")
+        for a in r.attachments:
+            lines.append("(attached file: " + redact_secrets(a.file_name) + ")")
     lines.append(UNTRUSTED_NOTE)
     return "\n".join(lines)
