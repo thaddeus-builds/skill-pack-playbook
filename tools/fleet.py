@@ -191,79 +191,130 @@ def parts(skill_pack: Path, playbook: Path) -> list[dict]:
     )]
 
 
-NETWORK_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": "ssh -o ConnectTimeout=20 -o BatchMode=yes",
-               "GIT_HTTP_LOW_SPEED_LIMIT": "1", "GIT_HTTP_LOW_SPEED_TIME": "30"}
+NETWORK_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_HTTP_LOW_SPEED_LIMIT": "1", "GIT_HTTP_LOW_SPEED_TIME": "30"}
+SSH_COMMAND = "ssh -o ConnectTimeout=20 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+REMOTE_SHOW_S, FETCH_S = 60, 300                                    # how long one `git remote show` and one fetch may take before they are given up on
 
 
-def git_env() -> dict[str, str]:
+def git_env(cwd: Path | None = None) -> dict[str, str]:
     """What keeps a git call from hanging on a remote that accepts the connection and never answers, or from asking a question nobody is there to
-    answer: no prompt, an ssh connect timeout, and a stall limit for http. A value the caller already set wins."""
-    return {k: v for k, v in NETWORK_ENV.items() if k not in os.environ}
+    answer: no prompt, a stall limit for http, and for ssh a connect timeout and keep-alives. A value the caller already set wins, and the ssh command
+    is left alone when the caller has one of their own (`GIT_SSH_COMMAND`, `GIT_SSH`, or `core.sshCommand` as `cwd` sees it): theirs may name a key or a port."""
+    env = {k: v for k, v in NETWORK_ENV.items() if k not in os.environ}
+    if not any(k in os.environ for k in ("GIT_SSH_COMMAND", "GIT_SSH")):
+        own = subprocess.run(["git", "config", "--get", "core.sshCommand"], cwd=cwd, capture_output=True, text=True, errors="replace")
+        if not own.stdout.strip():
+            env["GIT_SSH_COMMAND"] = SSH_COMMAND
+    return env
 
 
-def hide_credentials(url: str) -> str:
-    """`url` without the user and password of an address, for a line that is printed."""
-    return re.sub(r"(://)[^/@\s]*@", r"\1", url)
+SECRET_QUERY = re.compile(r"([?&][^=&\s]*(?:token|key|secret|pass|auth|sig)[^=&\s]*=)[^&\s]+", re.I)
+
+
+def hide_credentials(text: str) -> str:
+    """`text` (an address, or a line a git error printed) without the user and password of an address and without the value of a query parameter that
+    looks like a secret (`?token=...`)."""
+    return SECRET_QUERY.sub(r"\1<hidden>", re.sub(r"(://)[^/\s]*@", r"\1", text))
+
+
+def is_network_address(address: str) -> bool:
+    """Is `address` a URL or scp-like (`host:path`, `user@host:path`) rather than a path? Git's own rule: a colon before any slash."""
+    colon, slash = address.find(":"), address.find("/")
+    return "://" in address or (colon > 0 and (slash == -1 or colon < slash))
+
+
+def remote_address(pack: Path, name: str) -> str | None:
+    """The address of the checkout's remote `name`; a relative path is made absolute against the checkout, as git reads it. None when it has none."""
+    r = run(pack, "git", "remote", "get-url", name)
+    address = r.stdout.strip() if r.returncode == 0 else ""
+    if not address or os.path.isabs(address) or is_network_address(address):
+        return address or None
+    return str((pack / address).resolve())
+
+
+def inside(out: Path, pack: Path) -> bool:
+    """Is `out` the skill pack or a folder inside it? Compared as the file system does (a case-insensitive one, a link), not as text."""
+    here = out
+    while True:
+        try:
+            if here.exists() and os.path.samefile(here, pack):
+                return True
+        except OSError:
+            pass
+        if here.parent == here:
+            return False
+        here = here.parent
 
 
 def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = "origin") -> dict:
-    """A trial of `update` before a train, on a clone: the pack's checkout is only read. The clone keeps what `update` looks at: the checkout's own
-    default branch (so a checkout ahead of its remote is refused as `update` refuses it), the remote-tracking refs the checkout recorded (so
-    another remote that was ahead is seen as `update` sees it), and the remote's default branch only (no `origin/HEAD` inherited from the checkout's current branch). Its `origin` is the
-    checkout's own `remote` address, resolved when it is a relative path. Cloned into `out/<folder>`, which must not exist; a trial that
-    cannot start leaves no folder behind. {pack, state, text} as `update` returns it."""
+    """A trial of `update` before a train, on a clone: the pack's checkout is only read. The clone has the checkout's remotes under the checkout's own
+    names (so `update` sees another remote that is ahead, whichever one `remote` names), the remote-tracking refs the checkout recorded, its own default
+    branch (so a checkout ahead of its remote is refused as `update` refuses it), and no `HEAD` of a remote inherited from the checkout's current branch.
+    Cloned into `out/<folder>`, which must not exist; a trial that cannot start, or is interrupted, leaves no folder behind.
+    {pack, state, text} as `update` returns it."""
     name = pack.name
-    env = git_env()
+    env = git_env(pack)
 
     def refused(text: str) -> dict:
         return {"pack": name, "state": "refused", "text": text}
 
-    url = run(pack, "git", "remote", "get-url", remote)
-    if url.returncode != 0 or not url.stdout.strip():
+    address = remote_address(pack, remote)
+    if not address:
         return refused(f"the checkout has no remote named {remote}")
-    address = url.stdout.strip()
-    if "://" not in address and not re.match(r"^[\w.-]+@[\w.-]+:", address) and not os.path.isabs(address):
-        address = str((pack / address).resolve())                    # a relative path in a remote is relative to the checkout
     shown = hide_credentials(address)
-    if out.exists() and not out.is_dir():
-        return refused(f"{out} is a file; --out names a folder")
     dest = out / name
-    if dest.exists():
-        return refused(f"{dest} exists (two packs with the folder name {name}, or a trial made before); name an --out that has no folder for it")
-    out.mkdir(parents=True, exist_ok=True)
-    cloned = run(out, "git", "clone", "-q", "--no-hardlinks", str(pack), str(dest), timeout=300)
+    try:
+        if out.exists() and not out.is_dir():
+            return refused(f"{out} is a file; --out names a folder")
+        if dest.exists():
+            return refused(f"{dest} exists (two packs with the folder name {name}, or a trial made before); name an --out that has no folder for it")
+        out.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return refused(f"cannot use --out {out.name[:60]}: {e.strerror}")
 
-    def abandon(text: str) -> dict:
+    class Stop(Exception):
+        """A step of the setup failed; the message says which and why."""
+
+    def need(r: subprocess.CompletedProcess, what: str) -> None:
+        if r.returncode != 0:
+            raise Stop(f"{what}: {hide_credentials(first_line(r))}")
+
+    def build() -> None:
+        need(run(out, "git", "clone", "-q", "--no-hardlinks", str(pack), str(dest), timeout=FETCH_S), "cannot clone the checkout")
+        branch = default_branch(pack, remote)
+        run(dest, "git", "checkout", "-q", "--detach")
+        for b in run(dest, "git", "for-each-ref", "--format=%(refname:short)", "refs/heads").stdout.split():
+            run(dest, "git", "branch", "-q", "-D", b)
+        # the checkout's remotes under its own names; the clone's `origin` (the checkout itself) and the branches it made of the checkout's are dropped
+        run(dest, "git", "remote", "remove", "origin")
+        for other in run(pack, "git", "remote").stdout.split():
+            where = remote_address(pack, other)
+            if where:
+                need(run(dest, "git", "remote", "add", other, where), f"cannot copy the remote {other}")
+        # what `update` looks at, as the checkout has it now: its own default branch, and the remote-tracking refs it recorded (another remote that was
+        # ahead when the checkout last looked is ahead here too); nothing else of its local branches
+        if branch and run(pack, "git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0:
+            need(run(dest, "git", "fetch", "-q", str(pack), f"+refs/heads/{branch}:refs/heads/{branch}"), f"cannot copy the checkout's {branch}")
+        need(run(dest, "git", "fetch", "-q", str(pack), "+refs/remotes/*:refs/remotes/*"), "cannot copy the checkout's remote-tracking refs")
+        for other in run(dest, "git", "remote").stdout.split():
+            run(dest, "git", "remote", "set-head", other, "-d")
+        for attempt in range(3):                                       # a remote that drops a connection is tried again
+            fetched = run(dest, "git", "fetch", "-q", remote, env=env, timeout=FETCH_S)
+            if fetched.returncode == 0:
+                return
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+        raise Stop(f"cannot fetch {shown}: {hide_credentials(first_line(fetched))}")
+
+    try:
+        build()
+        return update(dest.resolve(), playbook, version, True, remote)
+    except Stop as e:
         shutil.rmtree(dest, ignore_errors=True)
-        return refused(text)
-
-    if cloned.returncode != 0:
-        return abandon(f"cannot clone the checkout: {first_line(cloned)}")
-    branch = default_branch(pack, remote)
-    run(dest, "git", "checkout", "-q", "--detach")
-    for b in run(dest, "git", "for-each-ref", "--format=%(refname:short)", "refs/heads").stdout.split():
-        run(dest, "git", "branch", "-q", "-D", b)
-    # what `update` looks at, as the checkout has it now: its own default branch, and the remote-tracking refs it recorded (another remote that was
-    # ahead when the checkout last looked is ahead here too); nothing else of its local branches
-    if branch and run(pack, "git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0:
-        run(dest, "git", "fetch", "-q", str(pack), f"+refs/heads/{branch}:refs/heads/{branch}")
-    run(dest, "git", "fetch", "-q", str(pack), "+refs/remotes/*:refs/remotes/*")
-    run(dest, "git", "remote", "set-url", "origin", address)
-    run(dest, "git", "remote", "set-head", "origin", "-d")
-    for other in (r for r in run(pack, "git", "remote").stdout.split() if r != remote):
-        u = run(pack, "git", "remote", "get-url", other).stdout.strip()
-        if u and "://" not in u and not re.match(r"^[\w.-]+@[\w.-]+:", u) and not os.path.isabs(u):
-            u = str((pack / u).resolve())
-        run(dest, "git", "remote", "add", other, u)
-    for attempt in range(3):                                       # a remote that drops a connection is tried again
-        fetched = run(dest, "git", "fetch", "-q", "origin", env=env, timeout=300)
-        if fetched.returncode == 0:
-            break
-        if attempt < 2:
-            time.sleep(2 * (attempt + 1))
-    else:
-        return abandon(f"cannot fetch {shown}: {hide_credentials(first_line(fetched))}")
-    return update(dest.resolve(), playbook, version, True, "origin")
+        return refused(str(e))
+    except BaseException:                                                # Ctrl-C in the middle of a clone must not poison the next trial
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
 
 
 def manifest_edits(dest: Path) -> list[str] | None:
@@ -413,7 +464,7 @@ def first_line(r: subprocess.CompletedProcess) -> str:
 def default_branch(pack: Path, remote: str = "origin") -> str | None:
     """The branch `git remote show REMOTE` calls HEAD; when that cannot be asked (the server does not answer: git.coco.xyz often
     does not), the one the checkout recorded at its last fetch (refs/remotes/REMOTE/HEAD); None when neither says."""
-    r = run(pack, "git", "remote", "show", remote)
+    r = run(pack, "git", "remote", "show", remote, env=git_env(pack), timeout=REMOTE_SHOW_S)
     m = re.search(r"^\s*HEAD branch:\s*(\S+)", r.stdout, re.M) if r.returncode == 0 else None
     if m and m.group(1) != "(unknown)":
         return m.group(1)
@@ -492,9 +543,9 @@ def export(pack: Path, out: Path, remote: str = "origin") -> dict:
     branch = default_branch(pack, remote)
     if not branch:
         return done("refused", f"`git remote show {remote}` names no default branch")
-    fetched = run(pack, "git", "fetch", "-q", remote, branch)
+    fetched = run(pack, "git", "fetch", "-q", remote, branch, env=git_env(pack), timeout=FETCH_S)
     base = f"{remote}/{branch}"
-    note = f"; fetch failed, this is what was last fetched: {first_line(fetched)}" if fetched.returncode != 0 else ""
+    note = f"; fetch failed, this is what was last fetched: {hide_credentials(first_line(fetched))}" if fetched.returncode != 0 else ""
     dest = out / pack.name
     if dest.exists():
         return done("refused", f"{dest} exists; remove it or choose another --out")
@@ -529,9 +580,9 @@ def update(pack: Path, playbook: Path, version: str, tests: bool = True, remote:
     new = f"claude/kit-{version}"
     if work.exists() or run(pack, "git", "rev-parse", "--verify", "-q", f"refs/heads/{new}").returncode == 0:
         return done("exists", f"worktree exists: {work} (branch {new}); remove it to start again")
-    fetched = run(pack, "git", "fetch", "-q", remote, branch)
+    fetched = run(pack, "git", "fetch", "-q", remote, branch, env=git_env(pack), timeout=FETCH_S)
     if fetched.returncode != 0:
-        return done("refused", f"cannot fetch {remote} {branch}: {first_line(fetched)}")
+        return done("refused", f"cannot fetch {remote} {branch}: {hide_credentials(first_line(fetched))}")
     base = f"{remote}/{branch}"
     if run(pack, "git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0 \
             and run(pack, "git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", f"refs/remotes/{base}").returncode != 0:
@@ -635,10 +686,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "rehearse":
         out = Path(args.out).expanduser().resolve()
         for h in skill_packs:
-            if out == h or h in out.parents:
+            if inside(out, h):
                 print(f"error: --out {out} is inside the skill pack {h}: the checkouts are only read; name a folder outside them", file=sys.stderr)
                 return 2
-        os.environ.update(git_env())
         current = (playbook / "kit" / "VERSION").read_text("utf-8").strip()
         results = [rehearse(h, out, playbook, current, args.remote) for h in skill_packs]
         for r in results:
