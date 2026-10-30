@@ -130,6 +130,12 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - `skills/research/SKILL.md` (new) and a line in the README's "Start a skill pack" list: the same research path as a skill an agent loads when asked to research, look at prior art or see how others design something (the owner's question, 2026-10-30: a keyword hook would load the procedure into every session; a skill puts only its description, 510 characters, in context and loads the 3 KB body when a task matches). Tried in a clean repository with `claude -p`, one run each: a Chinese and an English research prompt and a Chinese "how does the industry do X" prompt loaded the skill and then read `docs/research/README.md`; a Chinese "research this error" prompt and a one-line fact lookup did not. Test: `tests/test_prior_art_precedent.py`.
 - Skill packs: nothing (a skill a pack's agent may load; the pack's own copy is not needed)
 
+## [0.47.2] - 2026-10-31
+
+### Kit
+- `kit/contracts.d/inquiries-1.schema.json`: the copy of the new `inquiries/1` contract (draft; see Other) that a kit holds byte for byte with `contracts/`, which the previous merge forgot (its test, `kit/tests/test_contracts.py`, caught it; the count in that test is now fourteen)
+- Skill packs: mechanical (re-vendor with `python3 tools/fleet.py update`; a pack that reads `inquiries/1` needs it)
+
 ## [0.47.1] - 2026-10-31
 
 ### Kit
