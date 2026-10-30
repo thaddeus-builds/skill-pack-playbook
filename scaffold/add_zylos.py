@@ -61,6 +61,7 @@ CI_CHECK = re.compile(r"^[^#\n]*node\s+(?:\./)?zylos/lib\.js\s+check", re.M)
 OWNED_KEYS = ("lifecycle", "bin", "config", "next-steps")
 # the adapter's own patterns (hosts/zylos/lib.js, RE), the ones a value of ours has to satisfy
 SECRET_KEY = re.compile(r"SECRET|TOKEN|PASSWORD|ACCESS_KEY|API_KEY|PRIVATE_KEY")
+NOT_ALIASES = ("uv", "node", "sh", "python", "python3")                  # the adapter's: words a detached command cannot start with to mean the CLI
 RELPATH = re.compile(r"[A-Za-z0-9_./-]+")
 RE = {"name": r"[a-z0-9][a-z0-9-]*", "bin": r"[a-z0-9]+(-[a-z0-9]+)+", "prefix": r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*", "env": r"[A-Z][A-Z0-9_]*",
       "basePath": r"/[a-z0-9][a-z0-9-]*", "marker": r"[A-Z][A-Z0-9]*(-[A-Z0-9]+)+", "brand": r"[a-z0-9]+"}
@@ -81,8 +82,10 @@ def settings(skill_pack: Path) -> dict:
         raise refuse(f"{toml} is missing: this is not a skill pack")
     try:
         h = tomllib.loads(toml.read_text("utf-8")).get("skill_pack", {})
-    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError, OSError) as e:
         raise refuse(f"{toml} cannot be read ({e.__class__.__name__})") from None
+    if not isinstance(h, dict):
+        raise refuse(f"{toml}: [skill_pack] is not a table")
     raw = str(h.get("scripts_dir") or "scripts").replace("\\", "/")
     scripts = posixpath.normpath(raw)
     if raw.startswith("/") or scripts == ".." or scripts.startswith("../"):
@@ -91,6 +94,8 @@ def settings(skill_pack: Path) -> dict:
     missing = [k for k in ("name", "cli", "prefix") if not got[k]]
     if missing:
         raise refuse(f"skill-pack.toml [skill_pack] has no {', '.join(missing)}")
+    if not all(isinstance(got[k], str) for k in ("name", "cli", "prefix")):
+        raise refuse("skill-pack.toml: name, cli and env_prefix are text")
     for kind, key in (("name", "name"), ("prefix", "prefix")):
         if not fits(kind, str(got[key])):
             raise refuse(f"skill-pack.toml {('env_prefix' if key == 'prefix' else key)} = {got[key]!r} does not fit the adapter's pattern {RE[kind]}")
@@ -143,6 +148,10 @@ def problems(m: dict) -> list[str]:
                                ("detach.exit_marker", "marker", m["detach"]["exit_marker"])):
         if not fits(kind, value):
             out.append(f"{label} = {value!r} does not fit {RE[kind]}")
+    alias = m["detach"]["alias"]
+    if not fits("name", alias) or alias in NOT_ALIASES:
+        out.append(f"detach.alias = {alias!r} (the CLI word) is not a lowercase word of letters, digits and hyphens that the adapter accepts (not {', '.join(NOT_ALIASES)}); "
+                   f"write the manifest by hand")
     if SECRET_KEY.search(m["env"]["prefix"]):
         out.append(f"env.prefix {m['env']['prefix']!r} contains a word the adapter reads as a secret (SECRET, TOKEN, PASSWORD, ACCESS_KEY, API_KEY, PRIVATE_KEY), so every "
                    f"config key we write would have to be `sensitive: true`; write the manifest and the SKILL.md keys by hand")
@@ -151,13 +160,32 @@ def problems(m: dict) -> list[str]:
     return out
 
 
+def config_keys(m: dict) -> list[tuple[str, str, str | None]]:
+    """(name, description, default) of every key the adapter reads, from the manifest: the reply keys, the console's, what the tasks require, the defaults."""
+    c, d = m["console"], m.get("defaults") or {}
+    named = [(m["reply"]["channel"], "where the scheduled tasks report (a Zylos channel, e.g. lark); read by zylos/ only"),
+             (m["reply"]["endpoint"], "the endpoint on that channel (e.g. the owner's chat id); read by zylos/ only"),
+             (c["port_key"], f"the console's port on 127.0.0.1 (default {c['port']}); read by zylos/ only"),
+             (c["title_key"], "the console's page title; read by zylos/ only"),
+             (c["allow_host_key"], "the host's public domain, which the console answers to behind Caddy; read by zylos/ only")]
+    named += [(k, "required by a scheduled task; read by zylos/ only") for t in m.get("tasks", []) for k in t.get("requires", [])]
+    named += [(k, "has a default in the manifest; read by zylos/ only") for k in d if k != "_comment"]
+    out, seen = [], set()
+    for name, why in named:
+        if name and name not in seen:
+            seen.add(name)
+            out.append((name, why, str(d[name]["value"]) if isinstance(d.get(name), dict) and "value" in d[name] else None))
+    return out
+
+
 def frontmatter_keys(m: dict, s: dict) -> str:
-    """The Zylos keys of the SKILL.md frontmatter, as hosts/zylos/README.md lays them out."""
-    p, cli = s["prefix"], s["cli"]
-    return "\n".join([
+    """The Zylos keys of the SKILL.md frontmatter, as hosts/zylos/README.md lays them out. Everything the adapter's check compares comes from the manifest
+    (the one that exists, if there is one), not from the toml."""
+    cli = s["cli"]
+    lines = [
         "# Zylos adapter (zylos/README.md); other hosts ignore the keys below.",
-        f'next-steps: "Give post-install a 10-minute command timeout and relay its output to the owner. Then run `{cli} facts init` '
-        f'with the owner, and set {p}_REPLY_CHANNEL / {p}_REPLY_ENDPOINT through configure."',
+        f'next-steps: "Give post-install a 10-minute command timeout and relay its output to the owner. Then run `{cli} {m["scope"]["declare"]}` '
+        f'with the owner, and set {m["reply"]["channel"]} / {m["reply"]["endpoint"]} through configure."',
         "bin:",
         f"  {m['cli']['bin']}: zylos/bin/cli.js",
         "lifecycle:",
@@ -174,17 +202,14 @@ def frontmatter_keys(m: dict, s: dict) -> str:
         "config:",
         "  required: []",
         "  optional:",
-        f"    - name: {p}_REPLY_CHANNEL",
-        "      description: where the scheduled tasks report (a Zylos channel, e.g. lark); read by zylos/ only",
-        f"    - name: {p}_REPLY_ENDPOINT",
-        "      description: the endpoint on that channel (e.g. the owner's chat id); read by zylos/ only",
-        f"    - name: {p}_CONSOLE_PORT",
-        f"      description: the console's port on 127.0.0.1 (default {m['console']['port']}); read by zylos/ only",
-        f"    - name: {p}_CONSOLE_TITLE",
-        "      description: the console's page title; read by zylos/ only",
-        f"    - name: {p}_CONSOLE_ALLOW_HOST",
-        "      description: the host's public domain, which the console answers to behind Caddy; read by zylos/ only",
-    ])
+    ]
+    for name, why, default in config_keys(m):
+        lines += [f"    - name: {name}", f"      description: {why}"]
+        if SECRET_KEY.search(name):
+            lines.append("      sensitive: true")
+        if default is not None:
+            lines.append(f"      default: {default}")
+    return "\n".join(lines)
 
 
 def frontmatter_of(text: str) -> tuple[str, int] | None:
@@ -196,10 +221,27 @@ def frontmatter_of(text: str) -> tuple[str, int] | None:
 
 
 def skill_name(text: str) -> str | None:
-    """The `name:` of the frontmatter as a plain value, or None when there is none or it is not plain."""
+    """The `name:` of the frontmatter as the adapter reads it (hosts/zylos/lib.js `topValue` and `unquote`): the text after the colon and any indented lines
+    that follow, joined by spaces, quotes taken off, a trailing ` # comment` cut. None when there is no frontmatter or no name."""
     fm = frontmatter_of(text)
-    m = re.search(r"^name:[ \t]*(\S.*?)[ \t]*$", fm[0], re.M) if fm else None
-    return m.group(1).strip("\"'") if m else None
+    if not fm:
+        return None
+    lines = fm[0].split("\n")
+    at = next((i for i, ln in enumerate(lines) if ln.startswith("name:")), None)
+    if at is None:
+        return None
+    head, rest = lines[at][5:].strip(), []
+    for ln in lines[at + 1:]:
+        if ln.strip() and not ln[:1].isspace():
+            break
+        if ln.strip():
+            rest.append(ln.strip())
+    if re.fullmatch(r"[>|][+-]?", head):
+        return " ".join(rest)
+    v = " ".join([head, *rest]).strip()
+    if len(v) >= 2 and v[0] in "'\"" and v[-1] == v[0]:
+        return v[1:-1]
+    return re.sub(r"\s+#.*$", "", v)
 
 
 def with_frontmatter(text: str, keys: str) -> tuple[str | None, str | None]:
@@ -227,7 +269,7 @@ def with_frontmatter(text: str, keys: str) -> tuple[str | None, str | None]:
     return "---\n" + head.rstrip("\n") + "\n" + keys + "\n" + text[4 + close:], None
 
 
-OPENS_BLOCK = re.compile(r"^(?P<lead> *(?:- +)*)(?P<key>[^\s'\"#][^#]*?:[ \t]+)?[|>][0-9+-]{0,2}[ \t]*(?:#.*)?$")
+OPENS_BLOCK = re.compile(r"""^(?P<lead> *(?:- +)*)(?P<key>(?:"[^"]*"|'[^']*'|[^\s'"#][^#]*?):[ \t]+)?(?:[!&][^\s]*[ \t]+)*[|>][0-9+-]{0,2}[ \t]*(?:#.*)?$""")
 
 
 def _outside_blocks(lines: list[str]) -> list[bool]:
@@ -292,6 +334,8 @@ def _read(path: Path) -> tuple[str, bool]:
         raw = path.read_bytes().decode("utf-8")
     except UnicodeDecodeError:
         raise Unreadable("is not UTF-8") from None
+    except OSError as e:
+        raise Unreadable(f"cannot be read ({e.strerror})") from None
     crlf = "\r\n" in raw
     if crlf and re.search(r"(?<!\r)\n", raw):
         raise Unreadable("mixes LF and CRLF line endings")
@@ -433,7 +477,7 @@ def add(skill_pack: Path, *, brand: str = BRAND, port: int | None = None, dry_ru
                 made.append(d)
             undo.append((to, to.read_bytes() if to.is_file() else None, to.stat().st_mode & 0o777 if to.is_file() else 0o644))
             _write(to, data, mode)
-    except OSError as e:
+    except BaseException as e:                                          # a failed write, or Ctrl-C / SIGTERM halfway: the same way back
         stuck = []
         for to, old, was in reversed(undo):
             try:
@@ -450,15 +494,17 @@ def add(skill_pack: Path, *, brand: str = BRAND, port: int | None = None, dry_ru
             except OSError:
                 pass
         left = f"; these could not be put back, fix them by hand: {', '.join(stuck)}" if stuck else "; what was written before it was put back"
+        if not isinstance(e, OSError):
+            raise
         raise refuse(f"a write failed ({e.strerror or e.__class__.__name__}: {e.filename}){left}") from None
     return done, notes
 
 
 def check(skill_pack: Path) -> tuple[int, str]:
-    """`node zylos/lib.js check` in the skill pack: (exit code, its output); (0, "") without node on PATH."""
+    """`node zylos/lib.js check` in the skill pack: (exit code, its output); without node on PATH (0, a line that says the check did not run)."""
     node = shutil.which("node")
     if not node:
-        return 0, ""
+        return 0, "note: node is not on PATH, so the adapter's check did not run; run `node zylos/lib.js check` where node is"
     r = subprocess.run([node, "zylos/lib.js", "check"], cwd=skill_pack, capture_output=True, text=True)
     return r.returncode, (r.stdout + r.stderr).strip()
 
@@ -471,7 +517,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     sp = a.skill_pack.resolve()
-    done, notes = add(sp, brand=a.brand, port=a.port, dry_run=a.dry_run)
+    try:
+        done, notes = add(sp, brand=a.brand, port=a.port, dry_run=a.dry_run)
+    except (OSError, TypeError, AttributeError, KeyError, ValueError) as e:       # an input the tool did not foresee: one line, and nothing half done (add puts back)
+        raise refuse(f"{e.__class__.__name__}: {e}") from None
     for line in done:
         print(f"  {'would write' if a.dry_run else 'wrote'}  {line}")
     for line in notes:
