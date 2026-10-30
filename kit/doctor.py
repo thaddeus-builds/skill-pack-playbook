@@ -490,16 +490,26 @@ def check_platform_lock(ctx: Context, hook: PlatformLock | None) -> None:
 def check_verbs(ctx: Context) -> None:
     if not ctx.verbs or ctx.scripts_dir is None:
         return
-    missing = [v for v in ctx.verbs
-               if not (ctx.scripts_dir / v.script).is_file()]
+    absent = [v for v in ctx.verbs
+              if not (ctx.scripts_dir / v.script).is_file()]
+    # a development verb (the test runner) is left out of a release archive on purpose: information, never a warning
+    missing = [v for v in absent if v.kind != "dev"]
+    gone = [" ".join(v.words) for v in absent if v.kind == "dev"]
+    if gone:
+        ctx.info("verbs", msg("doctor_dev_verbs_absent", f"{len(gone)} "
+                              f"development command(s) are not in this copy "
+                              f"(a release archive leaves out tests): "
+                              f"{', '.join(gone)}", count=len(gone),
+                              verbs=", ".join(gone)))
     for v in missing:
         ctx.warn("verbs", msg("doctor_verb_script_missing", f"`{_cli()} "
                               f"{' '.join(v.words)}` has no script at "
                               f"{v.script}", verb=" ".join(v.words),
                               script=v.script))
     if not missing:
-        ctx.ok("verbs", msg("doctor_verbs_ok", f"{len(ctx.verbs)} verb(s), "
-                            f"every script present", count=len(ctx.verbs)))
+        ctx.ok("verbs", msg("doctor_verbs_ok", f"{len(ctx.verbs) - len(gone)} "
+                            f"verb(s), every script present",
+                            count=len(ctx.verbs) - len(gone)))
     bare = [" ".join(v.words) for v in ctx.verbs
             if v.kind != "dev" and not getattr(v, "examples", ())]
     if bare:
