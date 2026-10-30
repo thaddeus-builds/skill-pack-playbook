@@ -173,6 +173,10 @@ It sorts each tool call into `help` (the entry with `--help`), `verb` (the entry
 
 Use it two ways. Before and after a change to SKILL.md or the help, on the same cases: the change worked if the learning share and the model calls fell and no case stopped passing. Between models: compare tokens and model calls only on the cases both pass in every run.
 
+## Field trials
+
+A case here asks whether the agent keeps one rule. Whether the skill pack gets a better business result than the same agent without it, coached by a person, is a different question, answered on real work over weeks: [field-trial.md](field-trial.md), with its form [trial-form.md](trial-form.md), checked by `tools/trial_form.py`. *Designed 2026-10-30, not yet run.*
+
 ## The fixture
 
 `fixture-build.sh` builds the workspace one run starts in, outside the sandbox. It:
