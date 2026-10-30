@@ -119,7 +119,29 @@ LIMITS = {"id": 64, "kind": 40, "group": 60, "title": 120, "why": 400,
           "unit": 12, "evidence": 12, "rows": 30, "options": 8, "because": 200,
           "expect": 2000, "answer": 500, "verb": 7}
 TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,79}\Z")
+# what a gate may bind, in characters of its canonical form
+EXPECT_MAX = LIMITS["expect"]
 FILL = ["recommend.because"]
+
+
+def expect_length(expect: object) -> int:
+    """The characters the console counts for what a gate binds."""
+    return len(q.canonical(expect))
+
+
+def check_expect(expect: object) -> int:
+    """The length of `expect`, or a SkillPackError `pending_expect_too_long`
+    when a gate on it would not fit the console (EXPECT_MAX). A skill pack
+    calls it where it sets a proposal, so the agent learns then, not when the
+    owner finds no button."""
+    size = expect_length(expect)
+    if size > EXPECT_MAX:
+        raise SkillPackError(msg(
+            "pending_expect_too_long",
+            f"what the confirm binds is {size} characters and the console "
+            f"holds {EXPECT_MAX}; shorten it, or it can be confirmed only "
+            f"at the terminal", length=size, limit=EXPECT_MAX))
+    return size
 SKIP_EVIDENCE = ("because", "because_code")
 
 
@@ -285,12 +307,12 @@ def _gate(ask_id: str, verb: list[str], expect: dict, value_arg: bool,
                 f"(letters, digits, _ . : @ / -); confirm it at the terminal",
                 id=ask_id, word=w))
             return None
-    size = len(q.canonical(expect))
-    if size > LIMITS["expect"]:
+    size = expect_length(expect)
+    if size > EXPECT_MAX:
         warnings.append(msg(
             "pending_gate_too_long",
             f"{ask_id}: no gate, what it binds is {size} characters (the "
-            f"console holds {LIMITS['expect']}); confirm it at the terminal",
+            f"console holds {EXPECT_MAX}); confirm it at the terminal",
             id=ask_id, length=size))
         return None
     gate = {"verb": verb, "value_arg": value_arg, "expect": expect}
