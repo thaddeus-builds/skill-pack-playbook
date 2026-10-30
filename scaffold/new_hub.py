@@ -271,10 +271,12 @@ exec "$py" {home}/serve.py --dir "$CONSOLE_DIR" --title "{sh_dq(h['title'])}" \\
   --lang {h['lang']} --port "${{HUB_CONSOLE_PORT:-{h['port']}}}"{relay} "$@"
 """
     ask = f"""#!/bin/sh
-# The agent's side of {h['title']}'s console (ask.py), pinned to ./console.
+# The agent's side of {h['title']}'s console (ask.py), pinned to ./console. It is told the
+# verbs the console relays (the list bin/console has), so `add` refuses a gate the console
+# would draw no answer box for, instead of posting it.
 {new_client.python_check("HUB", "bin/ask")}root="$(cd "$(dirname "$0")/.." && pwd)"
 export CONSOLE_DIR="$root/console"
-exec "$py" {home}/ask.py "$@"
+exec "$py" {home}/ask.py --relay-verbs "{",".join(relay_list(h))}" "$@"
 """
     launch = json.dumps({"version": "0.0.1", "configurations": [{
         "name": f"{h['client']}-hub-console", "runtimeExecutable": "/bin/sh",
