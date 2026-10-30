@@ -19,9 +19,15 @@ It writes into another repository, so it is built not to leave it half done or b
 
   * every input is checked and every new file is computed before the first byte is written: a port outside 1024 to 65535, a brand or a name the
     adapter's own patterns refuse, a manifest that is not JSON or lacks a field, a folder `zylos/` that is a link, a CLI script that is not there;
+  * no write goes through a link: a path that is, or sits under, a link is refused (a `SKILL.md` or `ci.yml` that is a link is left alone and named); a
+    folder where a file goes, a file where a folder goes and a read-only target are refused before the first write; and a write that fails after all puts
+    back what was written (the bytes and modes of the files, the folders it made);
+  * the adapter's own rules are met before anything is written: the `SKILL.md` name is the component's, an `env_prefix` with SECRET, TOKEN, PASSWORD,
+    ACCESS_KEY, API_KEY or PRIVATE_KEY in it is refused (every config key would have to be `sensitive`), and the CLI path has only letters, digits, `_`, `.`,
+    `-` and `/`;
   * it never overwrites a manifest, a frontmatter that has Zylos keys or an ecosystem file; a skill pack that has them is left as it is, and
-    `python3 tools/fleet.py update` keeps the adapter copy current. A file it cannot edit safely (a ci.yml whose steps are not the file's end, a SKILL.md with
-    its own `bin:` or `config:`, no frontmatter) is left alone and named in a line, with what to add by hand;
+    `python3 tools/fleet.py update` keeps the adapter copy current. A file it cannot edit safely (a ci.yml whose steps are not the file's end, written in a style the editor does not read, or indented with a tab; a SKILL.md with
+    its own `bin:` or `config:`, a frontmatter that is not plain `key: value` lines, no frontmatter, LF and CRLF mixed) is left alone and named in a line, with what to add by hand;
   * then `node zylos/lib.js check` runs, when node is on PATH, and its verdict is the exit code.
 
 The port is the one thing two skill packs on one host must not share: default 8800 plus a hash of the name, in 8800 to 9799 (a hash has collisions: pass
