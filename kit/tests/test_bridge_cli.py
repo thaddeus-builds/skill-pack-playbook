@@ -209,6 +209,49 @@ def main() -> int:
 
         check("no output of any verb holds the api key", all(KEY not in o for o in outputs) and KEY not in p.stdout + p.stderr)
 
+        # a read that fails in transit is asked again; a send that was posted but could not be read back says so and is never repeated
+        import urllib.error
+        import urllib.request
+        from kit import bridge as bridge_mod
+        bridge_mod.READ_BACKOFF = 0.0
+        real = urllib.request.urlopen
+        dropped = {"get": 0, "post": 0}
+
+        def drop_first_get(req, timeout=None):
+            if req.get_method() == "GET" and dropped["get"] < 1:
+                dropped["get"] += 1
+                raise urllib.error.URLError(ConnectionResetError("dropped"))
+            return real(req, timeout=timeout)
+
+        code, out, err = run(["members", "T", *base], urlopen=drop_first_get)
+        check("a read that is dropped once is asked again and answers", code == 0 and dropped["get"] == 1 and "DEMO-agent" in out, (code, dropped, err))
+
+        def drop_readback(req, timeout=None):
+            if req.get_method() == "GET" and "/messages/M" in req.full_url:
+                raise urllib.error.URLError(ConnectionResetError("dropped"))
+            return real(req, timeout=timeout)
+
+        n = len(srv.msgs)
+        code, out, err = run(["send", "T", *base, "--file", txt, "--to", "AGENT", "--json"], urlopen=drop_readback)
+        doc = json.loads(out)
+        check("a send whose read-back keeps failing: exit 5, posted true with its id, stored once, told not to send again",
+              code == 5 and doc["posted"] is True and doc["id"] in srv.msgs and len(srv.msgs) == n + 1 and "do not send it again" in doc["reason"],
+              (code, doc, len(srv.msgs) - n))
+        code, out, err = run(["send", "T", *base, "--file", txt, "--to", "AGENT"], urlopen=drop_readback)
+        check("the text form says it too, on stderr", code == 5 and "posted as" in err and "do not send it again" in err, (code, err))
+
+        def drop_post(req, timeout=None):
+            if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                dropped["post"] += 1
+                raise urllib.error.URLError(ConnectionResetError("dropped"))
+            return real(req, timeout=timeout)
+
+        n = len(srv.msgs)
+        code, out, err = run(["send", "T", *base, "--file", txt, "--to", "AGENT", "--json"], urlopen=drop_post)
+        doc = json.loads(out)
+        check("a send that fails in transit is NOT asked again (it could post twice): one POST, exit 5, no posted flag",
+              code == 5 and dropped["post"] == 1 and len(srv.msgs) == n and "posted" not in doc, (code, dropped, doc))
+
         srv.close()
         srv.httpd.server_close()
         code, _, err = run(["members", "T", *base])
