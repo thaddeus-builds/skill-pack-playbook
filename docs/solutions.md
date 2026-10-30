@@ -6,7 +6,7 @@ Every solution runs on the same three layers:
 
 | Layer | What it is |
 | --- | --- |
-| Platform | the kit; the client hub (`scaffold/new_hub.py`); `cloud-gpu` for self-hosted generation |
+| Platform | the kit; the client hub (`scaffold/new_hub.py`); `cloud-gpu` for self-hosted generation; `filmkit` to render a finished film |
 | Truth | facts with one owner each: `product-feed` (catalog/1), `measurement` (truth/1), `search-intel` (intel/1), `asset-handoff` (handoff.batch/1), messaging (messages/1, from adcut for now) |
 | Contracts | the twelve documents in [`contracts/`](../contracts/README.md), written once into the hub's exchange folder |
 
@@ -17,7 +17,7 @@ Every solution runs on the same three layers:
 | **A. Brand, paid growth on several channels** | a direct-to-consumer brand with a site, ads on feeds and search, and creators | `meta-ads`, `video-ads` (千川, 腾讯), `google-ads`; `koc-script`, `creator-program` when creators are part of it | `product-feed`, `measurement`, `search-intel`, `asset-handoff`, messaging | `adcut`, `ad-copy`, `product-keyframe-video` |
 | **B. Short-video commerce in a regulated category** | a brand selling through feed video on Chinese platforms, with claims a regulator limits (medicine, health, finance) | `video-ads` (千川, 腾讯) | `measurement`; messaging and the claims scope | `adcut` (with the kit's `compliance`), `product-keyframe-video` |
 | **C. Marketplace seller** | a seller whose sales happen on Amazon | `amazon-ppc` | `search-intel`, `measurement` | `adcut` for Sponsored Brands video, when wanted |
-| **D. B2B, organic and sales-led** | a manufacturer or exporter that wins buyers through search, AI answers and outreach | `ecommerce-seo`, `geo-china` (China) or a global GEO pack (not built), `outbound`, `sdr` | `search-intel`, `measurement` | — (the agent writes the copy; `seo` publishes) |
+| **D. B2B, organic and sales-led** | a manufacturer or exporter that wins buyers through search, AI answers and outreach | `ecommerce-seo`, `geo-china` (China) or a global GEO pack (not built), `outbound`, `sdr` | `search-intel`, `measurement` | `proofcut` for a manufacturer's own footage (the agent writes the copy; `seo` publishes) |
 | **E. Our own acquisition** | the agency's own pipeline of clients | `seo-programmatic`, `seo-tools`, `geo-china`, `outbound`, `sdr` | `search-intel` | — |
 
 A client may need two solutions. A brand that also sells on Amazon is A plus C, on one hub; each pack still runs only its own platform.

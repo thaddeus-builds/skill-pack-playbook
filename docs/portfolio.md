@@ -30,10 +30,10 @@ Two packs on one account would share a credential, a change log and a write path
 
 | Layer | What it is | Members |
 | --- | --- | --- |
-| **1. Platform** | What every pack shares | the kit, the client hub (one facts store, one tagged intake, one inbox per owner, the exchange folder), `cloud-gpu` (a compute library, not a skill pack) |
+| **1. Platform** | What every pack shares | the kit, the client hub (one facts store, one tagged intake, one inbox per owner, the exchange folder), `cloud-gpu` (a compute library, not a skill pack), `filmkit` (a render library, not a skill pack: a film spec in, a finished film out) |
 | **2. Operators** | One pack per platform account. It holds the credential, the pulls, the ledger, the change log, the proposals and the guarded writer | see the table below |
 | **3. Truth** | Facts several packs need. One owner each; everyone else reads the owner's documents | `product-feed` (catalog, prices, stock, promotion windows), `measurement` (internal attribution, coefficients, break-even ROAS, incrementality), `search-intel` (demand and competitors for paid *and* organic search), `asset-handoff` (a creative's identity and tags: one name across its sizes, the UTM tags from the client's table, the rows for the client's intake form), messaging (the insight matrix and the claims scope; today inside adcut) |
-| **4. Makers** | Make assets to a spec and hand them over with a manifest. They know no platform's API | `adcut` (video), `product-keyframe-video` (product images), `ad-copy` (text: what each placement allows, the check of candidate text against it, and the proposals) |
+| **4. Makers** | Make assets to a spec and hand them over with a manifest. They know no platform's API | `adcut` (video), `proofcut` (video from a B2B manufacturer's own footage), `product-keyframe-video` (product images), `ad-copy` (text: what each placement allows, the check of candidate text against it, and the proposals) |
 | **5. Engines** | Logic that two or more packs use, in the kit | `ads-core`, `intent`, `creative`, `compliance`, `generation` (below) |
 
 Operators by axis:
@@ -86,7 +86,9 @@ TikTok is not added to `video-ads`: it is a pack of its own when a client needs 
 | adcut-skill-pack | `adcut` | Maker, video | 0.4.1, kit 0.33 | Writes `ads.creatives/1`, reads `ads.results/1` from any operator; the insight matrix is the messaging source (open decision 3) |
 | ad-copy-skill-pack | `adcopy` | Maker, text | M1 on local main (placement specs and the check), no remote | Publishes `copy.proposals/1`; `gads`, `mads` and `vads` read its placement checks instead of building their own |
 | product-keyframe-video | `keyframe` | Maker, product images | 0.1.0, frozen until its first demo | Hands frames with `ads.creatives/1` when it has a consumer |
+| proofcut-skill-pack | `proof` | Maker, video from the client's own footage | Scaffold, kit 0.47.0 (`thaddeus-builds/proofcut-skill-pack`, private) | The first client class is B2B exporters (solution D): a story spine, facts that carry their source quote, a release step for people on camera, TikTok first. Renders through `filmkit`; adcut is untouched |
 | cloud-gpu-skill-pack | `cloudgpu` | Platform, GPU jobs | 0.2.0, not on the kit | The one provider behind the kit's `generation` for self-hosted runs |
+| filmkit | `filmkit` | Platform, render | 0.1.0, not on the kit (`thaddeus-builds/filmkit`, private) | The engine under `proofcut`: one JSON film spec (`filmkit.film/1`) in, a finished film out, with static checks first. Needs numpy, Pillow, scipy and ffmpeg, so a pack runs it as a program from a vendored copy; adcut keeps its own composer until a second maker needs this one |
 | skill-pack-playbook | — | Platform | kit 0.33.1; client hub on a branch | Holds the contract schemas, the exchange folder and the engines |
 
 Not skill packs, or superseded (archive or leave): how a pack that has been split is retired is in [maintaining.md](maintaining.md), "Retiring a pack".
@@ -141,7 +143,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | Contract | Producer | Consumers | What it carries |
 | --- | --- | --- | --- |
 | `ads.creatives/1` (exists) | a maker | operators | creative id, files, the insight row it serves, the compliance state |
-| `ads.results/1` (exists) | an operator | makers, `measurement`, `creator-program` | per creative or entity: spend, outcomes, stage, whether the day is settled |
+| `ads.results/1` (exists) | an operator | makers, `measurement`, `creator-program` | per creative: spend, outcomes, stage, whether the day is settled (its schema requires `creative_code`, so a campaign-level read has no home here until `ads.spend/1`) |
 | `ads.results/2` | an operator | makers, `measurement`, `creator-program` | `ads.results/1` with the money columns in the row's own currency (`currency`, ISO 4217) instead of `_cny`; both are written for one release |
 | `ads.demand/1` | an operator | makers | how many creatives, of which format and slot, by when |
 | `handoff.batch/1` | `asset-handoff` | operators | each creative's name across its sizes, its files, its UTM tags, its form rows, and whether the names match in the media library and the form |
@@ -151,7 +153,11 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `messages/1` | the messaging owner | makers, `ad-copy`, `gads` (search ad assets), `kos` (briefs) | segment, pain, objection, sayable facts, the claims scope |
 | `truth/1` | `measurement` | operators | coefficient per campaign type, break-even ROAS, trust per campaign type; confirmed values go into the hub's facts |
 | `intel/1` | `search-intel` | `gads`, `ppc`, `seo`, `pseo` | keyword demand, trends, competitors seen, with sources and dates |
+| `ads.spend/1` | an operator | `meas`, the other operators | spend and its return per entity and day on the platform's numbers, money or index, settled or not |
+| `ads.status/1` | an operator | the daily page, the console | one day's status: freshness, spend, sections ready or not, what waits for a person |
+| `intel.ads/1` | `search-intel` | `adcopy`, `gads`, `ppc` | the ads competitors were seen running on search pages: words as published, first and last day seen, times seen |
 | `leads/1` | `outbound` | `sdr` | company, contacts, source, evidence |
+| `inquiries/1` | any operator that receives an inquiry (`seo` for site forms, `gads` and `meta-ads` for lead ads) | `sdr` | who wrote, from which company, the words as written, the page, the consent box text |
 | `creators.roster/1` (exists as vads K5) | `creator-program` | `meta-ads` | collaborations, codes, ad ids |
 
 ## Engines in the kit
