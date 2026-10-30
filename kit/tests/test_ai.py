@@ -13,6 +13,8 @@
   6. ask_json: the schema mode first; a vendor that refuses it, or text that is not one object, is asked once more in words; twice is refused.
   7. count_tokens is Anthropic's alone.
   8. ai.py's msg() calls are closed over its fragment.
+  9, 10. Cold reviews: each finding is a case. The second: a 2xx whose body does not arrive and Ctrl-C keep the estimate booked, the lock is on the ledger
+     itself, a cut-off error body, huge numbers, a bad price, a damaged ledger, the key in a JSON encoder's forms, `fits` on odd schemas.
 """
 
 import json
@@ -49,7 +51,7 @@ class Vendor:
         class H(BaseHTTPRequestHandler):
             def do_POST(self):
                 n = int(self.headers.get("content-length") or 0)
-                outer.seen.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}, "body": json.loads(self.rfile.read(n) or b"{}")})
+                outer.seen.append({"method": self.command, "path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}, "body": json.loads(self.rfile.read(n) or b"{}")})
                 status, body, extra = outer.script.pop(0) if outer.script else (200, outer.ok(), {})
                 if isinstance(body, tuple) and body[0] == "slow":
                     time.sleep(body[1])
@@ -65,6 +67,8 @@ class Vendor:
                     self.wfile.write(raw)
                 except OSError:
                     pass
+
+            do_GET = do_POST                 # a redirect that is followed comes back as a GET: it must show up in `seen`
 
             def log_message(self, *a):
                 pass
@@ -324,6 +328,7 @@ e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, sleep=no_sleep([]))
 check("a key across the 400-character cut leaves no prefix of itself: redaction comes first", code_of(e) == "aicall_http_error" and KEY[:10] not in str(e.message), str(e.message)[-120:])
 v.close()
 proxy = Vendor([])
+no_proxy = {k: os.environ.pop(k, None) for k in ("NO_PROXY", "no_proxy")}                  # a NO_PROXY that names 127.0.0.1 would pass this check by itself
 os.environ["HTTP_PROXY"] = os.environ["http_proxy"] = proxy.url
 v = Vendor([])
 try:
@@ -331,13 +336,14 @@ try:
 finally:
     os.environ.pop("HTTP_PROXY", None)
     os.environ.pop("http_proxy", None)
+    os.environ.update({k: x for k, x in no_proxy.items() if x is not None})
 check("a loopback call does not go through a proxy", len(v.seen) == 1 and not proxy.seen, (len(v.seen), proxy.seen))
 v.close()
 proxy.close()
 
 # --- the cap
 led = ai.Ledger(DATA / "ai_race.jsonl")
-v = Vendor([])
+v = Vendor([(200, ("slow", 0.5), {})] * 2)                         # the two sent calls stay in flight while the other six are turned away: a quick settle would free room
 out = []
 bud = ai.Budget(0.005)
 def one():
@@ -417,7 +423,8 @@ v.close()
 led = ai.Ledger(DATA / "ai_short.jsonl")
 v = Vendor([(200, ("short", b'{"content": [{"type": "te'), {})] * 4)
 e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, ledger=led, sleep=no_sleep([]))
-check("a reply cut short is a coded network fault and a ledger line, not a raw exception", code_of(e) == "aicall_network_error" and led.rows() and led.rows()[-1]["status"] == "network", (e, led.rows()))
+check("a 2xx reply cut short is a coded fault and a ledger line, not a raw exception, and it is not sent again (the vendor answered, so it may have billed it)",
+      code_of(e) == "aicall_network_error" and len(v.seen) == 1 and led.rows() and led.rows()[-1]["status"] == "cut_off", (e, led.rows(), len(v.seen)))
 v.close()
 led = ai.Ledger(DATA / "ai_slow.jsonl")
 v = Vendor([(200, ("slow", 1.0), {})])
@@ -454,6 +461,232 @@ from unittest import mock  # noqa: E402
 with mock.patch.object(config, "config", side_effect=config.ConfigError("none bound")):
     check("with no skill pack bound the refusal is coded and says so", code_of(refusal(ai.env_cap)) == "aicall_config_invalid")
 check("a price row error names the model", "x-model" in str(refusal(ai.prices_from_rows, [{"model": "x-model", "input_per_mtok_usd": "nope", "output_per_mtok_usd": "1"}]).message))
+
+print("[10] found by the second cold review")
+import urllib.error  # noqa: E402
+from unittest import mock  # noqa: E402
+
+# --- a 2xx whose body does not arrive: possibly billed, never sent again
+led = ai.Ledger(DATA / "ai_cut.jsonl")
+v = Vendor([(200, ("short", b'{"content": [{"type": "te'), {})] * 4)
+bud = ai.Budget(1.0)
+e = refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=bud, sleep=no_sleep([]))
+est = ai.estimate(route(v), "S", "t", 400, PRICES)[1]
+check("a 2xx cut short: one try, the line says cut_off, and the estimate stays booked in the ledger and in the Budget",
+      code_of(e) == "aicall_network_error" and len(v.seen) == 1 and led.rows()[-1]["status"] == "cut_off" and led.spent() == round(est, 6) and abs(bud.used_usd - est) < 1e-9
+      and "IncompleteRead" in str(e.message), (e, len(v.seen), led.rows()[-1:], bud.used_usd))
+v.close()
+for code in (503, 429):
+    v = Vendor([(code, ("short", b'{"error": "ov'), {})] * 4)
+    e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, sleep=no_sleep([]))
+    check(f"a {code} whose body is cut short is still the {code}: tried four times, coded, not a raw exception",
+          code_of(e) == "aicall_http_error" and e.message.params.get("status") == code and len(v.seen) == 4, (e, len(v.seen)))
+    v.close()
+v = Vendor([(200, b"not json", {})])
+led = ai.Ledger(DATA / "ai_notjson.jsonl")
+bud = ai.Budget(1.0)
+e = refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=bud, sleep=no_sleep([]))
+check("a 200 that is not JSON is booked at the estimate (it was billed)", code_of(e) == "aicall_bad_answer" and led.rows()[-1]["status"] == "bad_reply" and led.spent() == round(est, 6)
+      and abs(bud.used_usd - est) < 1e-9, (led.rows()[-1:], bud.used_usd))
+v.close()
+
+
+class ConnectTimeout:
+    def open(self, *a, **kw):
+        raise urllib.error.URLError(TimeoutError("connect timed out"))
+
+
+led = ai.Ledger(DATA / "ai_connect.jsonl")
+bud = ai.Budget(1.0)
+with mock.patch.object(ai, "_opener", return_value=ConnectTimeout()):
+    e = refusal(ai.ask, route(Vendor([])), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=bud, sleep=no_sleep([]))
+check("a connection that times out is not retried and keeps its estimate booked", code_of(e) == "aicall_network_error" and led.rows()[-1]["status"] == "timeout"
+      and led.rows()[-1]["attempts"] == 1 and led.spent() == round(est, 6), led.rows()[-1:])
+
+
+def ctrl_c(_seconds):
+    raise KeyboardInterrupt
+
+
+v = Vendor([(503, {}, {})])
+led = ai.Ledger(DATA / "ai_int.jsonl")
+bud = ai.Budget(1.0)
+try:
+    ai.ask(route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=bud, sleep=ctrl_c)
+    got = None
+except KeyboardInterrupt:
+    got = "interrupted"
+check("Ctrl-C in a back-off wait is raised as it was; the line says 'interrupted', the estimate stays booked and usage counts it as failed",
+      got == "interrupted" and led.rows()[-1]["status"] == "interrupted" and led.spent() == round(est, 6) and led.usage()["failed"] == 1 and abs(bud.used_usd - est) < 1e-9, (got, led.rows()[-1:]))
+v.close()
+
+# --- what the Budget holds
+v = Vendor([(200, Vendor.ok(tin=18, tout=40), {}), (400, {"error": "x"}, {})])
+bud = ai.Budget(1.0, run_usd=1.0)
+ai.ask(route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=ai.Ledger(DATA / "ai_used.jsonl"), budget=bud)
+check("after a reply the Budget holds what it cost, not the estimate", abs(bud.used_usd - 0.000218) < 1e-9, bud.used_usd)
+bud = ai.Budget(1.0, run_usd=1.0)
+refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=ai.Ledger(DATA / "ai_used2.jsonl"), budget=bud)
+check("after a call that was not billed (HTTP 400) it holds nothing", bud.used_usd == 0.0, bud.used_usd)
+v.close()
+
+# --- the lock is on the ledger itself
+base = ai.Ledger(DATA / "ai_lockid.jsonl")
+base.check_writable()
+(DATA / "ai_lockid_sym.jsonl").symlink_to(base.path)
+os.link(base.path, DATA / "ai_lockid_hard.jsonl")
+here = os.getcwd()
+os.chdir(DATA)
+rel = ai.Ledger("ai_lockid.jsonl")
+os.chdir(here)
+check("a relative ledger path is made absolute when the Ledger is made: a later chdir does not move it", rel.path.is_absolute() and os.path.samefile(rel.path, base.path))
+for label, other in (("a symlink", ai.Ledger(DATA / "ai_lockid_sym.jsonl")), ("a hard link", ai.Ledger(DATA / "ai_lockid_hard.jsonl")), ("a relative path", rel)):
+    done = threading.Event()
+
+    def go(other=other, done=done):
+        other.reserve({"at": ai.today() + "T00:00:00+00:00", "model": "m"}, 0.001, ai.Budget(1.0))
+        done.set()
+
+    with base._locked():
+        t = threading.Thread(target=go)
+        t.start()
+        time.sleep(0.3)
+        blocked = not done.is_set()
+    t.join(10)
+    check(f"{label} to the ledger takes the same lock: a reservation waits for the holder", blocked and done.is_set(), (blocked, done.is_set()))
+check("and there is no lock file beside the ledger", not list(DATA.glob("*.lock")), list(DATA.glob("*.lock")))
+if os.geteuid() != 0:
+    ro = Path(tmp_dir("ai-ro-"))
+    led_ro = ai.Ledger(ro / "calls.jsonl")
+    led_ro.check_writable()
+    os.chmod(ro, 0o555)
+    v = Vendor([])
+    try:
+        r = ai.ask(route(v), "S", "t", max_tokens=10, prices=PRICES, ledger=led_ro, budget=ai.Budget(1.0))
+    finally:
+        os.chmod(ro, 0o755)
+    check("a ledger file that can be written in a folder that cannot: the call is made and booked (no lock file to create)", r.text == "hello" and r.booked and len(led_ro.rows()) == 2, led_ro.rows())
+    v.close()
+a, b = ai.Ledger(DATA / "ai_shared_a.jsonl"), ai.Ledger(DATA / "ai_shared_b.jsonl")
+wins = []
+for _ in range(15):
+    bud, got = ai.Budget(100.0, run_usd=0.005), []
+
+    def go(l, bud=bud, got=got):
+        try:
+            l.reserve({"at": ai.today() + "T00:00:00+00:00", "model": "m"}, 0.002, bud)
+            got.append(1)
+        except SkillPackError:
+            got.append(0)
+
+    ts = [threading.Thread(target=go, args=(a if i % 2 else b,)) for i in range(8)]
+    [x.start() for x in ts]
+    [x.join() for x in ts]
+    wins.append(sum(got))
+check("one Budget over two ledger files: exactly two of eight calls reserve, in each of 15 rounds", set(wins) == {2}, wins)
+day = ai.today()
+led = ai.Ledger(DATA / "ai_midnight.jsonl")
+led.append({"at": "2000-01-01T10:00:00+00:00", "cost_usd": 0.0099, "status": "ok", "model": "m"})
+e = refusal(led.reserve, {"at": "2000-01-01T23:59:59+00:00", "model": "m"}, 0.001, ai.Budget(0.01))
+check("a reservation counts against the day it is stamped with, not the day the lock was taken", code_of(e) == "aicall_daily_cap_exceeded" and led.reserve({"at": day + "T00:00:00+00:00", "model": "m"}, 0.001, ai.Budget(0.01)))
+
+# --- a damaged ledger
+led = ai.Ledger(DATA / "ai_cutline.jsonl")
+led.path.write_text('{"at": "' + day + 'T01:00:00+00:00", "cost_usd": 0.004, "status": "ok", "model": "m"}\n{"at": "' + day + 'T02:00', encoding="utf-8")
+led.reserve({"at": day + "T03:00:00+00:00", "model": "m"}, 0.004, ai.Budget(0.01))
+e = refusal(led.reserve, {"at": day + "T04:00:00+00:00", "model": "m"}, 0.004, ai.Budget(0.01))
+check("a ledger whose last line was cut off: the next reservation starts a line of its own and counts, so the one after it is refused",
+      code_of(e) == "aicall_daily_cap_exceeded" and led.spent() == 0.008 and led.usage()["unreadable_lines"] == 1, (e, led.spent(), led.usage()["unreadable_lines"]))
+led.path.write_bytes(b'{"at": "' + day.encode() + b'T01:00:00+00:00", "cost_usd": 0.001, "status": "ok", "model": "m"}\n{"note": "\xe4\xb8')
+check("a multibyte character cut mid-write is one unreadable line, not an exception", led.spent() == 0.001 and led.usage()["unreadable_lines"] == 1, led.usage())
+good = '{"at": "' + day + 'T01:00:00+00:00", "cost_usd": 0.001, "status": "ok", "model": "m"}\n'
+led.path.write_text(good + "[" * 200000 + "\n" + '{"at": "' + day + 'T02:00:00+00:00", "cost_usd": -5, "status": "ok", "model": "m"}\n'
+                    + '{"at": "' + day + 'T03:00:00+00:00", "cost_usd": 1' + "0" * 400 + ', "status": "ok", "model": "m"}\n', encoding="utf-8")
+check("a line nested past the parser's limit is unreadable; a negative cost and a 400-digit cost count nothing; nothing raises",
+      led.spent() == 0.001 and led.usage()["unreadable_lines"] == 1 and led.usage()["cost_usd"] == 0.001, (led.spent(), led.usage()))
+check("the ledger refuses to write a NaN", raises(lambda: led.append({"cost_usd": float("nan")}), ValueError) is not None)
+
+
+class Flaky(ai.Ledger):
+    """A ledger that takes the reservation and then cannot write the settling line (the disk filled up)."""
+
+    def append(self, entry):
+        if entry.get("status") != "reserved":
+            raise OSError(28, "No space left on device")
+        super().append(entry)
+
+
+class Racy(ai.Ledger):
+    """A ledger that could be appended to a moment ago and cannot be when the reservation is made."""
+
+    def reserve(self, *a, **kw):
+        raise OSError(13, "Permission denied")
+
+
+v = Vendor([])
+e = refusal(ai.ask, route(v), "S", "t", max_tokens=10, prices=PRICES, ledger=Racy(DATA / "ai_racy.jsonl"), budget=ai.Budget(1.0))
+check("a ledger that fails when the reservation is made: refused as a coded line, nothing sent", code_of(e) == "aicall_config_invalid" and not v.seen and "cannot be appended to" in str(e.message), e)
+fl = Flaky(DATA / "ai_flaky.jsonl")
+r = ai.ask(route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=fl, budget=ai.Budget(1.0))
+check("a paid reply whose ledger line cannot be written is still returned, marked unbooked, and its reservation keeps counting", r.text == "hello" and r.booked is False and fl.spent() == round(est, 6), (r.booked, fl.spent()))
+v.script = [(400, {"error": "x"}, {})]
+e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, ledger=Flaky(DATA / "ai_flaky2.jsonl"))
+check("and a failed call still raises its own coded error, not the disk's", code_of(e) == "aicall_http_error", e)
+v.close()
+
+# --- numbers
+v = Vendor([(200, {**Vendor.ok(), "usage": {"input_tokens": 10 ** 400, "output_tokens": 5}}, {})])
+led = ai.Ledger(DATA / "ai_huge.jsonl")
+r = ai.ask(route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=ai.Budget(1.0))
+check("a usage count of 10**400 is unknown: the call is booked at its estimate, nothing overflows", r.cost_usd == round(est, 6) and led.rows()[-1].get("cost_estimated") is True, (r.cost_usd, led.rows()[-1:]))
+v.close()
+sch = {"type": "object", "required": ["n"], "properties": {"n": {"type": "number"}}}
+v = Vendor([(200, Vendor.ok(text='{"n": ' + "9" * 400 + "}"), {}), (200, Vendor.ok(text='{"n": 1}'), {})])
+obj, _ = ai.ask_json(route(v), "S", "t", sch, prices=PRICES)
+check("a 400-digit number for a number property does not fit: asked again, the fitting answer is returned", obj == {"n": 1} and len(v.seen) == 2, (obj, len(v.seen)))
+v.close()
+v = Vendor([])
+for label, bad in (("negative", (-1.0, 5.0)), ("NaN", (float("nan"), 1.0)), ("a string", ("1", "5")), ("three numbers", (1.0, 2.0, 3.0)), ("infinite", (1.0, float("inf"))), ("huge", (10 ** 400, 1.0))):
+    check(f"a price passed to ask that is {label}: ValueError before anything is sent", raises(lambda b=bad: ai.ask(route(v), "S", "t", prices={"fast-1": b}), ValueError) is not None and not v.seen, label)
+check("a bool is not a count, a number or a price; a count past a trillion is unknown", ai._count(True) is None and not ai._finite(True) and ai.cost_usd(PRICES, "fast-1", True, True) is None
+      and ai._count(10 ** 13) is None and ai._count(10 ** 12) == 10 ** 12 and not ai._finite(10 ** 400))
+v.close()
+
+# --- what can go wrong in the request
+v = Vendor([])
+waits = []
+for label, odd in (("a set", {"type": "object", "properties": {"x": {1, 2}}}), ("a NaN", {"type": "object", "default": float("nan")})):
+    e = refusal(ai.ask, route(v), "S", "t", schema=odd, prices=PRICES, sleep=no_sleep(waits))
+    check(f"a schema holding {label} is refused before sending: coded, no request, no retries", code_of(e) == "aicall_config_invalid" and not v.seen and not waits, (e, v.seen, waits))
+r = ai.ask(route(v), "S", "a\ud800b", prices=PRICES)
+check("a lone surrogate in the prompt is sent (escaped) and hashed, not a UnicodeEncodeError", r.text == "hello" and len(v.seen) == 1)
+led = ai.Ledger(DATA / "ai_imgcap.jsonl")
+e = refusal(ai.ask, route(v), "S", "t", [img, img, img], max_tokens=10, prices=PRICES, ledger=led, budget=ai.Budget(0.003))
+r = ai.ask(route(v), "S", "t", max_tokens=10, prices=PRICES, ledger=led, budget=ai.Budget(0.003))
+check("an image counts in the estimate: three of them pass a cap the text alone fits under only if the cap allows them", code_of(e) == "aicall_daily_cap_exceeded" and r.text == "hello", e)
+v.close()
+
+# --- the key in the forms an encoder writes
+k = 'sk-a/b"c\\d'
+forms = [k, json.dumps(k)[1:-1], json.dumps(k)[1:-1].replace("/", "\\/"), k.replace("/", "\\/")]
+check("redact hides the key as typed and as a JSON encoder writes it (quotes, backslashes, PHP's escaped slash)", all(ai.redact("x " + f + " y", k) == "x <key> y" for f in forms), [ai.redact("x " + f + " y", k) for f in forms])
+v = Vendor([(400, b'{"error": "bad key ' + forms[2].encode() + b'"}', {})])                      # on the wire as written, not escaped a second time
+odd_key = ai.Settings(key=k, base_url=v.url, protocol="anthropic", model="fast-1", task="review")
+e = refusal(ai.ask, odd_key, "S", "t", prices=PRICES, sleep=no_sleep([]))
+check("a 400 body that echoes the key the way PHP writes it does not leak it", code_of(e) == "aicall_http_error" and "sk-a" not in str(e.message), str(e.message))
+v.close()
+
+# --- fits
+check("fits: a schema that is not well formed constrains nothing, and does not raise",
+      all(ai.fits({"a": 1}, sc) is True for sc in ({"required": 3}, {"required": "ok"}, {"required": [3]}, {"type": {"a": 1}}, [1, 2], None, {"properties": {"a": []}}, {"properties": []})))
+one = lambda t: {"properties": {"a": {"type": t}}}  # noqa: E731
+check("fits: a list of types accepts a value of one it knows; a name it does not know is not a match, and a list of unknown names constrains nothing",
+      ai.fits({"a": "x"}, one(["foo", "integer"])) is False and ai.fits({"a": 2}, one(["foo", "integer"])) is True and ai.fits({"a": "x"}, one(["foo"])) is True)
+check("fits: 1.0 is an integer; 1.5, true, NaN and a 400-digit int are not; NaN and true are not numbers either",
+      ai.fits({"a": 1.0}, one("integer")) and not any(ai.fits({"a": x}, one("integer")) for x in (1.5, True, float("nan"), 10 ** 400)) and not any(ai.fits({"a": x}, one("number")) for x in (True, float("nan"), 10 ** 400)))
+check("fits: nested objects and the items of an array are checked", not ai.fits({"a": {"b": 1}}, {"properties": {"a": {"type": "object", "required": ["c"]}}})
+      and not ai.fits({"a": [1, "x"]}, {"properties": {"a": {"type": "array", "items": {"type": "integer"}}}}) and ai.fits({"a": [1, 2]}, {"properties": {"a": {"type": "array", "items": {"type": "integer"}}}}))
+
 
 print("[8] messages")
 codes = {ln.split("\t")[0] for ln in (Path(ai.__file__).parent / "message_codes.d" / "ai.tsv").read_text(encoding="utf-8").splitlines()[1:]}
