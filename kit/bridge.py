@@ -181,6 +181,9 @@ def check_isolation(targets: Iterable[Target]) -> list[str]:
 
 # --- REST: send and read back with the plugin's own HTTP calls -----------------------------------
 
+USER_AGENT = "claude-openmax-kit-bridge/1"
+
+
 class RestError(Exception):
     """An HTTP call failed. The text names the status and the step, never a body, a token or a key."""
 
@@ -221,6 +224,7 @@ def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable
         data = None if body is None else json.dumps(body).encode()
         req = urllib.request.Request(creds.base_url + path, data=data, method=method)
         req.add_header("Content-Type", "application/json")
+        req.add_header("User-Agent", USER_AGENT)         # Cloudflare answers Python's own with 403, error 1010
         for k, v in creds.headers.items():
             req.add_header(k, v)
         req.add_header("Authorization", f"Bearer {bearer}")
@@ -273,8 +277,9 @@ def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable
 
     def read(message_id: str) -> str | None:
         d = _unwrap(authed("GET", f"{base}/{message_id}"))
-        msg = d.get("message", d) if isinstance(d, dict) else None
-        content = msg.get("content") if isinstance(msg, dict) else None
+        # the real API answers {data: {message: {...}, content: {...}}}: the content sits beside the message
+        msg = d.get("message") if isinstance(d, dict) else None
+        content = d.get("content") if isinstance(d, dict) and "content" in d else (msg or {}).get("content") if isinstance(msg, dict) else None
         if not isinstance(content, dict):
             return None                          # nothing readable: not sent, not resent
         body = content.get("body")
