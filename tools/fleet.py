@@ -5,6 +5,7 @@
     python3 tools/fleet.py diff SKILL_PACK [FILE...]
     python3 tools/fleet.py update SKILL_PACK... [--version X] [--no-tests]
     python3 tools/fleet.py export SKILL_PACK... --out DIR [--remote NAME]
+    python3 tools/fleet.py rehearse SKILL_PACK... --out DIR [--remote NAME]
 
 For each skill pack it reads the kit (<scripts_dir>/kit/), the console
 (console/) and the Zylos adapter (zylos/), whichever it holds, and compares
@@ -31,6 +32,10 @@ bring every skill pack to one kit version.
 `diff` prints a unified diff, skill pack copy against the playbook's current
 file, for each file that is not the same (or only the FILEs named, as
 `kit/facts.py`, `console/core.py` or `zylos/lib.js`).
+
+`rehearse` is `update` tried on a clone, for the days before a train: each skill pack's checkout is cloned into `--out` (its `origin` pointed at the
+checkout's own remote address, its local branches dropped), the kit is taken as the playbook has it, released or not, and the pack's suite runs. The
+checkouts are only read. A pack that refuses to load a new kit file shows up here, not on the train.
 
 `update` brings each skill pack to this playbook's kit in a worktree of its
 own, so the pack's checkout is never touched: it asks `git remote show origin`
@@ -89,6 +94,7 @@ import shlex
 import subprocess
 import sys
 import tarfile
+import time
 import tomllib
 from pathlib import Path
 
@@ -182,6 +188,35 @@ def parts(skill_pack: Path, playbook: Path) -> list[dict]:
          "dest": skill_pack / "zylos", "version_file": "hosts/zylos/VERSION",
          "skip": ZYLOS_NOT_COPIED | ZYLOS_OWN},
     )]
+
+
+def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = "origin") -> dict:
+    """A trial of `update` before a train, on a clone: the pack's checkout is only read. Clones it into `out/<folder>` (which must not exist), points the
+    clone's `origin` at the checkout's own `remote` address, drops every local branch (only the remote's default branch matters), then runs `update` there,
+    taking this playbook's kit as it is, released or not. {pack, state, text} as `update` returns it."""
+    name = pack.name
+    url = run(pack, "git", "remote", "get-url", remote)
+    if url.returncode != 0 or not url.stdout.strip():
+        return {"pack": name, "state": "refused", "text": f"the checkout has no remote named {remote}"}
+    dest = out / name
+    if dest.exists():
+        return {"pack": name, "state": "refused", "text": f"{dest} exists; name an --out that has no folder for it"}
+    out.mkdir(parents=True, exist_ok=True)
+    cloned = run(out, "git", "clone", "-q", "--no-hardlinks", str(pack), str(dest))
+    if cloned.returncode != 0:
+        return {"pack": name, "state": "refused", "text": f"cannot clone the checkout: {first_line(cloned)}"}
+    run(dest, "git", "remote", "set-url", "origin", url.stdout.strip())
+    run(dest, "git", "checkout", "-q", "--detach")
+    for b in run(dest, "git", "for-each-ref", "--format=%(refname:short)", "refs/heads").stdout.split():
+        run(dest, "git", "branch", "-q", "-D", b)
+    for attempt in range(3):                                   # a remote that drops a connection is tried again
+        fetched = run(dest, "git", "fetch", "-q", "origin")
+        if fetched.returncode == 0:
+            break
+        time.sleep(2 * attempt)
+    else:
+        return {"pack": name, "state": "refused", "text": f"cannot fetch {url.stdout.strip()}: {first_line(fetched)}"}
+    return update(dest.resolve(), playbook, version, True, "origin")
 
 
 def manifest_edits(dest: Path) -> list[str] | None:
@@ -520,10 +555,14 @@ def main(argv: list[str] | None = None) -> int:
     u.add_argument("--no-tests", action="store_true", help="vendor and commit without running the suite")
     u.add_argument("--remote", default="origin", help="the remote the pack's real default branch is on (default origin)")
     u.add_argument("--allow-unreleased", action="store_true", help="take a kit that differs from the commit that set kit/VERSION (its bytes are not the released ones)")
+    r = sub.add_parser("rehearse", help="a trial of update on a clone of each skill pack, before a train: the checkouts are only read")
+    r.add_argument("skill_pack", nargs="+")
+    r.add_argument("--out", required=True, help="a folder; each pack is cloned to <out>/<its folder name>, which must not exist")
+    r.add_argument("--remote", default="origin", help="the remote the pack's real default branch is on (default origin)")
     args = ap.parse_args(argv)
     playbook = Path(args.playbook).resolve()
     skill_packs = [Path(h).expanduser().resolve() for h in
-                 (args.skill_pack if args.cmd in ("status", "update", "export") else [args.skill_pack])]
+                 (args.skill_pack if args.cmd in ("status", "update", "export", "rehearse") else [args.skill_pack])]
     for h in skill_packs:
         if not h.is_dir():
             print(f"error: {h} is not a directory", file=sys.stderr)
@@ -540,6 +579,12 @@ def main(argv: list[str] | None = None) -> int:
                   f"update from the commit that set kit/VERSION, or pass --allow-unreleased", file=sys.stderr)
             return 2
         results = [update(h, playbook, current, not args.no_tests, args.remote) for h in skill_packs]
+        for r in results:
+            print(f"{r['pack']}: {r['text']}")
+        return 0 if all(r["state"] in ("green", "current") for r in results) else 1
+    if args.cmd == "rehearse":
+        current = (playbook / "kit" / "VERSION").read_text("utf-8").strip()
+        results = [rehearse(h, Path(args.out).expanduser().resolve(), playbook, current, args.remote) for h in skill_packs]
         for r in results:
             print(f"{r['pack']}: {r['text']}")
         return 0 if all(r["state"] in ("green", "current") for r in results) else 1
