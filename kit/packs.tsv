@@ -100,3 +100,4 @@ tools.packs	testkit	the pack table reader, used by tools.vendor
 tools.skill_upload	testkit	the upload copy of SKILL.md (claude.ai, the Skills API)
 tools.leak_guard	testkit	the pre-push guard: no client term in what is pushed
 bridge	bridge	send one message through the OpenMax bridge and read it back by id before saying it was sent
+bridge_hooks	bridge	Claude Code hooks around the plugin's comm_send: a group message without a mention is refused, a sent message is kept as awaited, a reply is handed to the session as untrusted data
