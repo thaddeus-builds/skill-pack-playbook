@@ -25,6 +25,9 @@ each on a planted violation, so no suite can pass by looking at nothing.
   [11] a skill pack without markets: the gate and the json contract hold
   [12] never_table: a gated verb added to the table with no row in SKILL.md's
       Never table; the table moved below the rules
+  [13] upload_copy: a description of 1025 characters; one of exactly 1024;
+      a name with a reserved word; an XML tag in the description; a fill
+      marker in an over-long description (read only once B8 is signed)
 """
 
 import os
@@ -117,7 +120,7 @@ def spec_of(root: Path):
 
 ALL = ("run_tests", "ssot", "layering", "clock", "boundary", "json_contract",
        "human_tables", "gate", "release", "kit_drift", "roadmap",
-       "research", "never_table")
+       "research", "never_table", "upload_copy")
 
 
 def every(root: Path) -> dict:
@@ -346,6 +349,53 @@ def main() -> int:
     undo()
     check("…and green again once it is undone",
           not failing(suites.never_table(root)))
+
+    print("\n[13] upload_copy")
+    skill = (root / "SKILL.md").read_text(encoding="utf-8")
+    head, _, rest = skill.partition("\ndescription:")
+    old_desc = rest.split("\n", 1)[0]
+
+    def described(text: str) -> str:
+        return skill.replace(f"description:{old_desc}", f"description: {text}", 1)
+
+    check("the fresh skill pack's placeholder description is green",
+          not failing(suites.upload_copy(root)))
+    undo = planted(root, "SKILL.md", described("x" * 1025))
+    caught("a description of 1025 characters",
+           suites.upload_copy(root), "one the upload takes")
+    undo()
+    undo = planted(root, "SKILL.md", described("x" * 1024))
+    check("a description of exactly 1024 characters is green",
+          not failing(suites.upload_copy(root)))
+    undo()
+    undo = planted(root, "SKILL.md", described("Reads <b>things</b> for a client."))
+    caught("an XML tag in the description", suites.upload_copy(root),
+           "one the upload takes")
+    undo()
+    undo = planted(root, "SKILL.md", skill.replace("name: acme-skill-pack",
+                                                   "name: claude-acme", 1))
+    caught("a name with a reserved word", suites.upload_copy(root),
+           "one the upload takes")
+    undo()
+    fill = suites.FILL + " write it>> " + "x" * 1100
+    undo = planted(root, "SKILL.md", described(fill))
+    check("an over-long description that still holds a fill marker waits",
+          not failing(suites.upload_copy(root)))
+    undo_b8 = planted(root, "ssot/stages.agent.tsv", replace=(
+        "B8\tagent docs and evals\tB6\tbuilder owner + ci\ttodo",
+        "B8\tagent docs and evals\tB6\tbuilder owner + ci\tsigned"))
+    caught("…and is refused once B8 is signed", suites.upload_copy(root),
+           "one the upload takes")
+    undo_b8()
+    os.environ["CI_COMMIT_TAG"] = "v0.0.1"
+    try:
+        caught("…and is refused on a release tag", suites.upload_copy(root),
+               "one the upload takes")
+    finally:
+        del os.environ["CI_COMMIT_TAG"]
+    undo()
+    check("…and green again once it is undone",
+          not failing(suites.upload_copy(root)))
     _shop.use()
     return finish()
 
