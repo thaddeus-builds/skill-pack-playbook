@@ -11,6 +11,9 @@ Against a local fake server (kit/tests/test_bridge.py), with the pending file in
     are not; a reply behind 300 unrelated messages is found; a reply after the request is overdue still comes;
     a session started later gets it; a second session that finds the lock held reads nothing;
   * a request past its final deadline is dropped; a read is not repeated inside POLL_EVERY;
+  * stage 2: an @name that is no member (`unknown_mention`), the 11th awaited request in a conversation
+    (`request_cap`), a reply handed only to the session that asked until it ends or goes quiet, an answer in
+    several messages held until a 25-second lull and handed over together, marked read, stored without secrets;
   * the command line: JSON in, JSON out, exit 0 whatever fails; list, close, install-snippet.
 """
 
@@ -30,6 +33,7 @@ from kit.testing.check import check, finish  # noqa: E402
 from test_bridge import KEY, FakeServer, write_config  # noqa: E402
 
 GROUP_TEXT = "@DEMO-agent please confirm the DEMO time zone"
+h.QUIET_FOR = 0               # the quiet period has its own test; the rest read what is there at once
 
 
 def setup(d, srv):
@@ -51,8 +55,8 @@ def pre_tests():
         check("pre-send: a group message with no @name is refused with the no_mention words",
               out and out["hookSpecificOutput"]["permissionDecision"] == "deny"
               and "no_mention" in out["hookSpecificOutput"]["permissionDecisionReason"], out)
-        n = len(srv.log)
         check("pre-send: an @name goes through", h.pre_send(ev(GROUP_TEXT), env) is None)
+        n = len(srv.log)
         check("pre-send: the conversation kind was read once and is remembered",
               h.pre_send(ev("hello again"), env) is not None and len([x for x in srv.log[n:] if "/messages" not in x[0]]) == 0, srv.log[n:])
         check("pre-send: an endpoint with a reply suffix is the same conversation",
@@ -145,6 +149,84 @@ def deliver_tests():
         check("turn: a server that is down -> nothing, no error, the request stays", h.deliver(down, now=t0 + 60) == "" and len(h.load(down)["requests"]) == 1)
 
 
+def stage2_tests():
+    t0 = 2_000_000.0
+    ev = lambda text: {"tool_name": h.SEND_TOOL, "tool_input": {"endpoint": "DEMO-conv", "content": text}}  # noqa: E731
+    with tempfile.TemporaryDirectory() as d:
+        srv = FakeServer()
+        env = setup(d, srv)
+        deny = lambda text, now=t0: (h.pre_send(ev(text), env, now=now) or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "")  # noqa: E731
+        check("pre-send: an @name that is no member is refused as unknown_mention", deny("@Nobody hi").startswith("unknown_mention"), deny("@Nobody hi"))
+        check("pre-send: a member's name, any case, goes through", deny("@demo-agent hi") == "")
+        check("pre-send: one good @ among strays goes through", deny("@DEMO-agent and @Nobody") == "")
+        check("pre-send: @all goes through", deny("@all hi") == "")
+        srv.members = []
+        env_m = dict(env, CLAUDE_OPENMAX_DATA_DIR=os.path.join(d, "dm"))
+        check("pre-send: a member list that cannot be read refuses nothing",
+              h.pre_send(ev("@Nobody hi"), env_m, now=t0) is None)
+
+        for i in range(h.REQUEST_CAP):
+            h.post_send(sent_event(f"R{i}"), env, now=t0 + i)
+        check("pre-send: the 11th awaited request in a conversation is refused as request_cap",
+              deny("@DEMO-agent one more", now=t0 + 20).startswith("request_cap"), deny("@DEMO-agent one more", now=t0 + 20))
+        h.close("R0", env)
+        check("pre-send: closing one makes room", deny("@DEMO-agent one more", now=t0 + 20) == "")
+        check("pre-send: the cap is per day: after the final deadline it is gone",
+              deny("@DEMO-agent one more", now=t0 + h.FINAL_AFTER + 100) == "")
+        srv.close()
+
+    with tempfile.TemporaryDirectory() as d:
+        srv = FakeServer()
+        env = setup(d, srv)
+        tg = bridge.Target(env["CLAUDE_OPENMAX_CONFIG"], env["CLAUDE_OPENMAX_DATA_DIR"], "DEMO-conv", "DEMO-org")
+        sent = bridge.send_to(tg, GROUP_TEXT, mentions=["AGENT"])
+        h.post_send(dict(sent_event(sent.id), session_id="A"), env, now=t0)
+        srv.add("AGENT", "the answer")
+        check("sessions: another live session is not handed A's reply", h.deliver(env, now=t0 + 60, session_id="B") == "")
+        check("sessions: the session that asked is", "the answer" in h.deliver(env, now=t0 + 90, session_id="A"))
+        srv.add("AGENT", "and more")
+        check("sessions: B still gets nothing while A is alive", h.deliver(env, now=t0 + 150, session_id="B") == "")
+        h.end_session({"session_id": "A"}, env)
+        check("sessions: when A has ended, the next session gets it before its first turn",
+              "and more" in h.deliver(env, now=t0 + 200, session_id="B", force=True))
+        srv.add("AGENT", "later still")
+        h.post_send(dict(sent_event("X9"), session_id="C"), env, now=t0 + 300)
+        check("sessions: a session silent for SESSION_IDLE no longer owns its requests",
+              "later still" in h.deliver(env, now=t0 + 300 + h.SESSION_IDLE + 100, session_id="B", force=True))
+        srv.close()
+
+    h.QUIET_FOR = 25
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            srv = FakeServer()
+            env = setup(d, srv)
+            tg = bridge.Target(env["CLAUDE_OPENMAX_CONFIG"], env["CLAUDE_OPENMAX_DATA_DIR"], "DEMO-conv", "DEMO-org")
+            sent = bridge.send_to(tg, GROUP_TEXT, mentions=["AGENT"])
+            h.post_send(sent_event(sent.id), env, now=t0)
+            srv.add("AGENT", "part one, started")
+            first = h.deliver(env, now=t0 + 20)
+            srv.add("AGENT", "part two")
+            srv.add("AGENT", "part three, done")
+            second = h.deliver(env, now=t0 + 40)
+            third = h.deliver(env, now=t0 + 60)
+            out = h.deliver(env, now=t0 + 80)
+            check("quiet period: nothing is handed over while the answer is still arriving", first == second == third == "", (first, second, third))
+            check("quiet period: after the lull all three come together, once",
+                  all(x in out for x in ("part one", "part two", "part three")) and out.count("--- seq") == 3, out)
+            check("quiet period: nothing again afterwards", h.deliver(env, now=t0 + 120) == "")
+            reads = [x for x in srv.log if x[0].endswith("/read")]
+            check("mark-read: what was handed over is marked read up to its last message",
+                  len(reads) == 1 and reads[0][1]["read_until_seq"] == 4, reads)
+            check("quiet period: a held reply is kept in the file without a token",
+                  "glpat-" not in json.dumps(h.load(env)))
+            srv.add("AGENT", "late token glpat-ASFsO6V8AwzwdzLA7bniN286")
+            h.deliver(env, now=t0 + 140)
+            check("a message held for the lull is stored with its secret removed", "glpat-" not in json.dumps(h.load(env)), h.load(env))
+            srv.close()
+    finally:
+        h.QUIET_FOR = 0
+
+
 def cli_tests():
     def run(verb, event, env):
         out, err = io.StringIO(), io.StringIO()
@@ -188,8 +270,8 @@ def cli_tests():
         rc, out = run("pre-send", {}, env)
         check("cli: an empty event is no error", rc == 0)
         snip = json.loads(run("install-snippet", {}, env)[1])["hooks"]
-        check("cli: install-snippet names the four hooks with this file's absolute path",
-              set(snip) == {"PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart"}
+        check("cli: install-snippet names the five hooks with this file's absolute path",
+              set(snip) == {"PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart", "SessionEnd"}
               and snip["PreToolUse"][0]["matcher"] == h.SEND_TOOL and str(Path(h.__file__).resolve()) in snip["PreToolUse"][0]["hooks"][0]["command"], snip)
         srv.close()
 
@@ -198,6 +280,7 @@ def main() -> int:
     pre_tests()
     post_tests()
     deliver_tests()
+    stage2_tests()
     cli_tests()
     return finish()
 
