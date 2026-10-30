@@ -24,6 +24,7 @@ One page in the owner's language, for someone who will never read the code:
 - **How it decides.** The rule in plain words, with one worked example on the synthetic world.
 - **The asks.** The few decisions only the owner can make (at most five), each with its options and a recommended answer, and one line, in the owner's language, that says how to agree to all of them at once ("reply 'agree' if all are as recommended").
 - **What it stores.** Every table it adds, its columns and who writes them. An append-only table is permanent: once it holds rows its columns cannot change, so they are proven on a scratch copy of real data (never the client's live store) before the page fixes them, and the page says they were.
+- **A box at the top, and no builder's words.** Before section one, four lines: what "agree" sets going, what it costs (money, and the owner's time), the worst that can happen, and what is still needed from the owner. A single reply of "agree" has to be enough: a name or a number the page needs afterwards is asked for after the yes, and the page says so. No internal ids, table names, test names or command names; a word the owner has never used is explained where it first appears. Numbers in the headline are the ones that matter to the owner's goods (a total that is mostly something else is split first).
 - **The traps.** Each trap the research found, and the answer the design gives to it. For example: a tree whose branches cross counts one item twice; a comparison that brings back a target a person had parked; a column that can never be changed.
 
 ## The demo
@@ -133,6 +134,7 @@ The tool writes the page only when the list is empty, and prints the reasons oth
 
 - [ ] The prior-art scan is dated, and each trap it found is on the design page with its answer
 - [ ] The design page says what it is, how it decides, the asks (each with a recommended answer, and one reply that agrees to all) and what it stores
+- [ ] A fresh agent playing the owner (a person who knows the business and no software) read the page and its demo cold; what it could not follow, what contradicted itself and what was missing went back into the page
 - [ ] Every append-only column is proven on a scratch copy of real data
 - [ ] The demo is drawn by the skill pack's own renderer from a synthetic world and passes the renderer's check (before the code exists, by a stand-alone generator; when none is needed, the page says so and gives a worked example)
 - [ ] The demo guard finds nothing: the synthetic world and its badge in the header, `DEMO` ids, the renderer's check with the skill pack's style and commands, no client term in any form of the page, outside every client's data folder
