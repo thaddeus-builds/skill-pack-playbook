@@ -1,0 +1,22 @@
+# ads.spend/1
+{
+  "produced_at": "2026-10-31T08:00:00+08:00",
+  "producer": "gads",
+  "rows": [
+    {
+      "account": "demo-account-1",
+      "amount_kind": "index",
+      "campaign_type": "search",
+      "clicks": 120,
+      "conv_value": 310,
+      "conversions": 4.0,
+      "date": "2026-10-30",
+      "entity_id": "DEMO-C1",
+      "entity_kind": "campaign",
+      "impressions": 4100,
+      "platform": "google",
+      "settled": false,
+      "spend": 250
+    }
+  ]
+}

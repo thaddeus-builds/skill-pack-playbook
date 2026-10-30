@@ -1,0 +1,146 @@
+{
+  "$comment": "Draft from the search-intel design page of 2026-10-30 (competitor ads on search result pages). One row per ad, not per competitor: intel/1's competitors list has no room for ad text, first and last sighting or a count.",
+  "$id": "intel.ads-1.schema.json",
+  "title": "intel.ads/1",
+  "description": "The ads competitors (and the client) were seen running on search result pages: the words as published, where and when they were seen and how often. search-intel writes it from repeated samples of the pages; the makers and operators of paid search read it.",
+  "$defs": {
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"
+    }
+  },
+  "x-contract": "intel.ads/1",
+  "x-status": "draft",
+  "x-format": "json",
+  "x-producer": "search-intel",
+  "x-consumers": "the maker of ad copy and the paid search operators",
+  "x-rules": [
+    "The words are as published: never rewritten, translated or completed; a description the platform cut short stays cut and says so (description_truncated).",
+    "An ad is one advertiser and one headline start; the wordings the platform assembled for it on different searches are its variants, and the newest is the one shown.",
+    "The rows are a sample of searches, never a census: an ad not seen is not an ad not run, and times_seen counts searches that showed it, not impressions.",
+    "Every row has a source and the days it was first and last seen; an absent optional key means unknown, never null and never an empty string."
+  ],
+  "type": "object",
+  "required": [
+    "producer",
+    "produced_at",
+    "ads"
+  ],
+  "properties": {
+    "producer": {
+      "description": "The pack that wrote the document (its CLI word).",
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "description": "When the document was written: ISO 8601 with its zone.",
+      "$ref": "#/$defs/time"
+    },
+    "ads": {
+      "description": "The ads seen; empty when none was looked for.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "market",
+          "language",
+          "advertiser",
+          "headline",
+          "first_seen",
+          "last_seen",
+          "times_seen",
+          "source"
+        ],
+        "properties": {
+          "market": {
+            "description": "The market the search was made in (the hub's market word).",
+            "type": "string",
+            "minLength": 1
+          },
+          "language": {
+            "description": "The language of the words, an ISO 639-1 code.",
+            "type": "string",
+            "pattern": "^[a-z]{2}$"
+          },
+          "advertiser": {
+            "description": "The advertiser's display name as the ad showed it.",
+            "type": "string",
+            "minLength": 1
+          },
+          "display_url": {
+            "description": "The URL the ad displayed, as shown.",
+            "type": "string",
+            "minLength": 1
+          },
+          "headline": {
+            "description": "The headline text as published, its parts in one string.",
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "description": "The description text as published.",
+            "type": "string",
+            "minLength": 1
+          },
+          "description_truncated": {
+            "description": "True when the platform cut the description short.",
+            "type": "boolean"
+          },
+          "sitelinks": {
+            "description": "The titles of the ad's sitelinks.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "keywords": {
+            "description": "The searches it was seen on.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "first_seen": {
+            "description": "The day it was first seen, YYYY-MM-DD.",
+            "$ref": "#/$defs/date"
+          },
+          "last_seen": {
+            "description": "The day it was last seen, YYYY-MM-DD.",
+            "$ref": "#/$defs/date"
+          },
+          "times_seen": {
+            "description": "How many searches showed it.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "variants": {
+            "description": "How many different wordings it was seen with.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "role": {
+            "description": "What the owner decided the advertiser is.",
+            "type": "string",
+            "enum": [
+              "own",
+              "competitor",
+              "benchmark",
+              "unclear"
+            ]
+          },
+          "source": {
+            "description": "Where the page was read (the tool or dataset).",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}
