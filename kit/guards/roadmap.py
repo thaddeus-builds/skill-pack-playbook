@@ -29,6 +29,16 @@ The file (templates/ROADMAP.md is the starting point):
      items are all Done is closed and moves to Done as a row of its own (the
      method: docs/operating.md, "Integrate by milestone").
 
+  9. optional, for a roadmap that has grown: a line `Archive: <file>` before the
+     first section names a file, next to the roadmap, that holds old Done and
+     Parked rows: `# <Project> roadmap archive`, then `## Done` and/or
+     `## Parked` with rows in the same form (D and P ids, a Done row ends in a
+     reference, a date not after `Updated`). An id is used once across both
+     files (never reused), a reference from the live file (`unblocks`,
+     `includes`) resolves in either, and a named file that is missing or holds
+     another section is a problem. Nothing else moves: Now, Waiting, Next,
+     Milestones and Decisions stay in the live file.
+
 `check_file(path)` checks one file (a missing one is a problem);
 `check_roadmap(root)` checks a skill pack's: skill-pack.toml `[guards.roadmap]
 file`, else whichever of `docs/ROADMAP.md` and `ROADMAP.md` exists (both is
@@ -66,6 +76,8 @@ REFERENCE = re.compile(r"\([^()]+\)\s*$")
 QUOTE = re.compile(r'"[^"]{3,}"')
 UNBLOCKS = re.compile(r"unblocks:\s*([A-Z]\d+(?:\s*,\s*[A-Z]\d+)*)\s*$")
 PLACES = ("docs/ROADMAP.md", "ROADMAP.md")
+ARCHIVE = re.compile(r"^Archive:\s*(\S+)\s*$", re.M)
+ARCHIVED = ("Done", "Parked")
 
 
 def _day(text: str) -> date | None:
@@ -88,8 +100,57 @@ def sections(text: str) -> dict[str, list[str]]:
     return out
 
 
-def problems(text: str) -> list[str]:
-    """Every break of the format in `text`; [] when it holds."""
+def archive_name(text: str) -> str | None:
+    """The file the roadmap names as its archive (`Archive: <file>` before the first section), else None."""
+    head = text.lstrip("﻿").replace("\r\n", "\n").split("\n## ", 1)[0]
+    m = ARCHIVE.search(head)
+    return m.group(1) if m else None
+
+
+def _row(name: str, it: str, updated: date, rows: dict, p: list[str], where: str = "") -> None:
+    """One `- ` item of section `name` against the row rules; it joins `rows` (id -> (section, text))."""
+    m = ROW.match(it)
+    if not m:
+        p.append(f"{where}{name}: `{it[:50]}` is not `[ID] YYYY-MM-DD text`")
+        return
+    letter, num, day, rest = m.groups()
+    rid = letter + num
+    if letter != LETTER[name]:
+        p.append(f"{where}[{rid}] is in {name}, whose ids start with {LETTER[name]}")
+    if rid in rows:
+        p.append(f"{where}[{rid}] is used twice" + (" (in the roadmap and its archive)" if where else ""))
+    rows[rid] = (name, rest)
+    d = _day(day)
+    if d is None:
+        p.append(f"{where}[{rid}]: {day} is not a real day")
+    elif d > updated:
+        p.append(f"{where}[{rid}] is dated {day}, after Updated {updated}")
+    if name == "Done" and not REFERENCE.search(rest):
+        p.append(f"{where}[{rid}]: a Done row ends in a reference in parentheses, "
+                 f"`(commit abc1234)` or `(no ref)`")
+    if name == "Decisions" and not QUOTE.search(rest):
+        p.append(f"{where}[{rid}]: a Decisions row quotes the owner's words in double quotes")
+
+
+def _archive_problems(text: str, updated: date, rows: dict, p: list[str]) -> None:
+    """Rule 9 on the archive's text: its Done and Parked rows join `rows`."""
+    lines = [x for x in text.lstrip("﻿").replace("\r\n", "\n").split("\n") if x.strip()]
+    if not lines or not lines[0].startswith("# "):
+        p.append("archive: the first line must be the title, `# <Project> roadmap archive`")
+    heads = [x[3:].strip() for x in lines if x.startswith("## ")]
+    bad = [h for h in heads if h not in ARCHIVED]
+    if bad or len(set(heads)) != len(heads):
+        p.append(f"archive: only `## Done` and `## Parked`, each once, are allowed; found: {', '.join(heads) or 'none'}")
+        return
+    found = sections(text)
+    for name in heads:
+        for it in found[name]:
+            _row(name, it, updated, rows, p, "archive: ")
+
+
+def problems(text: str, archive: str | None = None) -> list[str]:
+    """Every break of the format in `text`; [] when it holds. `archive` is the text of the file the roadmap
+    names with `Archive:` (rule 9); without it an archive is taken as empty."""
     text = text.lstrip("﻿").replace("\r\n", "\n")
     lines = [x for x in text.split("\n") if x.strip()]
     p: list[str] = []
@@ -112,27 +173,9 @@ def problems(text: str) -> list[str]:
                 if not LINK.match(it):
                     p.append(f"Links: `{it[:50]}` is not `name: where`")
                 continue
-            m = ROW.match(it)
-            if not m:
-                p.append(f"{name}: `{it[:50]}` is not `[ID] YYYY-MM-DD text`")
-                continue
-            letter, num, day, rest = m.groups()
-            rid = letter + num
-            if letter != LETTER[name]:
-                p.append(f"[{rid}] is in {name}, whose ids start with {LETTER[name]}")
-            if rid in rows:
-                p.append(f"[{rid}] is used twice")
-            rows[rid] = (name, rest)
-            d = _day(day)
-            if d is None:
-                p.append(f"[{rid}]: {day} is not a real day")
-            elif d > updated:
-                p.append(f"[{rid}] is dated {day}, after Updated {updated}")
-            if name == "Done" and not REFERENCE.search(rest):
-                p.append(f"[{rid}]: a Done row ends in a reference in parentheses, "
-                         f"`(commit abc1234)` or `(no ref)`")
-            if name == "Decisions" and not QUOTE.search(rest):
-                p.append(f"[{rid}]: a Decisions row quotes the owner's words in double quotes")
+            _row(name, it, updated, rows, p)
+    if archive is not None:
+        _archive_problems(archive, updated, rows, p)
     if len(found["Now"]) > 1:
         p.append("Now holds more than one item: one turn per session")
     p += _milestones(rows)
@@ -183,7 +226,15 @@ def check_file(path: Path | str, name: str | None = None) -> list[str]:
     if not path.is_file():
         return [f"{name} does not exist: the project keeps its state in one "
                 f"roadmap (templates/ROADMAP.md)"]
-    return [f"{name}: {x}" for x in problems(path.read_text(encoding="utf-8", errors="replace"))]
+    text = path.read_text(encoding="utf-8", errors="replace")
+    rel = archive_name(text)
+    archive = None
+    if rel:
+        target = path.parent / rel
+        if Path(rel).is_absolute() or ".." in Path(rel).parts or not target.is_file():
+            return [f"{name}: Archive: {rel} is not a file next to the roadmap (a name, not a path outside its folder)"]
+        archive = target.read_text(encoding="utf-8", errors="replace")
+    return [f"{name}: {x}" for x in problems(text, archive)]
 
 
 def where(root: Path | str | None = None) -> tuple[Path, str, list[str]]:
@@ -274,6 +325,27 @@ PLANTED = {
 }
 
 
+ARCHIVE_TEXT = """# Demo roadmap archive
+## Done
+- [D0] 2026-09-01 the first merge (commit 0000000)
+## Parked
+- [P0] 2026-09-01 an old idea
+"""
+WITH_ARCHIVE = SOUND.replace("Updated: 2026-10-01\n", "Updated: 2026-10-01\nArchive: ROADMAP-ARCHIVE.md\n")
+WITH_ARCHIVE = WITH_ARCHIVE.replace("unblocks: X1, N1", "unblocks: X1, N1, D0")
+
+# a break of rule 9 -> (the archive's text, a word its problem must hold)
+PLANTED_ARCHIVE = {
+    "an id in both files": (ARCHIVE_TEXT.replace("[D0]", "[D1]"), "roadmap and its archive"),
+    "a Done row with no reference": (ARCHIVE_TEXT.replace(" (commit 0000000)", ""), "reference"),
+    "a row in the wrong section": (ARCHIVE_TEXT.replace("[P0]", "[D5]"), "whose ids start"),
+    "a section the archive may not hold": (ARCHIVE_TEXT + "## Next\n- [X5] 2026-09-01 x\n", "only `## Done`"),
+    "an unreal date": (ARCHIVE_TEXT.replace("2026-09-01 the first", "2026-02-30 the first"), "not a real day"),
+    "a date after Updated": (ARCHIVE_TEXT.replace("2026-09-01 the first", "2026-11-01 the first"), "after Updated"),
+    "no title": (ARCHIVE_TEXT.replace("# Demo roadmap archive", "Demo"), "title"),
+}
+
+
 def self_test() -> list[str]:
     """[] when the sound roadmap passes and every planted break is caught."""
     out = [f"a sound roadmap is refused: {problems(SOUND)}"] if problems(SOUND) else []
@@ -283,4 +355,12 @@ def self_test() -> list[str]:
         got = problems(text)
         if text == SOUND or not any(needle in x for x in got):
             out.append(f"the roadmap rule misses: {what} (got {got})")
+    if problems(WITH_ARCHIVE, ARCHIVE_TEXT):
+        out.append(f"a sound roadmap with its archive is refused: {problems(WITH_ARCHIVE, ARCHIVE_TEXT)}")
+    if not any("not a row of this file" in x for x in problems(WITH_ARCHIVE, "# Demo roadmap archive\n")):
+        out.append("a reference to a row the archive does not hold is accepted")
+    for what, (archive, needle) in PLANTED_ARCHIVE.items():
+        got = problems(WITH_ARCHIVE, archive)
+        if archive == ARCHIVE_TEXT or not any(needle in x for x in got):
+            out.append(f"the archive rule misses: {what} (got {got})")
     return out
