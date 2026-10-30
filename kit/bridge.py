@@ -56,6 +56,7 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 import re
@@ -563,7 +564,7 @@ def download_attachment(creds: Credentials, conversation_id: str, message: dict,
     """Save one attachment of `message` into `dest_dir`, byte for byte as the server holds it, and return where it went
     with its sha256 (the pack records the hash with the file it imports). The attachment must be one of the message's
     and the message must belong to `conversation_id`. The server is asked for a download link with the token; the link
-    is fetched with no credential at all, and neither it nor the token is put in a result or a reason. The file is named
+    is fetched with no credential at all (and only if it is https or the API's own address: a `file://` link would read a local file), and neither it nor the token is put in a result or a reason. The file is named
     by the last part of `file_name`; a name that is empty, `.` or `..`, or a file already there with other bytes, is
     refused (`RestError`), the same bytes are left as they are. Nothing is decoded."""
     if attachment not in _attachments_of(message):
@@ -579,6 +580,8 @@ def download_attachment(creds: Credentials, conversation_id: str, message: dict,
     link = item.get("download_url") if isinstance(item, dict) else None
     if not isinstance(link, str) or not link:
         raise RestError("download: no download link")
+    if urllib.parse.urlsplit(link).scheme != "https" and urllib.parse.urlsplit(link)[:2] != urllib.parse.urlsplit(creds.base_url)[:2]:
+        raise RestError("download: the download link is not https")      # file:// and ftp:// would read a local file or a stranger's host
     req = urllib.request.Request(link, headers={"User-Agent": USER_AGENT})
     try:
         with urlopen(req, timeout=timeout) as resp:
