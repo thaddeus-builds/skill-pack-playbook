@@ -43,9 +43,9 @@ What runs in production feeds back as issues and at most ten owner asks, which s
 
 ## Who decides what
 
-Write these three lanes into the repository on day one, not into an agent's memory.
+Write these lanes into the repository on day one, not an agent's memory.
 
-**Always the owner:** meaning · numbers · money · the client contract · the release on a client host. Everything technical, pushing and merging included, is the agent's.
+**Always the owner:** meaning · numbers · money · the client contract · the release. Technical choices, pushing and merging included, are the agent's.
 
 ```mermaid
 flowchart TB
@@ -57,12 +57,12 @@ flowchart TB
       direction LR
       c1["issue filed<br/>by an agent"] --> c2["triage against<br/>house rules"] --> c3["fix + tests in<br/>its own worktree"] --> c4["local suite green:<br/>merge"]
     end
-    OM["Cold read by a second agent,<br/>then the agent merges"]:::risky
+    OM["Cold read,<br/>then merge"]:::risky
     L3 -. "touches the risky list" .-> OM
     classDef risky stroke:#e37400,stroke-width:2px
 ```
 
-**The risky list:** the human gate, the write path, contract removals or renames, owner files, threshold values and human-data tables. A fix that touches it is read cold by a second agent, then merged; no merge moves the gate or the write path. Paid data calls and widening what may be written count only when the owner types them in chat. Template: [`templates/decision-rights.md`](templates/decision-rights.md).
+**The risky list:** the human gate, the write path, contract removals or renames, owner files, threshold values and human-data tables. A fix touching it is read cold by a second agent, then merged. Paid data calls and widening what may be written count only when the owner types them in chat. Template: [`templates/decision-rights.md`](templates/decision-rights.md).
 
 ---
 
