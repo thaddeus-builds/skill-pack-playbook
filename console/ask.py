@@ -145,6 +145,10 @@ def _parser() -> Parser:
     p.add_argument("--dir", help="the console folder (default: $CONSOLE_DIR; never guessed)")
     p.add_argument("--manifest", help="the skill pack's manifest (default: $CONSOLE_MANIFEST): its relay_verbs "
                    "decide which gate verbs `add` accepts, its max_open how many asks may be open")
+    p.add_argument("--relay-verbs", metavar="VERBS",
+                   help="the verbs the console may run, as serve.py takes them ('facts confirm,queue approve'): "
+                        "`add` refuses a gate on any other. For a console started with --relay-cmd and --relay-verbs "
+                        "(no manifest); it excludes --manifest")
     p.add_argument("--as", dest="name", default="main",
                    help="who is asking, logged as agent:NAME (default: main)")
     sub = p.add_subparsers(dest="verb", required=True, metavar="VERB")
@@ -253,13 +257,28 @@ def _manifest(a) -> dict | None:
         raise Refused("bad_request", str(e)) from None
 
 
+def _gate_verbs(a, man: dict | None) -> list | None:
+    """The verbs a gate may name: the manifest's, or `--relay-verbs`; None checks nothing (neither is given)."""
+    if a.relay_verbs is None:
+        return man["relay_verbs"] if man else None
+    if man:
+        raise Refused("bad_request", "--relay-verbs and a manifest exclude each other: the manifest holds relay_verbs")
+    try:
+        verbs = manifest_mod.verbs_from_text(a.relay_verbs)
+    except manifest_mod.ManifestError as e:
+        raise Refused("bad_request", str(e)) from None
+    if not verbs:
+        raise Refused("bad_request", "--relay-verbs names no verb: with none, every gated ask would be refused")
+    return verbs
+
+
 def cmd_add(a):
     store = _store(a)
     man = _manifest(a)
     limit = manifest_mod.limit(man)
     return {"ok": True, **store.post(a.name, _read_asks(a.file), dry_run=a.dry_run,
                                      max_open=min(a.max_open, limit) if a.max_open else limit,
-                                     gate_verbs=man["relay_verbs"] if man else None,
+                                     gate_verbs=_gate_verbs(a, man),
                                      page_only=man["page_only_verbs"] if man else None,
                                      default_expires=core.days_ahead(core.EXPIRES_DAYS))}
 
