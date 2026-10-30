@@ -140,6 +140,12 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - `skills/research/SKILL.md` (new) and a line in the README's "Start a skill pack" list: the same research path as a skill an agent loads when asked to research, look at prior art or see how others design something (the owner's question, 2026-10-30: a keyword hook would load the procedure into every session; a skill puts only its description, 510 characters, in context and loads the 3 KB body when a task matches). Tried in a clean repository with `claude -p`, one run each: a Chinese and an English research prompt and a Chinese "how does the industry do X" prompt loaded the skill and then read `docs/research/README.md`; a Chinese "research this error" prompt and a one-line fact lookup did not. Test: `tests/test_prior_art_precedent.py`.
 - Skill packs: nothing (a skill a pack's agent may load; the pack's own copy is not needed)
 
+## [0.47.3] - 2026-10-31
+
+### Kit
+- `kit/contracts.d/inquiries-1.schema.json` (with `contracts/`): the optional field `email_confirmed` on an inquiry, and the rule that only an email or a form whose address was confirmed proves the address is the writer's own (found by a cold read of the SDR skill pack's importer: a form anyone can type an address into was being taken as consent; the field is optional, a pack that produces inquiries from forms sets it when its form confirms the address)
+- Skill packs: nothing
+
 ## [0.47.2] - 2026-10-31
 
 ### Kit
