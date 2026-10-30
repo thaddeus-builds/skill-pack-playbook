@@ -86,4 +86,7 @@ spawn_allowed = ["compute_stories"]    # the one compute that may run other read
 [guards.evals]
 extra = ["facts init", "execute apply"]
 # families = ["queue"]
+# person_only = ["facts confirm", "plan approve"]   # only for a verb table declared per family (`facts`, `plan`: one
+#   gated verb each, the router forwards the words after it): the sub-verb words only a person runs; the Never
+#   table then names exactly these, and every gated verb needs one under it
 # uncovered = []
