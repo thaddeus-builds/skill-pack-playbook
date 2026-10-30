@@ -1,7 +1,7 @@
 ---
 name: filmkit
 description: Render a finished film (camera moves, cuts on the beat, a grade, animated type, own-synthesis sound, a loudness target) from one JSON film spec, and check it first - for a maker pack or an agent that has footage, a story and voice files and needs the film made.
-version: 0.1.0
+version: 0.1.4
 ---
 # Making a film from a spec (filmkit)
 

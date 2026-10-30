@@ -23,6 +23,7 @@ def tmpdir():
         yield Path(d)
 
 
+from filmkit.util import FilmkitError  # noqa: E402,F401
 from filmkit.demo import film_spec, make_assets  # noqa: E402,F401   the fixtures live in the library: `python -m filmkit demo` makes the same
 
 

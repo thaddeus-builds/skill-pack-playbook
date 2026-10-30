@@ -25,17 +25,20 @@ def safe_box(spec: dict) -> list[float] | None:
     s = spec.get("safe")
     if not s:
         return None
-    box = s.get("box") or S.SAFE_PROFILES.get(s.get("profile"))
+    if s.get("box"):
+        return [float(v) for v in s["box"]]                          # a caller's own box is in the canvas's own pixels
+    box = S.SAFE_PROFILES.get(s.get("profile"))
     if box is None:
         return None
     c = spec["canvas"]
-    sx, sy = c["w"] / 1080, c["h"] / 1920
+    sx, sy = c["w"] / 1080, c["h"] / 1920                            # a profile is written for 1080x1920 and scales with the canvas
     return [box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy]
 
 
 def layout(spec: dict, base_dir: Path, step: float = 0.2) -> list[str]:
     """Type outside the safe area, and two pieces of type on each other, found by sampling every `step` seconds."""
     cx = context(spec, base_dir)
+    c = spec["canvas"]
     sb = safe_box(spec)
     found, seen = [], set()
     t = 0.0
@@ -46,9 +49,15 @@ def layout(spec: dict, base_dir: Path, step: float = 0.2) -> list[str]:
                 for name, x0, y0, x1, y1 in ELEMENTS[el["element"]].boxes(t, el, cx, el):
                     boxes.append((i, name, x0, y0, x1, y1))
         for i, name, x0, y0, x1, y1 in boxes:
+            if name.startswith("~"):                                              # a decoration (rule, brackets, scan line): it only has to be on the canvas, and it may sit on type
+                if (x0 < -1 or y0 < -1 or x1 > c["w"] + 1 or y1 > c["h"] + 1) and (i, name, "canvas") not in seen:
+                    seen.add((i, name, "canvas"))
+                    found.append(f"t={t:.1f}s: {name[1:]} ({x0:.0f},{y0:.0f})-({x1:.0f},{y1:.0f}) is outside the canvas {c['w']}x{c['h']}")
+                continue
             if sb and (x0 < sb[0] - 1 or y0 < sb[1] - 1 or x1 > sb[2] + 1 or y1 > sb[3] + 1) and (i, name, "safe") not in seen:
                 seen.add((i, name, "safe"))
                 found.append(f"t={t:.1f}s: {name} ({x0:.0f},{y0:.0f})-({x1:.0f},{y1:.0f}) is outside the safe area {[round(v) for v in sb]}")
+        boxes = [b for b in boxes if not b[1].startswith("~")]
         for a in range(len(boxes)):
             for b in range(a + 1, len(boxes)):
                 (i, na, ax0, ay0, ax1, ay1), (j, nb, bx0, by0, bx1, by1) = boxes[a], boxes[b]
@@ -91,5 +100,17 @@ def fonts_note(spec: dict, base_dir: Path) -> list[str]:
     return [f"font role {r}: no file found, the fallback face is used" for r in f.fallback]
 
 
+def glyphs(spec: dict, base_dir: Path) -> list[str]:
+    """Characters of the type that the face it is set in has no glyph for: the film would show an empty box (a pill emoji, a rare character, a Latin face asked for Chinese)."""
+    fonts = Fonts(spec.get("fonts"), base_dir)
+    wanted: dict[str, str] = {}
+    for el in spec.get("overlays", []):
+        cls = ELEMENTS[el["element"]]
+        if hasattr(cls, "texts"):
+            for role, text in cls.texts(el):
+                wanted[role] = wanted.get(role, "") + text
+    return [f"font {role}: no glyph for {' '.join(repr(ch) for ch in miss)} (U+{ord(miss[0]):04X}...): it would be drawn as an empty box" for role, text in wanted.items() if (miss := fonts.missing(role, text))]
+
+
 def all_checks(spec: dict, base_dir: Path) -> dict:
-    return {"layout": layout(spec, base_dir), "timing": timing(spec, base_dir), "fonts": fonts_note(spec, base_dir)}
+    return {"layout": layout(spec, base_dir), "timing": timing(spec, base_dir), "glyphs": glyphs(spec, base_dir), "fonts": fonts_note(spec, base_dir)}

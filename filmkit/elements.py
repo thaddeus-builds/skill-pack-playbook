@@ -102,10 +102,28 @@ def rrect(cx: Ctx, layer, box, r, fill=None, outline=None, width=2, alpha=1.0):
     layer.alpha_composite(tmp)
 
 
-def line_box(cx, text, x, y, kind, size, lead, anchor, tracking):
+def ink_rows(cx: Ctx, kind: str, size: float, text: str) -> tuple[float, float]:
+    """The rows (design pixels, from the line's top: where `draw` puts `y`) between which the ink of `text` sits in the face: the font's own bounding box, so a descender or a CJK bottom is inside it."""
+    _, top, _, bottom = cx.font(kind, size).getbbox(text or " ", anchor="la")
+    return top / cx.q, bottom / cx.q
+
+
+def line_box(cx, text, x, y, kind, size, anchor, tracking):
+    """Where one line of tracked type is, in design pixels: its advance width across, the face's ink rows down."""
     w = text_width(cx, text, kind, size, tracking)
     x0 = x if anchor == "l" else (x - w / 2 if anchor == "m" else x - w)
-    return (x0, y, x0 + w, y + size * lead)
+    top, bottom = ink_rows(cx, kind, size, text)
+    return (x0, y + top, x0 + w, y + bottom)
+
+
+def scratch(cx: Ctx, kind: str, size: float) -> Image.Image:
+    """A transparent strip for one line to be drawn into and pasted clipped (the reveal mask of a line that rises): as tall as the face itself, ascent and descent and 12 pixels."""
+    asc, desc = cx.font(kind, size).getmetrics()
+    return Image.new("RGBA", (cx.W, asc + desc + 12), (0, 0, 0, 0))
+
+
+def anchor_problems(p) -> list[str]:
+    return [] if p.get("anchor", "l") in ("l", "m", "r") else ["anchor must be l, m or r"]
 
 
 @element("title")
@@ -120,7 +138,7 @@ class Title:
         for k in ("x", "y"):
             if not isinstance(p.get(k), (int, float)):
                 out.append(f"{k} must be a number")
-        return out
+        return out + anchor_problems(p)
 
     @classmethod
     def draw(cls, layer, t, p, cx, el):
@@ -135,7 +153,7 @@ class Title:
                 continue
             size, lead = title_size(cx, p), p["lead"]
             ly = p["y"] + i * size * lead
-            tmp = Image.new("RGBA", (cx.W, int(size * lead * cx.q) + 12), (0, 0, 0, 0))
+            tmp = scratch(cx, p["font"], size)
             d = ImageDraw.Draw(tmp)
             yy = (1 - a) * p["rise"] * cx.q + 6
             track_text(d, (p["x"] * cx.q, yy), line, cx.font(p["font"], size), (*fill, int(255 * min(1.0, a * 1.4))), p["tracking"], p["anchor"], cx.q)
@@ -151,8 +169,12 @@ class Title:
         for i, line in enumerate(p["lines"]):
             gone = p["out"] is not None and t >= el["t0"] + p["out"] + i * 0.05 + p["out_dur"]          # a line that has faded out is no longer on the screen
             if t >= el["t0"] + i * p["stagger"] + 0.2 and not gone:
-                out.append((f"title:{line[:18]}", *line_box(cx, line, p["x"], p["y"] + i * size * p["lead"], p["font"], size, 1.0, p["anchor"], p["tracking"])))
+                out.append((f"title:{line[:18]}", *line_box(cx, line, p["x"], p["y"] + i * size * p["lead"], p["font"], size, p["anchor"], p["tracking"])))
         return out
+
+    @staticmethod
+    def texts(p):
+        return [(p.get("font", "black"), line) for line in p["lines"]]
 
 
 @element("text")
@@ -161,7 +183,11 @@ class Text:
 
     @staticmethod
     def check(p):
-        return [] if isinstance(p.get("text"), str) and isinstance(p.get("x"), (int, float)) and isinstance(p.get("y"), (int, float)) else ["text, x and y are required"]
+        return ([] if isinstance(p.get("text"), str) and isinstance(p.get("x"), (int, float)) and isinstance(p.get("y"), (int, float)) else ["text, x and y are required"]) + anchor_problems(p)
+
+    @staticmethod
+    def texts(p):
+        return [(p.get("font", "med"), p["text"])]
 
     @classmethod
     def draw(cls, layer, t, p, cx, el):
@@ -177,7 +203,7 @@ class Text:
     def boxes(cls, t, p, cx, el):
         p = {**cls.defaults, **p}
         size = fitted(cx, [p["text"]], p["font"], p["size"], p["tracking"], p.get("max_width"))
-        return [("text", *line_box(cx, p["text"], p["x"], p["y"], p["font"], size, 1.0, p["anchor"], p["tracking"]))] if t >= el["t0"] + 0.2 else []
+        return [("text", *line_box(cx, p["text"], p["x"], p["y"], p["font"], size, p["anchor"], p["tracking"]))] if t >= el["t0"] + 0.2 else []
 
 
 @element("chip")
@@ -190,6 +216,10 @@ class Chip:
     @staticmethod
     def check(p):
         return [] if isinstance(p.get("text"), str) and isinstance(p.get("x"), (int, float)) and isinstance(p.get("y"), (int, float)) else ["text, x and y are required"]
+
+    @staticmethod
+    def texts(p):
+        return [("med", p["text"])]
 
     @classmethod
     def draw(cls, layer, t, p, cx, el):
@@ -242,7 +272,7 @@ class Brackets:
 
     @classmethod
     def boxes(cls, t, p, cx, el):
-        return []
+        return [("~brackets", *p["box"])] if t >= el["t0"] + 0.3 else []
 
 
 @element("scan")
@@ -278,7 +308,8 @@ class Scan:
 
     @classmethod
     def boxes(cls, t, p, cx, el):
-        return []
+        x0, y0, x1, y1 = p["box"]
+        return [("~scan", x0 - 8 - 26, y0, x1, y1)] if el["t0"] + 0.2 <= t <= el["t1"] else []
 
 
 @element("counter")
@@ -325,8 +356,17 @@ class Counter:
         if t < el["t0"] + 0.3:
             return []
         size, sfx_size = cls.sizes(cx, p)
-        w = text_width(cx, f"{p['target']:.0f}", "black", size) + (text_width(cx, p["suffix"], p.get("suffix_font") or "black", sfx_size) + 6 if p["suffix"] else 0)
-        return [("counter", p["x"], p["y"] + size * 0.12, p["x"] + w, p["y"] + size * 0.95)]
+        shown = f"{p['target']:.0f}"
+        w = text_width(cx, shown, "black", size) + (text_width(cx, p["suffix"], p.get("suffix_font") or "black", sfx_size) + 6 if p["suffix"] else 0)
+        top, bottom = ink_rows(cx, "black", size, shown)
+        if p["suffix"]:
+            st, sb = ink_rows(cx, p.get("suffix_font") or "black", sfx_size, p["suffix"])
+            top, bottom = min(top, st), max(bottom, sb)
+        return [("counter", p["x"], p["y"] + top, p["x"] + w, p["y"] + bottom)]
+
+    @staticmethod
+    def texts(p):
+        return [("black", f"{p['target']:.0f}")] + ([(p.get("suffix_font") or "black", p["suffix"])] if p.get("suffix") else [])
 
 
 @element("steps")
@@ -366,7 +406,7 @@ class Steps:
             d.ellipse((x * cx.q - r, (y + 14) * cx.q - r, x * cx.q + r, (y + 14) * cx.q + r), fill=(*BLUE, int(255 * a)), outline=(255, 255, 255, int(255 * a)), width=max(2, int(3 * cx.q)))
             track_text(d, ((x + 56) * cx.q, (y - 22) * cx.q), str(num), cx.font("bold", 40), (*BLUE, int(255 * a)), 4, "l", cx.q)
             size = cls.name_size(cx, p, name)
-            tmp = Image.new("RGBA", (cx.W, int(size * 1.12 * cx.q) + 12), (0, 0, 0, 0))
+            tmp = scratch(cx, "black", size)
             track_text(ImageDraw.Draw(tmp), ((x + 56) * cx.q, (1 - a) * 30 * cx.q + 6), name, cx.font("black", size), (255, 255, 255, int(255 * min(1.0, a * 1.4))), -0.5, "l", cx.q)
             paste_clipped(layer, tmp, int((y + 18 - 6) * cx.q))
 
@@ -379,8 +419,17 @@ class Steps:
         for i, (num, name) in enumerate(p["items"]):
             if t >= el["t0"] + p["first"] + i * p["gap"] + 0.3:
                 size = cls.name_size(cx, p, name)
-                out.append((f"step:{name[:14]}", p["x"] + 56, p["top"] + i * p["step"] + 18, p["x"] + 56 + text_width(cx, name, "black", size, -0.5), p["top"] + i * p["step"] + 18 + size))
+                y = p["top"] + i * p["step"]
+                nt, nb = ink_rows(cx, "bold", 40, str(num))
+                tt, tb = ink_rows(cx, "black", size, name)
+                out.append((f"step-dot:{num}", p["x"] - 18, y + 14 - 18, p["x"] + 18, y + 14 + 18))
+                out.append((f"step-number:{num}", p["x"] + 56, y - 22 + nt, p["x"] + 56 + text_width(cx, str(num), "bold", 40, 4), y - 22 + nb))
+                out.append((f"step:{name[:14]}", p["x"] + 56, y + 18 + tt, p["x"] + 56 + text_width(cx, name, "black", size, -0.5), y + 18 + tb))
         return out
+
+    @staticmethod
+    def texts(p):
+        return [("bold", str(num)) for num, _ in p["items"]] + [("black", name) for _, name in p["items"]]
 
 
 @element("rule")
@@ -404,7 +453,10 @@ class Rule:
 
     @classmethod
     def boxes(cls, t, p, cx, el):
-        return []
+        if t < el["t0"] + p.get("dur", 0.6) * 0.5:
+            return []
+        x0, x1 = min(p["x0"], p["x1"]), max(p["x0"], p["x1"])
+        return [("~rule", x0, p["y"], x1, p["y"] + p.get("thickness", 6))]
 
 
 @element("logo")

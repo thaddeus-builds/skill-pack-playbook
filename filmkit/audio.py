@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import butter, fftconvolve, sosfilt
 
-from .util import FilmkitError, ffmpeg_path, run
+from .util import FilmkitError, ffmpeg_path, ffprobe_path, run
 
 SR = 44100
 DEFAULT_PROGRESSION = [[57, [57, 60, 64, 69]], [53, [53, 57, 60, 65]], [48, [48, 52, 55, 64]], [55, [55, 59, 62, 67]]]      # Am F C G, the root first
@@ -129,9 +129,34 @@ def bed(dur: float, bpm: float = 90, progression=None, pluck_from: float = 0.0, 
 
 
 def read_audio(path: Path) -> np.ndarray:
-    """A file as mono float samples at 44.1 kHz (its first channel; a voice file is mono, and our own mixes are two equal channels)."""
-    out = run_bytes([ffmpeg_path(), "-v", "error", "-i", str(path), "-af", "pan=mono|c0=c0", "-f", "f32le", "-ar", str(SR), "-"])      # the first channel: a downmix would add gain
+    """A file as mono float samples at 44.1 kHz: the mean of its first two channels (a voice that sits on one channel of a stereo file is heard, not taken for silence, and a stereo mix reads
+    at its own level); a mono file as it is. The level of a voice line is for `level_voice`."""
+    n = run([ffprobe_path(), "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=channels", "-of", "csv=p=0", str(path)]).strip()
+    if not n.isdigit():
+        raise FilmkitError(f"{path} has no audio stream")
+    af = "pan=mono|c0=0.5*c0+0.5*c1" if int(n) >= 2 else "anull"
+    out = run_bytes([ffmpeg_path(), "-v", "error", "-i", str(path), "-af", af, "-f", "f32le", "-ar", str(SR), "-"])
     return np.frombuffer(out, dtype="<f4").astype(np.float64)
+
+
+VOICE_RMS = 0.10                                                               # the level every voice line is brought to (RMS of the part that speaks), before its own `gain`
+
+
+def level_voice(sig: np.ndarray, name: str) -> np.ndarray:
+    """A voice line at a fixed level whatever level the file was recorded at (a provider's -46 dB file would otherwise sit 15 dB under the bed and not duck it), its peak held under 0.9."""
+    peak = float(np.max(np.abs(sig))) if len(sig) else 0.0
+    if peak < 1e-4:
+        raise FilmkitError(f"the voice line {name} is silent")
+    active = sig[np.abs(sig) > 0.05 * peak]
+    k = VOICE_RMS / max(float(np.sqrt(np.mean(active ** 2))), 1e-9)
+    return sig * min(k, 0.9 / peak)
+
+
+def moving_mean(x: np.ndarray, win: int) -> np.ndarray:
+    """A centred moving average the length of `x` (np.convolve's "same" returns the longer operand, which a film shorter than the window would break)."""
+    full = np.convolve(x, np.ones(win) / win, mode="full")
+    start = (win - 1) // 2
+    return full[start:start + len(x)]
 
 
 def run_bytes(cmd):
@@ -182,7 +207,7 @@ def mix(spec_audio: dict, duration: float, base_dir: Path, out_wav: Path) -> dic
     voice_ends = []
     for ev in spec_audio.get("voice", []):
         p = Path(ev["file"])
-        sig = read_audio(p if p.is_absolute() else base_dir / p)
+        sig = level_voice(read_audio(p if p.is_absolute() else base_dir / p), str(ev["file"]))
         sig = reverb(np.concatenate([sig, np.zeros(SR)]), 0.9, 0.10) * env(len(sig) + SR, 0.02, 0.35)
         place(vo, sig, ev["t"], ev.get("gain", 1.0))
         voice_ends.append(round(ev["t"] + len(sig) / SR - 1.0, 2))
@@ -198,13 +223,14 @@ def mix(spec_audio: dict, duration: float, base_dir: Path, out_wav: Path) -> dic
     for i, t0 in enumerate(music.get("pings", [])):
         place(fx, ping(i), t0)
     win = int(0.05 * SR)
-    rms = np.sqrt(np.convolve(vo ** 2, np.ones(win) / win, mode="same"))
-    act = np.clip(np.convolve((rms > 0.012).astype(float), np.ones(int(0.35 * SR)) / int(0.35 * SR), mode="same") * 1.6, 0, 1)
+    rms = np.sqrt(moving_mean(vo ** 2, win))
+    act = np.clip(moving_mean((rms > max(0.1 * float(rms.max()), 1e-4)).astype(float), int(0.35 * SR)) * 1.6, 0, 1) if rms.max() > 1e-4 else np.zeros(n)
     duck = 10 ** (spec_audio.get("duck_db", -7) / 20)
     mx = bd * (1 - (1 - duck) * act) * 0.9 + fx * (0.85 + 0.15 * (1 - act)) + vo * 1.15
     k = min(n, int(spec_audio.get("fade_out", 1.4) * SR))                       # a fade longer than the film is the whole film
     fade = np.ones(n)
-    fade[-k:] = np.linspace(1, 0, k)
+    if k > 0:
+        fade[-k:] = np.linspace(1, 0, k)
     mx = mx * fade
     pk = float(np.max(np.abs(mx)))
     silent = pk < 1e-4                                                          # loudnorm would turn silence into noise: leave a silent film silent
@@ -218,4 +244,4 @@ def mix(spec_audio: dict, duration: float, base_dir: Path, out_wav: Path) -> dic
     else:
         got = normalise(pcm, target, Path(out_wav))
     pcm.unlink(missing_ok=True)
-    return {"voice_ends": voice_ends, "lufs_target": target, "mix_lufs": got}
+    return {"voice_ends": voice_ends, "lufs_target": target, "mix_lufs": got, "lufs_met": silent or (got is not None and abs(got - target) <= 1.0)}

@@ -6,28 +6,61 @@ from __future__ import annotations
 import json
 import math
 import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
-from .util import Ctx, clamp, ffmpeg_path, ffprobe_path, run, smooth
+from .util import Ctx, FilmkitError, clamp, ffmpeg_path, ffprobe_path, run, smooth
+
+
+# demuxers that do more than read one file: a clip that names other files or addresses is not footage
+REFUSED_FORMATS = {"concat", "hls", "applehttp", "dash", "sdp", "rtp", "rtsp", "tee", "lavfi", "ffmetadata", "data"}
+SAFE_INPUT = ["-protocol_whitelist", "file,pipe"]
 
 
 def probe(path: Path) -> dict:
-    """{w, h, duration, fps, has_audio} of a video as it plays (a phone clip stored sideways reports its upright size)."""
-    doc = json.loads(run([ffprobe_path(), "-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height,r_frame_rate:stream_side_data=rotation",
+    """{w, h, duration, fps, has_audio, hdr} of a video as it plays: a phone clip stored sideways reports its upright size, one with a non-square pixel its displayed width."""
+    doc = json.loads(run([ffprobe_path(), "-v", "error", *SAFE_INPUT, "-show_entries", "format=duration,format_name:stream=codec_type,width,height,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation",
                           "-of", "json", str(path)]))
-    v = next((s for s in doc.get("streams", []) if s.get("codec_type") == "video"), None)
+    fmt = doc.get("format", {})
+    if REFUSED_FORMATS & set(str(fmt.get("format_name", "")).split(",")):
+        raise FilmkitError(f"{path} is a {fmt['format_name']!r} file, not footage: it names other files or addresses")
+    streams = doc.get("streams", [])
+    has_audio = any(s.get("codec_type") == "audio" for s in streams)
+    duration = float(fmt.get("duration") or 0)
+    v = next((s for s in streams if s.get("codec_type") == "video"), None)
     if v is None:
-        return {"w": 0, "h": 0, "duration": float(doc.get("format", {}).get("duration") or 0), "fps": 0.0, "has_audio": any(s.get("codec_type") == "audio" for s in doc.get("streams", []))}
+        return {"w": 0, "h": 0, "duration": duration, "fps": 0.0, "has_audio": has_audio, "hdr": False}
     w, h = int(v["width"]), int(v["height"])
     rot = int((v.get("side_data_list") or [{}])[0].get("rotation", 0)) if v.get("side_data_list") else 0
+    sar = 1.0
+    try:
+        a, b = str(v.get("sample_aspect_ratio") or "1:1").split(":")
+        sar = float(a) / float(b) if float(a) > 0 and float(b) > 0 else 1.0
+    except (ValueError, ZeroDivisionError):
+        pass
+    square = abs(sar - 1.0) < 0.01 or abs(rot) in (90, 270)
     if abs(rot) in (90, 270):
         w, h = h, w
-    num, den = (v.get("r_frame_rate") or "0/1").split("/")
-    return {"w": w, "h": h, "duration": float(doc.get("format", {}).get("duration") or 0), "fps": float(num) / float(den or 1),
-            "has_audio": any(s.get("codec_type") == "audio" for s in doc.get("streams", []))}
+    if not square:
+        w = max(2, int(round(w * sar / 2)) * 2)                  # the displayed width, even
+    try:
+        num, den = str(v.get("r_frame_rate") or "0/1").split("/")
+        fps = float(num) / float(den) if float(den) else 0.0
+    except ValueError:
+        fps = 0.0
+    return {"w": w, "h": h, "duration": duration, "fps": fps, "has_audio": has_audio, "square": square, "hdr": v.get("color_transfer") in ("arib-std-b67", "smpte2084")}
+
+
+def _stderr_tail(f) -> str:
+    try:
+        f.flush()
+        f.seek(0)
+        return f.read().decode(errors="replace").strip()[-300:]
+    except (OSError, ValueError):
+        return ""
 
 
 class Shot:
@@ -36,18 +69,27 @@ class Shot:
         self.start, self.end = start, end            # the window it is on screen, transitions included
         self.first = math.ceil(start * fps - 1e-6)     # the first output frame it is asked for: the stream's frame 0 is that one, so `still` counts from it too
         self.proc = None
+        self.err = None
         self.last = None
         self.path = Path(cx.assets[spec["asset"]])
         self.kind = cx.assets_type[spec["asset"]]
         self.photo = None
         self.card_bg = None
+        self.clip = 0.0
+        self.pre = ""
         if self.kind == "image":
             self.photo = ImageOps.exif_transpose(Image.open(self.path)).convert("RGB")
             if spec.get("fit") == "card":
                 self.card_bg = self.cover(self.photo).filter(ImageFilter.GaussianBlur(40 * cx.q))
         else:
             info = probe(self.path)
-            self.sw, self.sh = info["w"], info["h"]
+            if not info["w"]:
+                raise FilmkitError(f"shots[{i}]: {self.path} has no video stream")
+            self.sw, self.sh, self.clip = info["w"], info["h"], info["duration"]
+            if not info["square"]:
+                self.pre = f"scale={self.sw}:{self.sh},setsar=1,"          # a non-square pixel is stretched to the shape it is shown in, so the bytes of a frame are what `probe` said
+            if info["hdr"]:
+                cx.notes.append(f"shots[{i}]: {self.path.name} is HDR (HLG or PQ): it is not tone-mapped, so its colours will look flat")
 
     def cover(self, im: Image.Image) -> Image.Image:
         W, H = self.cx.W, self.cx.H
@@ -63,34 +105,51 @@ class Shot:
         s = self.spec
         speed = s.get("speed", 1.0)
         dur = (self.end - self.start) * speed + 0.5
-        self.proc = subprocess.Popen([ffmpeg_path(), "-v", "error", "-ss", f"{s.get('in', 0.0):.3f}", "-t", f"{dur:.3f}", "-i", str(self.path), "-vf", f"setpts=PTS/{speed},fps={self.fps}",
-                                      "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self.err = tempfile.TemporaryFile()
+        self.proc = subprocess.Popen([ffmpeg_path(), "-v", "error", *SAFE_INPUT, "-ss", f"{s.get('in', 0.0):.3f}", "-t", f"{dur:.3f}", "-i", str(self.path), "-vf", f"{self.pre}setpts=PTS/{speed},fps={self.fps}",
+                                      "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE, stderr=self.err)
 
     def close(self):
         if self.proc:
             self.proc.stdout.close()
             self.proc.kill()
+            self.proc.wait()
             self.proc = None
+        if self.err:
+            self.err.close()
+            self.err = None
 
     def source_frame(self) -> np.ndarray:
         self.open()
         n = self.sw * self.sh * 3
         raw = self.proc.stdout.read(n)
         if len(raw) < n:
-            return self.last if self.last is not None else np.zeros((self.sh, self.sw, 3), np.uint8)
+            if self.last is None:                                           # the stream gave nothing at all: say why instead of showing black
+                raise FilmkitError(f"shots[{self.i}]: no frame decoded from {self.path} at in={self.spec.get('in', 0.0)}: {_stderr_tail(self.err) or 'the clip ends before this point'}")
+            return self.last                                                # the clip is shorter than the shot: its last frame is held
         self.last = np.frombuffer(raw, np.uint8).reshape(self.sh, self.sw, 3)
         return self.last
 
     def still_source(self, t: float) -> np.ndarray:
-        """The source frame the stream would hand this shot at output time `t`: the same filter chain, so a phone clip of variable frame rate gives the same frame here and in a render."""
+        """The source frame the stream would hand this shot at output time `t`: the same filter chain, so a phone clip of variable frame rate gives the same frame here and in a render, and a shot that
+        outlasts its clip shows the clip's last frame, as the render holds it."""
         s = self.spec
+        speed = s.get("speed", 1.0)
         n = max(0, round(t * self.fps) - self.first)
-        vf = f"setpts=PTS/{s.get('speed', 1.0)},fps={self.fps},select=eq(n\\,{n})"
-        raw = subprocess.run([ffmpeg_path(), "-v", "error", "-ss", f"{s.get('in', 0.0):.3f}", "-i", str(self.path), "-vf", vf, "-an", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
-                             capture_output=True).stdout
-        if len(raw) < self.sw * self.sh * 3:
-            return np.zeros((self.sh, self.sw, 3), np.uint8)
-        return np.frombuffer(raw, np.uint8).reshape(self.sh, self.sw, 3)
+        last = max(0, int(max(0.0, self.clip - s.get("in", 0.0)) / speed * self.fps + 1e-6) - 1)
+        n = min(n, last) if self.clip else n
+        need = self.sw * self.sh * 3
+        why = ""
+        for k in (n, n - 1, n - 2):
+            if k < 0:
+                break
+            vf = f"{self.pre}setpts=PTS/{speed},fps={self.fps},select=eq(n\\,{k})"
+            r = subprocess.run([ffmpeg_path(), "-v", "error", *SAFE_INPUT, "-ss", f"{s.get('in', 0.0):.3f}", "-i", str(self.path), "-vf", vf, "-an", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                               capture_output=True)
+            if len(r.stdout) >= need:
+                return np.frombuffer(r.stdout[:need], np.uint8).reshape(self.sh, self.sw, 3)
+            why = r.stderr.decode(errors="replace").strip()[-300:]
+        raise FilmkitError(f"shots[{self.i}]: no frame decoded from {self.path} at in={s.get('in', 0.0)}: {why or 'the clip ends before this point'}")
 
     # ---- the frame
     def frame(self, t: float, still: bool = False) -> np.ndarray:

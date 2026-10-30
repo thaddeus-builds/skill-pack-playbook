@@ -75,5 +75,37 @@ def test_the_synthesis_is_deterministic_and_stays_in_range():
     assert len(audio.ping(0)) == int(0.9 * audio.SR)
 
 
+def test_a_voice_line_is_brought_to_a_fixed_level_whatever_the_file_and_a_silent_one_is_refused():
+    """Review M7: a voice file 46 dB down sat 15 dB under the bed and did not duck it; one with the voice on the right channel only was read as silence."""
+    rng = np.random.default_rng(1)
+    t = np.arange(44100) / audio.SR
+    for amp in (0.9, 0.05, 0.0005):
+        sig = amp * np.sin(2 * np.pi * 220 * t) * (1 + 0.3 * rng.standard_normal(len(t)))
+        out = audio.level_voice(sig, "v.wav")
+        active = out[np.abs(out) > 0.05 * np.abs(out).max()]
+        assert abs(float(np.sqrt(np.mean(active ** 2))) - audio.VOICE_RMS) < 0.03 or np.abs(out).max() >= 0.89, (amp, np.sqrt(np.mean(active ** 2)))
+        assert np.abs(out).max() <= 0.9 + 1e-9
+    try:
+        audio.level_voice(np.zeros(1000), "silent.wav")
+    except _t.FilmkitError as e:
+        assert "silent" in str(e)
+    else:
+        raise AssertionError("a silent voice line was accepted")
+    with _t.tmpdir() as d:
+        _t.ffmpeg("-f", "lavfi", "-i", "sine=f=220:r=44100:d=1", "-af", "pan=stereo|c0=0*c0|c1=c0", str(d / "right.wav"))
+        sig = audio.read_audio(d / "right.wav")
+        assert float(np.abs(sig).max()) > 0.03, "the voice on the right channel is heard (the sine is 0.125, the mean of the channels half that)"
+
+
+def test_a_very_short_film_and_a_zero_fade_do_not_break_the_mix_and_the_report_says_when_the_target_was_missed():
+    with _t.tmpdir() as d:
+        got = audio.mix({"music": {"bed": True, "bpm": 90}, "fade_out": 0.01}, 0.2, d, d / "short.wav")
+        assert got["mix_lufs"] is None and got["lufs_met"] is False, got                          # under 0.4 s there is no loudness to measure: said, not hidden
+        got = audio.mix({"music": {"bed": True, "bpm": 90}, "lufs": -5}, 3.0, d, d / "loud.wav")
+        assert got["lufs_met"] is False and got["mix_lufs"] < -5.5, got                            # the limiter cannot reach -5: the report shows both numbers and says so
+        got = audio.mix({"music": {"bed": True, "bpm": 90}}, 3.0, d, d / "ok.wav")
+        assert got["lufs_met"] is True, got
+
+
 if __name__ == "__main__":
     _t.main(globals())

@@ -19,10 +19,13 @@ spec's own canvas (the design size), the order of `overlays` is their stacking o
 from __future__ import annotations
 
 import json
+import math
+import re
 from pathlib import Path
 
 from . import grade as G
 from .elements import ELEMENTS
+from .fonts import ROLES as FONT_ROLES
 from .transitions import TYPES
 from .util import FilmkitError
 
@@ -37,9 +40,44 @@ SAFE_PROFILES = {
 }
 
 
+BITRATE = re.compile(r"^\d+(\.\d+)?[kKmM]?$")
+ANCHORS = ("l", "m", "r")
+# the numeric parameters of the elements and the range each may take; a wrong type or a number outside it is a line of `validate`, never a crash in the middle of a render
+NUM_PARAMS = {
+    "x": (-5000, 10000), "y": (-5000, 10000), "x0": (-5000, 10000), "x1": (-5000, 10000), "top": (-5000, 10000), "size": (1, 2000), "suffix_size": (1, 2000), "name_size": (1, 2000),
+    "tracking": (-100, 300), "stagger": (0, 5), "dur": (0, 10), "rise": (-500, 500), "lead": (0.5, 3), "out": (0, 600), "out_dur": (0, 10), "alpha": (0, 1), "width": (1, 10000),
+    "max_width": (1, 10000), "max_height": (1, 10000), "opacity": (0, 1), "fade_in": (0, 10), "fade_out": (0, 10), "target": (0, 1e9), "hold": (0, 10), "suffix_scale": (0.1, 3),
+    "period": (0.1, 30), "thickness": (1, 200), "arm": (1, 2000), "step": (1, 5000), "gap": (0, 30), "first": (0, 30),
+}
+GRADE_KEYS = {"black": (-0.2, 0.5), "contrast": (0.2, 3), "s_curve": (-1, 1), "saturation": (0, 3), "gamma": (0.3, 3), "vignette": (0, 1), "grain": (0, 60)}
+MUSIC_LISTS = ("impacts", "whooshes", "pings")
+
+
+class _Constant(ValueError):
+    pass
+
+
+def _no_constant(name: str):
+    raise _Constant(f"{name} is not a number a spec may hold")
+
+
 def load(path: str | Path) -> tuple[dict, Path]:
-    p = Path(path)
-    return json.loads(p.read_text(encoding="utf-8")), p.parent
+    """The spec and the folder its relative paths are read from (absolute, so a file name that looks like an option or a URL is still a file). A spec that is not a JSON object is a FilmkitError."""
+    p = Path(path).resolve()
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"), parse_constant=_no_constant)
+    except OSError as e:
+        raise FilmkitError(f"cannot read the spec {path}: {e}") from e
+    except ValueError as e:
+        raise FilmkitError(f"the spec {path} is not valid JSON: {e}") from e
+    if not isinstance(doc, dict):
+        raise FilmkitError(f"the spec {path} is not a JSON object")
+    return doc, p.parent
+
+
+def _dur(t) -> float:
+    """What a transition adds to the windows of the two shots it joins: nothing for a cut."""
+    return 0.0 if not isinstance(t, dict) or t.get("type") == "cut" else max(0.0, float(t.get("dur", 0.0) or 0.0))
 
 
 def windows(spec: dict) -> list[tuple[float, float]]:
@@ -47,83 +85,318 @@ def windows(spec: dict) -> list[tuple[float, float]]:
     shots = spec["shots"]
     out = []
     for i, s in enumerate(shots):
-        din = (s.get("transition") or {}).get("dur", 0.0) if i > 0 else 0.0
-        dout = (shots[i + 1].get("transition") or {}).get("dur", 0.0) if i + 1 < len(shots) else 0.0
+        din = _dur(s.get("transition")) if i > 0 else 0.0
+        dout = _dur(shots[i + 1].get("transition")) if i + 1 < len(shots) else 0.0
         out.append((s["start"] - din / 2, s["end"] + dout / 2))
     return out
 
 
+def _n(v, lo=None, hi=None) -> bool:
+    """A real, finite number (not a bool) within [lo, hi]."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and (lo is None or v >= lo) and (hi is None or v <= hi)
+
+
+def _line(v) -> bool:
+    return isinstance(v, str) and v.isprintable()
+
+
+def _is_file(base_dir: Path, v) -> bool:
+    try:
+        p = Path(v)
+        return (p if p.is_absolute() else base_dir / p).is_file()
+    except (TypeError, ValueError, OSError):
+        return False
+
+
+def _overlay_problems(el: dict, w: str, assets: dict) -> list[str]:
+    out: list[str] = []
+    for k, (lo, hi) in NUM_PARAMS.items():
+        if el.get(k) is not None and not _n(el[k], lo, hi):                  # an explicit null is "not given" (a title's `out`, a steps list's `name_size`)
+            out.append(f"{w}.{k}: must be a number from {lo:g} to {hi:g}")
+    if "font" in el and el["font"] not in FONT_ROLES:
+        out.append(f"{w}.font: must be one of {', '.join(FONT_ROLES)}")
+    if "suffix_font" in el and el["suffix_font"] is not None and el["suffix_font"] not in FONT_ROLES:
+        out.append(f"{w}.suffix_font: must be one of {', '.join(FONT_ROLES)}")
+    if "anchor" in el and el["anchor"] not in ANCHORS:
+        out.append(f"{w}.anchor: must be one of {', '.join(ANCHORS)}")
+    for k in ("text", "suffix"):
+        if k in el and not _line(el[k]):
+            out.append(f"{w}.{k}: must be text on one line")
+    if "lines" in el and not (isinstance(el["lines"], list) and el["lines"] and all(_line(x) for x in el["lines"])):
+        out.append(f"{w}.lines: must be a list of lines of text, each on one line")
+    if "items" in el and not (isinstance(el["items"], list) and el["items"] and all(isinstance(i, list) and len(i) == 2 and _line(str(i[0])) and _line(i[1]) for i in el["items"])):
+        out.append(f"{w}.items: must be a list of [number, title] pairs, each on one line")
+    if "box" in el and not (isinstance(el["box"], list) and len(el["box"]) == 4 and all(_n(x, -5000, 10000) for x in el["box"]) and el["box"][0] < el["box"][2] and el["box"][1] < el["box"][3]):
+        out.append(f"{w}.box: must be [x0, y0, x1, y1] with x0 < x1 and y0 < y1")
+    if el.get("element") == "rule" and _n(el.get("x0")) and _n(el.get("x1")) and el["x1"] <= el["x0"]:
+        out.append(f"{w}.x1: must be greater than x0")
+    for k in ("color", "fill", "accent"):
+        if k in el and el[k] is not None and not (isinstance(el[k], list) and len(el[k]) >= 3 and all(_n(c, 0, 255) for c in el[k][:3])):
+            out.append(f"{w}.{k}: must be [r, g, b], each from 0 to 255")
+    if "align" in el and el["align"] not in ("l", "m"):
+        out.append(f"{w}.align: must be l or m")
+    if "grow" in el and el["grow"] not in ("left", "middle", None):
+        out.append(f"{w}.grow: must be left or middle")
+    if "dot" in el and not isinstance(el["dot"], bool):
+        out.append(f"{w}.dot: must be true or false")
+    if el.get("element") == "logo" and el.get("asset") not in assets:
+        out.append(f"{w}.asset: {el.get('asset')!r} is not in assets")
+    elif el.get("element") == "logo" and assets[el["asset"]].get("type") != "image":
+        out.append(f"{w}.asset: the logo must be an image asset")
+    return out
+
+
+def _shot_problems(s, i: int, shots: list, assets: dict, prev_end: float, ids: set) -> tuple[list[str], float | None]:
+    w = f"shots[{i}]"
+    out: list[str] = []
+    if not isinstance(s, dict):
+        return [f"{w}: must be an object"], None
+    if not isinstance(s.get("id"), str) or not s["id"]:
+        out.append(f"{w}.id: must be a name")
+    elif s["id"] in ids:
+        out.append(f"{w}.id: {s['id']!r} is used twice")
+    ids.add(s.get("id") if isinstance(s.get("id"), str) else None)
+    if not isinstance(s.get("asset"), str) or s["asset"] not in assets:
+        out.append(f"{w}.asset: {s.get('asset')!r} is not in assets")
+    if not (_n(s.get("start")) and _n(s.get("end")) and s["start"] < s["end"]):
+        return out + [f"{w}: start and end must be numbers with start before end"], None
+    if abs(s["start"] - prev_end) > 1e-3:
+        out.append(f"{w}.start: {s['start']} leaves a gap or an overlap after the last shot ({prev_end}); shots must follow one another")
+    if s.get("fit", "fill") not in ("fill", "card"):
+        out.append(f"{w}.fit: must be fill or card")
+    if "speed" in s and not _n(s["speed"], 0.05, 20):
+        out.append(f"{w}.speed: must be a number from 0.05 to 20")
+    if "in" in s and not _n(s["in"], 0, 36000):
+        out.append(f"{w}.in: must be a number of seconds from 0")
+    if "blur" in s and not _n(s["blur"], 0, 100):
+        out.append(f"{w}.blur: must be a number from 0 to 100")
+    if "dim" in s and not (isinstance(s["dim"], list) and len(s["dim"]) == 2 and all(_n(x, 0, 1) for x in s["dim"])):
+        out.append(f"{w}.dim: must be [from, to], each from 0 to 1")
+    if "card" in s and not (isinstance(s["card"], dict) and all(_n(v, 0.05, 1.0) for v in s["card"].values()) and set(s["card"]) <= {"width", "y"}):
+        out.append(f"{w}.card: must be {{width, y}}, each from 0.05 to 1")
+    cam = s.get("camera")
+    if cam is not None:
+        z = cam.get("zoom") if isinstance(cam, dict) else None
+        c = cam.get("center") if isinstance(cam, dict) else None
+        if not (isinstance(cam, dict) and (z is None or (isinstance(z, list) and len(z) == 2 and all(_n(x, 0.5, 6) for x in z)))
+                and (c is None or (isinstance(c, list) and len(c) == 2 and all(isinstance(p, list) and len(p) == 2 and all(_n(x, 0, 1) for x in p) for p in c)))):
+            out.append(f"{w}.camera: must be {{zoom: [from, to], center: [[x, y], [x, y]]}}, zoom from 0.5 to 6 and the centre a fraction of the picture")
+    t = s.get("transition")
+    if t is not None:
+        if i == 0:
+            out.append(f"{w}.transition: the first shot has nothing to come from")
+        elif not isinstance(t, dict):
+            out.append(f"{w}.transition: must be an object {{type, dur}}")
+        elif t.get("type") not in TYPES:
+            out.append(f"{w}.transition.type: must be one of {', '.join(TYPES)}")
+        elif t["type"] != "cut":
+            prev = shots[i - 1] if isinstance(shots[i - 1], dict) and _n(shots[i - 1].get("start")) and _n(shots[i - 1].get("end")) else None
+            if not _n(t.get("dur"), 0.02, 3):
+                out.append(f"{w}.transition.dur: must be a number of seconds from 0.02 to 3 (a cut has none)")
+            elif prev is not None and t["dur"] > min(s["end"] - s["start"], prev["end"] - prev["start"]) / 2 + 1e-6:
+                out.append(f"{w}.transition.dur: longer than half of a shot it joins")
+    return out, s["end"]
+
+
+def _media_problems(spec: dict, base_dir: Path) -> list[str]:
+    """What the files are: a video asset has a video stream and a shot does not start after its clip ends; an image asset opens as a picture."""
+    from PIL import Image
+
+    from .media import probe
+    out: list[str] = []
+    info: dict = {}
+    for name, a in spec["assets"].items():
+        if not _is_file(base_dir, a["path"]):
+            continue
+        p = Path(a["path"])
+        p = p if p.is_absolute() else base_dir / p
+        if a["type"] == "image":
+            try:
+                with Image.open(p) as im:
+                    im.verify()
+            except Exception as e:  # noqa: BLE001 - anything Pillow refuses is not a picture
+                out.append(f"assets.{name}.path: {a['path']!r} is not a picture Pillow can open ({type(e).__name__})")
+        else:
+            try:
+                info[name] = probe(p)
+            except FilmkitError as e:
+                out.append(f"assets.{name}.path: {a['path']!r} cannot be read as a video ({str(e)[:120]})")
+                continue
+            if not info[name]["w"]:
+                out.append(f"assets.{name}.path: {a['path']!r} has no video stream")
+    for i, s in enumerate(spec["shots"]):
+        meta = info.get(s.get("asset"))
+        if meta and meta["w"] and meta["duration"] and s.get("in", 0) >= meta["duration"] - 0.05:
+            out.append(f"shots[{i}].in: {s['in']} is at or after the end of the clip ({meta['duration']:.2f} s): the shot would be black")
+    return out
+
+
 def problems(spec: dict, base_dir: Path | None = None) -> list[str]:
-    """Everything wrong with a spec, each as `where: what`. [] when it can be rendered. Files are looked for when `base_dir` is given."""
+    """Everything wrong with a spec, each as `where: what`. [] when it can be rendered. Files are looked for (and read as what they claim to be) when `base_dir` is given. Never raises:
+    a shape this does not foresee is a line too."""
+    try:
+        return _problems(spec, base_dir)
+    except Exception as e:  # noqa: BLE001
+        return [f"spec: malformed ({type(e).__name__}: {e})"]
+
+
+def _problems(spec, base_dir: Path | None) -> list[str]:
+    if not isinstance(spec, dict):
+        return ["spec: must be a JSON object"]
     out: list[str] = []
     if spec.get("schema") != SCHEMA:
         out.append(f"schema: must be {SCHEMA!r}")
-    c = spec.get("canvas") or {}
-    for k in ("w", "h", "fps"):
-        if not isinstance(c.get(k), int) or c[k] <= 0:
-            out.append(f"canvas.{k}: must be a positive integer")
-    if isinstance(c.get("w"), int) and (c["w"] % 2 or c.get("h", 2) % 2):
+    c = spec.get("canvas")
+    c = c if isinstance(c, dict) else {}
+    for k, hi in (("w", 8192), ("h", 8192), ("fps", 120)):
+        if not (isinstance(c.get(k), int) and not isinstance(c.get(k), bool) and 0 < c[k] <= hi):
+            out.append(f"canvas.{k}: must be a whole number from 1 to {hi}")
+    if isinstance(c.get("w"), int) and isinstance(c.get("h"), int) and (c["w"] % 2 or c["h"] % 2):
         out.append("canvas: width and height must be even (H.264)")
     dur = spec.get("duration")
-    if not isinstance(dur, (int, float)) or dur <= 0:
-        out.append("duration: must be a positive number of seconds")
-        return out
-    assets = spec.get("assets") or {}
+    fps = c.get("fps") if isinstance(c.get("fps"), int) and c["fps"] > 0 else 30
+    if not _n(dur, 2.0 / fps, 600):
+        return out + ["duration: must be a number of seconds from two frames to 600"]
+    if "bpm" in spec and not _n(spec["bpm"], 20, 300):
+        out.append("bpm: must be a number from 20 to 300")
+    assets = spec.get("assets")
+    if not isinstance(assets, dict):
+        return out + ["assets: must be an object {name: {type, path}}"]
     for name, a in assets.items():
+        if not isinstance(a, dict):
+            out.append(f"assets.{name}: must be an object {{type, path}}")
+            continue
         if a.get("type") not in ("video", "image"):
             out.append(f"assets.{name}.type: must be video or image")
-        if base_dir is not None and not (Path(a.get("path", "")) if Path(a.get("path", "")).is_absolute() else base_dir / a.get("path", "")).is_file():
-            out.append(f"assets.{name}.path: {a.get('path')!r} is not a file")
+        if not isinstance(a.get("path"), str) or not a["path"]:
+            out.append(f"assets.{name}.path: must be a file name")
+        elif base_dir is not None and not _is_file(base_dir, a["path"]):
+            out.append(f"assets.{name}.path: {a['path']!r} is not a file")
+    if base_dir is not None and isinstance(spec.get("fonts"), dict):
+        for role, f in spec["fonts"].items():
+            if role not in FONT_ROLES:
+                out.append(f"fonts.{role}: a font role is one of {', '.join(FONT_ROLES)}")
+            elif f is not None and not _is_file(base_dir, f):
+                out.append(f"fonts.{role}: {f!r} is not a file")
+    elif "fonts" in spec and not isinstance(spec["fonts"], dict):
+        out.append("fonts: must be an object {role: file}")
     shots = spec.get("shots")
     if not isinstance(shots, list) or not shots:
         return out + ["shots: at least one shot"]
-    ids, prev_end = set(), 0.0
+    ids: set = set()
+    prev_end = 0.0
+    ok_shots = True
     for i, s in enumerate(shots):
-        w = f"shots[{i}]"
-        if s.get("id") in ids:
-            out.append(f"{w}.id: {s.get('id')!r} is used twice")
-        ids.add(s.get("id"))
-        if s.get("asset") not in assets:
-            out.append(f"{w}.asset: {s.get('asset')!r} is not in assets")
-        if not (isinstance(s.get("start"), (int, float)) and isinstance(s.get("end"), (int, float)) and s["start"] < s["end"]):
-            out.append(f"{w}: start and end must be numbers with start before end")
-            continue
-        if abs(s["start"] - prev_end) > 1e-3:
-            out.append(f"{w}.start: {s['start']} leaves a gap or an overlap after the last shot ({prev_end}); shots must follow one another")
-        prev_end = s["end"]
-        if s.get("fit", "fill") not in ("fill", "card"):
-            out.append(f"{w}.fit: must be fill or card")
-        if s.get("speed", 1.0) <= 0:
-            out.append(f"{w}.speed: must be above 0")
-        t = s.get("transition")
-        if i == 0 and t:
-            out.append(f"{w}.transition: the first shot has nothing to come from")
-        if t:
-            if t.get("type") not in TYPES:
-                out.append(f"{w}.transition.type: must be one of {', '.join(TYPES)}")
-            elif t["type"] != "cut" and t.get("dur", 0) > min(s["end"] - s["start"], shots[i - 1]["end"] - shots[i - 1]["start"]) / 2 + 1e-6:
-                out.append(f"{w}.transition.dur: longer than half of a shot it joins")
-    if abs(prev_end - dur) > 1e-3:
+        bad, end = _shot_problems(s, i, shots, assets, prev_end, ids)
+        out += bad
+        if end is None:
+            ok_shots = False
+        else:
+            prev_end = end
+    if ok_shots and abs(prev_end - dur) > 1e-3:
         out.append(f"shots: end at {prev_end}, the duration is {dur}")
-    for i, el in enumerate(spec.get("overlays", [])):
+    overlays = spec.get("overlays", [])
+    if not isinstance(overlays, list):
+        out.append("overlays: must be a list")
+        overlays = []
+    for i, el in enumerate(overlays):
         w = f"overlays[{i}]"
+        if not isinstance(el, dict):
+            out.append(f"{w}: must be an object")
+            continue
         cls = ELEMENTS.get(el.get("element"))
         if cls is None:
             out.append(f"{w}.element: {el.get('element')!r} is not one of {', '.join(ELEMENTS)}")
             continue
-        if not (isinstance(el.get("t0"), (int, float)) and isinstance(el.get("t1"), (int, float)) and el["t0"] < el["t1"]):
+        if not (_n(el.get("t0")) and _n(el.get("t1")) and el["t0"] < el["t1"]):
             out.append(f"{w}: t0 and t1 must be numbers with t0 before t1")
-        out += [f"{w} ({el['element']}): {m}" for m in cls.check(el)]
-        if el["element"] == "logo" and el.get("asset") not in assets:
-            out.append(f"{w}.asset: {el.get('asset')!r} is not in assets")
-    gr = spec.get("grade") or {}
-    if gr.get("look", "natural") not in G.LOOKS:
+        typed = _overlay_problems(el, w, assets)
+        out += typed
+        if not typed:
+            out += [f"{w} ({el['element']}): {m}" for m in cls.check(el)]
+    scrim = spec.get("scrim")
+    if scrim is not None and scrim is not False and not (isinstance(scrim, dict) and all(_n(scrim[k], 0, 255 if k.endswith("alpha") else 1) for k in scrim) and
+                                                         set(scrim) <= {"top", "bottom", "top_alpha", "bottom_alpha"}):
+        out.append("scrim: must be false, or {top, bottom (fractions), top_alpha, bottom_alpha (0 to 255)}")
+    fo = spec.get("fade_out")
+    if fo is not None and not (isinstance(fo, dict) and _n(fo.get("t"), 0) and _n(fo.get("dur"), 0.01, 30) and set(fo) <= {"t", "dur"}):
+        out.append("fade_out: must be {t, dur}, seconds, dur above 0")
+    gr = spec.get("grade") if isinstance(spec.get("grade"), dict) else {}
+    if "grade" in spec and not isinstance(spec["grade"], dict):
+        out.append("grade: must be an object {look, over}")
+    elif gr.get("look", "natural") not in G.LOOKS:
         out.append(f"grade.look: must be one of {', '.join(G.LOOKS)}")
-    for i, v in enumerate((spec.get("audio") or {}).get("voice", [])):
-        if not isinstance(v.get("t"), (int, float)) or not v.get("file"):
-            out.append(f"audio.voice[{i}]: t and file are required")
-        elif base_dir is not None and not (Path(v["file"]) if Path(v["file"]).is_absolute() else base_dir / v["file"]).is_file():
+    over = gr.get("over")
+    if over is not None:
+        if not isinstance(over, dict) or [k for k in over if k not in G.LOOKS["natural"]]:
+            out.append(f"grade.over: must be an object of the look's numbers ({', '.join(G.LOOKS['natural'])})")
+        else:
+            for k, v in over.items():
+                rng = GRADE_KEYS.get(k)
+                if rng is not None and not _n(v, *rng):
+                    out.append(f"grade.over.{k}: must be a number from {rng[0]:g} to {rng[1]:g}")
+                elif rng is None and not (isinstance(v, list) and len(v) == 3 and all(_n(x, -1, 1) for x in v)):
+                    out.append(f"grade.over.{k}: must be [r, g, b], each from -1 to 1")
+    out += _audio_problems(spec.get("audio"), base_dir)
+    enc = spec.get("encode")
+    if enc is not None:
+        if not isinstance(enc, dict) or set(enc) - {"bitrate", "minrate", "maxrate", "bufsize", "crf"}:
+            out.append("encode: must be {bitrate, minrate, maxrate, bufsize} or {crf}")
+        else:
+            for k in ("bitrate", "minrate", "maxrate", "bufsize"):
+                if k in enc and not (isinstance(enc[k], (str, int, float)) and not isinstance(enc[k], bool) and BITRATE.match(str(enc[k]))):
+                    out.append(f"encode.{k}: must look like 10M, 8500k or 9000000")
+            if "crf" in enc and not _n(enc["crf"], 0, 51):
+                out.append("encode.crf: must be a number from 0 to 51")
+    safe = spec.get("safe")
+    if safe is not None:
+        if not isinstance(safe, dict) or set(safe) - {"profile", "box"}:
+            out.append("safe: must be {profile} or {box}")
+        else:
+            if "profile" in safe and safe["profile"] not in SAFE_PROFILES:
+                out.append(f"safe.profile: must be one of {', '.join(SAFE_PROFILES)}")
+            if "box" in safe and not (isinstance(safe["box"], list) and len(safe["box"]) == 4 and all(_n(x, 0, 10000) for x in safe["box"]) and safe["box"][0] < safe["box"][2] and safe["box"][1] < safe["box"][3]):
+                out.append("safe.box: must be [x0, y0, x1, y1] in the canvas's own pixels")
+    if base_dir is not None and not out:
+        out += _media_problems(spec, base_dir)
+    return out
+
+
+def _audio_problems(a, base_dir: Path | None) -> list[str]:
+    if a is None:
+        return []
+    if not isinstance(a, dict):
+        return ["audio: must be an object"]
+    out: list[str] = []
+    for k, lo, hi in (("duck_db", -60, 0), ("lufs", -40, -5), ("fade_out", 0.01, 30)):
+        if k in a and not _n(a[k], lo, hi):
+            out.append(f"audio.{k}: must be a number from {lo:g} to {hi:g}")
+    voice = a.get("voice", [])
+    if not isinstance(voice, list):
+        out.append("audio.voice: must be a list of {t, file}")
+        voice = []
+    for i, v in enumerate(voice):
+        if not isinstance(v, dict) or not _n(v.get("t"), 0) or not isinstance(v.get("file"), str) or not v["file"]:
+            out.append(f"audio.voice[{i}]: t (from 0) and file are required")
+        elif base_dir is not None and not _is_file(base_dir, v["file"]):
             out.append(f"audio.voice[{i}].file: {v['file']!r} is not a file")
+        elif "gain" in v and not _n(v["gain"], 0, 8):
+            out.append(f"audio.voice[{i}].gain: must be a number from 0 to 8")
+    m = a.get("music")
+    if m is not None:
+        if not isinstance(m, dict):
+            return out + ["audio.music: must be an object"]
+        if "bpm" in m and not _n(m["bpm"], 20, 300):
+            out.append("audio.music.bpm: must be a number from 20 to 300")
+        if "pluck_from" in m and not _n(m["pluck_from"], 0):
+            out.append("audio.music.pluck_from: must be a number of seconds from 0")
+        if "bed" in m and not isinstance(m["bed"], bool):
+            out.append("audio.music.bed: must be true or false")
+        for k in MUSIC_LISTS:
+            if k in m and not (isinstance(m[k], list) and all(_n(x, 0) for x in m[k])):
+                out.append(f"audio.music.{k}: must be a list of times in seconds from 0")
+        if "risers" in m and not (isinstance(m["risers"], list) and all(isinstance(r, list) and len(r) == 2 and _n(r[0], 0) and _n(r[1], 0) and r[0] < r[1] for r in m["risers"])):
+            out.append("audio.music.risers: must be a list of [from, to] times in seconds with from before to")
     return out
 
 

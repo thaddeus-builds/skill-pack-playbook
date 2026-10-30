@@ -33,8 +33,16 @@ def write_cube(path: Path, lk: dict, size: int = 33) -> Path:
     return Path(path)
 
 
-def ffmpeg_filter(cube: Path, lk: dict) -> str:
-    parts = [f"lut3d=file={cube}:interp=tetrahedral"]
+def escape(v: str) -> str:
+    """A file name as a filter option: the characters that a filter graph reads as syntax are escaped."""
+    for ch in "\\:',[]=;":
+        v = v.replace(ch, "\\" + ch)
+    return v
+
+
+def ffmpeg_filter(cube: str | Path, lk: dict) -> str:
+    """The grade as an ffmpeg filter chain. `cube` is the LUT's file name: run ffmpeg in the folder that holds it, so the name is a plain one."""
+    parts = [f"lut3d=file={escape(str(cube))}:interp=tetrahedral"]
     if lk["vignette"] > 0:
         parts.append("vignette=angle=PI/5")
     if lk["grain"] > 0:

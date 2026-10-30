@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import signal
 import sys
 from pathlib import Path
 
@@ -15,8 +17,18 @@ from .render import inspect as inspect_film, render as render_film, still as sti
 from .util import FilmkitError
 
 
+class _Parser(argparse.ArgumentParser):
+    def error(self, message):                      # a wrong command line is a JSON document too, with the usual exit 2
+        print(json.dumps({"error": f"{self.prog}: {message}"}, ensure_ascii=False, indent=1))
+        sys.exit(2)
+
+
+def _terminated(*_):
+    raise KeyboardInterrupt                         # a job timeout (SIGTERM) unwinds like Ctrl-C: the render's work folder and ffmpeg children are cleaned up
+
+
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="filmkit", description=__doc__)
+    ap = _Parser(prog="filmkit", description=__doc__)
     sub = ap.add_subparsers(dest="verb", required=True)
     for name in ("validate", "check"):
         sub.add_parser(name).add_argument("spec")
@@ -37,6 +49,10 @@ def main(argv=None) -> int:
     sub.add_parser("elements")
     a = ap.parse_args(argv)
     try:
+        signal.signal(signal.SIGTERM, _terminated)
+    except ValueError:                              # not the main thread: the caller owns signals
+        pass
+    try:
         if a.verb == "looks":
             doc = G.LOOKS
         elif a.verb == "demo":
@@ -56,16 +72,28 @@ def main(argv=None) -> int:
             elif a.verb == "check":
                 S.require(spec, base)
                 doc = C.all_checks(spec, base)
-                doc["ok"] = not doc["layout"] and not doc["timing"]
+                doc["ok"] = not (doc["layout"] or doc["timing"] or doc["glyphs"])
+                print(json.dumps(doc, ensure_ascii=False, indent=1))
+                return 0 if doc["ok"] else 1
             elif a.verb == "still":
+                if not math.isfinite(a.at) or not math.isfinite(a.scale) or a.scale <= 0:
+                    raise FilmkitError("--at and --scale must be finite numbers, --scale above 0")
                 doc = {"png": str(still_frame(spec, base, a.at, Path(a.out), a.scale))}
             else:
-                doc = render_film(spec, base, Path(a.out), preview=a.preview, workdir=Path(a.workdir) if a.workdir else None,
-                               progress=lambda k, n: print(f"frame {k} of {n}", file=sys.stderr, flush=True))
+                if a.preview is not None and not (math.isfinite(a.preview) and 0 < a.preview <= 1):
+                    raise FilmkitError("--preview must be a fraction above 0 and up to 1")
+                doc = render_film(spec, base, Path(a.out), preview=a.preview, workdir=Path(a.workdir) if a.workdir else None, keep=[Path(a.spec)],
+                                  progress=lambda k, n: print(f"frame {k} of {n}", file=sys.stderr, flush=True))
         print(json.dumps(doc, ensure_ascii=False, indent=1))
         return 0
     except FilmkitError as e:
         print(json.dumps({"error": str(e)}, ensure_ascii=False, indent=1))
+        return 1
+    except KeyboardInterrupt:
+        print(json.dumps({"error": "interrupted"}, ensure_ascii=False, indent=1))
+        return 130
+    except Exception as e:  # noqa: BLE001 - the CLI's promise is one JSON document and an exit status, never a traceback
+        print(json.dumps({"error": f"{type(e).__name__}: {e}"}, ensure_ascii=False, indent=1))
         return 1
 
 

@@ -44,8 +44,8 @@ def ffprobe_path() -> str:
     return p
 
 
-def run(cmd: list[str]) -> str:
-    r = subprocess.run(cmd, capture_output=True, text=True)
+def run(cmd: list[str], cwd: Path | None = None) -> str:
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     if r.returncode:
         raise FilmkitError(f"{cmd[0]} failed ({r.returncode}): {r.stderr.strip()[-400:]}")
     return r.stdout
@@ -63,6 +63,7 @@ class Ctx:
     assets_type: dict = field(default_factory=dict)
     base_dir: Path = Path(".")
     cache: dict = field(default_factory=dict)
+    notes: list = field(default_factory=list)          # what a render says about its material that is not a problem (an HDR clip)
 
     @property
     def W(self) -> int:
