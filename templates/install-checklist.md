@@ -31,7 +31,7 @@ Written from the version the host actually runs, not the previous tag: tags are 
 | The change itself | The fix or feature this release carries, seen live |
 | Writes | Still off unless the owner enabled them in writing |
 
-Rules: no confirm, approve or apply on the owner's behalf; no paid data calls; report failures verbatim.
+Rules: no confirm, approve or apply on the owner's behalf; a refusal (`confirm_needs_human`) is a stop: report it and where the owner clicks, never work around it, in a pseudo-terminal least of all (`hosts/zylos/README.md`, "What the host agent may do"); no paid data calls; report failures verbatim.
 
 ## Scheduled tasks and long jobs
 

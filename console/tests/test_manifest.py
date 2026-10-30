@@ -130,6 +130,25 @@ def test_an_ask_whose_gate_verb_the_manifest_does_not_allow_is_refused_when_it_i
         assert ok("add", "--dry-run", "-", d=d, stdin=json.dumps(wrong))["posted"] == ["g1"]   # no manifest, no check (as before)
 
 
+def test_relay_verbs_given_on_the_command_line_are_checked_like_a_manifests():
+    gate = lambda *v: {"verb": list(v), "expect": {"verb": " ".join(v[:2])}}          # noqa: E731
+    wrong, right = mk_ask("g1", "approve", gate=gate("facts", "confirm", "k")), mk_ask("g2", "approve", gate=gate("hub", "facts", "confirm", "k"))
+    verbs = "hub facts confirm,hub queue approve"
+    with _t.tmpdir() as d:
+        doc = refused("invalid_ask", "--relay-verbs", verbs, "add", "-", d=d, stdin=json.dumps([wrong, right]))
+        errs = doc["params"]["errors"]
+        assert [(e["ask"], e["field"], e["code"]) for e in errs] == [("g1", "gate.verb", "not_allowed")], errs
+        assert "hub facts confirm, hub queue approve" in errs[0]["message"], errs[0]["message"]
+        assert ok("list", "--status", "all", d=d)["asks"] == []                       # all or nothing
+        assert ok("--relay-verbs", verbs, "add", "-", d=d, stdin=json.dumps(right))["posted"] == ["g2"]
+        refused("invalid_ask", "--relay-verbs", verbs, "add", "-", d=d, stdin=json.dumps(mk_ask("g3", "approve", gate=gate("hub", "facts"))))
+        assert ok("add", "--dry-run", "-", d=d, stdin=json.dumps(wrong))["posted"] == ["g1"]      # no list, no check (as before)
+        refused("bad_request", "--relay-verbs", verbs, "--manifest", put(d, "m.json", GOOD), "add", "-", d=d, stdin=json.dumps(right))
+        refused("bad_request", "--relay-verbs", " , ", "add", "-", d=d, stdin=json.dumps(right))   # no verb: not "check nothing"
+        refused("bad_request", "--relay-verbs", "hub -x", "add", "-", d=d, stdin=json.dumps(right))  # a word the console cannot send
+    assert manifest.verbs_from_text("facts confirm, queue approve ,,") == [["facts", "confirm"], ["queue", "approve"]]
+
+
 def test_the_manifest_comes_from_the_flag_or_the_environment_and_a_bad_one_is_a_refusal_not_a_pass():
     wrong = mk_ask("g1", "approve", gate={"verb": ["pay", "invoice"], "expect": {"verb": "pay invoice"}})
     with _t.tmpdir() as d:

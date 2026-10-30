@@ -53,6 +53,12 @@ One more rule holds SKILL.md itself, with or without cases (the generated
      agent's own (the template SKILL.md's Read scope; an eval forbids it only
      because an eval run is offline), and an external write (`execute apply`)
      is a person's once the skill pack names it in `extra`.
+     A skill pack whose verb table is per family (`facts`, `plan`: one `gated`
+     verb each, the router forwards the words after it and never declares them)
+     cannot name a sub-verb by kind: it lists the person-only words in
+     `[guards.evals].person_only` (`facts confirm`), and the table then names
+     exactly those words, each covering a gated verb or an `extra` one, and
+     no other word of the family.
 
 What the pattern cannot see (and the template README says): a verb whose name
 is only inside a quoted or echoed string is blocked when it follows a space
@@ -88,6 +94,8 @@ skill-pack.toml `[guards.evals]`, all optional:
                `<cli>.py`)
   kinds        verb kinds an eval agent must never run (default gated, external)
   extra        more forbidden verbs of the table, "facts init" style
+  person_only  for a per-family verb table: the words only a person runs
+               ("facts confirm"); the Never table names exactly these
   families     first words forbidden whole ("queue": every `queue ...`)
   flags        flags forbidden anywhere (default `--apply`)
   skip         folders of the evals dir that are not cases (default fixture,
@@ -135,6 +143,7 @@ def settings(cfg: SkillPackConfig) -> dict[str, Any]:
         "entries": tuple(dict.fromkeys(entries)),
         "kinds": strs(g.get("kinds"), DEFAULT_KINDS),
         "extra": strs(g.get("extra")),
+        "person_only": strs(g.get("person_only")),
         "families": strs(g.get("families")),
         "flags": strs(g.get("flags"), ["--apply"]),
         "skip": strs(g.get("skip"), ["fixture", "results"]),
@@ -238,6 +247,10 @@ def config_problems(s: dict[str, Any], table: list[Any], cli: str) -> list[str]:
     for e in s["extra"]:
         if tuple(e.split()) not in by_words:
             p.append(f"[guards.evals].extra: {e!r} is not a verb of the table")
+    for w in s["person_only"]:
+        words = w.split()
+        if not words or (kverbs.match(words, table) is None and not kverbs.group(words, table)):
+            p.append(f"[guards.evals].person_only: {w!r} is not a verb of the table, nor the start of one")
     if not s["entries"]:
         p.append("[guards.evals].entries is empty: an agent would be allowed every verb")
     elif cli not in s["entries"] and f"{cli}.py" not in s["entries"]:
@@ -609,28 +622,48 @@ def never_table(skill: str, heading: str = NEVER) -> dict[str, Any] | None:
     return found
 
 
+def _covers(word: tuple[str, ...], verb: tuple[str, ...]) -> bool:
+    """A person-only word stands for a verb of the table when one starts with the other: `facts confirm`
+    for the family `facts`, `facts` for `facts confirm`."""
+    n = min(len(word), len(verb))
+    return n > 0 and word[:n] == verb[:n]
+
+
 def never_problems(skill: str, verbs: Iterable[Any], entries: Iterable[str],
-                   extra: Iterable[str] = (), heading: str = NEVER) -> list[str]:
+                   extra: Iterable[str] = (), heading: str = NEVER,
+                   only_words: Iterable[str] = ()) -> list[str]:
     """What is wrong with SKILL.md's Never table against the verb table: a
     person-only verb with no row, a row that names a verb an agent may run or
-    no verb at all, a row that does not say why, a section that is not first."""
+    no verb at all, a row that does not say why, a section that is not first.
+
+    `only_words` (`[guards.evals].person_only`) is for a verb table declared per
+    family: the table then names exactly those words, and every gated verb and
+    every `extra` one must be covered by one of them."""
     table = list(verbs)
+    listed = {tuple(w.split()) for w in only_words}
     want = person_only(table, extra)
+    if listed:
+        uncovered = [v for v in want if not any(_covers(w, tuple(v.words)) for w in listed)]
+        if uncovered:
+            return [f"[guards.evals].person_only names no word under `{' '.join(v.words)}` (kind {v.kind}"
+                    f"{'' if v.kind == 'gated' else ', in [guards.evals].extra'}): add the words of it only a person runs"
+                    for v in uncovered]
     heads = [e.removesuffix(".py") for e in entries] or [""]
     title = f"`## {heading}`"
     sec = never_table(skill, heading)
     if sec is None:
-        if not want:
+        if not want and not listed:
             return []
+        names = [" ".join(w) for w in sorted(listed)] or [" ".join(v.words) for v in want]
         return [f"SKILL.md has no {title} section: the verbs only a person runs "
-                f"({', '.join(' '.join(v.words) for v in want)}) are listed there, in one table, first"]
+                f"({', '.join(names)}) are listed there, in one table, first"]
     p: list[str] = []
     if not sec["first"]:
         p.append(f"SKILL.md: {title} is not the first `##` section: the agent reads what only a person runs before anything else")
     rows = sec["rows"]
     if rows is None:
-        return p + ([f"SKILL.md: {title} has no table with a Verb column"] if want else [])
-    only = {tuple(v.words) for v in want}
+        return p + ([f"SKILL.md: {title} has no table with a Verb column"] if want or listed else [])
+    only = listed or {tuple(v.words) for v in want}
     named: set[tuple[str, ...]] = set()
     for cell, rest in rows:
         spans = re.findall(r"`([^`]+)`", cell)
@@ -650,13 +683,25 @@ def never_problems(skill: str, verbs: Iterable[Any], entries: Iterable[str],
                              f"(a flag on every verb is `{ANY} {words[flag]}`)")
                 continue
             v = kverbs.match(words, table)
+            if listed:                                   # the longest listed word the span starts with
+                key = next((w for w in sorted(listed, key=len, reverse=True) if tuple(words[:len(w)]) == w), ())
+            else:
+                key = tuple(v.words) if v else ()
             if v is None:
                 p.append(f"SKILL.md {title}: `{s}` is not a verb of the table")
-            elif tuple(v.words) not in only:
+            elif listed and key not in only:
+                p.append(f"SKILL.md {title}: `{s}` is not in [guards.evals].person_only, so an agent may run it: "
+                         f"only the words that list names belong there")
+            elif key not in only:
                 p.append(f"SKILL.md {title}: `{s}` is {' '.join(v.words)!r}, kind {v.kind}, which an agent may run: "
                          f"only a gated verb or one [guards.evals].extra names belongs there")
             else:
-                named.add(tuple(v.words))
+                named.add(key)
+    if listed:
+        for w in sorted(listed - named):
+            p.append(f"SKILL.md {title} does not name `{heads[0]} {' '.join(w)}` ([guards.evals].person_only): "
+                     f"add its row, and why only a person runs it")
+        return p
     for v in want:
         if tuple(v.words) not in named:
             p.append(f"SKILL.md {title} does not name `{heads[0]} {' '.join(v.words)}` (kind {v.kind}"
@@ -675,7 +720,7 @@ def check_never_table(root: Path | str | None = None) -> list[str]:
     skill = base / s["skill"]
     if not skill.is_file():
         return problems + [f"{s['skill']} is missing: its {s['never']} table names the verbs only a person runs"]
-    return problems + never_problems(_read(skill), table, s["entries"], s["extra"], s["never"])
+    return problems + never_problems(_read(skill), table, s["entries"], s["extra"], s["never"], s["person_only"])
 
 
 # ---- the rules, tried on planted input --------------------------------------
@@ -836,6 +881,35 @@ def never_self_test() -> list[str]:
         out.append("a flag on a gated verb is taken for the verb's own row")
     if never_problems("---\nname: x\n## not a heading: a YAML comment\n---\n" + _NEVER, _TABLE, **kw):
         out.append("a `##` line in the YAML front matter is read as the first section")
+    return out + person_only_self_test()
+
+
+_FAMILIES = [_V("facts", "shop.py", "gated"), _V("plan", "shop.py", "gated"), _V("queue", "shop.py", "read")]
+_FAMILY_NEVER = ("# Shop\n\n## Never\n\n| Verb | Why only a person |\n|---|---|\n"
+                 "| `shop facts confirm` | a confirmed value is the client's word |\n"
+                 "| `plan approve K`, `plan apply` | puts a plan in force |\n\n## Rules\n\n- x\n")
+
+
+def person_only_self_test() -> list[str]:
+    """[] when `[guards.evals].person_only` lets a per-family verb table name sub-verb words and still
+    catches a row for a word not listed, a listed word with no row, and a word under no verb."""
+    out: list[str] = []
+    kw = dict(entries=["shop"], only_words=["facts confirm", "plan approve", "plan apply"])
+    got = never_problems(_FAMILY_NEVER, _FAMILIES, **kw)
+    if got:
+        out.append(f"a family-gated table with person_only is refused: {got}")
+    plants = {
+        "a row for a word not listed": (_FAMILY_NEVER.replace("| `shop facts confirm` |", "| `shop facts confirm`, `shop plan add` |"), kw,
+                                        "is not in [guards.evals].person_only"),
+        "a listed word with no row": (_FAMILY_NEVER.replace("`plan approve K`, `plan apply`", "`plan approve K`"), kw,
+                                      "does not name `shop plan apply`"),
+        "a gated family under no listed word": (_FAMILY_NEVER, {**kw, "only_words": ["facts confirm"]}, "names no word under `plan`"),
+        "a row for no verb": (_FAMILY_NEVER.replace("`plan apply`", "`burn it`"), kw, "is not a verb of the table"),
+    }
+    for what, (text, args, frag) in plants.items():
+        got = never_problems(text, _FAMILIES, **args)
+        if not any(frag in g for g in got):
+            out.append(f"the person_only rule misses: {what} ({got})")
     return out
 
 

@@ -32,6 +32,9 @@ fake "shop" skill pack with a SKILL.md, an evals folder and four cases.
       skipped), the section moved below another, the
       heading renamed (and `never` in [guards.evals] that follows it), a typo
       in extra, no SKILL.md: each is reported, and undone
+  [5c] person_only, for a verb table declared per family: the Never table names
+      exactly the listed words; a row for an unlisted word, a listed word with
+      no row, a word under no verb and a gated verb under no word are reported
   [6] the fixture builder of templates/evals/, run in a scratch git repository:
       it builds the workspace, the entry it writes wipes the environment and
       points the data dir at the copy, litter (__pycache__, .DS_Store, a
@@ -433,6 +436,25 @@ def main() -> None:
     finally:
         evals.report = real_report
     check("[5b] check_never reports the self test and the table", ok is True and [r[1] for r in recorded] == [[], []], recorded)
+
+    print("\n[5c] [guards.evals].person_only: a verb table declared per family names the words, not the family")
+    check("[5c] the person_only self test finds nothing wrong", evals.person_only_self_test() == [], evals.person_only_self_test())
+    toml = root / "skill-pack.toml"
+    words = [" ".join(v.words) for v in evals.person_only(table, ["facts init"])]
+    lst = "person_only = [" + ", ".join(f'"{w}"' for w in words) + "]"
+    e, u = swap(toml, 'extra = ["facts init"]', 'extra = ["facts init"]\n' + lst)
+    e()
+    check("[5c] the shop's own person-only words as the list: the Never table is clean", evals.check_never_table(root) == [], evals.check_never_table(root))
+    never("a listed word's row dropped", "does not name `shop facts init` ([guards.evals].person_only)",
+          *swap(sk, "| `facts init` | declares the scope |\n", ""))
+    never("a row for a verb the list does not name", "is not in [guards.evals].person_only",
+          *swap(sk, "| `facts init` |", "| `facts init`, `shop facts list` |"))
+    never("a listed word that starts no verb", "person_only: 'fact burn' is not a verb of the table, nor the start of one",
+          *swap(toml, lst, lst[:-1] + ', "fact burn"]'))
+    never("a gated verb under no listed word", "names no word under `",
+          *swap(toml, lst, "person_only = [" + ", ".join(f'"{w}"' for w in words[1:]) + "]"))
+    u()
+    check("[5c] ... and clean once the list is removed", evals.check_never_table(root) == [], evals.check_never_table(root))
 
     print("\n[6] the fixture builder template")
     if shutil.which("bash") and shutil.which("git"):
