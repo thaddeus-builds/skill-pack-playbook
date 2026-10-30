@@ -43,7 +43,7 @@ patternstore	learning	a per-client pattern store: closed rows, two-coder floor, 
 pathweights	learning	path weights for variants: posteriors down a partition, states, the next batch, twins; past results as a gap signal
 pagestyle	pages	one look for pages that guide making: states as colour, word and icon; one decision; the check
 daily_page	pages	the day's items as one page over pagestyle: one decision, three warnings, a row per item, the owner's fold
-autonomy	autonomy	the autonomy levels: the tier registry, the owner's switch, scoped approvals, caps from the archive, code-free undo, the digest
+autonomy	autonomy	the autonomy levels: the tier registry, the owner's switch, scoped approvals, the rule switch and override rate, caps from the archive, code-free undo, the digest
 contracts	exchange	a contract file: the mark, the schema check, written once, read into raw
 ledger	ads-core	the report ledger: settled days, restatement, one currency
 pacing	ads-core	a month's budget over its days, two wallets, a monthly cap against the run-rate

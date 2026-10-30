@@ -127,7 +127,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 | [docs/stages.md](docs/stages.md) | Stage 0 (client meetings), the ten stages one line each, the day-one checklist |
 | [docs/rules.md](docs/rules.md) | Data layers and their guards, the human-in-the-loop rules, writing into someone else's system, what an agent judges, stories that prove themselves, registries |
 | [docs/consoles.md](docs/consoles.md) | The owner console, the client console, one workspace per client |
-| [docs/autonomy.md](docs/autonomy.md) | Autonomy levels L0 to L5: what proof each write into someone else's system carries, scoped approvals and the owner's switch; the `autonomy` pack |
+| [docs/autonomy.md](docs/autonomy.md) | Autonomy levels L0 to L5: what proof each write into someone else's system carries, scoped approvals, the owner's switch and the rule switch for rule-started work (L4); the `autonomy` pack |
 | [docs/operating.md](docs/operating.md) | Agents that file issues, building with many agents, keeping a skill pack small, hosting |
 | [docs/maintaining.md](docs/maintaining.md) | For the owner: how the playbook itself changes (issue, small pull request, merge, re-vendor when needed), what the agent checks, and the access token it needs |
 | [docs/skill-pack-agent-prompts.md](docs/skill-pack-agent-prompts.md) | The words to give a skill pack's own agent for what needs someone who knows that pack (a migration, a branch, a red test of its own); the fleet-wide steps stay with `tools/fleet.py` |
