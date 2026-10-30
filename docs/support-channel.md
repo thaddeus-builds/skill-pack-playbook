@@ -18,6 +18,8 @@ A Claude Code plugin from OpenMax. There is one shell function and one plugin co
 
 ## 4. Polling
 
+**Prefer `kit.bridge.wait_for_reply_to(target, sent.id, from_ids=[the asked agent's member id])`:** it reads the group over REST (no model call) until a reply to that message appears or 30 minutes pass, and returns `replied`, `timeout` or `unreadable` ([design](design/bridge-reply.md)). Run it in the background so the session is not blocked. An agent often answers without any mention, which is why `from_ids` is needed. Whether the reply answers the question is for the agent to judge; a follow-up needs `kit.bridge.next_round(used, why)`: at most three requests, each with the reason the last answer fell short. The 10-minute poll below is for a machine with no key file.
+
 Every 10 minutes, read-only ([check template](../templates/support-channel/check.md)). Keep the newest message id seen in a scratchpad file (outside git) and ask only for what is newer. Nothing new is one line, not a report. *Why:* the cutoff keeps a long thread out of the context and the one-line answer keeps the owner's page quiet.
 
 ## 5. Who to ask
