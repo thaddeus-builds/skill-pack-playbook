@@ -179,9 +179,11 @@ The cross-platform shared ads layer is `ads-core` and `creative`; a pack never i
 ## Placing a new capability: four questions
 
 1. Does it write to an external system or hold a credential? Then it goes in that platform's operator. There is only ever one.
-2. Do other packs need it as a fact? Then it has one owner, which publishes a document.
+2. Do other packs need it as a fact? Then it has one owner, which publishes a document. A fact that only needs storing and confirming starts as a hub fact (`npr_roas`, the currency); a pack of its own is for a fact that is computed, pulled or reconciled, and only when a client is waiting for it ([the order of the questions](design/cut-by-use.md)).
 3. Do two or more packs need the logic? Then it goes in the kit. Until a second pack needs it, it stays in the first.
 4. Is it about one client? Then it goes in that client's workspace or hub, never in a pack.
+
+A different rhythm or unit of work (a daily check, a wave of articles, a project round, a monthly program) is not a fifth question: it changes the shape of the pack's console and routine, not where the pack stands. A box whose `use` ([tools/adoption.tsv](../tools/adoption.tsv)) is `built` or `shell` is a hypothesis: before adding a contract, a kit engine or a layer above it, ask whether a client is waiting.
 
 ## Conflicts to fix, in order
 
