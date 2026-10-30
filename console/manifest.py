@@ -71,6 +71,12 @@ def _verb(where: str, v) -> list[str]:
     return list(v)
 
 
+def verbs_from_text(text: str) -> list[list[str]]:
+    """The comma form of the relay verbs, `"facts confirm,queue approve"`, as `serve.py --relay-verbs` takes it:
+    each verb's words checked as a manifest's are (ManifestError when one is not a plain verb)."""
+    return [_verb(f"--relay-verbs[{i}]", w.split()) for i, w in enumerate(x for x in text.split(",") if x.split())]
+
+
 def parse(doc) -> dict:
     """The manifest as the console uses it, or ManifestError. Always has every key."""
     if not isinstance(doc, dict):
