@@ -1,1 +1,1 @@
-A = 'main'
+A = 'resolved'
