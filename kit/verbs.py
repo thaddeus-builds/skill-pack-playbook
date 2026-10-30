@@ -22,8 +22,10 @@ declaration; a verb that is not listed is refused, never guessed):
 
     read      opens the database read-only, or reads nothing at all; writes
               nothing, calls nothing outside
-    ingest    writes cache tables (rebuildable) from raw or an imported
-              file; never a human table, never an external call
+    ingest    writes rebuildable derived output under the data folder from
+              raw or an imported file: cache tables, or files made from raw
+              material (a compiled spec, a picture, a rendered film); never
+              a human table, never an external call
     human     writes a human table: a pending value, or lowers trust
     gated     passes the human gate (a retype at the terminal, or a relayed
               one-time code) before it writes
@@ -83,7 +85,8 @@ from typing import Any, Iterable
 
 KINDS: dict[str, str] = {
     "read": "reads only: opens the database read-only, writes nothing",
-    "ingest": "writes cache tables from raw or an imported file; calls "
+    "ingest": "writes rebuildable derived output (cache tables, or files "
+              "made from raw material) from raw or an imported file; calls "
               "nothing outside",
     "human": "writes a human table: a pending value, or lowers trust",
     "gated": "needs a person: a retype at the terminal or a relayed "

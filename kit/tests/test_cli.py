@@ -315,6 +315,8 @@ def test_help() -> None:
           set(doc["kinds"]) == set(verbs.KINDS)
           and [b["words"] for b in doc["builtins"]] == [["doctor"], ["verbs"]]
           and doc["cli"] == "shop")
+    check("verbs --json: `ingest` is described as derived output (cache tables, or files made from raw material), never an external call",
+          "files made from raw material" in doc["kinds"]["ingest"] and "calls nothing outside" in doc["kinds"]["ingest"], doc["kinds"]["ingest"])
     rc, out, _ = capture(d.main, ["verbs"], env=env())
     check("verbs (text): the help listing", rc == 0 and "shop pending" in out)
     check("a malformed table fails when the dispatcher is built",
