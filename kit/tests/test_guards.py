@@ -766,6 +766,15 @@ def test_release(root: Path) -> None:
           "/tests export-ignore" in text and "/ssot/index.tsv export-ignore"
           in text and text.index("/tests") < text.index("/ssot/index.tsv")
           and "THRESHOLD_NAMES" not in text, text)
+    import io
+    buf = io.StringIO()
+    check("release.main prints the same text and writes nothing without --write",
+          release.main([str(root)], out=buf) == 0 and buf.getvalue() == text, buf.getvalue())
+    with planted(root, ".gitattributes", "# stale\n"):
+        check("release.main --write replaces .gitattributes with what the config implies, and the release guard agrees",
+              release.main(["--write", str(root)], out=io.StringIO()) == 0
+              and (root / ".gitattributes").read_text() == text and release.check_gitattributes(root) == [],
+              (root / ".gitattributes").read_text())
 
 
 # ------------------------------------------------------------ [3] layering
