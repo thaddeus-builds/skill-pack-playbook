@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.4.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.4.2). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -206,7 +206,7 @@ Zylos treats a failing post-install or post-upgrade as a warning, so read the ou
   - Soft checks, which print a note and continue: each endpoint's reachability; `<cli> <doctor>` (summary line printed, full report in `logs/doctor-install.log`); the declared scope, with the exact `scope.declare` command when none is; the console entry present; the Caddy block and the public Host (below).
   - It prints the absolute CLI command, then reconciles the scheduled tasks.
 - **post-upgrade** is post-install in light mode: uv, Python, the CLI and the tasks; it skips the endpoint, doctor and scope checks and says so.
-- **pre-uninstall** stops the detached jobs still running (a job counts only if its pid *and* start time match), removes every task this adapter manages, copies the console's Caddy block to `<data dir>/caddy-block.saved` (uninstall deletes it from the Caddyfile), and never touches the rest of the data dir. It exits 1 with the reason when a job or a task can't be stopped or removed.
+- **pre-uninstall** stops the detached jobs still running (a job counts only if its pid *and* start time match) and waits until each has really exited (its whole process group; a job still alive after `ZYLOS_JOB_STOP_WAIT_S` seconds, default 600, fails the hook), removes every task this adapter manages, copies the console's Caddy block to `<data dir>/caddy-block.saved` (uninstall deletes it from the Caddyfile), and never touches the rest of the data dir. It exits 1 with the reason when a job or a task can't be stopped or removed.
 
 Each hook's runtime is capped at 9 minutes, under the agent's 10-minute command cap. A soft step the cap cuts is listed as skipped with the command that finishes it; a hard step the cap cuts fails with "rerun post-install". The hooks are idempotent, so a rerun picks up where it stopped.
 

@@ -139,6 +139,31 @@ def test_detach_alias_is_the_skill_pack_cli_and_pre_uninstall_stops_jobs():
             and "stopped detached job pull-orders" not in r2.stdout, r2.stdout + r2.stderr
 
 
+def test_pre_uninstall_waits_until_a_job_has_exited_and_fails_when_one_will_not():
+    # A job that handles SIGTERM may finish its step first (seen in the adcut skill pack: four jobs exited two hours after the upgrade that told them to stop):
+    # the hook returns when the process is gone, and exits 1, naming the job, when it is still alive after ZYLOS_JOB_STOP_WAIT_S.
+    with Host() as host:
+        detach = os.path.join(host.adapter, "bin", "detach.js")
+        slow = host.node(detach, "slow", "--", "sh", "-c", "trap 'sleep 1.5; exit 0' TERM; sleep 30 & wait")
+        job = json.load(open(os.path.join(host.logs, "slow.pid")))
+        t0 = time.time()
+        r = host.hook("pre-uninstall.js", ZYLOS_DATA_DIR=host.data)
+        took = time.time() - t0
+        assert slow.returncode == 0 and r.returncode == 0 and not running(job["pid"]), r.stdout + r.stderr
+        assert took >= 1.3 and "detached job slow exited" in r.stdout and "s after SIGTERM" in r.stdout, (took, r.stdout)
+        stubborn = host.node(detach, "stubborn", "--", "sh", "-c", "trap '' TERM; sleep 6")
+        job = json.load(open(os.path.join(host.logs, "stubborn.pid")))
+        try:
+            r = host.hook("pre-uninstall.js", ZYLOS_DATA_DIR=host.data, ZYLOS_JOB_STOP_WAIT_S="1")
+            assert stubborn.returncode == 0 and r.returncode == 1, r.stdout + r.stderr
+            assert "detached job stubborn" in r.stderr and "is still running 1 s after SIGTERM" in r.stderr, r.stderr
+        finally:
+            try:
+                os.killpg(job["pid"], 9)
+            except OSError:
+                pass
+
+
 def test_a_zombie_job_is_not_alive():
     # Under an init that never reaps (a container without --init), a finished
     # job stays a zombie: it must neither block its re-run nor be "stopped".
