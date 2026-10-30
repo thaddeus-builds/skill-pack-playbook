@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.4.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.4.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -228,6 +228,17 @@ The adapter resolves a key as the skill pack does: process env, then `env.files`
 ## One client per host
 
 A Zylos host runs one agent for one owner, and nothing isolates one client from another. So a host serves exactly one client: one data dir. A second client needs a second host. One client with several scopes (markets) fits on one host.
+
+## What the host agent may do, and what a refusal means
+
+On Zylos the human gate is the console inbox and nothing else. The console service holds the confirm-code secret (it makes its own at each start, and `configure` refuses any gate secret: "Never a gate secret" above), so the agent can neither make a confirm code nor be given one in chat. There is no chat-relayed confirm on this host.
+
+- **The agent may** read (every `read` verb), plan, propose, set **pending** values and dry-run. The skill pack's `SKILL.md` `## Never` table lists the verbs only a person runs; each skill pack says which proof a write takes.
+- **A refusal is a stop.** A write refused with `confirm_needs_human` ("must be run by a human at an interactive terminal") means a person confirms it. The agent reports the refusal as it was, says which item waits, and tells the owner where to click: the console inbox, the ask for that item. It does not retry, reword the command or look for another door.
+- **Never wrap the command in a pseudo-terminal** (`script`, `expect`, a `pty` in Python, `ssh -t localhost`). A terminal is how the gate tells a person from an agent; a write made through one is recorded as the person's own.
+- **Ask the owner for what only the owner can do** (confirm, approve, apply), not the agent, and do not ask the agent to set as confirmed a value the skill pack holds pending.
+
+*Why:* seen in the SEO skill pack (2026-10-30). A host agent asked to set a pending value was refused, and the real boundary took a day, a group read through a model and two questions to the owner to find; the agent was careful (it refused the pseudo-terminal and asked), but nothing it had read said so. A skill pack links here from its own docs and `SKILL.md` `## Never`.
 
 ## Running the skill pack CLI
 

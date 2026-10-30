@@ -46,6 +46,7 @@ import os
 import shutil
 import subprocess
 import sys
+import types
 from collections import namedtuple
 from pathlib import Path
 
@@ -1001,6 +1002,34 @@ def test_json_verbs(root: Path, data: Path) -> None:
                json_contract.check_read_verbs_no_db(empty, verbs=makes),
                "compute creates: created ['shop.db']",
                "compute creates: exit 0 on a failure")
+
+
+    # a read verb that needs no database (issue #353): named in skill-pack.toml, it may succeed with none
+    free = READS + [V(("compute", "creates"), "compute_creates.py", "read")]
+    with planted(root, "scripts/compute_creates.py", "print('{}')\n"):
+        caught("a read verb that succeeds with no DB, when no allowance names it",
+               json_contract.check_read_verbs_no_db(Path(tmp_dir("shop-empty3-")), verbs=free, allow_ok=()),
+               "compute creates: exit 0 on a failure")
+        clean("... and the same verb named in allow_ok",
+              json_contract.check_read_verbs_no_db(Path(tmp_dir("shop-empty4-")), verbs=free, allow_ok=("compute creates",)))
+        cfg = types.SimpleNamespace(raw={"guards": {"json_contract": {"no_db_ok": ["compute  creates"]}}})
+        check("[guards.json_contract] no_db_ok is read as typed, spaces collapsed",
+              json_contract.no_db_ok(cfg, free) == ("compute creates",))
+        for what, bad in (("a name that is no read verb", ["compute creats"]), ("a string, not a list", "compute creates"),
+                          ("a list of numbers", [3])):
+            cfg = types.SimpleNamespace(raw={"guards": {"json_contract": {"no_db_ok": bad}}})
+            try:
+                json_contract.no_db_ok(cfg, free)
+                refused = False
+            except ValueError:
+                refused = True
+            check(f"no_db_ok refuses {what}", refused)
+    check("with no allowance anywhere, nothing is allowed", json_contract.no_db_ok(types.SimpleNamespace(raw={}), free) == ())
+    with planted(root, "scripts/compute_creates.py",
+                 "import os\nimport sqlite3\nsqlite3.connect(os.path.join(os.environ['SHOP_DATA_DIR'], 'shop.db')).close()\nprint('{}')\n"):
+        caught("an allowed verb still may not create the DB",
+               json_contract.check_read_verbs_no_db(Path(tmp_dir("shop-empty2-")), verbs=free, allow_ok=("compute creates",)),
+               "compute creates: created ['shop.db']")
 
 
 # ------------------------------------------------------------ [5] boundary
