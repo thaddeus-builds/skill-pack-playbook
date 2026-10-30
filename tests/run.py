@@ -28,17 +28,21 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+from kit.testing.run_tests import GIT_LOCAL_ENV  # noqa: E402
 RESULT_RE = re.compile(r"^RESULT: (\d+) passed$", re.M)
 TIMEOUT = 120
 
 
 def git_local_names() -> set[str]:
-    """The variables git says name one repository (`git rev-parse --local-env-vars`): a pre-push hook hands them down, and a test's own `git init` would
-    then act on the checkout that was pushing. Asked of git, so the list is never out of date; none when there is no git."""
+    """The variables that name one repository: a pre-push hook hands them down, and a test's own `git init` would then act on the checkout that was
+    pushing. The kit's list (`run_tests.GIT_LOCAL_ENV`) and whatever this git adds to it (`git rev-parse --local-env-vars`): a git that cannot be asked
+    (none on PATH, a broken one) must not turn the filter off."""
     try:
-        return set(subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split())
+        asked = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split()
     except OSError:
-        return set()
+        asked = []
+    return set(asked) | set(GIT_LOCAL_ENV)
 
 
 GIT_LOCAL = git_local_names()
