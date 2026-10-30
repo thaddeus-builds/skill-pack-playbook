@@ -38,6 +38,8 @@ f41884bd01b3f585b09c97aaca7b3133a668f3a6e7ccac02fa1a64c7408f3a35  contracts.d/ad
 3660266cdc530ca3a5392c64012c33541854f4beef3f195b3ae14c3732f96528  contracts.d/ads.demand-1.schema.json
 74946a165646b755ed686c8941a12bef8b163267c0874b9166187646e7139e18  contracts.d/ads.results-1.schema.json
 b93ee9d8126208fee3b8ebc4c41fb8f6653d5cc925e19a3b55b739ed982ab13f  contracts.d/ads.results-2.schema.json
+1654d14bac12840ab96cc0c5367adb7a8c167170151dde0c6a6e13478202dbe6  contracts.d/ads.spend-1.schema.json
+cdd82dec06acc4ecefedc48cc961a217da83f2f8613008fa4ee56051957f7501  contracts.d/ads.status-1.schema.json
 c30a104705083734b167a047758b250fb283d9267c4cbe5947e78dad10972cdb  contracts.d/catalog-1.schema.json
 db984ee97e266b1c3a9129e66898b782feb6e682cc4297820b14480024315489  contracts.d/copy.proposals-1.schema.json
 6ffcd4320623f447d5cad52c3cdf161dc1fd174e1631de1770507cdb8b37c4dc  contracts.d/creators.roster-1.schema.json

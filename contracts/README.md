@@ -38,6 +38,8 @@ Every property has a `description` of one sentence.
 | `messages/1` | draft | the messaging owner | makers, ad-copy, gads, kos | [schema](messages-1.schema.json) | [JSON](examples/messages-1.example.json) |
 | `truth/1` | draft | measurement | operators | [schema](truth-1.schema.json) | [JSON](examples/truth-1.example.json) |
 | `intel/1` | draft | search-intel | gads, ppc, seo, pseo | [schema](intel-1.schema.json) | [JSON](examples/intel-1.example.json) |
+| `ads.spend/1` | draft | an operator | measurement, the other operators | [schema](ads.spend-1.schema.json) | [JSON](examples/ads.spend-1.example.json) |
+| `ads.status/1` | draft | an operator | the daily page, the owner's console | [schema](ads.status-1.schema.json) | [JSON](examples/ads.status-1.example.json) |
 | `intel.ads/1` | draft | search-intel | ad-copy, gads, ppc | [schema](intel.ads-1.schema.json) | [JSON](examples/intel.ads-1.example.json) |
 | `leads/1` | draft | outbound | sdr | [schema](leads-1.schema.json) | [JSON](examples/leads-1.example.json) |
 
