@@ -128,6 +128,12 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - `skills/research/SKILL.md` (new) and a line in the README's "Start a skill pack" list: the same research path as a skill an agent loads when asked to research, look at prior art or see how others design something (the owner's question, 2026-10-30: a keyword hook would load the procedure into every session; a skill puts only its description, 510 characters, in context and loads the 3 KB body when a task matches). Tried in a clean repository with `claude -p`, one run each: a Chinese and an English research prompt and a Chinese "how does the industry do X" prompt loaded the skill and then read `docs/research/README.md`; a Chinese "research this error" prompt and a one-line fact lookup did not. Test: `tests/test_prior_art_precedent.py`.
 - Skill packs: nothing (a skill a pack's agent may load; the pack's own copy is not needed)
 
+## [0.47.1] - 2026-10-31
+
+### Kit
+- `kit.doctor` `check_verbs` (found by a remote agent installing the SDR skill pack from a `git archive`, 2026-10-29): a verb of kind `dev` whose script is not in the copy (the test runner, left out of a release archive on purpose) is one information line, `doctor_dev_verbs_absent`, and no longer a warning, so `doctor --strict` stays green on an installed copy; a missing script of any other kind still warns
+- Skill packs: mechanical (re-vendor with `python3 tools/fleet.py update`; a pack whose installed copy lacks `tests/` stops seeing the warning)
+
 ## [0.47.0] - 2026-10-28
 
 ### Kit
