@@ -30,7 +30,7 @@ Every property has a `description` of one sentence.
 | `ads.results/1` | in use | an operator (video-ads; any operator may) | makers (adcut), measurement, creator-program | [schema](ads.results-1.schema.json) | [TSV](examples/ads.results-1.example.tsv) |
 | `ads.results/2` | draft | an operator (video-ads; any operator may) | makers (adcut), measurement, creator-program | [schema](ads.results-2.schema.json) | [TSV](examples/ads.results-2.example.tsv) |
 | `creators.roster/1` | agreed | creator-program | video-ads | [schema](creators.roster-1.schema.json) | [JSON](examples/creators.roster-1.example.json) |
-| `ads.demand/1` | draft | an operator | makers | [schema](ads.demand-1.schema.json) | [JSON](examples/ads.demand-1.example.json) |
+| `ads.demand/1` | agreed | an operator | makers | [schema](ads.demand-1.schema.json) | [JSON](examples/ads.demand-1.example.json) |
 | `handoff.batch/1` | draft | asset-handoff | operators | [schema](handoff.batch-1.schema.json) | [JSON](examples/handoff.batch-1.example.json) |
 | `copy.proposals/1` | draft | ad-copy | operators, asset-handoff | [schema](copy.proposals-1.schema.json) | [JSON](examples/copy.proposals-1.example.json) |
 | `ads.changes/1` | draft | an operator | measurement | [schema](ads.changes-1.schema.json) | [JSON](examples/ads.changes-1.example.json) |
@@ -42,6 +42,7 @@ Every property has a `description` of one sentence.
 | `ads.status/1` | draft | an operator | the daily page, the owner's console | [schema](ads.status-1.schema.json) | [JSON](examples/ads.status-1.example.json) |
 | `intel.ads/1` | draft | search-intel | ad-copy, gads, ppc | [schema](intel.ads-1.schema.json) | [JSON](examples/intel.ads-1.example.json) |
 | `leads/1` | draft | outbound | sdr | [schema](leads-1.schema.json) | [JSON](examples/leads-1.example.json) |
+| `inquiries/1` | draft | any operator that receives an inquiry (seo for site forms, gads and meta-ads for lead ads) | sdr | [schema](inquiries-1.schema.json) | [JSON](examples/inquiries-1.example.json) |
 
 **Status** (`x-status`):
 - `in-use`: two packs already write and read it. The schema states the format they hold; it changes nothing in it, and the packs' definitions (adcut's `adcut/contracts.py`, the video-ads skill pack's `docs/contract.md`) stay the longer account of what the columns mean.
