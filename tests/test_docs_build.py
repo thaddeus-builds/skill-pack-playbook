@@ -730,10 +730,15 @@ def test_the_skill_template_has_its_frontmatter_and_three_scopes():
 
 def test_decision_rights_keeps_the_lanes_and_the_digest():
     text = doc("templates/decision-rights.md")
-    for heading in ("1. Always the owner", "2. AI proposes, owner confirms", "3. AI alone",
-                    "The risky list (owner merges)", "Channels that count", "The digest"):
+    for heading in ("1. Always the owner", "2. AI proposes, owner confirms", "3. AI alone: every technical choice",
+                    "The risky list (a cold read, then the agent merges)", "Channels that count", "The digest"):
         assert section(text, heading), heading
     assert "Deciders and advisers" not in text and "Dissent" not in text
+    # the owner decides business only: technical choices, pushing and merging are the agent's (the owner, 2026-10-30)
+    for rel in ("README.md", "BUILD.md", "templates/decision-rights.md"):
+        body = doc(rel)
+        assert "owner merges" not in body.lower() and "owner's merge" not in body.lower(), rel
+    assert "pushing, opening and merging pull requests" in text and "real examples" in text
 
 
 ALWAYS_STOPS = ("Unconfirmed spend", "The spend gate", "Consent", "Technical QC")
