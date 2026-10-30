@@ -138,35 +138,35 @@ def settings(task: str, tasks: Iterable[str], *, default_base: str | None = None
     tasks = tuple(tasks)
     get = get or _get
     if task not in tasks:
-        raise _fail(msg("ai_config_invalid", f"unknown AI task {task!r} (tasks: {', '.join(tasks)}); nothing was sent", var="task",
+        raise _fail(msg("aicall_config_invalid", f"unknown AI task {task!r} (tasks: {', '.join(tasks)}); nothing was sent", var="task",
                         detail=f"one of {', '.join(tasks)}"))
     key_var = _name("API_KEY")
     key = (get(key_var) or "").strip()
     if not key:
-        raise _fail(msg("ai_config_missing", f"set {key_var} in the host's .env (the vendor's API key); nothing was sent", var=key_var),
+        raise _fail(msg("aicall_config_missing", f"set {key_var} in the host's .env (the vendor's API key); nothing was sent", var=key_var),
                     f"add {key_var}=… to the host's .env")
     proto_var = _name("PROTOCOL")
     protocol = (get(proto_var) or "anthropic").strip().lower()
     if protocol not in PROTOCOLS:
-        raise _fail(msg("ai_config_invalid", f"{proto_var} is {' or '.join(PROTOCOLS)} (got {protocol!r}); nothing was sent", var=proto_var,
+        raise _fail(msg("aicall_config_invalid", f"{proto_var} is {' or '.join(PROTOCOLS)} (got {protocol!r}); nothing was sent", var=proto_var,
                         detail=f"one of {', '.join(PROTOCOLS)}"))
     base_var = _name("BASE_URL")
     base = (get(base_var) or default_base or "").strip()
     if not base:
-        raise _fail(msg("ai_config_missing", f"set {base_var} (the vendor's address): no vendor is built in; nothing was sent", var=base_var),
+        raise _fail(msg("aicall_config_missing", f"set {base_var} (the vendor's address): no vendor is built in; nothing was sent", var=base_var),
                     f"add {base_var}=https://… to the host's .env")
     base = base.rstrip("/")
     u = urllib.parse.urlsplit(base)
     if u.scheme not in ("http", "https") or not u.hostname or u.username or u.password or u.query:
-        raise _fail(msg("ai_config_invalid", f"{base_var} is a plain http(s) URL without credentials or a query; nothing was sent", var=base_var,
+        raise _fail(msg("aicall_config_invalid", f"{base_var} is a plain http(s) URL without credentials or a query; nothing was sent", var=base_var,
                         detail="a plain http(s) URL"))
     if u.scheme == "http" and u.hostname not in LOOPBACK:
-        raise _fail(msg("ai_config_invalid", f"{base_var} must be https (the key would travel in the clear); nothing was sent", var=base_var,
+        raise _fail(msg("aicall_config_invalid", f"{base_var} must be https (the key would travel in the clear); nothing was sent", var=base_var,
                         detail="https, or a loopback host"))
     own, every = _name(f"MODEL_{task.upper()}"), _name("MODEL")
     model = (get(own) or get(every) or "").strip()
     if not model:
-        raise _fail(msg("ai_config_missing", f"set {own} (this task) or {every} (every task): no model is built in; nothing was sent", var=own),
+        raise _fail(msg("aicall_config_missing", f"set {own} (this task) or {every} (every task): no model is built in; nothing was sent", var=own),
                     f"add {own}=<model name> or {every}=<model name> to the host's .env")
     return Settings(key=key, base_url=base, protocol=protocol, model=model, task=task)
 
@@ -183,7 +183,7 @@ def env_cap(*, get: Callable[[str], str | None] | None = None) -> float | None:
     except ValueError:
         v = float("nan")
     if not (v > 0 and v != float("inf")):
-        raise _fail(msg("ai_config_invalid", f"{var} is a number of US dollars above 0", var=var, detail="a number above 0"))
+        raise _fail(msg("aicall_config_invalid", f"{var} is a number of US dollars above 0", var=var, detail="a number above 0"))
     return v
 
 
@@ -207,7 +207,7 @@ def prices_from_rows(rows: Iterable[Mapping[str, str]]) -> dict[str, tuple[float
         except ValueError:
             a = b = -1.0
         if not (a >= 0 and b >= 0):
-            raise _fail(msg("ai_config_invalid", f"the price row of {model} holds a number that is not one (USD per million tokens, 0 or more)",
+            raise _fail(msg("aicall_config_invalid", f"the price row of {model} holds a number that is not one (USD per million tokens, 0 or more)",
                             var="model prices", detail=model))
         out[model] = (a, b)
     return out
@@ -283,10 +283,10 @@ def check_budget(spent: float, est_usd: float | None, budget: Budget) -> None:
     """Refuse before sending: the run cap against the estimate, the daily cap against what was spent (reached) and what was spent plus the estimate."""
     est = est_usd or 0.0
     if budget.run_usd is not None and est > budget.run_usd:
-        raise _fail(msg("ai_run_cap_exceeded", f"estimated ${est:.4f} exceeds the run cap ${budget.run_usd:.2f}; nothing was sent",
+        raise _fail(msg("aicall_run_cap_exceeded", f"estimated ${est:.4f} exceeds the run cap ${budget.run_usd:.2f}; nothing was sent",
                         estimated_usd=f"{est:.4f}", cap_usd=f"{budget.run_usd:.2f}"), "do fewer calls in one run, or use a cheaper model")
     if spent >= budget.daily_usd or spent + est > budget.daily_usd:
-        raise _fail(msg("ai_daily_cap_exceeded", f"today's AI calls cost ${spent:.4f}, this one about ${est:.4f} more; the daily cap is "
+        raise _fail(msg("aicall_daily_cap_exceeded", f"today's AI calls cost ${spent:.4f}, this one about ${est:.4f} more; the daily cap is "
                         f"${budget.daily_usd:.2f}; nothing was sent", spent_usd=f"{spent:.4f}", estimated_usd=f"{est:.4f}",
                         cap_usd=f"{budget.daily_usd:.2f}"), "wait for tomorrow (UTC), or a person raises the cap")
 
@@ -298,10 +298,10 @@ def _image(path) -> tuple[str, str, str]:
     try:
         data = p.read_bytes()
     except OSError as e:
-        raise _fail(msg("ai_image_unreadable", f"{p}: cannot read the image ({e.strerror}); nothing was sent", path=str(p))) from None
+        raise _fail(msg("aicall_image_unreadable", f"{p}: cannot read the image ({e.strerror}); nothing was sent", path=str(p))) from None
     mime = _IMAGE_TYPES.get(p.suffix.lower()) or mimetypes.guess_type(str(p))[0]
     if not mime or not mime.startswith("image/"):
-        raise _fail(msg("ai_image_unreadable", f"{p}: not an image file; nothing was sent", path=str(p)))
+        raise _fail(msg("aicall_image_unreadable", f"{p}: not an image file; nothing was sent", path=str(p)))
     return mime, base64.standard_b64encode(data).decode(), hashlib.sha256(data).hexdigest()
 
 
@@ -330,9 +330,9 @@ def build_request(s: Settings, system: str, text: str, images, max_tokens: int, 
 
 
 def parse_response(s: Settings, doc) -> tuple[str, int | None, int | None, str | None]:
-    """(text, input tokens, output tokens, stop reason) of a reply, or ai_bad_answer."""
+    """(text, input tokens, output tokens, stop reason) of a reply, or aicall_bad_answer."""
     def bad(detail):
-        return _fail(msg("ai_bad_answer", f"the {s.protocol} reply is not what the protocol says: {detail}", detail=detail))
+        return _fail(msg("aicall_bad_answer", f"the {s.protocol} reply is not what the protocol says: {detail}", detail=detail))
     if not isinstance(doc, dict):
         raise bad("not a JSON object")
     u = doc.get("usage") if isinstance(doc.get("usage"), dict) else {}
@@ -400,7 +400,7 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
     images = list(images)
     known = s.model in (prices or {})
     if not known and (unpriced == "refuse" or budget is not None):
-        raise _fail(msg("ai_model_unpriced", f"{s.model}: no price, so the cap could not count it; nothing was sent", model=s.model),
+        raise _fail(msg("aicall_model_unpriced", f"{s.model}: no price, so the cap could not count it; nothing was sent", model=s.model),
                     "add the model's list price to the pack's ai_prices.tsv, or use a priced model")
     url, headers, body = build_request(s, system, text, images, max_tokens, schema, effort)
     if budget is not None:
@@ -419,12 +419,12 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         return err
 
     if status == 0:
-        raise fail(_fail(msg("ai_network_error", f"{s.host}: no answer after {attempts} tries ({doc}); is the base URL right?", detail=str(doc), host=s.host)),
+        raise fail(_fail(msg("aicall_network_error", f"{s.host}: no answer after {attempts} tries ({doc}); is the base URL right?", detail=str(doc), host=s.host)),
                    "network")
     if status != 200:
-        raise fail(_fail(msg("ai_http_error", f"{s.host} answered HTTP {status}: {doc}", status=status, detail=str(doc), host=s.host)), f"http_{status}")
+        raise fail(_fail(msg("aicall_http_error", f"{s.host} answered HTTP {status}: {doc}", status=status, detail=str(doc), host=s.host)), f"http_{status}")
     if doc is None:
-        raise fail(_fail(msg("ai_bad_answer", f"{s.host} answered 200 with a body that is not JSON", detail="not JSON")), "bad_reply")
+        raise fail(_fail(msg("aicall_bad_answer", f"{s.host} answered 200 with a body that is not JSON", detail="not JSON")), "bad_reply")
     try:
         out, tin, tout, stop = parse_response(s, doc)
     except SkillPackError as e:
@@ -458,25 +458,25 @@ def ask_json(s: Settings, system: str, text: str, schema: dict, images=(), **kw)
             r = ask(s, system + (JSON_ONLY if mode == "words" else ""), text, images, schema=schema if mode == "schema" else None, **kw)
         except SkillPackError as e:
             code = getattr(e.message, "code", "")
-            if mode == "schema" and code in ("ai_http_error", "ai_bad_answer") and (code == "ai_bad_answer" or "HTTP 400" in str(e.message)):
+            if mode == "schema" and code in ("aicall_http_error", "aicall_bad_answer") and (code == "aicall_bad_answer" or "HTTP 400" in str(e.message)):
                 last = e
                 continue
             raise
         obj = unwrap_json(r.text)
         if obj is not None:
             return obj, r
-        last = _fail(msg("ai_json_invalid", "the reply is not one JSON object", detail=r.text[:80]))
-    raise last or _fail(msg("ai_json_invalid", "the reply is not one JSON object", detail="none"))
+        last = _fail(msg("aicall_json_invalid", "the reply is not one JSON object", detail=r.text[:80]))
+    raise last or _fail(msg("aicall_json_invalid", "the reply is not one JSON object", detail="none"))
 
 
 def count_tokens(s: Settings, system: str, text: str, images=(), *, timeout: float = TIMEOUT_S, sleep: Callable[[float], None] = time.sleep) -> int:
     """The input tokens `ask` would send, by Anthropic's `messages/count_tokens` (free; counts against no cap and is not logged). Anthropic protocol only."""
     if s.protocol != "anthropic":
         proto_var = _name("PROTOCOL")
-        raise _fail(msg("ai_config_invalid", f"count_tokens is Anthropic's endpoint; {proto_var} must be anthropic for it; nothing was sent", var=proto_var,
+        raise _fail(msg("aicall_config_invalid", f"count_tokens is Anthropic's endpoint; {proto_var} must be anthropic for it; nothing was sent", var=proto_var,
                         detail="anthropic for count_tokens"))
     url, headers, body = build_request(s, system, text, list(images), 1)
     status, doc, _, _ = _send(s, url + "/count_tokens", headers, {k: body[k] for k in ("model", "system", "messages")}, timeout, sleep)
     if status != 200 or not isinstance(doc, dict) or not isinstance(doc.get("input_tokens"), int):
-        raise _fail(msg("ai_http_error", f"{s.host} count_tokens answered HTTP {status}: {doc}", status=status, detail=str(doc), host=s.host))
+        raise _fail(msg("aicall_http_error", f"{s.host} count_tokens answered HTTP {status}: {doc}", status=status, detail=str(doc), host=s.host))
     return doc["input_tokens"]
