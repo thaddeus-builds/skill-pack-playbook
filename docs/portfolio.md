@@ -141,7 +141,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | Contract | Producer | Consumers | What it carries |
 | --- | --- | --- | --- |
 | `ads.creatives/1` (exists) | a maker | operators | creative id, files, the insight row it serves, the compliance state |
-| `ads.results/1` (exists) | an operator | makers, `measurement`, `creator-program` | per creative or entity: spend, outcomes, stage, whether the day is settled |
+| `ads.results/1` (exists) | an operator | makers, `measurement`, `creator-program` | per creative: spend, outcomes, stage, whether the day is settled (its schema requires `creative_code`, so a campaign-level read has no home here until `ads.spend/1`) |
 | `ads.results/2` | an operator | makers, `measurement`, `creator-program` | `ads.results/1` with the money columns in the row's own currency (`currency`, ISO 4217) instead of `_cny`; both are written for one release |
 | `ads.demand/1` | an operator | makers | how many creatives, of which format and slot, by when |
 | `handoff.batch/1` | `asset-handoff` | operators | each creative's name across its sizes, its files, its UTM tags, its form rows, and whether the names match in the media library and the form |
@@ -153,6 +153,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `intel/1` | `search-intel` | `gads`, `ppc`, `seo`, `pseo` | keyword demand, trends, competitors seen, with sources and dates |
 | `intel.ads/1` | `search-intel` | `adcopy`, `gads`, `ppc` | the ads competitors were seen running on search pages: words as published, first and last day seen, times seen |
 | `leads/1` | `outbound` | `sdr` | company, contacts, source, evidence |
+| `inquiries/1` | any operator that receives an inquiry (`seo` for site forms, `gads` and `meta-ads` for lead ads) | `sdr` | who wrote, from which company, the words as written, the page, the consent box text |
 | `creators.roster/1` (exists as vads K5) | `creator-program` | `meta-ads` | collaborations, codes, ad ids |
 
 ## Engines in the kit
