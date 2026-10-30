@@ -17,6 +17,8 @@
     and "us" is its sender; next_round stops at three and wants a reason;
   * a group message with no mention is refused (`no_mention`), before any send; a DM is not; the headless path
     wants an ASCII @name in the text, REST wants member ids to mention; a mid-word @ (an address) is no mention;
+  * an id that is not a member of the group is refused (`unknown_mention`), a member list that cannot be read
+    refuses nothing, an @ is compared with display names that have spaces;
   * check_isolation names a missing, world-readable or key-less config, a wrong organization, a data dir
     shared by two configs, and one config used with two data dirs.
 """
@@ -70,6 +72,9 @@ class FakeServer:
         self.store_empty, self.expire, self.fail_send = store_empty, expire, fail_send
         self.msgs, self.log, self.exchanges, self.tokens = {}, [], 0, ["tok-1", "tok-2"]
         self.conv_type = "GROUP"
+        self.members = [{"member_id": "ME", "display_name": "DEMO-me", "kind": "agent"},
+                        {"member_id": "AGENT", "display_name": "DEMO-agent", "kind": "agent"},
+                        {"member_id": "DEMO-member", "display_name": "Demo Member", "kind": "human"}]
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -99,6 +104,8 @@ class FakeServer:
                     outer.exchanges += 1
                     return self._reply(200, {"data": {"access_token": outer.tokens[min(outer.exchanges, 2) - 1]}})
                 outer.log.append((self.path, body, auth))
+                if self.path.endswith("/read"):
+                    return self._reply(200, {"data": {}})
                 if outer.expire and auth == "Bearer tok-1":
                     return self._reply(401, {"error": "expired"})
                 if outer.fail_send:
@@ -118,6 +125,8 @@ class FakeServer:
                     return
                 outer.log.append((self.path, None, self.headers.get("Authorization", "")))
                 bare, _, query = self.path.partition("?")
+                if bare.endswith("/members"):
+                    return self._reply(200, {"data": outer.members})
                 if not bare.endswith("/messages") and "/messages/" not in bare and "/conversations/" in bare:
                     return self._reply(200, {"data": {"id": bare.rsplit("/", 1)[1], "type": outer.conv_type}})
                 if bare.endswith("/messages"):
@@ -167,13 +176,14 @@ def rest_tests(t: str) -> None:
         cfg = write_config(d, "a.json", srv.url)
         tg = bridge.Target(cfg, os.path.join(d, "data-a"), "DEMO-conv", "DEMO-org")
         r = bridge.send_to(tg, t, mentions=M)
-        sent_body = srv.log[0][1]
+        posts = [x for x in srv.log if x[1] is not None]
+        sent_body = posts[0][1]
         check("REST: sent, read back by id, no resend", r.sent and r.id == "M1" and not r.resent, r)
         check("REST: the typed body, a fresh client id, the exchanged token",
               sent_body["type"] == "AGENT_TEXT" and sent_body["content"]["body"]["text"] == t
-              and sent_body["client_msg_id"] and srv.log[0][2] == "Bearer tok-1" and srv.exchanges == 1, srv.log)
+              and sent_body["client_msg_id"] and posts[0][2] == "Bearer tok-1" and srv.exchanges == 1, srv.log)
         check("REST: a User-Agent of its own (the edge refuses Python's default)", all(x for x in [srv.exchanges >= 1]) and r.sent)
-        check("REST: the read-back asks for the id the send returned", srv.log[1][0].endswith("/messages/M1"), srv.log)
+        check("REST: the read-back asks for the id the send returned", [x for x in srv.log if "/messages/" in x[0]][-1][0].endswith("/messages/M1"), srv.log)
         check("REST: the key is in no result, reason or repr",
               KEY not in repr(r) and KEY not in repr(bridge.load_credentials(cfg, "DEMO-org")))
         srv.close()
@@ -206,7 +216,7 @@ def rest_tests(t: str) -> None:
         send, read = bridge.rest_runners(bridge.load_credentials(cfg, "DEMO-org"), "DEMO-conv", mentions=["DEMO-member"])
         send("@DEMO-agent hi")
         check("REST: mentions go as member objects at the top level",
-              srv.log[0][1]["mentions"] == [{"type": "member", "member_id": "DEMO-member"}], srv.log)
+              [x for x in srv.log if x[1] is not None][0][1]["mentions"] == [{"type": "member", "member_id": "DEMO-member"}], srv.log)
         srv.close()
 
         down = bridge.Target(write_config(d, "g.json", "http://127.0.0.1:9"), os.path.join(d, "data-g"), "DEMO-conv", "DEMO-org")
@@ -250,11 +260,29 @@ def mention_tests(t: str) -> None:
               not r.sent and r.reason == "no_mention" and not [x for x in srv.log if x[1] is not None] and srv.exchanges == 0, (r, srv.log))
         r = bridge.send_to(tg, t, mentions=M)
         check("send_to: with member ids it is sent and they ride as mention objects",
-              r.sent and srv.log[0][1]["mentions"] == [{"type": "member", "member_id": "DEMO-member"}], (r, srv.log))
+              r.sent and [x for x in srv.log if x[1] is not None][0][1]["mentions"] == [{"type": "member", "member_id": "DEMO-member"}], (r, srv.log))
         dmt = bridge.Target(cfg, os.path.join(d, "dm"), "DEMO-dm", "DEMO-org", dm=True)
         r = bridge.send_to(dmt, "hello, no mention here")
         check("send_to: a DM target is sent with no mention", r.sent, r)
         srv.close()
+
+def unknown_tests(t: str) -> None:
+    members = [{"member_id": "A1", "display_name": "E-commercial Bot"}, {"member_id": "H1", "display_name": "Lizzy Liu"}]
+    for text, bad in (("@E-commercial Bot please check", False), ("@e-commercial bot please", False), ("@Lizzy Liu hi", False),
+                      ("@Nobody hi", True), ("@E-commercial Bot and @Nobody", False), ("@E-commercial and so on", True), ("@all hi", False), ("@everyone hi", False),
+                      ("no at here", False), ("@ alone", True)):
+        check(f"unknown_mentions: {text!r} -> {bad}", bridge.unknown_mentions(text, members) is bad)
+    with tempfile.TemporaryDirectory() as d:
+        srv = FakeServer()
+        cfg = write_config(d, "u.json", srv.url)
+        tg = bridge.Target(cfg, os.path.join(d, "du"), "DEMO-conv", "DEMO-org")
+        r = bridge.send_to(tg, t, mentions=["WRONG-id"])
+        check("send_to: an id that is no member of the group is refused, nothing sent",
+              not r.sent and r.reason == "unknown_mention: WRONG-id" and not [x for x in srv.log if x[1] is not None], (r, srv.log))
+        srv.members = []
+        check("send_to: a member list that cannot be read refuses nothing", bridge.send_to(tg, t, mentions=["WRONG-id"]).sent)
+        srv.close()
+
 
 def reply_tests(t: str) -> None:
     A = bridge.Anchor("S1", 10, "ME")
@@ -416,6 +444,7 @@ def main() -> int:
           r.sent and calls == ["comm_send", "comm"], (r, calls))
     rest_tests(t)
     mention_tests(t)
+    unknown_tests(t)
     reply_tests(t)
     isolation_tests()
     return finish()
