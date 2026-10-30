@@ -73,7 +73,7 @@ What a repository is and where it sits in the layers. Whether a client has used 
 | video-ads-skill-pack | `vads` | Operator, paid push: 千川, 腾讯 (Meta leaves it, see below) | earned | R43 rewritten; engines to `ads-core` and `creative` (its X63), then the Meta side to `meta-ads` |
 | ecommerce-seo-skill-pack | `seo` | Operator, organic pull, Google organic | earned | Owns website content fields; reads `intel/1` for new demand work |
 | ecommerce-seo-skill-pack-plugins | — | Distribution of `seo` (web audit, app, MCP) | distribution of `seo` | None |
-| seo-programmatic-skill-pack | `pseo` | Operator, organic pull, page sets | shell (no row in the table yet) | Reads its page list from `seo` (its S07) |
+| seo-programmatic-skill-pack | `pseo` | Operator, organic pull, page sets | shell | Reads its page list from `seo` (its S07) |
 | seo-tools-harness | `seoh` | Operator, organic pull, free tools | frozen | Demand checks move to `search-intel` when it next changes |
 | geo-china-skill-pack | `geo` | Operator, organic pull, AI answers (China) | earned | Global AI answers become the same pack with a market, or a sibling (open, not urgent) |
 | koc-script-skill-pack | `kos` | Operator, earned push, creator briefs | built | Its claims check moves to the kit's `compliance` |
