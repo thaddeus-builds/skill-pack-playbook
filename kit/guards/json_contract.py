@@ -42,6 +42,10 @@ kit.testing.sandbox's env) and applies the rules above.
 
 Test: kit/tests/test_guards.py (the units and the read verbs),
 kit/tests/test_verb_cases.py (check_verbs).
+
+`check_read_verbs_no_db` also runs each read verb on a data dir with no database: it must fail `no_db` and
+create nothing. A read verb that needs no database (it lists kept files, or reads a public page) is named in
+`[guards.json_contract] no_db_ok = ["briefs list"]`; it may then succeed there, and still may not create one.
 """
 
 from __future__ import annotations
@@ -52,7 +56,7 @@ import sys
 from datetime import date
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from kit import contract, messages
 from kit.config import SkillPackConfig
@@ -357,6 +361,21 @@ def sample_args(cfg: SkillPackConfig, given: dict | None = None
     return out
 
 
+def no_db_ok(cfg: SkillPackConfig, reads: list, given: Iterable[str] | None = None) -> tuple[str, ...]:
+    """The read verbs, as typed, that may succeed with no database (one that only lists kept files or reads a
+    public page): `given`, else skill-pack.toml `[guards.json_contract] no_db_ok = ["briefs list"]`. A name
+    that is no read verb of the table is a ValueError: a typo would switch the allowance off without a word."""
+    raw = given if given is not None else section(cfg, "guards", "json_contract").get("no_db_ok", [])
+    if not (isinstance(raw, (list, tuple)) and all(isinstance(a, str) for a in raw)):
+        raise ValueError(f"[guards.json_contract].no_db_ok must be a list of verbs as typed, got {raw!r}")
+    out = tuple(" ".join(a.split()) for a in raw)
+    known = {" ".join(v.words) for v in reads}
+    unknown = [a for a in out if a not in known]
+    if unknown:
+        raise ValueError(f"[guards.json_contract].no_db_ok names {unknown}, which are not read verbs of the table")
+    return out
+
+
 def check_read_verbs(data_dir: Path | str, *, verbs: Any = None,
                      run: Run | None = None, market: str | None = None,
                      skip: tuple[str, ...] = (),
@@ -399,13 +418,14 @@ def _listing(d: Path) -> list[str]:
 
 def check_read_verbs_no_db(data_dir: Path | str, *, verbs: Any = None,
                            run: Run | None = None, market: str | None = None,
-                           allow_ok: tuple[str, ...] = (),
+                           allow_ok: tuple[str, ...] | None = None,
                            registry: dict | None = None,
                            codes: tuple[str, ...] = ("no_db",),
                            args: dict | None = None) -> list[str]:
     """On a data dir without a DB, every read verb that needs the data dir
     fails `no_db` (one coded failure document) and creates nothing.
-    `allow_ok` = verbs (as typed) that may succeed without a DB; `codes`
+    `allow_ok` = verbs (as typed) that may succeed without a DB (default:
+    skill-pack.toml `[guards.json_contract] no_db_ok`; `()` allows none); `codes`
     = the failure codes accepted (add `usage` for a verb that needs an
     argument this check does not give); `args` = sample arguments per
     verb (sample_args())."""
@@ -417,6 +437,7 @@ def check_read_verbs_no_db(data_dir: Path | str, *, verbs: Any = None,
     if (d / cfg.db_file).exists():
         return [f"fixture: {d / cfg.db_file} exists; give an empty data dir"]
     before = _listing(d)
+    allow_ok = no_db_ok(cfg, _reads(cfg, verbs), allow_ok)
     for v in _reads(cfg, verbs):
         if not getattr(v, "needs_data_dir", True):
             continue
