@@ -52,10 +52,10 @@ def main() -> int:
     here = {p.name: p.read_bytes() for p in contracts.SCHEMAS.glob("*.schema.json")}
     there = {p.name: p.read_bytes() for p in (PLAYBOOK / "contracts").glob("*.schema.json")}
     check("kit/contracts.d holds the playbook's contracts/ schemas, byte for byte",
-          here == there and len(here) == 13,
+          here == there and len(here) == 14,
           sorted(set(here) ^ set(there)) or [n for n in here if here[n] != there.get(n)])
     examples = sorted(EXAMPLES.iterdir())
-    check("an example for each of the thirteen", len(examples) == 13, examples)
+    check("an example for each of the fourteen", len(examples) == 14, examples)
     bad = []
     for f in examples:
         kind, version, text = example(f.name)
