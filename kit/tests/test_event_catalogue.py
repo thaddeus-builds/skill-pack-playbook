@@ -43,6 +43,15 @@ def main() -> int:
           and cn["lunar_new_year"] == date(2026, 2, 17) and "thanksgiving" not in cn, cn)
     check("Singapore has the double-digit days 3.3 to 10.10 and 12.12 on their dates", all(sg[n] == date(2026, m, m) for n, m in
           (("three_three", 3), ("four_four", 4), ("five_five", 5), ("six_six", 6), ("seven_seven", 7), ("eight_eight", 8), ("nine_nine", 9), ("ten_ten", 10), ("double_twelve", 12))), sg)
+    sg27 = on("SG", 2027)
+    check("Singapore: National Day on 08-09 every year, and the moon-based holidays of the Ministry of Manpower's list for 2026 and 2027",
+          sg["singapore_national_day"] == date(2026, 8, 9) and sg27["singapore_national_day"] == date(2027, 8, 9)
+          and (sg["hari_raya_puasa"], sg["hari_raya_haji"], sg["deepavali"]) == (date(2026, 3, 21), date(2026, 5, 27), date(2026, 11, 8))
+          and (sg27["hari_raya_puasa"], sg27["hari_raya_haji"], sg27["deepavali"]) == (date(2027, 3, 10), date(2027, 5, 17), date(2027, 10, 28)), (sg, sg27))
+    sg28, my26 = on("SG", 2028), on("MY", 2026)
+    check("a year outside the Singapore table lists none of its moon-based holidays, never a guess (National Day stays: it is fixed)",
+          not {"hari_raya_puasa", "hari_raya_haji", "deepavali"} & set(sg28) and "singapore_national_day" in sg28 and "lunar_new_year" in sg28, sorted(sg28))
+    check("those dates are Singapore's: Malaysia, which keeps other days, gets none of them", not {"hari_raya_puasa", "hari_raya_haji", "deepavali", "singapore_national_day"} & set(my26), sorted(my26))
     check("a market code that is not two capitals is refused", all(_refused(m) for m in ("us", "USA", "", "U1")))
 
     print("[3] the table has an end, and what a candidate says of itself")
@@ -55,9 +64,13 @@ def main() -> int:
     print("[3b] a name is the identity across years, and what is left to ask")
     markets = sorted({m for *_, ms, _r in cat.EVENTS for m in ms.split() if m != cat.ALL}) + [None]
     years = range(cat.TABLE_YEARS[0], cat.TABLE_YEARS[1] + 1)
-    drift = {m: [sorted({c.name for c in cat.candidates(m, y)}) for y in years] for m in markets}
-    check("every market lists the same names in every year of the table: a name is the identity of an event, so a strike by name holds for every year",
+    listed = lambda m: {n for n, _k, _b, ms, _r in cat.EVENTS if cat.ALL in ms.split() or m in ms.split()}
+    left_out = lambda m, y: {n for n, t in cat.TABLES.items() if y not in t and n in listed(m)}   # a `table` event of a year its table does not cover is the only name that may be missing
+    drift = {m: [sorted({c.name for c in cat.candidates(m, y)} | left_out(m, y)) for y in years] for m in markets}
+    check("every market lists the same names in every year of the table: a name is the identity of an event, so a strike by name holds for every year (a table event is missing only in a year its table leaves out)",
           all(all(names == per[0] for names in per) for per in drift.values()), {m: [len(n) for n in per] for m, per in drift.items()})
+    check("each table event is listed in every year its table covers, in the market it is for", all(
+        n in {c.name for c in cat.candidates("SG" if n != "lunar_new_year" else "CN", y)} for n, t in cat.TABLES.items() for y in t))
     c26 = cat.candidates("US", 2026)
     black = next(c for c in c26 if c.name == "black_friday")
     from kit import event_days  # noqa: E402
