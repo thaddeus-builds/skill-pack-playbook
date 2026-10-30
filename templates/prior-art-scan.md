@@ -11,6 +11,7 @@ Before building, look at what already exists: tools the client could buy, open-s
 | Before a release that adds a write path or a paid call (BUILD.md B7 and B9) | What went wrong for others doing the same writes? | No new write or paid call |
 | When the client names a tool or a competitor | What does that tool do that we do not? | — |
 | Before a feature an owner has to understand and steer ([design-first.md](design-first.md), step 1) | How do others do it, and which traps does it hide? | A fix, a refactor, or a change only the builder sees |
+| The owner asks how others design something: where a shared module lives, how remote workers are structured, whether to split or merge, "is there a standard way?" | What do mature systems do, what transfers to ours and what does not? ([a design question](#a-design-question-from-the-owner-a-precedent-scan)) | The question is only about a name or a link (the quick scan) |
 
 Each scan is dated. A scan older than 90 days is stale: re-scan before quoting it to the owner.
 
@@ -57,7 +58,7 @@ The scan above runs before a build. A skill pack that is already built needs the
 
 The owner pastes a repository or a product and asks "did we already look at this, and is there more like it?". That is a lookup with a short tail, not a scan: about 30 tool calls in all, one agent, no fan-out.
 
-1. **Read what is kept first.** Open `docs/prior-art/README.md` and `sources.tsv` (or `docs/research/README.md`), then search the whole repository for the project's name, its owner and its URL. Answer "yes, on this date, with this verdict, here" or "no" before any search; the owner is asking exactly this.
+1. **Read what is kept first.** Open `docs/prior-art/README.md` and `sources.tsv` (or `docs/research/README.md`), then search the whole repository for the project's name, its owner and its URL. Then run the playbook's `python3 tools/research.py` over the sibling skill packs (the same vendor or question has been researched twice in different packs). Answer "yes, on this date, with this verdict, here" or "no" before any search; the owner is asking exactly this.
 2. **Facts before words, per project.** `gh api` for stars, licence, push date, archived and renamed; then the LICENSE file itself; then the README and the one page that shows the interface (an API reference, a schema, an MCP tool list), not the marketing page. A rewrite in progress, a repository closed to contributions, or a licence that forbids linking is a finding: put it in the verdict.
 3. **Find the neighbours in three searches at most:** the project's own "alternatives" or "similar" list, one search for the job in plain words ("open source X for agents"), and one in the client's market language when it is not English. Merge the hits into one table: name, licence, size, last push, verdict. Stop when two searches in a row add nothing.
 4. **One verdict per project**, the four words of the audit below, each naming the module it would change or the reason it changes none. What only running can answer (fonts, speed, whether two runs give the same bytes) goes on a **spike list** as questions. It is neither guessed nor run unasked.
@@ -65,6 +66,19 @@ The owner pastes a repository or a product and asks "did we already look at this
 6. **Ask the owner after, not before:** which module they hope to improve, and which regions or tool families are not covered yet. Keep the answers as dated "deferred" lines, so a skipped lens reads as a decision, not a hole.
 
 *Seen once, in a video-ad skill pack (2026-10-26):* the owner pasted two open-source editors and asked whether the market had been looked at. Earlier research held licences and schema patterns but nothing on editors, and was spread over one long page. The quick scan found that one editor is under AGPL (a separate process at most), the other is mid-rewrite with its headless mode only promised, and a third project (an HTML-to-video engine with agent skills) was the one worth a spike. The answers went into `docs/prior-art-editors.md`, linked from `docs/prior-art.md`.
+
+## A design question from the owner (a precedent scan)
+
+The owner asks how professional teams design a thing: where a shared module lives, how remote workers are structured, whether to split a package or merge two. It is a lookup that ends in a design, not a scan of the market: one agent, four searches in one turn.
+
+1. **Read what is kept first, in this pack and its siblings:** `docs/research/README.md`, then `python3 tools/research.py` over the sibling skill packs for the question's words. Answer "yes, on this date, with this answer" before any search.
+2. **Name the lenses, one search each, in parallel (four at most):** a mature system's own specification or protocol; the most used implementation and what its operators learned; the design rule that applies, and its criticism; one counter-example or failure story. Read the page, not the snippet, for the claim that carries the decision.
+3. **Per source, write three things:** what it does, what transfers to ours, and what does not transfer and why. Where our own numbers differ, write the measured one beside it, tagged **[ours]**. A source that only agrees with what we already think is a note, not evidence.
+4. **One verdict, and what it changes:** each "what follows for us" line names the module, registry row or page it changes and is tagged **[inference]**; what only a measurement can settle goes on a spike list.
+5. **Say what could not be read:** a search that found nothing on a name, a source read second-hand, the reach of the search (one engine, one country). "Unconfirmed" means looked for and not found.
+6. **Write it down in the same turn,** as a file in `docs/research/` and a row in its index; the answer to the owner gives the verdict and cites the file, never the search. A pack with no `docs/research/` yet creates the index from [research-index.md](research-index.md) first; a pack that predates the scaffold and keeps one flat page leaves it and points it at the folder.
+
+*Seen once, in the adcut skill pack (2026-10-30):* the owner asked whether to open a CPU skill pack beside the GPU one or to rename the GPU one, and whether professional teams had a way to decide. Four searches (distcc, Bazel's remote execution API, SkyPilot, the rule of three) confirmed the plan (offload only small inputs; launching on machines you have and provisioning rented ones are two layers; extract a shared module when a second pack needs it) and added two changes (cache a result by the hash of its inputs; fall back to the local machine only when the remote could not run, not when the job failed). The first answer left the search in the chat, the index had been read for the pack but not its siblings, and adcut had no `docs/research/`; all three were found only when the owner asked whether the playbook had a process for this.
 
 ## Do you need a deep-research tool?
 
