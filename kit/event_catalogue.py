@@ -8,7 +8,8 @@ A candidate is a *proposal*, never a fact: a client may not run a sale on it. `b
 
   * `fixed`: the same calendar day every year (a double-digit day, a holiday on a date);
   * `rule`:  computed from a rule (the day after the fourth Thursday of November; Easter by the Gregorian computus and the days counted from it);
-  * `table`: a lunar date, from a short table (`TABLE_YEARS`); a year outside it gives no such candidate, never a guess.
+  * `table`: a date that moves with the moon, from a short table (`TABLES`; `TABLE_YEARS` is the Lunar New Year's span); a year outside an event's table gives no
+    such candidate, never a guess.
 
 **A candidate's `name` is its identity, and it is stable across years**: the same event has the same name in 2026 and in 2030 while its date moves (Black Friday, Lunar New Year), so a pack stores "this client does not run it" (a strike) by name and the next year's candidate is skipped; a test holds the set of names of a market equal over every year of the table.
 
@@ -31,6 +32,13 @@ ALL = "*"
 # Lunar New Year, the first day, by Gregorian year. The only lunar date here; a year outside the table has no such candidate.
 LUNAR_NEW_YEAR = {2026: date(2026, 2, 17), 2027: date(2027, 2, 6), 2028: date(2028, 1, 26), 2029: date(2029, 2, 13), 2030: date(2030, 2, 3)}
 TABLE_YEARS = (min(LUNAR_NEW_YEAR), max(LUNAR_NEW_YEAR))
+# Singapore's three public holidays that move with the moon, from the Ministry of Manpower's published list as read on 2026-10-31, which covers 2026 and 2027
+# only. They are listed for SG alone: another market's feast can fall a day away (moon sighting), and a year outside the table gives no candidate, never a guess.
+HARI_RAYA_PUASA = {2026: date(2026, 3, 21), 2027: date(2027, 3, 10)}
+HARI_RAYA_HAJI = {2026: date(2026, 5, 27), 2027: date(2027, 5, 17)}
+DEEPAVALI = {2026: date(2026, 11, 8), 2027: date(2027, 10, 28)}
+# Every `table` event and the years it covers, so a test (and a pack) can tell a year left out of a table from an event that is missing.
+TABLES = {"lunar_new_year": LUNAR_NEW_YEAR, "hari_raya_puasa": HARI_RAYA_PUASA, "hari_raya_haji": HARI_RAYA_HAJI, "deepavali": DEEPAVALI}
 
 MON, THU, SUN = 0, 3, 6
 SEA = "ID MY PH SG TH VN TW"
@@ -74,19 +82,23 @@ def _black_friday(y: int) -> date:
 EVENTS: list[tuple[str, str, str, str, Callable[[int], date | None]]] = [
     ("new_year", "holiday", "fixed", ALL, lambda y: date(y, 1, 1)),
     ("lunar_new_year", "holiday", "table", "CN TW HK SG MY VN KR", lambda y: LUNAR_NEW_YEAR.get(y)),
+    ("hari_raya_puasa", "holiday", "table", "SG", lambda y: HARI_RAYA_PUASA.get(y)),
     ("valentines_day", "gifting", "fixed", ALL, lambda y: date(y, 2, 14)),
     ("womens_day", "gifting", "fixed", "CN TW", lambda y: date(y, 3, 8)),
     ("white_day", "gifting", "fixed", "JP KR TW", lambda y: date(y, 3, 14)),
     ("easter", "holiday", "rule", "US CA GB AU NZ DE FR IT ES", easter),
     ("mothering_sunday", "gifting", "rule", "GB IE", lambda y: easter(y) - timedelta(days=21)),
+    ("hari_raya_haji", "holiday", "table", "SG", lambda y: HARI_RAYA_HAJI.get(y)),
     ("mothers_day", "gifting", "rule", MOTHERS_MAY, lambda y: nth_weekday(y, 5, SUN, 2)),
     ("fathers_day", "gifting", "rule", "US CA GB IN", lambda y: nth_weekday(y, 6, SUN, 3)),
     ("fathers_day", "gifting", "rule", "AU NZ", lambda y: nth_weekday(y, 9, SUN, 1)),
     ("six_eighteen", "sale", "fixed", "CN", lambda y: date(y, 6, 18)),
+    ("singapore_national_day", "holiday", "fixed", "SG", lambda y: date(y, 8, 9)),
     ("nine_nine", "sale", "fixed", SEA, lambda y: date(y, 9, 9)),
     ("thanksgiving", "holiday", "rule", "US", lambda y: nth_weekday(y, 11, THU, 4)),
     ("thanksgiving", "holiday", "rule", "CA", lambda y: nth_weekday(y, 10, MON, 2)),
     ("singles_day", "sale", "fixed", "CN TW HK SG MY", lambda y: date(y, 11, 11)),
+    ("deepavali", "holiday", "table", "SG", lambda y: DEEPAVALI.get(y)),
     ("black_friday", "sale", "rule", ALL, _black_friday),
     ("cyber_monday", "sale", "rule", ALL, lambda y: _black_friday(y) + timedelta(days=3)),
     ("double_twelve", "sale", "fixed", "CN " + SEA, lambda y: date(y, 12, 12)),
