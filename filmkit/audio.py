@@ -142,7 +142,7 @@ def run_bytes(cmd):
     return r.stdout
 
 
-LIMIT = 0.84                                                                    # the sample-peak ceiling, -1.5 dBFS: AAC adds about 0.4 dB, so the delivered true peak stays near -1 dBTP
+LIMIT = 0.80                                                                    # the sample-peak ceiling, -1.9 dBFS: AAC adds 0.4 to 1 dB, so the delivered true peak stays at or under -1 dBTP
 
 
 def measure_lufs(src: list[str], chain: str = "") -> float | None:

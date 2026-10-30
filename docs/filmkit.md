@@ -79,13 +79,13 @@ even after the AAC encode; the report says what it landed on (`mix_lufs`). A fil
 
 | element | what | main params |
 |---|---|---|
-| `title` | lines of type that rise and fade in one after another, optionally out again | `lines`, `x`, `y`, `size`, `font` (black/bold/med/reg), `fill`, `anchor` (l/m/r), `tracking`, `stagger`, `out` |
+| `title` | lines of type that rise and fade in one after another, optionally out again | `lines`, `x`, `y`, `size`, `font` (black/bold/med/reg), `fill`, `anchor` (l/m/r), `tracking`, `stagger`, `out`, `max_width` (the size shrinks until the widest line fits it, never below 60 percent; the layout check sees the size used) |
 | `text` | one tracked line that fades in (a tagline, a label) | `text`, `x`, `y`, `size`, `tracking`, `anchor`, `alpha` |
 | `chip` | a rounded label with a pulsing dot | `text`, `x`, `y`, `dot`, `accent` |
 | `brackets` | four corner brackets growing out from the centre of a box | `box` `[x0, y0, x1, y1]`, `out`, `arm`, `width`, `color` |
 | `scan` | a sweeping line with a trail and a measuring rule on the edge of a box | `box`, `period`, `color` |
 | `counter` | a number counting up to `target`, then a suffix that pops | `target`, `suffix`, `size`, `suffix_size`, `hold`, `x`, `y` |
-| `steps` | a vertical rail with numbered items appearing in turn, the whole leaving at `out` | `items` `[[number, title]...]`, `x`, `top`, `step`, `gap`, `first`, `out` |
+| `steps` | a vertical rail with numbered items appearing in turn, the whole leaving at `out` | `items` `[[number, title]...]`, `x`, `top`, `step`, `gap`, `first`, `out`, `name_size` (default 66, 54 for a long title), `max_width` (each title shrinks to fit the room right of its number) |
 | `rule` | a line that grows from its centre (or `grow: "left"`) | `x0`, `x1`, `y`, `thickness`, `dur`, `color` |
 | `logo` | the brand mark faded in and out | `asset`, `x`, `y`, `width`, `opacity`, `fade_in`, `fade_out`, `rise`, `align` |
 

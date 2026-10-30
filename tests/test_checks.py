@@ -26,6 +26,25 @@ def test_a_good_layout_has_nothing_to_report_and_a_title_in_the_wrong_place_is_f
         assert C.layout(free, d) == [], "with no safe-area demand the same place is fine"
 
 
+def test_max_width_shrinks_a_title_and_a_steps_item_until_it_fits_and_the_check_sees_the_new_size():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = _t.film_spec(d)
+        title = {"element": "title", "t0": 0.0, "t1": 3.0, "lines": ["WHO MEASURES", "YOUR GLASS?"], "x": 64, "y": 420, "size": 120}
+        spec["overlays"] = [title]
+        assert any("outside the safe area" in g for g in C.layout(spec, d)), "at its own size the line runs past the right edge"
+        title["max_width"] = 900 - 64
+        assert C.layout(spec, d) == [], C.layout(spec, d)
+        steps = {"element": "steps", "t0": 0.0, "t1": 3.0, "x": 100, "top": 500, "step": 140, "items": [["01", "MATERIAL PRODUCTION"], ["02", "SHORT"]]}
+        spec["overlays"] = [steps]
+        assert any("step:MATERIAL PRODU" in g and "outside" in g for g in C.layout(spec, d)), C.layout(spec, d)
+        steps["max_width"] = 900 - (100 + 56)
+        assert C.layout(spec, d) == [], C.layout(spec, d)
+        steps["name_size"] = 40
+        del steps["max_width"]
+        assert C.layout(spec, d) == [], "a smaller `name_size` fits as well"
+
+
 def test_two_pieces_of_type_on_each_other_are_found_with_the_time():
     with _t.tmpdir() as d:
         _t.make_assets(d)

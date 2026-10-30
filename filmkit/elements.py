@@ -2,13 +2,13 @@
 inside an element are seconds after its `t0` (so moving an element in time moves all of it). Every element has three parts: `check` (what is wrong with its params), `draw` (a frame of it on
 an RGBA layer) and `boxes` (where its type sits at a time, in design pixels: the layout check reads these to find a line off the safe area or two lines on each other).
 
-    title    lines of type that rise and fade in one after another (a mask reveal), optionally out again
+    title    lines of type that rise and fade in one after another (a mask reveal), optionally out again; `max_width` shrinks the size until the widest line fits
     text     one tracked line that fades in (a tagline, a small label)
     chip     a rounded label with a pulsing dot (a section tag)
     brackets four corner brackets that grow out from the centre of a box
     scan     a sweeping line with a trail and a measuring rule on the edge of a box
     counter  a number that counts up to a target, then a suffix (its own size: `suffix_size`) that pops
-    steps    a vertical progress line with numbered items that appear in turn
+    steps    a vertical progress line with numbered items that appear in turn (`name_size`; `max_width`: the items' titles shrink to fit it)
     rule     a line that grows from its centre (or from its left end: `grow`: "left")
     logo     the brand's mark, faded in and out
 """
@@ -60,6 +60,17 @@ def text_width(cx: Ctx, text: str, kind: str, size: float, tracking: float = 0.0
     return (sum(d.textlength(ch, font=f) + tracking * cx.q for ch in text) - tracking * cx.q) / cx.q
 
 
+def fitted(cx: Ctx, texts: list[str], kind: str, size: float, tracking: float, max_width: float | None, floor: float = 0.6) -> float:
+    """The size (design pixels) at which the widest of `texts` fits `max_width`: `size` itself when it already does, else scaled down to fit, never below `floor` of it (a line that
+    still does not fit is for the layout check to name). No `max_width`: `size`."""
+    if not max_width:
+        return size
+    widest = max(text_width(cx, t, kind, size, tracking) for t in texts)
+    if widest <= max_width:
+        return size
+    return max(size * floor, size * max_width / widest * 0.995)
+
+
 def paste_clipped(layer, tmp, y):
     if y < 0 or y + tmp.height > layer.height:
         tmp = tmp.crop((0, max(0, -y), tmp.width, min(tmp.height, layer.height - y)))
@@ -108,7 +119,7 @@ class Title:
                 a *= 1 - smooth(prog(t, t0 + p["out"] + i * 0.05, p["out_dur"]))
             if a <= 0.001:
                 continue
-            size, lead = p["size"], p["lead"]
+            size, lead = fitted(cx, p["lines"], p["font"], p["size"], p["tracking"], p.get("max_width")), p["lead"]
             ly = p["y"] + i * size * lead
             tmp = Image.new("RGBA", (cx.W, int(size * lead * cx.q) + 12), (0, 0, 0, 0))
             d = ImageDraw.Draw(tmp)
@@ -122,9 +133,10 @@ class Title:
         if t < el["t0"]:
             return []
         out = []
+        size = fitted(cx, p["lines"], p["font"], p["size"], p["tracking"], p.get("max_width"))
         for i, line in enumerate(p["lines"]):
             if t >= el["t0"] + i * p["stagger"] + 0.2:
-                out.append((f"title:{line[:18]}", *line_box(cx, line, p["x"], p["y"] + i * p["size"] * p["lead"], p["font"], p["size"], 1.0, p["anchor"], p["tracking"])))
+                out.append((f"title:{line[:18]}", *line_box(cx, line, p["x"], p["y"] + i * size * p["lead"], p["font"], size, 1.0, p["anchor"], p["tracking"])))
         return out
 
 
@@ -282,7 +294,13 @@ class Counter:
 
 @element("steps")
 class Steps:
-    defaults = dict(x=100, top=500, step=190, gap=0.95, first=0.2, out=None)
+    defaults = dict(x=100, top=500, step=190, gap=0.95, first=0.2, out=None, name_size=None, max_width=None)
+
+    @staticmethod
+    def name_size(cx, p, name):
+        """The size an item's title is set at: `name_size`, else 66 (54 for a long one), and never wider than `max_width` (the room right of the number)."""
+        base = p["name_size"] or (66 if len(name) < 20 else 54)
+        return fitted(cx, [name], "black", base, -0.5, p["max_width"])
 
     @staticmethod
     def check(p):
@@ -310,7 +328,7 @@ class Steps:
             r = (16 + 6 * (1 - a)) * cx.q
             d.ellipse((x * cx.q - r, (y + 14) * cx.q - r, x * cx.q + r, (y + 14) * cx.q + r), fill=(*BLUE, int(255 * a)), outline=(255, 255, 255, int(255 * a)), width=max(2, int(3 * cx.q)))
             track_text(d, ((x + 56) * cx.q, (y - 22) * cx.q), str(num), cx.font("bold", 40), (*BLUE, int(255 * a)), 4, "l", cx.q)
-            size = 66 if len(name) < 20 else 54
+            size = cls.name_size(cx, p, name)
             tmp = Image.new("RGBA", (cx.W, int(size * 1.12 * cx.q) + 12), (0, 0, 0, 0))
             track_text(ImageDraw.Draw(tmp), ((x + 56) * cx.q, (1 - a) * 30 * cx.q + 6), name, cx.font("black", size), (255, 255, 255, int(255 * min(1.0, a * 1.4))), -0.5, "l", cx.q)
             paste_clipped(layer, tmp, int((y + 18 - 6) * cx.q))
@@ -321,7 +339,7 @@ class Steps:
         out = []
         for i, (num, name) in enumerate(p["items"]):
             if t >= el["t0"] + p["first"] + i * p["gap"] + 0.3:
-                size = 66 if len(name) < 20 else 54
+                size = cls.name_size(cx, p, name)
                 out.append((f"step:{name[:14]}", p["x"] + 56, p["top"] + i * p["step"] + 18, p["x"] + 56 + text_width(cx, name, "black", size, -0.5), p["top"] + i * p["step"] + 18 + size))
         return out
 
