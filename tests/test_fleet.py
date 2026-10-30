@@ -629,5 +629,173 @@ def test_rehearse_says_red_for_a_failing_suite_and_refuses_a_folder_that_exists(
         assert nores.returncode == 1 and "no remote named origin" in nores.stdout, nores.stdout
 
 
+def test_rehearse_names_the_checkouts_remotes_like_the_checkout_does_so_nothing_is_missed():
+    """Found by the second cold review: with --remote github the clone's `origin` was the github address and the checkout's own origin was lost, so
+    an origin that had moved on was never seen and the trial went green where `update` refuses."""
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        real_remote(pack, Path(tmp))                                    # github/trunk is the real one, origin is as it was...
+        other = Path(tmp) / "other"
+        git(Path(tmp), "clone", "-q", str(Path(tmp) / "origin.git"), str(other))
+        (other / "ORIGIN.md").write_text("origin moved on too\n")
+        git(other, "add", "-A")
+        git(other, "commit", "-qm", "origin moved")
+        git(other, "push", "-q", "origin", "trunk")
+        git(pack, "fetch", "-q", "origin")                              # ...and the checkout has seen it
+        real = update(pb, str(pack), "--remote", "github")
+        trial = rehearse(pb, Path(tmp) / "trial", str(pack), "--remote", "github")
+        want = "the remote origin has 1 commit(s) on trunk that github/trunk does not"
+        assert real.returncode == 1 and want in real.stdout, real.stdout
+        assert trial.returncode == 1 and want in trial.stdout, trial.stdout + trial.stderr
+        names = git(Path(tmp) / "trial" / "acme", "remote").split()
+        assert sorted(names) == ["github", "origin"] and git(Path(tmp) / "trial" / "acme", "remote", "get-url", "github") == str(Path(tmp) / "github.git"), names
+
+
+def test_rehearse_copies_only_the_remotes_the_checkout_has():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        real_remote(pack, Path(tmp))
+        git(pack, "remote", "remove", "origin")                         # a checkout whose only remote is github
+        r = rehearse(pb, Path(tmp) / "trial", str(pack), "--remote", "github")
+        assert r.returncode == 0, r.stdout + r.stderr
+        clone = Path(tmp) / "trial" / "acme"
+        assert git(clone, "remote").split() == ["github"], git(clone, "remote")
+        assert not git(clone, "for-each-ref", "refs/remotes/origin"), "no branch of the checkout is left as a ref of a remote it does not have"
+
+
+def test_an_address_is_a_path_or_a_remote_by_gits_own_rule():
+    spec = importlib.util.spec_from_file_location("fleet_tool3", FLEET)
+    fleet = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fleet)
+    for remote in ("host.example.com:org/repo.git", "git@host.example.com:org/repo.git", "ssh://git@host.example.com/org/repo.git", "https://host.example.com/x.git",
+                   "[::1]:org/repo.git", "file:///srv/repo.git"):
+        assert fleet.is_network_address(remote), remote
+    for path in ("/srv/repo.git", "../origin.git", "./a:b", "origin.git", "dir/with:colon"):
+        assert not fleet.is_network_address(path), path
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        for url in ("host.example.com:org/repo.git", "git@host.example.com:org/repo.git"):
+            git(pack, "remote", "set-url", "origin", url)
+            assert fleet.remote_address(pack, "origin") == url, "an scp-like address, with or without a user, is not taken for a path"
+        git(pack, "remote", "set-url", "origin", "../origin.git")
+        assert fleet.remote_address(pack, "origin") == str((pack / "../origin.git").resolve())
+        assert fleet.remote_address(pack, "nope") is None
+
+
+def test_the_ssh_command_is_ours_only_when_nobody_else_set_one():
+    spec = importlib.util.spec_from_file_location("fleet_tool4", FLEET)
+    fleet = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fleet)
+    clean = {k: v for k, v in os.environ.items() if k not in ("GIT_SSH", "GIT_SSH_COMMAND", "GIT_TERMINAL_PROMPT", "GIT_HTTP_LOW_SPEED_LIMIT", "GIT_HTTP_LOW_SPEED_TIME")}
+    clean["GIT_CONFIG_GLOBAL"] = os.devnull
+    clean["GIT_CONFIG_NOSYSTEM"] = "1"
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        with mock.patch.dict(os.environ, clean, clear=True):
+            env = fleet.git_env(pack)
+            assert "ConnectTimeout=20" in env["GIT_SSH_COMMAND"] and "ServerAliveInterval" in env["GIT_SSH_COMMAND"] and "BatchMode=yes" in env["GIT_SSH_COMMAND"], env
+            git(pack, "config", "core.sshCommand", "ssh -i /my/key -p 2222")
+            assert "GIT_SSH_COMMAND" not in fleet.git_env(pack), "a core.sshCommand of the user's own (a key, a port) is not overridden"
+            git(pack, "config", "--unset", "core.sshCommand")
+        with mock.patch.dict(os.environ, {**clean, "GIT_SSH": "/usr/bin/my-ssh"}, clear=True):
+            assert "GIT_SSH_COMMAND" not in fleet.git_env(pack), "GIT_SSH is theirs"
+        with mock.patch.dict(os.environ, {**clean, "GIT_SSH_COMMAND": "ssh -F /my/config"}, clear=True):
+            assert "GIT_SSH_COMMAND" not in fleet.git_env(pack), "GIT_SSH_COMMAND is theirs"
+
+
+def test_an_address_in_a_printed_line_shows_no_secret():
+    spec = importlib.util.spec_from_file_location("fleet_tool5", FLEET)
+    fleet = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fleet)
+    hide = fleet.hide_credentials
+    pw = "p" + "@" + "ss" + "word"                                      # a password that holds an @
+    assert hide("https://user:" + pw + "@host.example.com/x.git") == "https://host.example.com/x.git"
+    assert hide("fatal: unable to access 'https://user:tok@host.example.com/x.git/': 401") == "fatal: unable to access 'https://host.example.com/x.git/': 401"
+    for q in ("token", "private_token", "access_token", "api_key", "secret", "password", "auth"):
+        assert "SEKRET" not in hide(f"https://host.example.com/x.git?{q}=SEKRET&ref=main"), q
+    assert hide("https://host.example.com/x.git?ref=main") == "https://host.example.com/x.git?ref=main"
+    assert hide("https://host.example.com/a@b/x.git") == "https://host.example.com/a@b/x.git", "an @ in the path is not a user"
+
+
+def test_a_remote_that_never_answers_is_given_up_on():
+    import socket
+    spec = importlib.util.spec_from_file_location("fleet_tool6", FLEET)
+    fleet = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fleet)
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(8)                                                       # takes the connection, never says a word
+    try:
+        with _t.tmpdir() as tmp:
+            pb, pack = make_pack(Path(tmp))
+            git(pack, "remote", "set-url", "origin", f"git://127.0.0.1:{srv.getsockname()[1]}/x.git")
+            git(pack, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+            with mock.patch.object(fleet, "REMOTE_SHOW_S", 1), mock.patch.object(fleet, "FETCH_S", 1):
+                assert fleet.default_branch(pack, "origin") == "trunk", "the branch recorded at the last fetch, once the remote has not answered in time"
+                done = fleet.update(pack.resolve(), pb, "0.2.0", True, "origin")
+        assert done["state"] == "refused" and "cannot fetch origin trunk" in done["text"] and "timed out" in done["text"], done
+        assert not (pack.parent / "acme_worktrees").exists()
+    finally:
+        srv.close()
+
+
+def test_an_interrupted_trial_leaves_no_clone_behind():
+    spec = importlib.util.spec_from_file_location("fleet_tool7", FLEET)
+    fleet = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fleet)
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        out = Path(tmp) / "trial"
+        with mock.patch.object(fleet, "update", side_effect=KeyboardInterrupt):
+            try:
+                fleet.rehearse(pack, out, pb, "0.2.0")
+                raised = False
+            except KeyboardInterrupt:
+                raised = True
+        assert raised and not (out / "acme").exists(), "Ctrl-C passes through and the half-made clone is removed"
+        again = rehearse(pb, out, str(pack))
+        assert again.returncode == 0, again.stdout + again.stderr
+
+
+def test_out_is_inside_a_pack_as_the_file_system_sees_it_and_a_long_out_is_a_line():
+    spec = importlib.util.spec_from_file_location("fleet_tool8", FLEET)
+    fleet = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fleet)
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        link = Path(tmp) / "link-to-pack"
+        link.symlink_to(pack)
+        assert fleet.inside(link / "trial", pack) and fleet.inside(pack, pack) and not fleet.inside(Path(tmp) / "elsewhere", pack)
+        shouted = Path(str(pack).replace("acme", "ACME"))
+        if shouted.exists():                                            # a case-insensitive file system: the same folder under another spelling
+            assert fleet.inside(shouted / "trial", pack), "a different spelling of the same folder"
+            r = rehearse(pb, shouted / "trial", str(pack))
+            assert r.returncode == 2 and "inside the skill pack" in r.stderr and not (pack / "trial").exists(), "and the command line refuses it too: " + r.stdout + r.stderr
+        r = rehearse(pb, link / "trial", str(pack))
+        assert r.returncode == 2 and "inside the skill pack" in r.stderr and not (pack / "trial").exists(), r.stdout + r.stderr
+        r = rehearse(pb, Path(tmp) / ("x" * 300), str(pack))
+        assert r.returncode == 1 and "Traceback" not in r.stderr and "cannot use --out" in r.stdout, r.stdout + r.stderr
+
+
+def test_a_setup_step_that_fails_is_a_line_and_leaves_no_clone():
+    spec = importlib.util.spec_from_file_location("fleet_tool9", FLEET)
+    fleet = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fleet)
+    real = fleet.run
+
+    def failing(cwd, *cmd, **kw):
+        if cmd[:3] == ("git", "remote", "add"):
+            return subprocess.CompletedProcess(cmd, 128, "", "fatal: could not add the remote")
+        return real(cwd, *cmd, **kw)
+
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        out = Path(tmp) / "trial"
+        with mock.patch.object(fleet, "run", failing):
+            doc = fleet.rehearse(pack, out, pb, "0.2.0")
+        assert doc["state"] == "refused" and "cannot copy the remote origin: fatal: could not add the remote" in doc["text"], doc
+        assert not (out / "acme").exists(), "the half-made clone is removed"
+
+
 if __name__ == "__main__":
     _t.main(globals())
