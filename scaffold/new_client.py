@@ -148,7 +148,7 @@ exec "$py" {home}/console/serve.py --dir "$CONSOLE_DIR" --title "{a.title}" \\
 # The agent's side of {a.title}'s console (console/ask.py), pinned to workspace/console.
 {python_check(p, "bin/ask")}root="$(cd "$(dirname "$0")/.." && pwd)"
 export CONSOLE_DIR="$root/workspace/console"
-exec "$py" {home}/console/ask.py "$@"
+exec "$py" {home}/console/ask.py --relay-verbs "{','.join(relay)}" "$@"
 """
     deny = [f"Bash({pre}bin/{cli} {g}:*)" for g in gates
             for pre in ("./", "")]
