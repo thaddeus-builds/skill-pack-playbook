@@ -7,6 +7,8 @@
      emitted code, the all-unemitted fragment is deleted, and the kit's own codes are untouched whether emitted or not.
   3. Afterwards the registry still loads, `check_registry_closed` has no "registered but no msg() call emits it" line, and a second run finds nothing.
   4. A code emitted only in a file outside the sources is pruned (the sources are the claim), and the same code stays when the sources name that file.
+  5. A scan it cannot trust deletes nothing: a source that matches no file, a file that does not parse, a call with no literal code, a root whose name
+     holds glob characters (read, not mistaken for no sources), a registry file that is a link (not written through), CRLF kept, no temporary left.
 """
 
 import shutil
@@ -96,5 +98,68 @@ s_in = [f"{cfg2.scripts_dir}/**/*.py", "elsewhere/*.py"]
 check("a code emitted in a file the sources name stays", "old_half_code" not in {c for cs in prune_codes.unemitted(root2, s_in).values() for c in cs})
 check("the default (every .py under the root) keeps a code emitted outside the scripts folder", "old_half_code" not in {c for cs in prune_codes.unemitted(root2, ["**/*.py"]).values() for c in cs})
 check("the same code is pruned when the sources leave that file out", "old_half_code" in {c for cs in prune_codes.unemitted(root2, [f"{cfg2.scripts_dir}/**/*.py"]).values() for c in cs})
+
+print("[5] a scan it cannot trust deletes nothing")
+
+
+def snapshot(r):
+    return {p: p.read_bytes() for p in sorted((r / "ssot").rglob("*.tsv"))}
+
+
+root3 = make()
+cfg3 = config.use(root3)
+snap = snapshot(root3)
+for label, srcs in (("a source that matches nothing", [f"{cfg3.scripts_dir}/**/*.py", "nosuch/*.py"]), ("only a mistyped folder", ["scirpts/**/*.py"]), ("a bare folder name", [cfg3.scripts_dir])):
+    try:
+        prune_codes.prune(root3, srcs)
+        refused = None
+    except prune_codes.Refused as e:
+        refused = str(e)
+    check(f"{label}: refused, and no registry file changed", refused is not None and snapshot(root3) == snap, refused)
+(root3 / cfg3.scripts_dir / "broken.py").write_text("def (:\n", encoding="utf-8")
+try:
+    prune_codes.prune(root3, [f"{cfg3.scripts_dir}/**/*.py"])
+    refused = None
+except prune_codes.Refused as e:
+    refused = str(e)
+check("a source file that does not parse: refused (its codes would look unemitted), nothing changed", refused is not None and "cannot be read as Python" in refused and snapshot(root3) == snap, refused)
+(root3 / cfg3.scripts_dir / "broken.py").write_text('from kit.messages import msg\n\ndef f(c):\n    return msg(c, "x")\n', encoding="utf-8")
+try:
+    prune_codes.prune(root3, [f"{cfg3.scripts_dir}/**/*.py"])
+    refused = None
+except prune_codes.Refused as e:
+    refused = str(e)
+check("a msg() call whose code is not a literal: refused, nothing changed", refused is not None and "not a string literal" in refused and snapshot(root3) == snap, refused)
+check("the command line says so and exits 2", prune_codes.main(["--root", str(root3), "--sources", "nosuch/*.py", "--dry-run"]) == 2)
+(root3 / cfg3.scripts_dir / "broken.py").unlink()
+
+root4 = make()
+cfg4 = config.use(root4)
+moved = root4.parent / "br[1]x"
+shutil.copytree(root4, moved)
+config.use(moved)
+found = prune_codes.unemitted(moved, [f"{cfg4.scripts_dir}/**/*.py"])
+check("a root whose own name holds glob characters is read (its scripts are found, so an emitted code is not pruned)", "kept_in_half" not in {c for cs in found.values() for c in cs} and found, found)
+
+root5 = make()
+cfg5 = config.use(root5)
+dead = root5 / "ssot" / "message_codes.d" / "dead.tsv"
+outside = Path(tmp_dir("prune-outside-")) / "other.tsv"
+outside.write_text(HEADER + row("other_packs_code"), encoding="utf-8")
+dead.unlink()
+dead.symlink_to(outside)
+config.use(root5)
+before_outside = outside.read_bytes()
+prune_codes.prune(root5, [f"{cfg5.scripts_dir}/**/*.py"])
+check("a registry file that is a link is not written through: the file it points at is untouched", outside.read_bytes() == before_outside and dead.is_symlink())
+
+root6 = make()
+cfg6 = config.use(root6)
+half = root6 / "ssot" / "message_codes.d" / "half.tsv"
+half.write_bytes((HEADER + row("kept_in_half") + row("old_half_code")).replace("\n", "\r\n").encode("utf-8"))
+config.use(root6)
+prune_codes.prune(root6, [f"{cfg6.scripts_dir}/**/*.py"])
+check("CRLF line endings are kept, the unemitted row is gone, no temporary file is left",
+      half.read_bytes() == (HEADER + row("kept_in_half")).replace("\n", "\r\n").encode("utf-8") and not list((root6 / "ssot").rglob("*.prune-tmp")), half.read_bytes())
 
 finish()
