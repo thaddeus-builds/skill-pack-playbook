@@ -1,9 +1,12 @@
 """tools/adoption.tsv: each known skill pack's adoption level (conformance/INVARIANTS.md,
-"Adoption levels"), the level it should reach, and the day the proofs were last run.
+"Adoption levels"), the level it should reach, how much a client has used it, and the day
+the proofs were last run.
 
 The table says where a skill pack stands; the commands in INVARIANTS.md say whether it is
 true. This file checks what a test can: the header, a level and a target in L0 to L3 with
-the target not below the level, `checked` a day that is not in the future, a next step on
+the target not below the level, a `use` from the four words (earned, built, shell, library)
+seen on a day that is not in the future, a library that sits at L0 and stays there, a
+non-library that is not at L0 only by being a library, `checked` a day that is not in the future, a next step on
 every row that has a distance to cover, one row per pack, and, when the sibling checkouts
 are present, that each row names a folder among them (CI has none and skips that check).
 Each check is first tried on a planted break, so it cannot pass by reading nothing. The one
@@ -27,8 +30,9 @@ sys.path.insert(0, HERE)
 import _t  # noqa: E402
 
 TABLE = ROOT / "tools" / "adoption.tsv"
-COLUMNS = ["pack", "level", "target", "checked", "next_step", "note"]
+COLUMNS = ["pack", "level", "target", "use", "use_seen", "checked", "next_step", "note"]
 LEVELS = ["L0", "L1", "L2", "L3"]
+USES = ["earned", "built", "shell", "library"]
 DAY = re.compile(r"^\d{4}-\d\d-\d\d$")
 
 
@@ -73,14 +77,22 @@ def problems(header: list[str], rows: list[dict[str, str]], day: date, folder: P
                 out.append(f"{pack}: target {target} is below level {level}")
             elif level != target and not r["next_step"].strip():
                 out.append(f"{pack}: level {level} short of target {target} needs a next_step")
-        checked = r["checked"].strip()
-        try:
-            if not DAY.match(checked):
-                raise ValueError
-            if date.fromisoformat(checked) > day:
-                out.append(f"{pack}: checked {checked} is in the future")
-        except ValueError:
-            out.append(f"{pack}: checked {checked!r} is not a day (YYYY-MM-DD)")
+        use = r["use"].strip()
+        if use not in USES:
+            out.append(f"{pack}: use {use!r} is not one of {', '.join(USES)}")
+        elif use == "library" and (level, target) != ("L0", "L0"):
+            out.append(f"{pack}: a library has no adapter, so it stays L0 to L0")
+        elif use != "library" and (level, target) == ("L0", "L0"):
+            out.append(f"{pack}: a skill pack aims above L0, or it is a library")
+        for key in ("use_seen", "checked"):
+            val = r[key].strip()
+            try:
+                if not DAY.match(val):
+                    raise ValueError
+                if date.fromisoformat(val) > day:
+                    out.append(f"{pack}: {key} {val} is in the future")
+            except ValueError:
+                out.append(f"{pack}: {key} {val!r} is not a day (YYYY-MM-DD)")
         if folder is not None and pack and "/" not in pack and not (folder / pack).is_dir():
             out.append(f"{pack}: no such folder among the checkouts in {folder}")
     for pack, n in seen.items():
@@ -92,8 +104,8 @@ def problems(header: list[str], rows: list[dict[str, str]], day: date, folder: P
 
 
 GOOD = "\t".join(COLUMNS) + "\n" + "\n".join((
-    "alpha-skill-pack\tL1\tL3\t2026-10-26\tdrop the pack it does not import\tkit 0.33.1",
-    "beta-skill-pack\tL0\tL0\t2026-10-26\t\ta library",
+    "alpha-skill-pack\tL1\tL3\tearned\t2026-10-26\t2026-10-26\tdrop the pack it does not import\tkit 0.33.1",
+    "beta-skill-pack\tL0\tL0\tlibrary\t2026-10-26\t2026-10-26\t\ta library",
 )) + "\n"
 DAY0 = date(2026, 10, 26)
 
@@ -109,8 +121,14 @@ def test_the_check_sees_each_break_planted_in_a_small_table():
         "needs a next_step": GOOD.replace("drop the pack it does not import", ""),
         "checked '2026/10/26'": GOOD.replace("2026-10-26\tdrop", "2026/10/26\tdrop"),
         "checked '2026-13-40'": GOOD.replace("2026-10-26\tdrop", "2026-13-40\tdrop"),
-        "in the future": GOOD.replace("2026-10-26\tdrop", "2026-10-27\tdrop"),
-        "2 rows": GOOD + "alpha-skill-pack\tL1\tL1\t2026-10-26\t\t\n",
+        "checked 2026-10-27 is in the future": GOOD.replace("2026-10-26\tdrop", "2026-10-27\tdrop"),
+        "use 'busy'": GOOD.replace("\tearned\t", "\tbusy\t"),
+        "use '' is not": GOOD.replace("\tearned\t", "\t\t"),
+        "use_seen 2026-10-27 is in the future": GOOD.replace("\tearned\t2026-10-26", "\tearned\t2026-10-27"),
+        "use_seen '2026/10/26'": GOOD.replace("\tearned\t2026-10-26", "\tearned\t2026/10/26"),
+        "a library has no adapter": GOOD.replace("beta-skill-pack\tL0\tL0", "beta-skill-pack\tL1\tL1"),
+        "aims above L0": GOOD.replace("\tlibrary\t", "\tbuilt\t"),
+        "2 rows": GOOD + "alpha-skill-pack\tL1\tL1\tearned\t2026-10-26\t2026-10-26\t\t\n",
         "not a folder name": GOOD.replace("beta-skill-pack", "../beta-skill-pack"),
         "no rows": "\t".join(COLUMNS) + "\n",
     }
