@@ -722,21 +722,54 @@ function jobAlive(job) {
   return !job.start || !now || now === job.start;
 }
 
+// detach.js records the pid of the `sh` that wraps the command, and that sh is
+// the first to die of the SIGTERM sent to the group, while the command it ran
+// (a job's own process) is still finishing its step in the same group. So
+// "the recorded pid is gone" is not "the job is gone": a group with a process
+// that is not a zombie is a job still running.
+function groupAlive(pgid) {
+  const r = spawnSync('pgrep', ['-g', String(pgid)], { encoding: 'utf8' });
+  if (r.error) { try { process.kill(-pgid, 0); return true; } catch (e) { return e.code === 'EPERM'; } } // no pgrep: any member counts
+  return r.status === 0 && r.stdout.split(/\s+/).filter(Boolean).some((p) => procState(Number(p)) !== 'Z');
+}
+
 // pre-uninstall: stop every detached job still running (its whole process
-// group: detach.js starts each as a group leader). Returns the problems.
+// group: detach.js starts each as a group leader), and wait until each has
+// really exited. A job that handles SIGTERM may have to finish the step it is
+// in first (a skill pack's take on a rented box, a few minutes), and one that
+// is blocked can ignore it for much longer: sending the signal and going on
+// removed the skill dir under a job that was still running, and an upgrade
+// then read "stopped" as "gone" (seen in the adcut skill pack, 2026-10-30:
+// four jobs exited two hours after the upgrade that told them to stop). A job
+// still alive after ZYLOS_JOB_STOP_WAIT_S seconds (default 600) is a problem,
+// so the hook exits 1 and the upgrade does not go on. Returns the problems.
 function stopJobs() {
   const problems = [];
+  const waitMs = 1000 * (Number(process.env.ZYLOS_JOB_STOP_WAIT_S) > 0 ? Number(process.env.ZYLOS_JOB_STOP_WAIT_S) : 600);
   let files = [];
   try { files = fs.readdirSync(LOGS_DIR).filter((f) => f.endsWith('.pid')); } catch { /* no logs */ }
+  const signalled = [];
   for (const f of files) {
     const job = readJob(path.join(LOGS_DIR, f));
     if (!jobAlive(job)) continue;
     try {
       try { process.kill(-job.pid, 'SIGTERM'); } catch { process.kill(job.pid, 'SIGTERM'); }
       log(`stopped detached job ${path.basename(f, '.pid')} (pid ${job.pid}: ${[].concat(job.cmd || []).join(' ')})`);
+      signalled.push({ name: path.basename(f, '.pid'), job });
     } catch (e) {
       problems.push(`could not stop detached job ${f} (pid ${job.pid}): ${e.code || e.message}`);
     }
+  }
+  const t0 = Date.now();
+  let left = signalled;
+  while (left.length && Date.now() - t0 < waitMs) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    const still = left.filter((x) => jobAlive(x.job) || groupAlive(x.job.pid));
+    for (const x of left) if (!still.includes(x)) log(`detached job ${x.name} exited ${Math.round((Date.now() - t0) / 1000)} s after SIGTERM`);
+    left = still;
+  }
+  for (const x of left) {
+    problems.push(`detached job ${x.name} (pid ${x.job.pid}) is still running ${Math.round(waitMs / 1000)} s after SIGTERM, so it was not stopped: wait for it to finish (a step it is in), then run this again`);
   }
   return problems;
 }
