@@ -141,8 +141,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [0.47.3] - 2026-10-31
 
 ### Kit
-- `kit/contracts.d/inquiries-1.schema.json` (with `contracts/`): the optional field `email_confirmed` on an inquiry, and the rule that only an email or a form whose address was confirmed proves the address is the writer's own (found by a cold read of the SDR skill pack's importer: a form anyone can type an address into was being taken as consent)
-- Skill packs: nothing (an optional field; a pack that produces inquiries from forms sets it when its form confirms the address)
+- `kit/contracts.d/inquiries-1.schema.json` (with `contracts/`): the optional field `email_confirmed` on an inquiry, and the rule that only an email or a form whose address was confirmed proves the address is the writer's own (found by a cold read of the SDR skill pack's importer: a form anyone can type an address into was being taken as consent; the field is optional, a pack that produces inquiries from forms sets it when its form confirms the address)
+- Skill packs: nothing
 
 ## [0.47.2] - 2026-10-31
 
