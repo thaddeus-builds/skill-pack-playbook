@@ -2,13 +2,13 @@
 
 > **Archived 2026-10-26.** The workbook half was built as the kit's `workbook` pack (kit 0.11.0 to 0.12.0; `kit/workbook.py`, `workbook_map`, `workbook_store`, `file_gate`, `workbook_patch`; two skill packs import it). The browser half, `browser-ops`, is not built and stays a ROADMAP row (X8). Kept as written; links point at the tree as it was.
 
-Status: `workbook` slice 1 (read, the map, the store) is **kit 0.11.0**; the rest is design (proposed 2026-10-10 from the KOL skill pack's client Emma; the owner agreed to write it into the playbook). The modules are added as `extra` in their own packs and become more only when two independent skill packs use them in merged code ([the admission rule](kit-and-tools.md#the-admission-rule)).
+Status: `workbook` slice 1 (read, the map, the store) is **kit 0.11.0**; the rest is design (proposed 2026-10-10 from the KOL skill pack's client; the owner agreed to write it into the playbook). The modules are added as `extra` in their own packs and become more only when two independent skill packs use them in merged code ([the admission rule](kit-and-tools.md#the-admission-rule)).
 
 ## Why now
 
 Two things came up in one client at once, and each is the kind of thing the next client will bring.
 
-1. **The client runs everything in a spreadsheet.** Emma's team manages every influencer project in one Excel workbook (12 sheets, a budget and target block, a roster per quarter, a group-buy ledger, a discount calendar). The skill pack must run beside it and put each new result back where the team already looks, for a smooth change-over (KOL skill pack R29, X39). Any skill pack that serves a team with a living workbook has the same need, and the video-ad skill pack's hand-off sheet is the same shape.
+1. **The client runs everything in a spreadsheet.** The client's team manages every influencer project in one Excel workbook (12 sheets, a budget and target block, a roster per quarter, a group-buy ledger, a discount calendar). The skill pack must run beside it and put each new result back where the team already looks, for a smooth change-over (KOL skill pack R29, X39). Any skill pack that serves a team with a living workbook has the same need, and the video-ad skill pack's hand-off sheet is the same shape.
 2. **The platform has no API.** The client's ad tool (Smartly) can only be driven through a browser; opening an API to a customer takes months. Operating a platform through a browser has to follow the same ladder as an API: read first, then draft, then operate, each important step approved. The social-marketing skill pack already drives a real browser with Playwright and holds a one-entry writer allowlist; the video-ad skill pack reads a platform's review results in a person's browser.
 
 ## Consumers
