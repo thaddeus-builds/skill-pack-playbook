@@ -1,6 +1,8 @@
 # Send prompt
 
-Run: `<bridge_command> -p --allowedTools comm_send "<prompt below>"`
+Run: `<bridge_command> -p "<prompt below>" --allowedTools mcp__plugin_openmax-channel_openmax__comm_send </dev/null`
+
+The prompt comes **before** `--allowedTools` (that flag takes every word after it as a tool name), the tool is named in full (a bare `comm_send` is refused as not granted), and `</dev/null` stops `claude -p` waiting for input.
 
 ```
 Call comm_send once with endpoint "<conversation_id>" and content set to this single
