@@ -39,6 +39,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (default behaviour is byte for byte what it was; ecommerce-seo can pass `runner="auto"` when its entry point moves onto `kit.cli.Dispatcher`, and a pack that sets `KIT_RUNNER=uv` because most of its scripts declare dependencies may choose `auto` for the few that do not)
 
 ### Other
+- `scaffold/new_skill_pack.py` writes a new skill pack for GitHub by default (owner's decision 2026-10-30): `.github/workflows/ci.yml` (the secret scan, story id and changelog checks on pull requests in one job; the suite by hand only), `.github/CODEOWNERS`, and `.github` in `[release].internal`; `--host gitlab` writes the GitLab files as before. New template `templates/github-ci.yml`. An existing skill pack is not touched.
+- Skill packs: nothing (only a pack scaffolded from now on differs)
 - `tools/fleet.py export SKILL_PACK... --out DIR`: each pack's default branch on its remote as plain files, with how far the checkout is behind it and a warning when another remote is ahead; the monthly census (`status`, `consumers.py`) reads those, not the checkouts. 2026-10-30: eight checkouts were behind their remotes (meta-ads by 110 commits) and the census described them, not the packs' mains. `default_branch` falls back to the branch recorded at the last fetch when the server does not answer.
 - Skill packs: nothing (the playbook's own tool)
 - `tools/fleet.py update` refuses when another remote of the pack has commits on the default branch that the remote it would cut from lacks (a pack whose home moved from GitLab to GitHub while `origin` still names the old server), and names the remote to pass with `--remote`; #316 caught only a local branch that was ahead.
