@@ -1,0 +1,28 @@
+# intel.ads/1
+{
+  "ads": [
+    {
+      "advertiser": "Example Mattress Co",
+      "description": "Free delivery, 100 nights at home.",
+      "display_url": "https://www.mattress.example",
+      "first_seen": "2026-10-27",
+      "headline": "Example Mattress Co | Autumn sale, 40% off",
+      "keywords": [
+        "mattress"
+      ],
+      "language": "en",
+      "last_seen": "2026-10-30",
+      "market": "US",
+      "role": "competitor",
+      "sitelinks": [
+        "Trial",
+        "Stores"
+      ],
+      "source": "demo-serp-tool",
+      "times_seen": 11,
+      "variants": 2
+    }
+  ],
+  "produced_at": "2026-10-31T08:00:00+08:00",
+  "producer": "intel"
+}

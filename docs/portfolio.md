@@ -30,10 +30,10 @@ Two packs on one account would share a credential, a change log and a write path
 
 | Layer | What it is | Members |
 | --- | --- | --- |
-| **1. Platform** | What every pack shares | the kit, the client hub (one facts store, one tagged intake, one inbox per owner, the exchange folder), `cloud-gpu` (a compute library, not a skill pack) |
+| **1. Platform** | What every pack shares | the kit, the client hub (one facts store, one tagged intake, one inbox per owner, the exchange folder), `cloud-gpu` (a compute library, not a skill pack), `filmkit` (a render library, not a skill pack: a film spec in, a finished film out) |
 | **2. Operators** | One pack per platform account. It holds the credential, the pulls, the ledger, the change log, the proposals and the guarded writer | see the table below |
 | **3. Truth** | Facts several packs need. One owner each; everyone else reads the owner's documents | `product-feed` (catalog, prices, stock, promotion windows), `measurement` (internal attribution, coefficients, break-even ROAS, incrementality), `search-intel` (demand and competitors for paid *and* organic search), `asset-handoff` (a creative's identity and tags: one name across its sizes, the UTM tags from the client's table, the rows for the client's intake form), messaging (the insight matrix and the claims scope; today inside adcut) |
-| **4. Makers** | Make assets to a spec and hand them over with a manifest. They know no platform's API | `adcut` (video), `product-keyframe-video` (product images), `ad-copy` (text: what each placement allows, the check of candidate text against it, and the proposals) |
+| **4. Makers** | Make assets to a spec and hand them over with a manifest. They know no platform's API | `adcut` (video), `proofcut` (video from a B2B manufacturer's own footage), `product-keyframe-video` (product images), `ad-copy` (text: what each placement allows, the check of candidate text against it, and the proposals) |
 | **5. Engines** | Logic that two or more packs use, in the kit | `ads-core`, `intent`, `creative`, `compliance`, `generation` (below) |
 
 Operators by axis:
@@ -63,31 +63,35 @@ TikTok is not added to `video-ads`: it is a pack of its own when a client needs 
 
 ## Where every repository sits
 
-| Repository | CLI | Layer and role | State on 2026-10-23, or the date in the cell | What changes |
+What a repository is and where it sits in the layers. Whether a client has used it is the `use` column, read from [`tools/adoption.tsv`](../tools/adoption.tsv) and checked by `tests/test_adoption.py`; the long state notes this table used to hold went stale in a week. `earned`: a client's data has gone through it; `built`: tests, no client; `shell`: a scaffold; `library`: not a skill pack.
+
+| Repository | CLI | Layer and role | Use ([tools/adoption.tsv](../tools/adoption.tsv)) | What changes |
 | --- | --- | --- | --- | --- |
-| amazon-ppc-skill-pack | `ppc` | Operator, paid pull, Amazon | 0.21.0, no kit; holds its own copy of every engine; on GitHub (`thaddeus-builds`, private) since 2026-10-28, no longer on GitLab | Names its neighbours; its intent engines are the source for the kit's `intent` |
-| google-ads-skill-pack | `gads` | Operator, paid pull and push, Google | Scaffold, at B0.6 | Takes YouTube and Display (open decision 1); takes `intent` and `creative` from the kit at B3 |
-| meta-ads-skill-pack | `mads` | Operator, paid push, Meta | On 2026-10-28: scaffolded 2026-10-26, kit 0.45.0; the Meta read side has moved from `video-ads`, on a branch only, not yet on `main`; imports `base` only | Takes the Meta side of `video-ads` (its `docs/ROADMAP.md`, X1 to X7), on the kit's `ads-core` and `creative` (its thin verbs, X23 and X24, import them); the upload to Meta's media library is its write (video-ads R80) |
-| video-ads-skill-pack | `vads` | Operator, paid push: 千川, 腾讯 (Meta leaves it, see below) | On 2026-10-28: 0.3.0, kit 0.45.0; still holds its own copies of the engines and, until the split is done, the Meta side | R43 rewritten; engines to `ads-core` and `creative` (its X63), then the Meta side to `meta-ads` |
-| ecommerce-seo-skill-pack | `seo` | Operator, organic pull, Google organic | 1.16.0, own core | Owns website content fields; reads `intel/1` for new demand work |
-| ecommerce-seo-skill-pack-plugins | — | Distribution of `seo` (web audit, app, MCP) | Active | None |
-| seo-programmatic-skill-pack | `pseo` | Operator, organic pull, page sets | Scaffold; the generator is in its case repository | Reads its page list from `seo` (its S07) |
-| seo-tools-harness | `seoh` | Operator, organic pull, free tools | 0.3.0, frozen | Demand checks move to `search-intel` when it next changes |
-| geo-china-skill-pack | `geo` | Operator, organic pull, AI answers (China) | kit 0.8.1 | Global AI answers become the same pack with a market, or a sibling (open, not urgent) |
-| koc-script-skill-pack | `kos` | Operator, earned push, creator briefs | Built, docs unfilled | Its claims check moves to the kit's `compliance` |
-| creator-program-skill-pack | `crp` | Operator, earned push, creator economics and affiliate | Work on branch `m1-roster` | Publishes `creators.roster/1`; takes affiliate commissions |
-| social-marketing-harness | `smh` | Operator, own social (RedNote) | Dormant since 2026-10-01 | Keep; its browser reader is the model for a kit browser module |
-| outbound-skill-pack | `obd` | Operator, sales-led, sourcing | 0.1.0, untagged | Hands `leads/1` to `sdr` (open decision 2) |
-| sdr-skill-pack | `sdr` | Operator, sales-led, pipeline | 0.1.0, installed | Reads `leads/1` through its provider contract (P10) |
-| product-feed-skill-pack | `feed` | Truth: catalog | Scaffold | Publishes `catalog/1`; owns the merchant-feed override fields |
-| measurement-skill-pack | `meas` | Truth: outcomes | M1 on local main (ROAS maturity, conversion-rate basis), no remote | Publishes `truth/1`; reads `ads.results/1` and `ads.changes/1` |
-| asset-handoff-skill-pack | `handoff` | Truth: a creative's identity and tags | M1 on local main, read-only, no remote | Publishes `handoff.batch/1`; writes nothing outside: the upload to a media library is the platform operator's write |
-| search-intel-skill-pack | `intel` | Truth: demand and competitors | Scaffold | Publishes `intel/1` for paid and organic search |
-| adcut-skill-pack | `adcut` | Maker, video | 0.4.1, kit 0.33 | Writes `ads.creatives/1`, reads `ads.results/1` from any operator; the insight matrix is the messaging source (open decision 3) |
-| ad-copy-skill-pack | `adcopy` | Maker, text | M1 on local main (placement specs and the check), no remote | Publishes `copy.proposals/1`; `gads`, `mads` and `vads` read its placement checks instead of building their own |
-| product-keyframe-video | `keyframe` | Maker, product images | 0.1.0, frozen until its first demo | Hands frames with `ads.creatives/1` when it has a consumer |
-| cloud-gpu-skill-pack | `cloudgpu` | Platform, GPU jobs | 0.2.0, not on the kit | The one provider behind the kit's `generation` for self-hosted runs |
-| skill-pack-playbook | — | Platform | kit 0.33.1; client hub on a branch | Holds the contract schemas, the exchange folder and the engines |
+| amazon-ppc-skill-pack | `ppc` | Operator, paid pull, Amazon | built | Names its neighbours; its intent engines are the source for the kit's `intent` |
+| google-ads-skill-pack | `gads` | Operator, paid pull and push, Google | earned | Takes YouTube and Display (open decision 1); takes `intent` and `creative` from the kit at B3 |
+| meta-ads-skill-pack | `mads` | Operator, paid push, Meta | earned | Takes the Meta side of `video-ads` (its `docs/ROADMAP.md`, X1 to X7), on the kit's `ads-core` and `creative` (its thin verbs, X23 and X24, import them); the upload to Meta's media library is its write (video-ads R80) |
+| video-ads-skill-pack | `vads` | Operator, paid push: 千川, 腾讯 (Meta leaves it, see below) | earned | R43 rewritten; engines to `ads-core` and `creative` (its X63), then the Meta side to `meta-ads` |
+| ecommerce-seo-skill-pack | `seo` | Operator, organic pull, Google organic | earned | Owns website content fields; reads `intel/1` for new demand work |
+| ecommerce-seo-skill-pack-plugins | — | Distribution of `seo` (web audit, app, MCP) | distribution of `seo` | None |
+| seo-programmatic-skill-pack | `pseo` | Operator, organic pull, page sets | shell (no row in the table yet) | Reads its page list from `seo` (its S07) |
+| seo-tools-harness | `seoh` | Operator, organic pull, free tools | frozen | Demand checks move to `search-intel` when it next changes |
+| geo-china-skill-pack | `geo` | Operator, organic pull, AI answers (China) | earned | Global AI answers become the same pack with a market, or a sibling (open, not urgent) |
+| koc-script-skill-pack | `kos` | Operator, earned push, creator briefs | built | Its claims check moves to the kit's `compliance` |
+| creator-program-skill-pack | `crp` | Operator, earned push, creator economics and affiliate | built | Publishes `creators.roster/1`; takes affiliate commissions |
+| social-marketing-harness | `smh` | Operator, own social (RedNote) | dormant since 2026-10-01 (R8) | Keep; its browser reader is the model for a kit browser module |
+| outbound-skill-pack | `obd` | Operator, sales-led, sourcing | built | Hands `leads/1` to `sdr` (open decision 2) |
+| sdr-skill-pack | `sdr` | Operator, sales-led, pipeline | earned | Reads `leads/1` (companies another pack found) and `inquiries/1` (what people wrote to the client); a first email in a country that needs consent goes out only with the recipient's own message as evidence, so an inquiry is the lawful way in |
+| product-feed-skill-pack | `feed` | Truth: catalog | shell | Publishes `catalog/1`; owns the merchant-feed override fields |
+| measurement-skill-pack | `meas` | Truth: outcomes | built | Publishes `truth/1`; reads `ads.results/1` and `ads.changes/1` |
+| asset-handoff-skill-pack | `handoff` | Truth: a creative's identity and tags | built | Publishes `handoff.batch/1`; writes nothing outside: the upload to a media library is the platform operator's write |
+| search-intel-skill-pack | `intel` | Truth: demand and competitors | shell | Publishes `intel/1` for paid and organic search |
+| adcut-skill-pack | `adcut` | Maker, video | earned | Writes `ads.creatives/1`, reads `ads.results/1` from any operator; the insight matrix is the messaging source (open decision 3) |
+| ad-copy-skill-pack | `adcopy` | Maker, text | built | Publishes `copy.proposals/1`; `gads`, `mads` and `vads` read its placement checks instead of building their own |
+| product-keyframe-video | `keyframe` | Maker, product images | built | Hands frames with `ads.creatives/1` when it has a consumer |
+| proofcut-skill-pack | `proof` | Maker, video from the client's own footage | shell | The first client class is B2B exporters (solution D): a story spine, facts that carry their source quote, a release step for people on camera, TikTok first. Renders through `filmkit`; adcut is untouched |
+| cloud-gpu-skill-pack | `cloudgpu` | Platform, GPU jobs | library | The one provider behind the kit's `generation` for self-hosted runs |
+| filmkit | `filmkit` | Platform, render | library | The engine under `proofcut`: one JSON film spec (`filmkit.film/1`) in, a finished film out, with static checks first. Needs numpy, Pillow, scipy and ffmpeg, so a pack runs it as a program from a vendored copy; adcut keeps its own composer until a second maker needs this one |
+| skill-pack-playbook | — | Platform | this repository | Holds the contract schemas, the exchange folder and the engines |
 
 Not skill packs, or superseded (archive or leave): how a pack that has been split is retired is in [maintaining.md](maintaining.md), "Retiring a pack".
 - `amazon-ads-harness`: superseded by `amazon-ppc`.
@@ -141,7 +145,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | Contract | Producer | Consumers | What it carries |
 | --- | --- | --- | --- |
 | `ads.creatives/1` (exists) | a maker | operators | creative id, files, the insight row it serves, the compliance state |
-| `ads.results/1` (exists) | an operator | makers, `measurement`, `creator-program` | per creative or entity: spend, outcomes, stage, whether the day is settled |
+| `ads.results/1` (exists) | an operator | makers, `measurement`, `creator-program` | per creative: spend, outcomes, stage, whether the day is settled (its schema requires `creative_code`, so a campaign-level read has no home here until `ads.spend/1`) |
 | `ads.results/2` | an operator | makers, `measurement`, `creator-program` | `ads.results/1` with the money columns in the row's own currency (`currency`, ISO 4217) instead of `_cny`; both are written for one release |
 | `ads.demand/1` | an operator | makers | how many creatives, of which format and slot, by when |
 | `handoff.batch/1` | `asset-handoff` | operators | each creative's name across its sizes, its files, its UTM tags, its form rows, and whether the names match in the media library and the form |
@@ -151,7 +155,11 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `messages/1` | the messaging owner | makers, `ad-copy`, `gads` (search ad assets), `kos` (briefs) | segment, pain, objection, sayable facts, the claims scope |
 | `truth/1` | `measurement` | operators | coefficient per campaign type, break-even ROAS, trust per campaign type; confirmed values go into the hub's facts |
 | `intel/1` | `search-intel` | `gads`, `ppc`, `seo`, `pseo` | keyword demand, trends, competitors seen, with sources and dates |
+| `ads.spend/1` | an operator | `meas`, the other operators | spend and its return per entity and day on the platform's numbers, money or index, settled or not |
+| `ads.status/1` | an operator | the daily page, the console | one day's status: freshness, spend, sections ready or not, what waits for a person |
+| `intel.ads/1` | `search-intel` | `adcopy`, `gads`, `ppc` | the ads competitors were seen running on search pages: words as published, first and last day seen, times seen |
 | `leads/1` | `outbound` | `sdr` | company, contacts, source, evidence |
+| `inquiries/1` | any operator that receives an inquiry (`seo` for site forms, `gads` and `meta-ads` for lead ads) | `sdr` | who wrote, from which company, the words as written, the page, the consent box text |
 | `creators.roster/1` (exists as vads K5) | `creator-program` | `meta-ads` | collaborations, codes, ad ids |
 
 ## Engines in the kit
