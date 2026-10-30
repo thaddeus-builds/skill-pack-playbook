@@ -1,6 +1,8 @@
 # Read-only check prompt (every 10 minutes)
 
-Run: `<bridge_command> -p --allowedTools comm "<prompt below>"`
+Run: `<bridge_command> -p "<prompt below>" --allowedTools mcp__plugin_openmax-channel_openmax__comm </dev/null`
+
+The prompt comes **before** `--allowedTools` (that flag takes every word after it as a tool name), the tool is named in full (a bare `comm` is refused as not granted), and `</dev/null` stops `claude -p` waiting for input.
 
 ```
 Read the conversation <conversation_id> with the comm tool (getMessages). Do NOT send
