@@ -1,0 +1,58 @@
+{
+  "$comment": "Draft from docs/portfolio.md, 'Contracts'. The fields follow what ad-copy's `adcopy compute check` prints today (a candidate, its placement and field, its length counted the placement's way, its status and findings), read from its main branch, plus the selling-point direction each proposal tests, which the pack's ledger will add (its M2). The pack aligns to this schema once it is agreed.",
+  "$id": "copy.proposals-1.schema.json",
+  "title": "copy.proposals/1",
+  "description": "Candidate ad text, one per placement field, each checked against that placement's spec and the client's banned terms, with the selling-point direction it tests. ad-copy writes it; operators read it to build their ads, and asset-handoff reads it for the rows of the client's form.",
+  "$defs": {
+    "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"}
+  },
+  "x-contract": "copy.proposals/1",
+  "x-status": "draft",
+  "x-format": "json",
+  "x-producer": "ad-copy",
+  "x-consumers": "operators, asset-handoff",
+  "x-rules": [
+    "An operator uses only a proposal whose status is clean, or to_decide after a person decided; a blocked one is never used.",
+    "length is counted the way the placement counts (a double-width character may count as 2), not as plain characters, unless the finding says the rule was not sourced.",
+    "A proposal's id is stable: the same text keeps its id in every document that lists it.",
+    "An absent optional key means unknown, never null and never an empty string."
+  ],
+  "type": "object",
+  "required": ["producer", "produced_at", "proposals"],
+  "properties": {
+    "producer": {"description": "The pack that wrote the document (its CLI word).", "type": "string", "minLength": 1},
+    "produced_at": {"description": "When the document was written: ISO 8601 with its zone.", "$ref": "#/$defs/time"},
+    "market": {"description": "The market and language the texts are written for (the hub's market word).", "type": "string", "minLength": 1},
+    "proposals": {
+      "description": "The candidate texts; empty when there are none.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "placement", "field", "text", "length", "status"],
+        "properties": {
+          "id": {"description": "Unique and stable.", "type": "string", "minLength": 1},
+          "ad": {"description": "Which ad the text belongs to, when several texts make one ad (the headlines and descriptions of one responsive search ad).", "type": "string", "minLength": 1},
+          "placement": {"description": "The placement the text is for, in ad-copy's word (for example google_rsa).", "type": "string", "minLength": 1},
+          "field": {"description": "The field of the placement the text fills (headline, description, primary_text...).", "type": "string", "minLength": 1},
+          "text": {"description": "The text, as it would run.", "type": "string", "minLength": 1},
+          "length": {"description": "The text's length counted the way the placement counts it.", "type": "integer", "minimum": 0},
+          "status": {"description": "clean: nothing found; to_decide: a person decides (a recommended limit passed, a draft rule matched); blocked: it cannot be used as it is.", "enum": ["clean", "to_decide", "blocked"]},
+          "direction": {"description": "The selling-point direction the text tests, in the client's words, so results can be read by direction.", "type": "string", "minLength": 1},
+          "findings": {
+            "description": "What the check found; empty when the status is clean.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["check", "severity"],
+              "properties": {
+                "check": {"description": "The producer's code for the finding.", "type": "string", "minLength": 1},
+                "severity": {"description": "block: the text cannot be used; warn: a person decides.", "enum": ["block", "warn"]},
+                "message": {"description": "The finding in words.", "type": "string", "minLength": 1}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
