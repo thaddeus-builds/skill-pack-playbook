@@ -71,7 +71,7 @@ dark gradient at the top and the bottom under the type; `"scrim": false` for non
 under speech. The whole is brought to `lufs`, **measured on the stereo file that is delivered** (one mono signal on two channels reads 3 LU louder than on one), with a limiter set so that the delivered file's true peak is about -1 dBTP
 even after the AAC encode; the report says what it landed on (`mix_lufs`). A film with no sound at all stays silent.
 
-**Encode.** `bitrate`/`minrate`/`maxrate`/`bufsize` for a client that fixes a floor, or `{"crf": 18}`; H.264, yuv420p, AAC 192k, 44.1 kHz.
+**Encode.** `bitrate`/`minrate`/`maxrate`/`bufsize` for a client that fixes a floor, or `{"crf": 18}`; H.264, yuv420p, AAC 192k, 44.1 kHz. A floor is checked, not hoped for: x264 spends less than its target on an easy picture (a short, still, dark film), so `render` measures the video's bitrate and, when it is under `minrate`, encodes again with a higher target (twice at most, never above `maxrate`); the report says `video_kbps`, `floor_kbps` and `floor_met`.
 
 ## Elements
 

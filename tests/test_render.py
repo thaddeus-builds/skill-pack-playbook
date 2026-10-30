@@ -59,6 +59,26 @@ def test_a_still_is_the_same_picture_as_the_frame_of_the_render():
         assert psnr > 24, psnr                                                                    # an encode and a seek differ a little; the picture is the same
 
 
+def test_a_floor_is_met_by_encoding_again_with_a_higher_target_and_never_above_the_maxrate():
+    from filmkit.render import kbps, meet_floor
+    assert kbps("10M") == 10000 and kbps("8500k") == 8500 and kbps("9000000") == 9000
+    enc = {"bitrate": "10M", "minrate": "8500k", "maxrate": "12M"}
+    calls = []
+
+    def again(ratio):
+        def f(target):
+            calls.append(round(target))
+            return {"bitrate_kbps": target * ratio + 192}
+        return f
+    ok = meet_floor({"bitrate_kbps": 9100 + 192}, enc, 192, again(0.8))
+    assert calls == [] and ok["floor_met"] and ok["video_kbps"] == 9100, "already over the floor: nothing is encoded again"
+    got = meet_floor({"bitrate_kbps": 8300 + 192}, enc, 192, again(0.8))
+    assert len(calls) == 1 and 10000 < calls[0] <= 12000 and got["floor_met"] and got["video_kbps"] >= 8500, (calls, got)
+    calls.clear()
+    stuck = meet_floor({"bitrate_kbps": 7000 + 192}, enc, 192, again(0.5))
+    assert calls == [12000] and not stuck["floor_met"] and stuck["floor_kbps"] == 8500, (calls, stuck)           # the target went to the cap at once; a second try at the cap would change nothing
+
+
 def test_a_bitrate_encode_and_the_cut_transition_are_honoured():
     with _t.tmpdir() as d:
         _t.make_assets(d)

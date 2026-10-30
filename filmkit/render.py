@@ -78,12 +78,35 @@ def footage_frame(spec: dict, shots: list[Shot], t: float, still: bool = False) 
     return blend(first.frame(t, still), second.frame(t, still), p, tr.get("type", "dissolve"))
 
 
-def encode_args(spec: dict, preview: bool) -> list[str]:
+def kbps(v) -> float:
+    """A bitrate as ffmpeg writes it (`10M`, `8500k`, `9000000`) in kilobits a second."""
+    t = str(v).strip().lower()
+    return float(t.rstrip("mk")) * (1000 if t.endswith("m") else 1 if t.endswith("k") else 0.001)
+
+
+def meet_floor(info: dict, enc: dict, audio_k: float, again) -> dict:
+    """A client's floor is a promise, not a hope: x264 spends less than its target on easy pictures (a short, still, dark film ended 40 kbps under), so measure the video's bitrate
+    (the file's less the audio's) and, when it is under `minrate`, encode again with a higher target (`again(target_kbps)` returns the new report), twice at most and never above
+    `maxrate`. The report gains `video_kbps`, `floor_kbps` and `floor_met`."""
+    floor, target, cap = kbps(enc["minrate"]), kbps(enc["bitrate"]), kbps(enc.get("maxrate", enc["bitrate"]))
+    for _ in range(2):
+        video = info["bitrate_kbps"] - audio_k
+        if video >= floor or target >= cap:
+            break
+        target = min(cap, target * floor * 1.04 / max(video, 1))
+        info = again(target)
+    video = info["bitrate_kbps"] - audio_k
+    return {**info, "video_kbps": video, "floor_kbps": round(floor), "floor_met": video >= floor}
+
+
+def encode_args(spec: dict, preview: bool, bitrate_kbps: float | None = None) -> list[str]:
+    """The video encode. `bitrate_kbps` replaces the spec's target (the floor's correction in `render`)."""
     e = spec.get("encode") or {"crf": 18}
     if preview:
         return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]
     if e.get("bitrate"):
-        return ["-c:v", "libx264", "-preset", "slow", "-b:v", e["bitrate"], "-minrate", e.get("minrate", e["bitrate"]), "-maxrate", e.get("maxrate", e["bitrate"]),
+        target = f"{int(round(bitrate_kbps))}k" if bitrate_kbps else e["bitrate"]
+        return ["-c:v", "libx264", "-preset", "slow", "-b:v", target, "-minrate", e.get("minrate", e["bitrate"]), "-maxrate", e.get("maxrate", e["bitrate"]),
                 "-bufsize", e.get("bufsize", "2M"), "-profile:v", "high"]
     return ["-c:v", "libx264", "-preset", "slow", "-crf", str(e.get("crf", 18)), "-profile:v", "high"]
 
@@ -133,9 +156,15 @@ def render(spec: dict, base_dir: Path, out: Path, *, preview: float | None = Non
     cmd += ["-filter_complex", "[0:v][1:v]overlay=format=auto[v]", "-map", "[v]"]
     if sound:
         cmd += ["-map", "2:a", "-c:a", "aac", "-b:a", "192k", "-shortest"]
-    cmd += encode_args(spec, preview is not None) + ["-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)]
-    run(cmd)
+    tail = ["-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)]
+    run(cmd + encode_args(spec, preview is not None) + tail)
     info = inspect(Path(out))
+    enc = spec.get("encode") or {}
+    if preview is None and enc.get("bitrate") and enc.get("minrate"):
+        def again(target: float) -> dict:
+            run(cmd + encode_args(spec, False, target) + tail)
+            return inspect(Path(out))
+        info = meet_floor(info, enc, 192 if sound else 0, again)
     info.update(notes)
     info["fonts_fallback"] = cx.fonts.fallback
     if tmp:
