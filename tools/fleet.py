@@ -91,6 +91,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -190,32 +191,78 @@ def parts(skill_pack: Path, playbook: Path) -> list[dict]:
     )]
 
 
+NETWORK_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": "ssh -o ConnectTimeout=20 -o BatchMode=yes",
+               "GIT_HTTP_LOW_SPEED_LIMIT": "1", "GIT_HTTP_LOW_SPEED_TIME": "30"}
+
+
+def git_env() -> dict[str, str]:
+    """What keeps a git call from hanging on a remote that accepts the connection and never answers, or from asking a question nobody is there to
+    answer: no prompt, an ssh connect timeout, and a stall limit for http. A value the caller already set wins."""
+    return {k: v for k, v in NETWORK_ENV.items() if k not in os.environ}
+
+
+def hide_credentials(url: str) -> str:
+    """`url` without the user and password of an address, for a line that is printed."""
+    return re.sub(r"(://)[^/@\s]*@", r"\1", url)
+
+
 def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = "origin") -> dict:
-    """A trial of `update` before a train, on a clone: the pack's checkout is only read. Clones it into `out/<folder>` (which must not exist), points the
-    clone's `origin` at the checkout's own `remote` address, drops every local branch (only the remote's default branch matters), then runs `update` there,
-    taking this playbook's kit as it is, released or not. {pack, state, text} as `update` returns it."""
+    """A trial of `update` before a train, on a clone: the pack's checkout is only read. The clone keeps what `update` looks at: the checkout's own
+    default branch (so a checkout ahead of its remote is refused as `update` refuses it), the remote-tracking refs the checkout recorded (so
+    another remote that was ahead is seen as `update` sees it), and the remote's default branch only (no `origin/HEAD` inherited from the checkout's current branch). Its `origin` is the
+    checkout's own `remote` address, resolved when it is a relative path. Cloned into `out/<folder>`, which must not exist; a trial that
+    cannot start leaves no folder behind. {pack, state, text} as `update` returns it."""
     name = pack.name
+    env = git_env()
+
+    def refused(text: str) -> dict:
+        return {"pack": name, "state": "refused", "text": text}
+
     url = run(pack, "git", "remote", "get-url", remote)
     if url.returncode != 0 or not url.stdout.strip():
-        return {"pack": name, "state": "refused", "text": f"the checkout has no remote named {remote}"}
+        return refused(f"the checkout has no remote named {remote}")
+    address = url.stdout.strip()
+    if "://" not in address and not re.match(r"^[\w.-]+@[\w.-]+:", address) and not os.path.isabs(address):
+        address = str((pack / address).resolve())                    # a relative path in a remote is relative to the checkout
+    shown = hide_credentials(address)
+    if out.exists() and not out.is_dir():
+        return refused(f"{out} is a file; --out names a folder")
     dest = out / name
     if dest.exists():
-        return {"pack": name, "state": "refused", "text": f"{dest} exists; name an --out that has no folder for it"}
+        return refused(f"{dest} exists (two packs with the folder name {name}, or a trial made before); name an --out that has no folder for it")
     out.mkdir(parents=True, exist_ok=True)
-    cloned = run(out, "git", "clone", "-q", "--no-hardlinks", str(pack), str(dest))
+    cloned = run(out, "git", "clone", "-q", "--no-hardlinks", str(pack), str(dest), timeout=300)
+
+    def abandon(text: str) -> dict:
+        shutil.rmtree(dest, ignore_errors=True)
+        return refused(text)
+
     if cloned.returncode != 0:
-        return {"pack": name, "state": "refused", "text": f"cannot clone the checkout: {first_line(cloned)}"}
-    run(dest, "git", "remote", "set-url", "origin", url.stdout.strip())
+        return abandon(f"cannot clone the checkout: {first_line(cloned)}")
+    branch = default_branch(pack, remote)
     run(dest, "git", "checkout", "-q", "--detach")
     for b in run(dest, "git", "for-each-ref", "--format=%(refname:short)", "refs/heads").stdout.split():
         run(dest, "git", "branch", "-q", "-D", b)
-    for attempt in range(3):                                   # a remote that drops a connection is tried again
-        fetched = run(dest, "git", "fetch", "-q", "origin")
+    # what `update` looks at, as the checkout has it now: its own default branch, and the remote-tracking refs it recorded (another remote that was
+    # ahead when the checkout last looked is ahead here too); nothing else of its local branches
+    if branch and run(pack, "git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0:
+        run(dest, "git", "fetch", "-q", str(pack), f"+refs/heads/{branch}:refs/heads/{branch}")
+    run(dest, "git", "fetch", "-q", str(pack), "+refs/remotes/*:refs/remotes/*")
+    run(dest, "git", "remote", "set-url", "origin", address)
+    run(dest, "git", "remote", "set-head", "origin", "-d")
+    for other in (r for r in run(pack, "git", "remote").stdout.split() if r != remote):
+        u = run(pack, "git", "remote", "get-url", other).stdout.strip()
+        if u and "://" not in u and not re.match(r"^[\w.-]+@[\w.-]+:", u) and not os.path.isabs(u):
+            u = str((pack / u).resolve())
+        run(dest, "git", "remote", "add", other, u)
+    for attempt in range(3):                                       # a remote that drops a connection is tried again
+        fetched = run(dest, "git", "fetch", "-q", "origin", env=env, timeout=300)
         if fetched.returncode == 0:
             break
-        time.sleep(2 * attempt)
+        if attempt < 2:
+            time.sleep(2 * (attempt + 1))
     else:
-        return {"pack": name, "state": "refused", "text": f"cannot fetch {url.stdout.strip()}: {first_line(fetched)}"}
+        return abandon(f"cannot fetch {shown}: {hide_credentials(first_line(fetched))}")
     return update(dest.resolve(), playbook, version, True, "origin")
 
 
@@ -350,9 +397,12 @@ CHANGELOG_LINE = "- Re-vendored the playbook kit {old} -> {new} (`tools/fleet.py
 UNRELEASED = re.compile(r"^## \[Unreleased\]", re.I | re.M)
 
 
-def run(cwd: Path, *cmd: str, env: dict | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, errors="replace",
-                          env={**os.environ, **(env or {})})
+def run(cwd: Path, *cmd: str, env: dict | None = None, timeout: float | None = None) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, errors="replace",
+                              env={**os.environ, **(env or {})}, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, "", f"timed out after {int(timeout or 0)} s")
 
 
 def first_line(r: subprocess.CompletedProcess) -> str:
@@ -583,8 +633,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{r['pack']}: {r['text']}")
         return 0 if all(r["state"] in ("green", "current") for r in results) else 1
     if args.cmd == "rehearse":
+        out = Path(args.out).expanduser().resolve()
+        for h in skill_packs:
+            if out == h or h in out.parents:
+                print(f"error: --out {out} is inside the skill pack {h}: the checkouts are only read; name a folder outside them", file=sys.stderr)
+                return 2
+        os.environ.update(git_env())
         current = (playbook / "kit" / "VERSION").read_text("utf-8").strip()
-        results = [rehearse(h, Path(args.out).expanduser().resolve(), playbook, current, args.remote) for h in skill_packs]
+        results = [rehearse(h, out, playbook, current, args.remote) for h in skill_packs]
         for r in results:
             print(f"{r['pack']}: {r['text']}")
         return 0 if all(r["state"] in ("green", "current") for r in results) else 1
