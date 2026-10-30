@@ -9,18 +9,26 @@
   4. A code emitted only in a file outside the sources is pruned (the sources are the claim), and the same code stays when the sources name that file.
   5. A scan it cannot trust deletes nothing: a source that matches no file, a file that does not parse, a call with no literal code, a root whose name
      holds glob characters (read, not mistaken for no sources), a registry file that is a link (not written through), CRLF kept, no temporary left.
+  7. (the third cold review) A folder only named `venv` is the pack's own code and is read; a real virtual environment is skipped with a line; two links back
+     to the root do not hang the walk; a link to a folder is followed; the glob rules (`*`, `?`, `**/`, sets) and a source outside the root; a registry that is
+     not valid is a line; each line keeps its own ending; the registry in memory is fresh after a run; the temporary file is beside the original and goes
+     on failure and on Ctrl-C; a fragment taken away between the read and the delete; an emitter written `m.msg(...)`.
   6. (the second cold review) The temporary file has a name nobody chose, so a link or a folder at a guessable name is harmless; the mode is kept; two runs
      at once end the same as one; a folder named like a source, a dangling link, an unreadable file, a null byte and a nested expression are refused or
      ignored cleanly; `venv/` is not read; a main registry with every row unemitted keeps its header; a link inside the pack and a fragment folder that
      leads outside are skipped; a folder that cannot take the new file is a line, not a traceback.
 """
 
+import contextlib
+import io
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
+from unittest import mock
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -238,8 +246,9 @@ if os.geteuid() != 0:
 (scripts9 / "locked.py").unlink(missing_ok=True)
 venv = root9 / "venv" / "lib"
 venv.mkdir(parents=True)
+(venv.parent / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
 (venv / "template.py").write_text("def (:\n", encoding="utf-8")
-check("a venv/ folder is not read: its files cannot refuse the run", refused(lambda: prune_codes.prune(root9, ["**/*.py"], dry_run=True)) is None)
+check("a virtual environment (a folder with a pyvenv.cfg) is not read: its files cannot refuse the run", refused(lambda: prune_codes.prune(root9, ["**/*.py"], dry_run=True)) is None)
 
 root10 = make()
 cfg10 = config.use(root10)
@@ -282,5 +291,130 @@ if os.geteuid() != 0:
         frag13.chmod(0o755)
     check("a fragment folder that cannot take a new file: a line that says so, not a traceback, and no temporary file left", why is not None and "cannot be written" in why
           and not list(frag13.glob("*.prune-tmp")), why)
+
+print("[7] found by the third cold review")
+root14 = make()
+cfg14 = config.use(root14)
+helper = root14 / cfg14.scripts_dir / "venv"
+helper.mkdir()
+(helper / "setup_env.py").write_text('from kit.messages import msg\n\ndef f():\n    return msg("venv_setup_failed", "x")\n', encoding="utf-8")
+(root14 / "ssot" / "message_codes.d" / "venv.tsv").write_text(HEADER + row("venv_setup_failed"), encoding="utf-8")
+config.use(root14)
+found = prune_codes.prune(root14, ["**/*.py"], dry_run=True)
+check("a folder only named venv is the pack's own code: the code it emits is not pruned", "venv_setup_failed" not in {c for cs in found.values() for c in cs}, found)
+real_venv = root14 / "realenv"
+(real_venv / "lib").mkdir(parents=True)
+(real_venv / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+(real_venv / "lib" / "x.py").write_text("def (:\n", encoding="utf-8")
+quiet = io.StringIO()
+with contextlib.redirect_stderr(quiet):
+    prune_codes.prune(root14, ["**/*.py"], dry_run=True)
+check("a real virtual environment is skipped, and a line on stderr says so", "realenv/ is not read" in quiet.getvalue(), quiet.getvalue())
+
+root15 = make()
+cfg15 = config.use(root15)
+(root15 / "a").symlink_to(".")
+(root15 / "b").symlink_to(".")
+(root15 / "c").symlink_to("a")
+t0 = time.monotonic()
+found = prune_codes.prune(root15, ["**/*.py"], dry_run=True)
+check("links back to the root do not hang the walk, and the files are still found once", time.monotonic() - t0 < 10 and "kept_in_half" not in {c for cs in found.values() for c in cs}, time.monotonic() - t0)
+
+root16 = make()
+cfg16 = config.use(root16)
+ext = Path(tmp_dir("prune-ext-")) / "shared"
+ext.mkdir()
+(ext / "more.py").write_text('from kit.messages import msg\n\ndef g():\n    return msg("old_half_code", "x")\n', encoding="utf-8")
+(root16 / "shared").symlink_to(ext)
+check("a link to a folder is followed: a code emitted there is not pruned", "old_half_code" not in {c for cs in prune_codes.unemitted(root16, ["**/*.py"]).values() for c in cs})
+
+rx = prune_codes.glob_re
+check("glob rules: * and ? stay in a folder, **/ is any number of folders (none too), a set picks one character",
+      rx("scripts/*.py").match("scripts/a.py") and not rx("scripts/*.py").match("scripts/sub/a.py") and rx("scripts/**/*.py").match("scripts/a.py") and rx("scripts/**/*.py").match("scripts/x/y/a.py")
+      and rx("a?.py").match("ab.py") and not rx("a?.py").match("a/.py") and rx("[ab].py").match("a.py") and not rx("[ab].py").match("c.py") and rx("[!ab].py").match("c.py")
+      and not rx("x.py").match("xapy") and rx("**").match("a/b/c.py"))
+r17 = make()
+c17 = config.use(r17)
+inside_abs = str(r17 / c17.scripts_dir / "emits.py")
+check("an absolute source inside the root works; one outside, and a ../ one, are refused with a line",
+      prune_codes.sources_read(r17, [inside_abs]) == [r17 / c17.scripts_dir / "emits.py"] and "outside" in (refused(lambda: prune_codes.sources_read(r17, ["/etc/hosts.py"])) or "")
+      and "leaves" in (refused(lambda: prune_codes.sources_read(r17, ["../x/*.py"])) or ""))
+
+# --- a registry that is not valid is a line, not a traceback
+r18 = make()
+c18 = config.use(r18)
+(r18 / "ssot" / "message_codes.d" / "bad.tsv").write_bytes(b"\xff\xfe not utf-8\n")
+err = io.StringIO()
+with contextlib.redirect_stderr(err):
+    code = prune_codes.main(["--root", str(r18), "--sources", f"{c18.scripts_dir}/**/*.py", "--dry-run"])
+check("a registry file that is not UTF-8: exit 2 with an error line", code == 2 and err.getvalue().startswith("error:"), (code, err.getvalue()[:100]))
+(r18 / "ssot" / "message_codes.d" / "bad.tsv").write_text(HEADER + row("kept_in_half"), encoding="utf-8")        # the same code as half.tsv
+err = io.StringIO()
+with contextlib.redirect_stderr(err):
+    code = prune_codes.main(["--root", str(r18), "--sources", f"{c18.scripts_dir}/**/*.py", "--dry-run"])
+check("a code registered twice: exit 2 with an error line", code == 2 and err.getvalue().startswith("error:"), (code, err.getvalue()[:100]))
+
+# --- each line keeps its own ending; the registry in memory is fresh
+r19 = make()
+c19 = config.use(r19)
+half19 = r19 / "ssot" / "message_codes.d" / "half.tsv"
+half19.write_bytes((HEADER + row("kept_in_half").replace("\n", "\r\n") + row("old_half_code")).encode("utf-8"))
+srcs19 = all_sources(r19)                                             # (all_sources binds the pack, which reloads the registry: it is called once, before both runs)
+prune_codes.prune(r19, srcs19)
+check("a file that mixes LF and CRLF keeps each line's ending", half19.read_bytes() == (HEADER + row("kept_in_half").replace("\n", "\r\n")).encode("utf-8"), half19.read_bytes())
+check("a second run in the same process finds nothing (the registry in memory was cleared)", prune_codes.prune(r19, srcs19) == {})
+
+# --- the temporary file
+r20 = make()
+c20 = config.use(r20)
+asked = []
+real_mkstemp = tempfile.mkstemp
+
+
+def spying(*a, **kw):
+    asked.append(kw.get("dir"))
+    return real_mkstemp(*a, **kw)
+
+
+with mock.patch.object(tempfile, "mkstemp", spying):
+    prune_codes.prune(r20, all_sources(r20))
+here20 = {(r20 / "ssot" / "message_codes.d").resolve(), (r20 / "ssot").resolve()}
+check("the temporary file is made beside the original (so the rename is atomic)", asked and all(Path(d).resolve() in here20 for d in asked), asked)
+for label, boom, expect in (("a failure", OSError(28, "No space left on device"), "cannot be written"), ("Ctrl-C", KeyboardInterrupt(), None)):
+    r21 = make()
+    c21 = config.use(r21)
+    snap21 = {q: q.read_bytes() for q in sorted((r21 / "ssot").rglob("*.tsv"))}
+    got = None
+    with mock.patch.object(os, "replace", side_effect=boom):
+        try:
+            prune_codes.prune(r21, all_sources(r21))
+        except prune_codes.Refused as e:
+            got = str(e)
+        except KeyboardInterrupt:
+            got = "interrupted"
+    check(f"{label} in the rename: no temporary file is left and no file that is still there was changed", not list((r21 / "ssot").rglob("*.prune-tmp"))
+          and all(q.read_bytes() == b for q, b in snap21.items() if q.exists()) and (got is not None and (expect is None or expect in got)), (got, list((r21 / "ssot").rglob("*.prune-tmp"))))
+r22 = make()
+c22 = config.use(r22)
+dead22 = r22 / "ssot" / "message_codes.d" / "dead.tsv"
+real_read = Path.read_bytes
+
+
+def read_then_remove(self):
+    data = real_read(self)
+    if self.name == "dead.tsv" and self.exists():
+        self.unlink()
+    return data
+
+
+with mock.patch.object(Path, "read_bytes", read_then_remove):
+    done = refused(lambda: prune_codes.prune(r22, all_sources(r22)))
+check("a fragment another run takes away between the read and the delete is not an error", done is None and not dead22.exists(), done)
+
+# --- an emitter written m.msg(...)
+r23 = make()
+c23 = config.use(r23)
+(r23 / c23.scripts_dir / "attr.py").write_text('from kit import messages as m\n\ndef h():\n    return m.msg("old_half_code", "x")\n', encoding="utf-8")
+check("a code emitted as m.msg(...) is not pruned", "old_half_code" not in {c for cs in prune_codes.unemitted(r23, all_sources(r23)).values() for c in cs})
 
 finish()
