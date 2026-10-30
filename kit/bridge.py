@@ -276,11 +276,11 @@ def _client(creds: Credentials, urlopen, timeout: float):
 
 
 def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable[str] = (),
-                 urlopen=urllib.request.urlopen, timeout: float = 30.0):
+                 urlopen=urllib.request.urlopen, timeout: float = 30.0, authed=None):
     """`send` and `read` for send_and_verify over HTTP. `mentions` are member ids sent as mention objects
     (an @name in the text wakes an agent only with one). `send.last_error` holds why a send returned None."""
     mention_objs = [{"type": "member", "member_id": m} for m in mentions]
-    authed = _client(creds, urlopen, timeout)
+    authed = authed or _client(creds, urlopen, timeout)
 
     base = f"{creds.prefix}/conversations/{conversation_id}/messages"
 
@@ -315,9 +315,33 @@ def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable
     return send, read
 
 
+def fetch_members(creds: Credentials, conversation_id: str, *, authed=None, urlopen=urllib.request.urlopen,
+                  timeout: float = 10.0) -> list[dict]:
+    """The conversation's members as `{member_id, display_name, kind, ...}`; [] when the list cannot be read."""
+    try:
+        d = _unwrap((authed or _client(creds, urlopen, timeout))("GET", f"{creds.prefix}/conversations/{conversation_id}/members"))
+    except RestError:
+        return []
+    return [m for m in d if isinstance(m, dict)] if isinstance(d, list) else []
+
+
+def unknown_mentions(text: str, members: list[dict]) -> bool:
+    """True when `text` has an @ and none of them is followed by a member's display name (or @all).
+    Names have spaces ("E-commercial Bot"), so each @ is compared with the start of what follows it."""
+    names = [str(m.get("display_name") or "").casefold() for m in members if m.get("display_name")]
+    seen = False
+    for hit in re.finditer(r"(?<!\w)@", text):
+        seen = True
+        rest = text[hit.end():].casefold()
+        if rest.startswith(("all", "everyone")) or any(rest.startswith(n) for n in names):
+            return False
+    return seen
+
+
 def send_to(target: Target, text: str, *, mentions: Iterable[str] = (), urlopen=urllib.request.urlopen) -> Result:
     """Check the isolation, then send `text` to the target over REST and read it back. `mentions` are the
-    member ids to @-mention; a group message with none is refused (`no_mention`), a direct one needs none."""
+    member ids to @-mention; a group message with none is refused (`no_mention`), a direct one needs none;
+    an id that is not a member of the group is refused (`unknown_mention`) when the member list can be read."""
     problems = check_isolation([target])
     if problems:
         return Result(False, reason="isolation: " + problems[0])
@@ -326,7 +350,14 @@ def send_to(target: Target, text: str, *, mentions: Iterable[str] = (), urlopen=
     except (OSError, ValueError) as e:
         return Result(False, reason=f"config: {e}")
     mentions = list(mentions)
-    send, read = rest_runners(creds, target.conversation_id, mentions=mentions, urlopen=urlopen)
+    authed = _client(creds, urlopen, 30.0)                        # one token for the member read, the send and the read-back
+    if mentions and not target.dm:
+        members = fetch_members(creds, target.conversation_id, authed=authed)
+        ids = {m.get("member_id") for m in members}
+        wrong = [m for m in mentions if members and m not in ids]
+        if wrong:
+            return Result(False, reason="unknown_mention: " + ", ".join(wrong))
+    send, read = rest_runners(creds, target.conversation_id, mentions=mentions, urlopen=urlopen, authed=authed)
     result = send_and_verify(send, read, text, dm=target.dm, mention_ok=bool(mentions))
     if not result.sent and result.reason == "no_id_returned" and send.last_error:
         return Result(False, result.id, result.resent, f"no_id_returned: {send.last_error}")
