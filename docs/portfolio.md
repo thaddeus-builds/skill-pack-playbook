@@ -152,6 +152,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `truth/1` | `measurement` | operators | coefficient per campaign type, break-even ROAS, trust per campaign type; confirmed values go into the hub's facts |
 | `intel/1` | `search-intel` | `gads`, `ppc`, `seo`, `pseo` | keyword demand, trends, competitors seen, with sources and dates |
 | `leads/1` | `outbound` | `sdr` | company, contacts, source, evidence |
+| `inquiries/1` | any operator that receives an inquiry (`seo` for site forms, `gads` and `meta-ads` for lead ads) | `sdr` | who wrote, from which company, the words as written, the page, the consent box text |
 | `creators.roster/1` (exists as vads K5) | `creator-program` | `meta-ads` | collaborations, codes, ad ids |
 
 ## Engines in the kit

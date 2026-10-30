@@ -39,6 +39,7 @@ Every property has a `description` of one sentence.
 | `truth/1` | draft | measurement | operators | [schema](truth-1.schema.json) | [JSON](examples/truth-1.example.json) |
 | `intel/1` | draft | search-intel | gads, ppc, seo, pseo | [schema](intel-1.schema.json) | [JSON](examples/intel-1.example.json) |
 | `leads/1` | draft | outbound | sdr | [schema](leads-1.schema.json) | [JSON](examples/leads-1.example.json) |
+| `inquiries/1` | draft | any operator that receives an inquiry (seo for site forms, gads and meta-ads for lead ads) | sdr | [schema](inquiries-1.schema.json) | [JSON](examples/inquiries-1.example.json) |
 
 **Status** (`x-status`):
 - `in-use`: two packs already write and read it. The schema states the format they hold; it changes nothing in it, and the packs' definitions (adcut's `adcut/contracts.py`, the video-ads skill pack's `docs/contract.md`) stay the longer account of what the columns mean.
