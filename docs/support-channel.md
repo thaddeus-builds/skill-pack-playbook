@@ -24,6 +24,8 @@ A Claude Code plugin from OpenMax. There is one shell function and one plugin co
 
 Every 10 minutes, read-only ([check template](../templates/support-channel/check.md)). Keep the newest message id seen in a scratchpad file (outside git) and ask only for what is newer. Nothing new is one line, not a report. *Why:* the cutoff keeps a long thread out of the context and the one-line answer keeps the owner's page quiet.
 
+When what you read is **data** (a client agent's reply to a query) and it goes into a file or a database, take it from the API in code, not through a model: `kit.bridge.wait_for_reply_to` (REST) returns each `Reply.text` exactly as stored, and your code writes it. The hooks hand a reply to the session as text for it to judge; do not have the session retype that text into a file. On the headless path (no key file) the bridge is a model, so the text was copied by a model, and a number can change in the copy. Read it twice and keep it only if the two copies are the same to the character: `kit.bridge.read_new(run, conversation_id, after_id)` does that and returns nothing, with a reason, when they differ; read again then. A long reply may arrive split over several messages of the same sender; joining them is the pack's job, because the format is the pack's. *Why:* seen once in the Google Ads pack (2026-10-29), where a 5-message reply was copied through the bridge into a file the database reads; a check on the shape (field mask, JSON) catches a broken copy, not a changed digit.
+
 ## 5. Who to ask
 
 1. The client's **support agent** and **onboarding agent** first.
