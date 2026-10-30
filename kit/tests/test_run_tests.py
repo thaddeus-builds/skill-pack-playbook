@@ -247,6 +247,27 @@ def main() -> int:
               sorted(set(git.stdout.split()) - set(run_tests.GIT_LOCAL_ENV)))
     sample = (Path(ROOT) / "kit" / "tools" / "pre-push.sample").read_text(encoding="utf-8")
     check("the pre-push sample clears git's own list, not a copy of it", "unset $(git rev-parse --local-env-vars)" in sample, sample[-400:])
+    print("\n[13] the pre-push sample, run for real (found by the second cold review: the check above reads the text, it does not run it)")
+    top = Path(tmp_dir("hook-")) / "pack"
+    (top / "kit" / "tools").mkdir(parents=True)
+    (top / "kit" / "tools" / "leak_guard.py").write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+    bin_dir = top.parent / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "python3").symlink_to(sys.executable)                       # the sample wants a python3 of 3.11 or newer on PATH; this one is
+    seen = top.parent / "hook-env.txt"
+    plain = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    subprocess.run(["git", "init", "-q"], cwd=top, env=plain, check=True)
+    subprocess.run(["git", "config", "skillpack.prepush-tests", f'env > "{seen}"'], cwd=top, env=plain, check=True)
+    handed = {"GIT_DIR": str(top / ".git"), "GIT_INDEX_FILE": str(top / ".git" / "index"), "GIT_PREFIX": "", "GIT_COMMON_DIR": str(top / ".git"),
+              "GIT_CONFIG_PARAMETERS": "'core.abbrev=9'", "KEEP_ME": "1", "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    hook = subprocess.run(["sh", str(Path(ROOT) / "kit" / "tools" / "pre-push.sample"), "origin", "https://example.com/x.git"], cwd=top, env={**plain, **handed},
+                          input="", capture_output=True, text=True)
+    got = dict(ln.split("=", 1) for ln in seen.read_text(encoding="utf-8", errors="replace").splitlines() if "=" in ln) if seen.exists() else {}
+    check("the hook runs the pack's test command from the top level after the guard passes, and the command still has the rest of the environment",
+          hook.returncode == 0 and got.get("KEEP_ME") == "1", (hook.returncode, hook.stderr[-300:], sorted(got)[:5]))
+    listed = set(subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True, env=plain).stdout.split()) | set(run_tests.GIT_LOCAL_ENV)
+    check("that command sees none of the variables git says name a repository, although the hook was handed them",
+          not [k for k in listed if k in got] and all(k in handed for k in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_CONFIG_PARAMETERS")), sorted(k for k in listed if k in got))
     return finish()
 
 

@@ -30,13 +30,22 @@ RESULT_RE = re.compile(r"^RESULT: (\d+) passed$", re.M)
 TIMEOUT = 120
 
 
+# The names git listed when this was written (the same as kit.testing.run_tests.GIT_LOCAL_ENV: tests/test_runners_env.py fails when they differ). This file
+# stands alone, so it cannot import the kit's list; it is used with what git says now.
+GIT_LOCAL_FALLBACK = ("GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY",
+                      "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS",
+                      "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR")
+
+
 def git_local_names() -> set[str]:
-    """The variables git says name one repository (`git rev-parse --local-env-vars`): a pre-push hook hands them down, and a test's own `git init` would
-    then act on the checkout that was pushing. Asked of git, so the list is never out of date; none when there is no git."""
+    """The variables that name one repository: a pre-push hook hands them down, and a test's own `git init` would then act on the checkout that was
+    pushing. What this git says (`git rev-parse --local-env-vars`) together with GIT_LOCAL_FALLBACK: a git that cannot be asked (none on PATH, a broken
+    one) must not turn the filter off."""
     try:
-        return set(subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split())
+        asked = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split()
     except OSError:
-        return set()
+        asked = []
+    return set(asked) | set(GIT_LOCAL_FALLBACK)
 
 
 GIT_LOCAL = git_local_names()
