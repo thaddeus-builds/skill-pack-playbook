@@ -4,6 +4,7 @@
     {
       "campaign": "utm_source=google&utm_campaign=demo-dealers",
       "channel": "form",
+      "email_confirmed": true,
       "company": {
         "country": "DE",
         "domain": "demo-trade.example.de",
