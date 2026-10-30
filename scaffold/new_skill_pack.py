@@ -441,7 +441,9 @@ def main(argv: list[str] | None = None) -> int:
         return rc
     write(d, {".gitattributes": gitattributes(d)})
     if not a.no_zylos:
-        add_zylos.add(d)
+        _, notes = add_zylos.add(d)
+        for line in notes:
+            print(f"  note   {line}")
         code, out = add_zylos.check(d)
         if code != 0:
             print(out, file=sys.stderr)

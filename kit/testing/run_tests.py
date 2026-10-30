@@ -105,11 +105,27 @@ def sweep(tmp: Path, ignore: tuple[str, ...] = IGNORE_LEAKS) -> list[str]:
     return left
 
 
+# The variables git sets for a hook (`git rev-parse --local-env-vars`) that point at one repository. A test that makes a throwaway repository must not
+# inherit them: a pre-push hook that runs the tests hands them down, and the test's `git init` or `git commit` then lands in the checkout that was
+# pushing (its branch moved, its files shown as deleted; a bare `git init` flips core.bare). The one list; run_all.py and the playbook's other test
+# runners take it from here.
+GIT_LOCAL_ENV = ("GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY",
+                 "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS",
+                 "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR")
+
+
+def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """The environment a test file runs in: ours, without the variables that name a repository, with no bytecode written, plus `extra`."""
+    env = {k: v for k, v in os.environ.items() if k not in GIT_LOCAL_ENV}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.update(extra or {})
+    return env
+
+
 def _exec(file: Path, root: Path, tmp: Path, timeout_s: float
           ) -> tuple[int | None, str]:
     """(exit code or None on timeout, stdout+stderr)."""
-    env = {**os.environ, "TMPDIR": str(tmp), "PYTHONDONTWRITEBYTECODE": "1",
-           TEST_RUN_ENV: "1"}
+    env = clean_env({"TMPDIR": str(tmp), TEST_RUN_ENV: "1"})
     p = subprocess.Popen([sys.executable, str(file)], cwd=root, env=env,
                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT, text=True,

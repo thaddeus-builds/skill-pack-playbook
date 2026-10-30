@@ -17,7 +17,9 @@ process with a TMPDIR we then inspect:
   * a file's own `# kit-timeout: S` is its budget: a slow file with a
     larger one passes under a short default, a file past a smaller one is
     killed; `--timeout S` sets the run's default, and a bad one fails;
-  * every file sees KIT_TEST_RUN=1.
+  * every file sees KIT_TEST_RUN=1;
+  * no file inherits a variable that names a repository (GIT_DIR, GIT_INDEX_FILE ...): a pre-push hook hands them down, and a test's throwaway `git init` would
+    then act on the checkout that was pushing; the list is git's own (`git rev-parse --local-env-vars`).
 """
 
 import os
@@ -220,6 +222,31 @@ def main() -> int:
           rc == 1 and "FAILED: no tests/test_*.py matches 'zzz'" in out, out)
     rc, out, _ = gate({"helper.py": PASS, "test_a.py": PASS})
     check("only test_*.py files run", rc == 0 and "helper.py" not in out, out)
+    print("\n[12] the git variables a test must not inherit")
+    local = {"GIT_DIR": "/nowhere/.git", "GIT_INDEX_FILE": "/nowhere/index", "GIT_WORK_TREE": "/nowhere", "GIT_PREFIX": "x/", "GIT_COMMON_DIR": "/nowhere/.git"}
+    saved = {k: os.environ.get(k) for k in local}
+    os.environ.update(local)
+    os.environ["GIT_AUTHOR_NAME"] = "kept"
+    try:
+        env = run_tests.clean_env({"X": "1"})
+        body = ("import os\nleft = [k for k in %r if k in os.environ]\nassert not left, left\nassert os.environ.get('GIT_AUTHOR_NAME') == 'kept'\n" % sorted(local)) + PASS
+        rc, out, _ = gate({"test_env.py": body})
+    finally:
+        os.environ.pop("GIT_AUTHOR_NAME", None)
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    check("clean_env has none of them, keeps the rest, and adds what it is given", not [k for k in local if k in env] and env["GIT_AUTHOR_NAME"] == "kept" and env["X"] == "1"
+          and env["PYTHONDONTWRITEBYTECODE"] == "1")
+    check("a test file run by the gate does not see them (and still sees the author name)", rc == 0 and out.rstrip().endswith("RESULT: 1 passed"), out)
+    git = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True)
+    if git.returncode == 0 and git.stdout.split():
+        check("every name this git lists is in the list (a newer git that lists more fails here, so the list is kept up)", set(git.stdout.split()) <= set(run_tests.GIT_LOCAL_ENV),
+              sorted(set(git.stdout.split()) - set(run_tests.GIT_LOCAL_ENV)))
+    sample = (Path(ROOT) / "kit" / "tools" / "pre-push.sample").read_text(encoding="utf-8")
+    check("the pre-push sample clears git's own list, not a copy of it", "unset $(git rev-parse --local-env-vars)" in sample, sample[-400:])
     return finish()
 
 
