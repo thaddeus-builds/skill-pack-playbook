@@ -1,2 +1,0 @@
-id	when	do	params	why	stories
-P02	an approved action has not run within the approval window	drop the approval; the action must be approved again	approval_ttl_hours	a price or a budget may have changed since I approved it	S01

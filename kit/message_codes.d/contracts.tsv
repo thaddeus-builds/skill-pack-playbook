@@ -1,7 +1,0 @@
-code	params	meaning_en	meaning_zh
-exchange_schema_unknown	kind,version	No schema for {kind}/{version}: the contract is not in this kit	{kind}/{version} 没有对应的 schema：这个契约不在本套件里
-exchange_unreadable	file,detail	{file} cannot be read: {detail}	无法读取 {file}：{detail}
-exchange_mark_wrong	file,expected,found	{file}: its first line is not {expected} ({found})	{file} 的第一行不是 {expected}（实际是：{found}）
-exchange_version_unknown	file,kind,found,knows	{file} is {kind} version {found}; this reader knows version {knows} only	{file} 是 {kind} 的第 {found} 版；本读取方只认第 {knows} 版
-exchange_invalid	file,kind,detail	{file} is not a valid {kind}: {detail}	{file} 不是有效的 {kind}：{detail}
-exchange_would_overwrite	path	{path} already holds different bytes; a contract file is written once and never replaced — write the new one under a new name. Nothing was written	{path} 已存在且内容不同；契约文件只写一次、不覆盖，请换一个文件名。未写入任何内容

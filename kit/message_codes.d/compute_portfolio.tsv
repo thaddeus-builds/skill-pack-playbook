@@ -1,5 +1,0 @@
-code	params	meaning_en	meaning_zh
-portfolio_history_insufficient	have,need	the account's history has {have} creative(s) old enough to read how many become mature, {need} needed: no number of new creatives is given	账户历史里够老、可看多少会成熟的素材只有 {have} 条、需要 {need} 条：不给需要多少条新素材
-portfolio_too_late	month,days_left	{month}: {days_left} day(s) left is shorter than the time a new creative takes to become mature: new creatives cannot close the gap this month	{month}：只剩 {days_left} 天，比新素材成熟所需时间短：这个月来不及用新素材补缺口
-portfolio_gap	month,gap	{month}: if nothing new enters, the performance creatives fall about {gap} conversions short of the result target	{month}：没有新素材的话，效果素材离结果目标还差约 {gap} 个转化
-portfolio_no_performance		no creative is in a performance state: nothing to project	没有任何素材在效果状态：无从推算
