@@ -183,6 +183,15 @@ def _endpoint_conversation(endpoint: str) -> str:
     return rest.split("|")[0].strip()
 
 
+def request_cap_reason(state: dict, conv: str, now: float) -> str:
+    """'' while the conversation has room for another awaited request; else the `request_cap` refusal."""
+    open_here = [r for r in state["requests"] if r["conversation_id"] == conv and now < r["final"]]
+    if len(open_here) < REQUEST_CAP:
+        return ""
+    return (f"request_cap: {len(open_here)} requests are still awaited in this conversation (at most {REQUEST_CAP} "
+            "in 24 hours). Close the finished ones (`bridge_hooks.py list`, `close ID`) or ask the owner.")
+
+
 def pre_send(event: dict, env=None, urlopen=urllib.request.urlopen, now=None) -> dict | None:
     """The hook's answer: a refusal (a dict for Claude Code), or None to let the call through. Refuses only a
     message to a conversation known to be a GROUP that has no @name, whose @name is no member, or that would be
@@ -213,10 +222,9 @@ def pre_send(event: dict, env=None, urlopen=urllib.request.urlopen, now=None) ->
         return None
     if kind != "GROUP":
         return None
-    open_here = [r for r in state["requests"] if r["conversation_id"] == conv and now < r["final"]]
-    if len(open_here) >= REQUEST_CAP:
-        return deny(f"request_cap: {len(open_here)} requests are still awaited in this conversation (at most {REQUEST_CAP} "
-                    "in 24 hours). Close the finished ones (`bridge_hooks.py list`, `close ID`) or ask the owner.")
+    over = request_cap_reason(state, conv, now)
+    if over:
+        return deny(over)
     if not bridge._AT_NAME.search(text):
         return deny(NO_MENTION)
     if members and bridge.unknown_mentions(text, members):

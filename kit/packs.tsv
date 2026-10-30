@@ -102,3 +102,4 @@ tools.leak_guard	testkit	the pre-push guard: no client term in what is pushed
 tools.eval_ledger	testkit	where an eval agent's turns and tool output went: help, docs, source or verbs
 bridge	bridge	send one message through the OpenMax bridge and read it back by id before saying it was sent
 bridge_hooks	bridge	Claude Code hooks around the plugin's comm_send: a group message without a mention is refused, a sent message is kept as awaited, a reply is handed to the session as untrusted data
+bridge_cli	bridge	the bridge over REST as a command line (members, send, wait, read) for a session that cannot write Python: the text from a file or stdin, the hook's request cap, replies as untrusted data
