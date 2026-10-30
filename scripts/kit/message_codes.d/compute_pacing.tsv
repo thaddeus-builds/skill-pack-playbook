@@ -1,0 +1,8 @@
+code	params	meaning_en	meaning_zh
+pacing_no_data	month	no complete day to plan from	没有完整的一天可供规划
+pacing_no_target	month	{month}: no spend target for the month: nothing to plan	{month}：本月没有预算目标：无从规划
+pacing_flat	have,need	the weekday weights need {need} weeks of each weekday, {have} found: every day weighs the same	星期权重需要每个星期几 {need} 周的数据，只有 {have} 周：每天同重
+pacing_no_performance	month	{month}: no performance creative has enough conversions to read an efficiency from: all of the money is exploration	{month}：没有效果素材的转化多到能算出效率：全部是探索预算
+pacing_shortfall	month,need,left	{month}: the result still to reach needs about {need} at today's efficiency and {left} is left	{month}：以现在的效率，还要达成的结果约需 {need}，剩下的只有 {left}
+pacing_result_met	month	{month}: the result target is already met	{month}：结果目标已经达成
+pacing_no_days_left	month	{month}: no day is left to plan	{month}：没有剩下的日子可规划
