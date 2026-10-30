@@ -12,6 +12,8 @@
   [7] a folder with no skill-pack.toml, and a pack with no CLI script, are refused with one line
   [8] the CI step: Node 22 and the check as the last steps; nothing added twice or to a file with no steps
   [9] to [11] (a cold review): a CI file or a SKILL.md that is not safe to edit is left alone with a line; bad inputs are refused before the first write
+  [12] (the second cold review): nothing is written through a link or into a place that cannot take it; a write that fails puts back what was written;
+       a name, prefix or path the adapter's check would refuse is refused first; a ci.yml or SKILL.md written in a style we do not read is left alone
 """
 
 import json
@@ -307,10 +309,158 @@ def test_bad_inputs_are_refused_before_anything_is_written() -> None:
     check("a .gitlab-ci.yml is not edited and a line says to add the check by hand", ".gitlab-ci.yml is not edited" in r.stdout and (d / ".gitlab-ci.yml").read_text("utf-8") == "test:\n  script: [x]\n")
 
 
+def link_to(target: Path, at: Path) -> None:
+    at.parent.mkdir(parents=True, exist_ok=True)
+    at.symlink_to(target)
+
+
+def test_nothing_is_written_through_a_link_or_where_it_cannot_go() -> None:
+    print("[12a] links and places that cannot take a write")
+    outside = Path(tmp_dir("zylos-out-"))
+    d = bare("lk-skill")
+    keep = outside / "SKILL.md"
+    keep.write_bytes((d / "SKILL.md").read_bytes())
+    (d / "SKILL.md").unlink()
+    link_to(keep, d / "SKILL.md")
+    r = run(d)
+    check("a SKILL.md that is a link: the file it points at is untouched and a line says to edit it by hand",
+          keep.read_bytes() == (outside / "SKILL.md").read_bytes() and b"lifecycle:" not in keep.read_bytes() and "SKILL.md is a link" in r.stdout, r.stdout[-300:])
+    d = bare("lk-gh")
+    ci_real = outside / "gh"
+    shutil.copytree(d / ".github", ci_real)
+    shutil.rmtree(d / ".github")
+    link_to(ci_real, d / ".github")
+    before = (ci_real / "workflows" / "ci.yml").read_bytes()
+    r = run(d)
+    check("a .github that is a link: ci.yml behind it is untouched and a line says so", (ci_real / "workflows" / "ci.yml").read_bytes() == before and "is, or sits under, a link" in r.stdout, r.stdout[-300:])
+    d = bare("lk-dangling")
+    gone = outside / "not-there.cjs"
+    link_to(gone, d / "ecosystem.config.cjs")
+    before = tree(d)
+    r = run(d)
+    check("an ecosystem file that is a dangling link: refused, nothing written, the target not created", r.returncode != 0 and "link" in r.stderr and not gone.exists() and tree(d) == before and not (d / "zylos").exists(), (r.stderr[-300:], sorted(tree(d))[:4]))
+    d = bare("lk-bin")
+    run(d)
+    shutil.rmtree(d / "zylos" / "bin")
+    elsewhere = Path(tmp_dir("zylos-bin-"))
+    link_to(elsewhere, d / "zylos" / "bin")
+    r = run(d)
+    check("a zylos/bin that is a link: refused and nothing is written behind it", r.returncode != 0 and "link" in r.stderr and not list(elsewhere.iterdir()), (r.stderr[-300:], list(elsewhere.iterdir())))
+    d = bare("lk-dir")
+    (d / "ecosystem.config.cjs").mkdir()
+    before = tree(d)
+    r = run(d)
+    check("an ecosystem file that is a folder: refused, nothing written", r.returncode != 0 and "not a file" in r.stderr and tree(d) == before and not (d / "zylos").exists(), r.stderr[-300:])
+    d = bare("lk-zfile")
+    (d / "zylos").write_text("a file, not a folder\n", encoding="utf-8")
+    r = run(d)
+    check("a zylos that is a file: refused with a line, not a traceback", r.returncode != 0 and "Traceback" not in r.stderr and "not a folder" in r.stderr and (d / "zylos").read_text("utf-8") == "a file, not a folder\n", r.stderr[-300:])
+    if os.geteuid() != 0:
+        d = bare("lk-ro")
+        ci = d / ".github" / "workflows" / "ci.yml"
+        ci.chmod(0o444)
+        before = tree(d)
+        r = run(d)
+        ci.chmod(0o644)
+        check("a read-only ci.yml: refused before the first write, nothing written", r.returncode != 0 and "not writable" in r.stderr and tree(d) == before and not (d / "zylos").exists(), r.stderr[-300:])
+
+
+def test_a_failed_write_puts_back_what_was_written() -> None:
+    print("[12b] all or nothing")
+    d = bare("rb")
+    before = tree(d)
+    real = add_zylos._write
+    seen = []
+
+    def failing(to, data, mode):
+        seen.append(to.name)
+        if to.name == "ci.yml":
+            raise PermissionError(13, "Permission denied", str(to))
+        real(to, data, mode)
+
+    add_zylos._write = failing
+    try:
+        try:
+            add_zylos.add(d)
+            said = None
+        except SystemExit as e:
+            said = str(e)
+    finally:
+        add_zylos._write = real
+    check("a write that fails in the last file: SKILL.md, the ecosystem file and the adapter are all back as they were, and the one line says so",
+          said is not None and "a write failed" in said and "put back" in said and tree(d) == before and not (d / "zylos").exists() and "ci.yml" in seen and len(seen) > 5, (said, seen[:3]))
+    again = add_zylos.add(d)
+    check("and the next run, once the cause is gone, does all of it", len(again[0]) > 5 and (d / "zylos" / "manifest.json").is_file())
+
+
+def test_what_the_adapters_check_would_refuse_is_refused_first() -> None:
+    print("[12c] names and paths")
+    d = bare("nm")
+    skill = d / "SKILL.md"
+    skill.write_text(skill.read_text("utf-8").replace("name: acme-skill-pack", "name: other-skill-pack", 1), encoding="utf-8")
+    before = tree(d)
+    r = run(d)
+    check("a SKILL.md name that is not the component's: refused with both names, before any write", r.returncode != 0 and "other-skill-pack" in r.stderr and "acme-skill-pack" in r.stderr and tree(d) == before, r.stderr[-300:])
+    for label, old, new in (("a prefix with TOKEN in it", 'env_prefix = "ACME"', 'env_prefix = "ACME_TOKEN"'), ("a prefix with SECRET in it", 'env_prefix = "ACME"', 'env_prefix = "SECRET"'),
+                            ("a scripts folder with a space", 'scripts_dir = "scripts"', 'scripts_dir = "my scripts"'), ("a scripts folder with a non-ASCII letter", 'scripts_dir = "scripts"', 'scripts_dir = "skripte-\u00e4"')):
+        d = bare("nm-" + label.split()[1][:4])
+        toml = d / "skill-pack.toml"
+        text = toml.read_text("utf-8")
+        toml.write_text(text.replace(old, new), encoding="utf-8")
+        if "scripts" in old:
+            (d / "scripts").rename(d / new.split('"')[1])
+        before = tree(d)
+        r = run(d)
+        check(f"{label}: refused with a line, nothing written", r.returncode != 0 and "Traceback" not in r.stderr and "error:" in r.stderr and tree(d) == before, (r.stderr[-300:], sorted(set(tree(d)) ^ set(before))[:3]))
+    d = bare("nm-ok")
+    toml = d / "skill-pack.toml"
+    toml.write_text(toml.read_text("utf-8").replace('env_prefix = "ACME"', 'env_prefix = "ACME_TOKENS_X"'), encoding="utf-8")
+    check("the secret words are matched as the adapter does (anywhere in the prefix): TOKENS_X is refused too", run(d).returncode != 0)
+
+
+def test_a_ci_or_skill_md_in_a_style_we_do_not_read_is_left_alone() -> None:
+    print("[12d] styles")
+    for label, text in (
+        ("steps with a sibling key at the items' own indent", "jobs:\n  t:\n    steps:\n    - run: x\n    timeout-minutes: 5\n"),
+        ("a `steps:` inside a script block at the end of the file", "jobs:\n  t:\n    steps:\n      - run: x\nnotes: |\n  steps:\n  - a\n"),
+        ("a tab in the indent", "jobs:\n  t:\n    steps:\n      - run: x\n\t- run: y\n"),
+    ):
+        new, note = ci_note(text)
+        check(f"ci.yml, {label}: nothing is added and a line says what to do by hand", new is None and note and ("tab" in note if "tab" in label else True), (new, note))
+    ok, _ = ci_note("jobs:\n  t:\n    steps:\n    - run: x\n")
+    check("steps written at the key's own indent (compact style) get the new steps at that indent, and the file is still YAML", ok is not None and yaml_ok(ok) and "\n    - name: Zylos adapter check\n      run: node zylos/lib.js check" in ok, ok)
+    ok, _ = ci_note("jobs:\n  t:\n    steps:\n      - run: |\n          echo\n          # a comment in the script\n          steps:\n")
+    check("a script block that ends the file keeps all its lines before the new steps", ok is not None and yaml_ok(ok) and ok.index("steps:\n      - uses") > ok.index("a comment in the script"), ok)
+    for label, edit in (("a quoted key", lambda t: t.replace("type: capability\n", 'type: capability\n"bin": x\n', 1)),
+                        ("a single-quoted key", lambda t: t.replace("type: capability\n", "type: capability\n'config': {}\n", 1)),
+                        ("a quoted lifecycle", lambda t: t.replace("type: capability\n", "type: capability\n\"lifecycle\": {}\n", 1)),
+                        ("an explicit `?` key", lambda t: t.replace("type: capability\n", "type: capability\n? bin\n: x\n", 1)),
+                        ("a list at the top", lambda t: t.replace("type: capability\n", "type: capability\n- a\n", 1))):
+        d = bare("st-" + label.split()[1][:4])
+        skill = d / "SKILL.md"
+        skill.write_text(edit(skill.read_text("utf-8")), encoding="utf-8")
+        before = skill.read_bytes()
+        r = run(d)
+        check(f"SKILL.md with {label}: not edited{'' if 'lifecycle' in label else ', and a line says to merge by hand'}", skill.read_bytes() == before and (("lifecycle" in label) or "by hand" in r.stdout), r.stdout[-300:])
+    d = bare("st-flow")
+    skill = d / "SKILL.md"
+    skill.write_text("---\n{name: acme-skill-pack, version: 0.1.0, type: capability}\n---\nbody\n", encoding="utf-8")
+    r = run(d)
+    check("a frontmatter written as a flow mapping: not edited, a line says so", skill.read_text("utf-8").startswith("---\n{name:") and "lifecycle" not in skill.read_text("utf-8") and "by hand" in r.stdout, r.stdout[-300:])
+    d = bare("st-mixed")
+    skill = d / "SKILL.md"
+    skill.write_bytes(skill.read_bytes().replace(b"\n", b"\r\n", 5))
+    before = skill.read_bytes()
+    r = run(d)
+    check("a SKILL.md that mixes LF and CRLF: not edited, a line says so", skill.read_bytes() == before and "mixes LF and CRLF" in r.stdout, r.stdout[-300:])
+
+
 if __name__ == "__main__":
     for fn in (test_the_scaffold_sets_it_up_by_default, test_adding_to_an_existing_pack_and_running_twice,
                test_what_the_skill_pack_owns_is_not_overwritten, test_dry_run_and_the_verdict, test_the_port, test_refusals,
                test_the_ci_step, test_a_ci_file_that_is_not_safe_to_edit_is_left_alone, test_a_skill_md_that_is_not_safe_to_edit_is_left_alone,
-               test_bad_inputs_are_refused_before_anything_is_written):
+               test_bad_inputs_are_refused_before_anything_is_written, test_nothing_is_written_through_a_link_or_where_it_cannot_go,
+               test_a_failed_write_puts_back_what_was_written, test_what_the_adapters_check_would_refuse_is_refused_first,
+               test_a_ci_or_skill_md_in_a_style_we_do_not_read_is_left_alone):
         fn()
     raise SystemExit(finish())

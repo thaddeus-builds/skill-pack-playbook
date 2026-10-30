@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import posixpath
 import re
 import shutil
@@ -53,6 +54,8 @@ BRAND = "openmax"
 CI_CHECK = re.compile(r"^[^#\n]*node\s+(?:\./)?zylos/lib\.js\s+check", re.M)
 OWNED_KEYS = ("lifecycle", "bin", "config", "next-steps")
 # the adapter's own patterns (hosts/zylos/lib.js, RE), the ones a value of ours has to satisfy
+SECRET_KEY = re.compile(r"SECRET|TOKEN|PASSWORD|ACCESS_KEY|API_KEY|PRIVATE_KEY")
+RELPATH = re.compile(r"[A-Za-z0-9_./-]+")
 RE = {"name": r"[a-z0-9][a-z0-9-]*", "bin": r"[a-z0-9]+(-[a-z0-9]+)+", "prefix": r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*", "env": r"[A-Z][A-Z0-9_]*",
       "basePath": r"/[a-z0-9][a-z0-9-]*", "marker": r"[A-Z][A-Z0-9]*(-[A-Z0-9]+)+", "brand": r"[a-z0-9]+"}
 
@@ -134,6 +137,11 @@ def problems(m: dict) -> list[str]:
                                ("detach.exit_marker", "marker", m["detach"]["exit_marker"])):
         if not fits(kind, value):
             out.append(f"{label} = {value!r} does not fit {RE[kind]}")
+    if SECRET_KEY.search(m["env"]["prefix"]):
+        out.append(f"env.prefix {m['env']['prefix']!r} contains a word the adapter reads as a secret (SECRET, TOKEN, PASSWORD, ACCESS_KEY, API_KEY, PRIVATE_KEY), so every "
+                   f"config key we write would have to be `sensitive: true`; write the manifest and the SKILL.md keys by hand")
+    if not RELPATH.fullmatch(m["cli"]["entry"]) or any(seg in ("", ".", "..") for seg in m["cli"]["entry"].split("/")):
+        out.append(f"cli.entry = {m['cli']['entry']!r} is not a path of letters, digits, `_`, `.`, `-` and `/` inside the skill pack")
     return out
 
 
@@ -173,61 +181,145 @@ def frontmatter_keys(m: dict, s: dict) -> str:
     ])
 
 
+def frontmatter_of(text: str) -> tuple[str, int] | None:
+    """(the frontmatter's lines, where its closing `---` starts in text[4:]) or None: it must open with `---` and close on a line that is exactly `---`."""
+    if not text.startswith("---\n"):
+        return None
+    close = re.search(r"^---$", text[4:], re.M)                                      # exactly `---`, as the adapter's own check reads it
+    return (text[4:4 + close.start()], close.start()) if close else None
+
+
+def skill_name(text: str) -> str | None:
+    """The `name:` of the frontmatter as a plain value, or None when there is none or it is not plain."""
+    fm = frontmatter_of(text)
+    m = re.search(r"^name:[ \t]*(\S.*?)[ \t]*$", fm[0], re.M) if fm else None
+    return m.group(1).strip("\"'") if m else None
+
+
 def with_frontmatter(text: str, keys: str) -> tuple[str | None, str | None]:
     """(text with the Zylos keys at the end of its frontmatter, None), (None, None) when it has them already (`lifecycle:`), or (None, why) when it
-    cannot be edited safely: no frontmatter, a closing delimiter not found, or one of the keys we would add is already there on its own."""
-    if text.startswith("﻿"):
+    cannot be edited safely: no frontmatter, a closing delimiter not found, a top level that is not plain `key: value` lines, or one of the keys we
+    would add is already there on its own."""
+    if text.startswith("\ufeff"):
         return None, "SKILL.md starts with a byte-order mark: add the Zylos keys by hand (zylos/README.md, SKILL.md frontmatter)"
     if not text.startswith("---\n"):
         return None, "SKILL.md has no frontmatter: add one with the Zylos keys by hand (zylos/README.md)"
-    close = re.search(r"^---$", text[4:], re.M)                                      # exactly `---`, as the adapter's own check reads it
-    if not close:
+    fm = frontmatter_of(text)
+    if not fm:
         return None, "SKILL.md's frontmatter has no closing line that is exactly `---` (the adapter's check reads no other): fix it, or add the Zylos keys by hand"
-    head = text[4:4 + close.start()]
-    present = set(re.findall(r"^([A-Za-z_][\w-]*)[ \t]*:", head, re.M))
+    head, close = fm
+    top = [ln for ln in head.split("\n") if ln.strip() and not ln.startswith((" ", "\t", "#"))]
+    keyed = [re.match(r"""^(?:([A-Za-z_][\w-]*)|"([A-Za-z_][\w-]*)"|'([A-Za-z_][\w-]*)')[ \t]*:(?:[ \t]|$)""", ln) for ln in top]
+    if not all(keyed):
+        return None, "SKILL.md's frontmatter has a top-level line that is not `key: value` (a flow mapping, an explicit `?` key, a list): add the Zylos keys by hand (zylos/README.md)"
+    present = {next(g for g in m.groups() if g) for m in keyed}
     if "lifecycle" in present:
         return None, None
     clash = [k for k in OWNED_KEYS if k in present]
     if clash:
         return None, f"SKILL.md has its own {', '.join(f'`{k}:`' for k in clash)} without `lifecycle:`: merge the Zylos keys by hand (zylos/README.md)"
-    return "---\n" + head.rstrip("\n") + "\n" + keys + "\n" + text[4 + close.start():], None
+    return "---\n" + head.rstrip("\n") + "\n" + keys + "\n" + text[4 + close:], None
+
+
+OPENS_BLOCK = re.compile(r"^(?P<lead> *(?:- +)*)(?P<key>[^\s'\"#][^#]*?:[ \t]+)?[|>][0-9+-]{0,2}[ \t]*(?:#.*)?$")
+
+
+def _outside_blocks(lines: list[str]) -> list[bool]:
+    """For each line: is it outside a block scalar (`key: |`, `- run: >-`)? A line inside one is text, whatever it looks like."""
+    out: list[bool] = []
+    block = None                                                       # the column the lines of the open block must be indented past
+    for ln in lines:
+        if block is not None and (not ln.strip() or len(ln) - len(ln.lstrip(" ")) > block):
+            out.append(False)
+            continue
+        block = None
+        out.append(True)
+        m = OPENS_BLOCK.match(ln)
+        if m and not ln.lstrip().startswith("#"):
+            block = len(m["lead"]) if m["key"] else len(ln) - len(ln.lstrip(" "))
+    return out
 
 
 def with_ci_step(text: str) -> tuple[str | None, str | None]:
     """(text of a GitHub workflow with Node 22 and the check as the last steps, None), (None, None) when it runs the check already, or (None, why) when
-    its steps are not the end of the file: a job with none, a key after them, steps written inline."""
+    its steps are not the end of the file: a job with none, a key after them (even at the items' own indent), steps written inline, a tab."""
     if CI_CHECK.search(text):
         return None, None
     lines = text.split("\n")
-    at = [i for i, ln in enumerate(lines) if re.match(r"^ {0,6}steps:[ \t]*$", ln)]
+    plain = _outside_blocks(lines)
+    if any("\t" in ln[:len(ln) - len(ln.lstrip())] for ln, p in zip(lines, plain) if p):
+        return None, "ci.yml indents with a tab"
+    at = [i for i, ln in enumerate(lines) if plain[i] and re.match(r"^ {0,6}steps:[ \t]*$", ln)]
     if not at:
         return None, "ci.yml has no `steps:` list to add to (a job that calls a reusable workflow, or steps written inline)"
     i = at[-1]
     steps_indent = len(lines[i]) - len(lines[i].lstrip(" "))
-    content = [(n, ln) for n, ln in enumerate(lines[i + 1:]) if ln.strip() and not ln.lstrip().startswith("#")]
+    after = range(i + 1, len(lines))
+    content = [j for j in after if lines[j].strip() and plain[j] and not lines[j].lstrip().startswith("#")]
     if not content:
         return None, "ci.yml's last `steps:` list is empty"
-    first = content[0][1]
+    first = lines[content[0]]
     item = len(first) - len(first.lstrip(" "))
     if not first.lstrip().startswith("- ") or item < steps_indent:
         return None, "ci.yml's last `steps:` is not followed by a list"
-    if any(len(ln) - len(ln.lstrip(" ")) < item for _, ln in content):
-        return None, "ci.yml has more after its last `steps:` list (a job key or a top-level key)"
+    for j in content:
+        ind = len(lines[j]) - len(lines[j].lstrip(" "))
+        if ind < item or (ind == item and not lines[j].lstrip().startswith("-")):
+            return None, "ci.yml has more after its last `steps:` list (a job key or a top-level key)"
+    # the new steps go after the last line that is part of the list: a script block's lines count, a comment between items or after them does not
+    last = max(j for j in after if lines[j].strip() and (not plain[j] or not lines[j].lstrip().startswith("#")))
     pad = " " * item
-    lines[i + 1 + content[-1][0] + 1:i + 1 + content[-1][0] + 1] = [
+    lines[last + 1:last + 1] = [
         f"{pad}- uses: actions/setup-node@v7", f"{pad}  with:", f'{pad}    node-version: "22"', f"{pad}- name: Zylos adapter check",
         f"{pad}  run: node zylos/lib.js check"]
     return "\n".join(lines), None
 
 
+class Unreadable(Exception):
+    """A file this tool will not edit; the message finishes the sentence "<file> ...", the caller says what to do by hand."""
+
+
 def _read(path: Path) -> tuple[str, bool]:
-    """(text with LF line endings, whether the file used CRLF)."""
-    raw = path.read_bytes().decode("utf-8")
-    return raw.replace("\r\n", "\n"), "\r\n" in raw
+    """(text with LF line endings, whether the file used CRLF). A file that is not UTF-8, or mixes LF and CRLF (rewriting it would change lines we do not
+    own), is Unreadable."""
+    try:
+        raw = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise Unreadable("is not UTF-8") from None
+    crlf = "\r\n" in raw
+    if crlf and re.search(r"(?<!\r)\n", raw):
+        raise Unreadable("mixes LF and CRLF line endings")
+    return raw.replace("\r\n", "\n"), crlf
 
 
 def _bytes(text: str, crlf: bool) -> bytes:
     return (text.replace("\n", "\r\n") if crlf else text).encode("utf-8")
+
+
+def link_in(skill_pack: Path, rel: str) -> str | None:
+    """The first part of `rel` below the skill pack that is a link (a write there would go where the link points), else None."""
+    p = skill_pack
+    for part in Path(rel).parts:
+        p = p / part
+        if p.is_symlink():
+            return p.relative_to(skill_pack).as_posix()
+    return None
+
+
+def unwritable(skill_pack: Path, rel: str) -> str | None:
+    """Why `rel` cannot be written, or None: it is a folder, a parent of it is a file, or the place is read-only. A pre-flight; `add` still puts back
+    what it wrote if a write fails after all."""
+    to = skill_pack / rel
+    if to.exists() and not to.is_file():
+        return f"{rel} exists and is not a file"
+    probe = to if to.exists() else to.parent
+    while not probe.exists():
+        probe = probe.parent
+    if not to.exists() and not probe.is_dir():
+        return f"{probe.relative_to(skill_pack).as_posix()} is a file, not a folder"
+    if not os.access(probe, os.W_OK | (0 if probe.is_file() else os.X_OK)):
+        return f"{probe.relative_to(skill_pack).as_posix() if probe != skill_pack else '.'} is not writable"
+    return None
 
 
 def plan(skill_pack: Path, *, brand: str, port: int | None) -> tuple[list[tuple[str, bytes, int | None]], list[str], list[str]]:
@@ -264,12 +356,17 @@ def plan(skill_pack: Path, *, brand: str, port: int | None) -> tuple[list[tuple[
         if not (to.is_file() and to.read_bytes() == src.read_bytes()):
             writes.append((f"zylos/{rel}", src.read_bytes(), src.stat().st_mode & 0o777))
     skill = skill_pack / "SKILL.md"
-    if skill.is_file():
+    if link_in(skill_pack, "SKILL.md"):
+        notes.append("SKILL.md is a link: it is not edited through it; add the Zylos keys to the file it points at by hand (zylos/README.md)")
+    elif skill.is_file():
         try:
             text, crlf = _read(skill)
-        except UnicodeDecodeError:
-            notes.append("SKILL.md is not UTF-8: add the Zylos keys by hand (zylos/README.md)")
+        except Unreadable as e:
+            notes.append(f"SKILL.md {e}: add the Zylos keys by hand (zylos/README.md)")
         else:
+            named = skill_name(text)
+            if named is not None and named != m["name"]:
+                raise refuse(f"SKILL.md name is {named!r} but the component's is {m['name']!r}: the adapter's check wants the same name in both; fix one, nothing was written")
             new, note = with_frontmatter(text, frontmatter_keys(m, s))
             if note:
                 notes.append(note)
@@ -280,11 +377,13 @@ def plan(skill_pack: Path, *, brand: str, port: int | None) -> tuple[list[tuple[
     if not (skill_pack / "ecosystem.config.cjs").is_file():
         writes.append(("ecosystem.config.cjs", (SOURCE / "ecosystem.config.cjs.template").read_bytes(), None))
     ci = skill_pack / ".github" / "workflows" / "ci.yml"
-    if ci.is_file():
+    if link_in(skill_pack, ".github/workflows/ci.yml"):
+        notes.append(".github/workflows/ci.yml is, or sits under, a link: it is not edited; add Node 22 and `node zylos/lib.js check` by hand")
+    elif ci.is_file():
         try:
             text, crlf = _read(ci)
-        except UnicodeDecodeError:
-            notes.append("ci.yml is not UTF-8: add Node 22 and `node zylos/lib.js check` by hand")
+        except Unreadable as e:
+            notes.append(f"ci.yml {e}: add Node 22 and `node zylos/lib.js check` by hand")
         else:
             new, note = with_ci_step(text)
             if note:
@@ -293,19 +392,59 @@ def plan(skill_pack: Path, *, brand: str, port: int | None) -> tuple[list[tuple[
                 writes.append((".github/workflows/ci.yml", _bytes(new, crlf), None))
     if (skill_pack / ".gitlab-ci.yml").is_file():
         notes.append(".gitlab-ci.yml is not edited: add `node zylos/lib.js check` to it by hand (Node 22 or newer)")
+    for rel, _, _ in writes:
+        via = link_in(skill_pack, rel)
+        if via:
+            raise refuse(f"{rel} is, or sits under, the link {via}: it would write outside its own place in the skill pack; nothing was written")
+        why = unwritable(skill_pack, rel)
+        if why:
+            raise refuse(f"{rel} cannot be written ({why}); nothing was written")
     return writes, notes, [rel for rel, _, _ in writes]
 
 
+def _write(to: Path, data: bytes, mode: int | None) -> None:
+    to.write_bytes(data)
+    if mode is not None:
+        to.chmod(mode)
+
+
 def add(skill_pack: Path, *, brand: str = BRAND, port: int | None = None, dry_run: bool = False) -> tuple[list[str], list[str]]:
-    """(the files created or changed, the notes): everything is planned before the first write."""
+    """(the files created or changed, the notes): everything is planned before the first write, and a write that fails puts back what was written."""
     writes, notes, done = plan(skill_pack, brand=brand, port=port)
-    if not dry_run:
+    if dry_run:
+        return done, notes
+    undo: list[tuple[Path, bytes | None, int]] = []                    # (file, its bytes before or None if it is new, its mode before)
+    made: list[Path] = []                                              # folders this run created
+    try:
         for rel, data, mode in writes:
             to = skill_pack / rel
-            to.parent.mkdir(parents=True, exist_ok=True)
-            to.write_bytes(data)
-            if mode is not None:
-                to.chmod(mode)
+            new_dirs, d = [], to.parent
+            while not d.exists():
+                new_dirs.append(d)
+                d = d.parent
+            for d in reversed(new_dirs):
+                d.mkdir()
+                made.append(d)
+            undo.append((to, to.read_bytes() if to.is_file() else None, to.stat().st_mode & 0o777 if to.is_file() else 0o644))
+            _write(to, data, mode)
+    except OSError as e:
+        stuck = []
+        for to, old, was in reversed(undo):
+            try:
+                if old is None:
+                    to.unlink(missing_ok=True)
+                else:
+                    to.write_bytes(old)
+                    to.chmod(was)
+            except OSError:
+                stuck.append(to.relative_to(skill_pack).as_posix())
+        for d in reversed(made):
+            try:
+                d.rmdir()
+            except OSError:
+                pass
+        left = f"; these could not be put back, fix them by hand: {', '.join(stuck)}" if stuck else "; what was written before it was put back"
+        raise refuse(f"a write failed ({e.strerror or e.__class__.__name__}: {e.filename}){left}") from None
     return done, notes
 
 
