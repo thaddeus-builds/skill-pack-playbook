@@ -800,5 +800,132 @@ def test_a_setup_step_that_fails_is_a_line_and_leaves_no_clone():
         assert not (out / "acme").exists(), "the half-made clone is removed"
 
 
+def load_fleet(tag: str):
+    spec = importlib.util.spec_from_file_location("fleet_tool_" + tag, FLEET)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def bare_environment(**extra) -> dict:
+    """An environment with no git identity, no global or system git configuration, and none of the variables that name a repository."""
+    gone = ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
+    env = {k: v for k, v in os.environ.items() if k not in gone}
+    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", **extra)
+    return env
+
+
+def test_variables_that_name_a_repository_do_not_reach_the_git_calls():
+    """Found by the third cold review: run from a hook, `git rebase --exec` or `git bisect run`, GIT_DIR was handed to every git call, and the clone went into the
+    repository that was running the tool."""
+    fleet = load_fleet("env")
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        other = Path(tmp) / "unrelated"
+        git(Path(tmp), "init", "-q", "-b", "main", str(other))
+        (other / "f.txt").write_text("mine\n")
+        git(other, "add", "-A")
+        git(other, "commit", "-qm", "an unrelated repository")
+        before = (git(other, "rev-parse", "HEAD"), git(other, "branch", "--list"), git(other, "remote"), (other / ".git" / "config").read_text())
+        hook = {"GIT_DIR": str(other / ".git"), "GIT_WORK_TREE": str(other), "GIT_INDEX_FILE": str(other / ".git" / "index"), "GIT_PREFIX": ""}
+        with mock.patch.dict(os.environ, {**IDENTITY, **hook}):
+            doc = fleet.rehearse(pack, Path(tmp) / "trial", pb, "0.2.0")
+            out = fleet.export(pack, Path(tmp) / "exported", "origin")
+            head = fleet.git(pack, "rev-parse", "HEAD")
+        assert doc["state"] == "green" and out["state"] == "exported", (doc, out)
+        assert head.strip() == git(pack, "rev-parse", "HEAD"), "a repository is read from its folder, not from the repository the hook names"
+        assert before == (git(other, "rev-parse", "HEAD"), git(other, "branch", "--list"), git(other, "remote"), (other / ".git" / "config").read_text()), \
+            "the unrelated repository is as it was: no clone, no remote, no branch moved"
+
+
+def test_an_interrupted_suite_leaves_no_worktree_behind_and_a_kept_one_stays():
+    fleet = load_fleet("wt")
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        out = Path(tmp) / "trial"
+
+        def interrupted_in_the_suite(dest, playbook, version, tests, remote):
+            (out / "acme_worktrees" / "kit-0.2.0").mkdir(parents=True)
+            raise KeyboardInterrupt
+
+        with mock.patch.object(fleet, "update", interrupted_in_the_suite):
+            try:
+                fleet.rehearse(pack, out, pb, "0.2.0")
+                raised = False
+            except KeyboardInterrupt:
+                raised = True
+        assert raised and not (out / "acme").exists() and not (out / "acme_worktrees").exists(), "the clone and the worktree update made are both gone"
+        again = rehearse(pb, out, str(pack))
+        assert again.returncode == 0 and "worktree exists" not in again.stdout, again.stdout + again.stderr
+        kept = Path(tmp) / "trial2"
+        (kept / "acme_worktrees").mkdir(parents=True)
+        (kept / "acme_worktrees" / "mine.txt").write_text("a folder that was there before\n")
+        with mock.patch.object(fleet, "update", side_effect=KeyboardInterrupt):
+            try:
+                fleet.rehearse(pack, kept, pb, "0.2.0")
+            except KeyboardInterrupt:
+                pass
+        assert (kept / "acme_worktrees" / "mine.txt").is_file(), "a worktrees folder that existed before the trial is not the trial's to remove"
+
+
+def test_the_clone_has_the_checkouts_identity_ssh_command_and_address_rewrites():
+    """Found by the third cold review: the clone is a new repository, so a `user.name` kept only in the checkout's own config, a `core.sshCommand` and the
+    like were lost: `update` could not commit and the fetch used the wrong key."""
+    fleet = load_fleet("cfg")
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        git(pack, "config", "--local", "user.name", "Local Name")
+        git(pack, "config", "--local", "user.email", "local@example.com")
+        git(pack, "config", "--local", "core.sshCommand", "ssh -i /my/key -p 2222")
+        git(pack, "config", "--local", "--add", "credential.helper", "store")
+        git(pack, "config", "--local", "url.https://mirror.example.com/.insteadOf", "https://origin.example.com/")
+        git(pack, "config", "--local", "http.version", "HTTP/1.1")
+        git(pack, "config", "--local", "core.autocrlf", "true")
+        with mock.patch.dict(os.environ, bare_environment()):
+            doc = fleet.rehearse(pack, Path(tmp) / "trial", pb, "0.2.0")
+        clone = Path(tmp) / "trial" / "acme"
+        assert doc["state"] == "green", doc
+        assert git(clone, "config", "--local", "user.name") == "Local Name" and git(clone, "config", "--local", "user.email") == "local@example.com"
+        assert git(clone, "config", "--local", "core.sshCommand") == "ssh -i /my/key -p 2222"
+        assert git(clone, "config", "--local", "--get-all", "credential.helper") == "store" and git(clone, "config", "--local", "http.version") == "HTTP/1.1"
+        assert git(clone, "config", "--local", "url.https://mirror.example.com/.insteadOf") == "https://origin.example.com/"
+        assert subprocess.run(["git", "-C", str(clone), "config", "--local", "core.autocrlf"], capture_output=True, text=True).stdout.strip() == "", "only what a command needs is copied"
+        assert "GIT_SSH_COMMAND" not in fleet.git_env(clone), "the ssh decision is made from the clone, which now has the checkout's command"
+
+
+def test_a_folder_that_was_there_is_not_removed_and_secrets_stay_out_of_every_printed_line():
+    fleet = load_fleet("keep")
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        out = Path(tmp) / "trial"
+        (out / "acme").mkdir(parents=True)
+        (out / "acme" / "keep.txt").write_text("the user's own folder\n")
+        doc = fleet.rehearse(pack, out, pb, "0.2.0")
+        assert doc["state"] == "refused" and "exists" in doc["text"] and (out / "acme" / "keep.txt").read_text() == "the user's own folder\n", doc
+        secret = "SEKRET" + "9999"
+        git(pack, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+        git(pack, "remote", "set-url", "origin", "https://" + "user:" + secret + AT + "127.0.0.1:1/x.git?token=" + secret)
+        with mock.patch.object(fleet, "FETCH_S", 5):
+            refused = fleet.update(pack.resolve(), pb, "0.2.0", True, "origin")
+            exported = fleet.export(pack, Path(tmp) / "exported", "origin")
+        assert secret not in json.dumps([refused, exported]), (refused, exported)
+        assert refused["state"] == "refused" and "cannot fetch" in refused["text"], refused
+
+
+def test_an_out_that_cannot_be_made_is_a_line_for_export_too_and_more_secrets_are_hidden():
+    fleet = load_fleet("misc")
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        a_file = Path(tmp) / "afile"
+        a_file.write_text("x")
+        doc = fleet.export(pack, a_file, "origin")
+        assert doc["state"] == "refused" and "cannot use --out" in doc["text"], doc
+    hide = fleet.hide_credentials
+    for name in ("t", "pwd", "code", "jwt", "bearer", "api_key", "secret"):
+        assert "SEKRET" not in hide(f"https://host.example.com/x.git?{name}=SEKRET&ref=main"), name
+    assert hide("https://host.example.com/x.git#token=SEKRET") == "https://host.example.com/x.git" and hide("see #123 for the issue") == "see #123 for the issue"
+    assert hide("https://host.example.com/x.git?ref=main&topic=1") == "https://host.example.com/x.git?ref=main&topic=1", "a name that only contains t is not 't'"
+
+
 if __name__ == "__main__":
     _t.main(globals())
