@@ -11,6 +11,7 @@
   [6] the port is stable per name, in 8800 to 9799, different for different names, and --port wins
   [7] a folder with no skill-pack.toml, and a pack with no CLI script, are refused with one line
   [8] the CI step: Node 22 and the check as the last steps; nothing added twice or to a file with no steps
+  [9] to [11] (a cold review): a CI file or a SKILL.md that is not safe to edit is left alone with a line; bad inputs are refused before the first write
 """
 
 import json
@@ -164,17 +165,152 @@ def test_refusals() -> None:
 def test_the_ci_step() -> None:
     print("[8] the CI step")
     base = "jobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo hi\n"
-    new = add_zylos.with_ci_step(base)
-    check("Node 22 and the check come last", new is not None and new.endswith(
+    new, note = add_zylos.with_ci_step(base)
+    check("Node 22 and the check come last", note is None and new is not None and new.endswith(
         '      - uses: actions/setup-node@v7\n        with:\n          node-version: "22"\n'
         '      - name: Zylos adapter check\n        run: node zylos/lib.js check\n'), new)
-    check("added once", add_zylos.with_ci_step(new) is None)
-    check("a file with no steps is left alone", add_zylos.with_ci_step("name: x\non: push\n") is None)
+    check("added once", add_zylos.with_ci_step(new) == (None, None))
+    check("a file with no steps is left alone and says why", add_zylos.with_ci_step("name: x\non: push\n")[0] is None and add_zylos.with_ci_step("name: x\non: push\n")[1])
+
+
+def ci_note(text: str):
+    new, note = add_zylos.with_ci_step(text)
+    return new, note
+
+
+def yaml_ok(text: str) -> bool:
+    try:
+        import yaml
+    except ImportError:
+        return True                                                  # no YAML reader here: the structural checks above stand alone
+    try:
+        yaml.safe_load(text)
+        return True
+    except yaml.YAMLError:
+        return False
+
+
+def test_a_ci_file_that_is_not_safe_to_edit_is_left_alone() -> None:
+    print("[9] found by a cold review: the CI file")
+    job = "jobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"
+    cases = {
+        "a last job that calls a reusable workflow": job + "  u:\n    uses: org/repo/.github/workflows/w.yml@main\n",
+        "a top-level key after the jobs": job + "env:\n  A: b\n",
+        "a job key after the steps": job + "    timeout-minutes: 5\n",
+        "steps only in a comment": "jobs:\n  t:\n    runs-on: x\n    # steps:\n",
+        "steps written inline": "jobs:\n  t:\n    steps: [a, b]\n",
+    }
+    for label, text in cases.items():
+        new, note = ci_note(text)
+        check(f"{label}: nothing is added and the line says what to do by hand", new is None and note, (new, note))
+    ok, _ = ci_note(job + "\n# a comment at column 0\n")
+    check("a comment or a blank line after the steps stays after the new steps, and the file is still YAML", ok is not None and yaml_ok(ok) and ok.index("Zylos adapter check") < ok.index("# a comment"), ok)
+    ok, _ = ci_note("jobs:\n  a:\n    steps:\n      - run: x\n  b:\n    steps:\n      - run: y\n")
+    check("several jobs: the last job's steps get it, and the file is still YAML", ok is not None and yaml_ok(ok) and ok.rstrip().endswith("run: node zylos/lib.js check"), ok)
+    ok, _ = ci_note("jobs:\n  t:\n    steps:\n      - run: |\n          echo steps:\n          steps:\n")
+    check("a `steps:` line inside a script block is not taken for the list", ok is not None and yaml_ok(ok) and ok.count("Zylos adapter check") == 1 and
+          "          steps:\n      - uses" in ok.replace("\r", ""), ok)
+    already, _ = ci_note(job + "      - run: node ./zylos/lib.js check\n")
+    commented, _ = ci_note(job + "      # node zylos/lib.js check\n")
+    check("a check already run (even as ./zylos) is not added again; a commented one does not count", already is None and commented is not None)
+    crlf, _ = ci_note((job).replace("\n", "\r\n").replace("\r\n", "\n"))
+    d = bare("crlf")
+    ci = d / ".github" / "workflows" / "ci.yml"
+    ci.write_bytes(ci.read_bytes().replace(b"\n", b"\r\n"))
+    r = run(d)
+    after = ci.read_bytes()
+    check("a CRLF ci.yml stays CRLF", r.returncode == 0 and b"\r\n" in after and after.count(b"\n") == after.count(b"\r\n") and b"Zylos adapter check" in after, after[-160:])
+
+
+def test_a_skill_md_that_is_not_safe_to_edit_is_left_alone() -> None:
+    print("[10] found by a cold review: SKILL.md")
+    for label, extra in (("bin:", "bin:\n  x: y\n"), ("config:", "config:\n  required: []\n"), ("next-steps:", 'next-steps: "do it"\n')):
+        d = bare("skill-" + label[:3])
+        skill = d / "SKILL.md"
+        skill.write_text(skill.read_text("utf-8").replace("type: capability\n", "type: capability\n" + extra, 1), encoding="utf-8")
+        before = skill.read_bytes()
+        r = run(d)
+        check(f"its own {label} without lifecycle: SKILL.md is not touched and a line says to merge by hand", skill.read_bytes() == before and "merge the Zylos keys by hand" in r.stdout, r.stdout[-300:])
+        again = run(d)
+        check(f"and a second run says the same, it does not pretend it is done ({label})", skill.read_bytes() == before and "merge the Zylos keys by hand" in again.stdout)
+    d = bare("skill-trail")
+    skill = d / "SKILL.md"
+    text = skill.read_text("utf-8")
+    skill.write_text(text.replace("\n---\n", "\n---  \n", 1), encoding="utf-8")
+    before = skill.read_bytes()
+    r = run(d)
+    check("a closing `---` with trailing spaces is not the adapter's closing line: SKILL.md is untouched and a line says so (no false green)",
+          skill.read_bytes() == before and "exactly `---`" in r.stdout, r.stdout[-300:])
+    d = bare("skill-nofm")
+    skill = d / "SKILL.md"
+    skill.write_text("# no frontmatter here\n", encoding="utf-8")
+    r = run(d)
+    check("no frontmatter: untouched, with a line", skill.read_text("utf-8") == "# no frontmatter here\n" and "no frontmatter" in r.stdout, r.stdout[-200:])
+    d = bare("skill-bom")
+    skill = d / "SKILL.md"
+    skill.write_bytes(b"\xef\xbb\xbf" + skill.read_bytes())
+    r = run(d)
+    check("a byte-order mark: untouched, with a line", "byte-order mark" in r.stdout, r.stdout[-200:])
+    d = bare("skill-crlf")
+    skill = d / "SKILL.md"
+    skill.write_bytes(skill.read_bytes().replace(b"\n", b"\r\n"))
+    run(d)
+    after = skill.read_bytes()
+    check("a CRLF SKILL.md stays CRLF, with the keys added", b"lifecycle:" in after and after.count(b"\n") == after.count(b"\r\n"))
+
+
+def test_bad_inputs_are_refused_before_anything_is_written() -> None:
+    print("[11] found by a cold review: inputs")
+    for label, extra in (("--port 80", ["--port", "80"]), ("--port -1", ["--port", "-1"]), ("--port 70000", ["--port", "70000"]), ("--brand 'Open Max'", ["--brand", "Open Max"])):
+        d = bare("in-" + label[2:6])
+        before = tree(d)
+        r = run(d, *extra)
+        check(f"{label}: one line, exit non-zero, nothing written", r.returncode != 0 and "error:" in (r.stdout + r.stderr) and "Traceback" not in r.stderr and tree(d) == before, (r.stdout[-200:], r.stderr[-200:]))
+    d = bare("in-prefix")
+    toml = d / "skill-pack.toml"
+    toml.write_text(toml.read_text("utf-8").replace('env_prefix = "ACME"', 'env_prefix = "a:b"'), encoding="utf-8")
+    before = tree(d)
+    r = run(d)
+    check("an env prefix with a colon: refused with a line, nothing written", r.returncode != 0 and "env_prefix" in (r.stdout + r.stderr) and tree(d) == before and "Traceback" not in r.stderr, r.stderr[-200:])
+    d = bare("in-scripts")
+    toml = d / "skill-pack.toml"
+    toml.write_text(toml.read_text("utf-8").replace('scripts_dir = "scripts"', 'scripts_dir = "./scripts/"'), encoding="utf-8")
+    r = run(d)
+    m = json.loads((d / "zylos" / "manifest.json").read_text("utf-8")) if (d / "zylos" / "manifest.json").is_file() else {}
+    check("scripts_dir written as ./scripts/ is normalised: the entry is scripts/acme.py and the check passes", r.returncode == 0 and m.get("cli", {}).get("entry") == "scripts/acme.py", (r.stdout[-200:], m.get("cli")))
+    d = bare("in-up")
+    toml = d / "skill-pack.toml"
+    toml.write_text(toml.read_text("utf-8").replace('scripts_dir = "scripts"', 'scripts_dir = "../x"'), encoding="utf-8")
+    r = run(d)
+    check("a scripts_dir that leaves the pack is refused", r.returncode != 0 and "leaves the skill pack" in (r.stdout + r.stderr))
+    d = bare("in-manifest")
+    run(d)
+    (d / "zylos" / "manifest.json").write_text("{}", encoding="utf-8")
+    before = tree(d)
+    r = run(d)
+    check("a manifest of {}: one line, nothing else written, no traceback", r.returncode != 0 and "manifest" in (r.stdout + r.stderr) and "Traceback" not in r.stderr and tree(d) == before, (r.stdout[-200:], r.stderr[-200:]))
+    (d / "zylos" / "manifest.json").write_text("not json", encoding="utf-8")
+    r = run(d, "--dry-run")
+    check("a manifest that is not JSON: a line even with --dry-run, no traceback", r.returncode != 0 and "Traceback" not in r.stderr, r.stderr[-200:])
+    d = bare("in-explicit")
+    run(d)
+    r = run(d, "--port", "9100")
+    check("--port with a manifest that exists says it is ignored", "--port and --brand are ignored" in r.stdout, r.stdout[-200:])
+    d = bare("in-link")
+    real = Path(tmp_dir("zylos-real-"))
+    (d / "zylos").symlink_to(real)
+    r = run(d)
+    check("a zylos/ that is a link is refused and nothing is written through it", r.returncode != 0 and "is a link" in (r.stdout + r.stderr) and not list(real.iterdir()), (r.stdout[-200:], list(real.iterdir())))
+    d = bare("in-gitlab")
+    (d / ".gitlab-ci.yml").write_text("test:\n  script: [x]\n", encoding="utf-8")
+    r = run(d)
+    check("a .gitlab-ci.yml is not edited and a line says to add the check by hand", ".gitlab-ci.yml is not edited" in r.stdout and (d / ".gitlab-ci.yml").read_text("utf-8") == "test:\n  script: [x]\n")
 
 
 if __name__ == "__main__":
     for fn in (test_the_scaffold_sets_it_up_by_default, test_adding_to_an_existing_pack_and_running_twice,
                test_what_the_skill_pack_owns_is_not_overwritten, test_dry_run_and_the_verdict, test_the_port, test_refusals,
-               test_the_ci_step):
+               test_the_ci_step, test_a_ci_file_that_is_not_safe_to_edit_is_left_alone, test_a_skill_md_that_is_not_safe_to_edit_is_left_alone,
+               test_bad_inputs_are_refused_before_anything_is_written):
         fn()
     raise SystemExit(finish())
