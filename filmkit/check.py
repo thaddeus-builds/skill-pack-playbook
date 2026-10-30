@@ -13,7 +13,12 @@ from .util import Ctx
 
 def context(spec: dict, base_dir: Path, q: float = 1.0) -> Ctx:
     c = spec["canvas"]
-    return Ctx(c["w"], c["h"], q, Fonts(spec.get("fonts"), base_dir), {}, {}, base_dir)
+    assets, kinds = {}, {}
+    for name, a in (spec.get("assets") or {}).items():                  # what render resolves, so an element that reads a file (a logo's shape) sees it here too
+        pth = Path(a["path"])
+        assets[name] = str(pth if pth.is_absolute() else base_dir / pth)
+        kinds[name] = a["type"]
+    return Ctx(c["w"], c["h"], q, Fonts(spec.get("fonts"), base_dir), assets, kinds, base_dir)
 
 
 def safe_box(spec: dict) -> list[float] | None:

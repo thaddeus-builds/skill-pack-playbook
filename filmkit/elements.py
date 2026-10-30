@@ -2,15 +2,15 @@
 inside an element are seconds after its `t0` (so moving an element in time moves all of it). Every element has three parts: `check` (what is wrong with its params), `draw` (a frame of it on
 an RGBA layer) and `boxes` (where its type sits at a time, in design pixels: the layout check reads these to find a line off the safe area or two lines on each other).
 
-    title    lines of type that rise and fade in one after another (a mask reveal), optionally out again; `max_width` shrinks the size until the widest line fits
-    text     one tracked line that fades in (a tagline, a small label)
-    chip     a rounded label with a pulsing dot (a section tag)
+    title    lines of type that rise and fade in one after another (a mask reveal), optionally out again; `max_width` and `max_height` shrink the size until the lines fit
+    text     one tracked line that fades in (a tagline, a small label); `max_width` shrinks it to fit
+    chip     a rounded label with a pulsing dot (a section tag); `max_width` shrinks the text so the whole chip fits
     brackets four corner brackets that grow out from the centre of a box
     scan     a sweeping line with a trail and a measuring rule on the edge of a box
-    counter  a number that counts up to a target, then a suffix (its own size: `suffix_size`) that pops
+    counter  a number that counts up to a target, then a suffix (its own size: `suffix_size`) that pops; `max_width` scales both down to fit
     steps    a vertical progress line with numbered items that appear in turn (`name_size`; `max_width`: the items' titles shrink to fit it)
     rule     a line that grows from its centre (or from its left end: `grow`: "left")
-    logo     the brand's mark, faded in and out
+    logo     the brand's mark, faded in and out (`max_height`: a square mark is made narrower; the layout check sees its box)
 """
 from __future__ import annotations
 
@@ -62,13 +62,27 @@ def text_width(cx: Ctx, text: str, kind: str, size: float, tracking: float = 0.0
 
 def fitted(cx: Ctx, texts: list[str], kind: str, size: float, tracking: float, max_width: float | None, floor: float = 0.6) -> float:
     """The size (design pixels) at which the widest of `texts` fits `max_width`: `size` itself when it already does, else scaled down to fit, never below `floor` of it (a line that
-    still does not fit is for the layout check to name). No `max_width`: `size`."""
+    still does not fit is for the layout check to name). The tracking between letters does not shrink with the size, so the room for the letters themselves is what is left of
+    `max_width` after it. No `max_width`: `size`."""
     if not max_width:
         return size
-    widest = max(text_width(cx, t, kind, size, tracking) for t in texts)
-    if widest <= max_width:
-        return size
-    return max(size * floor, size * max_width / widest * 0.995)
+    best = size
+    for t in texts:
+        if text_width(cx, t, kind, size, tracking) <= max_width:
+            continue
+        glyphs = text_width(cx, t, kind, size, 0.0)
+        room = max_width - tracking * max(0, len(t) - 1)
+        best = min(best, size * room / glyphs * 0.98 if glyphs > 0 and room > 0 else 0.0)
+    return max(size * floor, best)
+
+
+def title_size(cx: Ctx, p: dict) -> float:
+    """A title's size: its own, shrunk until the widest line fits `max_width` and the lines fit `max_height` (design pixels; never below 60 percent)."""
+    size = fitted(cx, p["lines"], p["font"], p["size"], p["tracking"], p.get("max_width"))
+    mh = p.get("max_height")
+    if mh and len(p["lines"]) * size * p["lead"] > mh:
+        size = max(p["size"] * 0.6, mh / (len(p["lines"]) * p["lead"]) * 0.98)
+    return size
 
 
 def paste_clipped(layer, tmp, y):
@@ -119,7 +133,7 @@ class Title:
                 a *= 1 - smooth(prog(t, t0 + p["out"] + i * 0.05, p["out_dur"]))
             if a <= 0.001:
                 continue
-            size, lead = fitted(cx, p["lines"], p["font"], p["size"], p["tracking"], p.get("max_width")), p["lead"]
+            size, lead = title_size(cx, p), p["lead"]
             ly = p["y"] + i * size * lead
             tmp = Image.new("RGBA", (cx.W, int(size * lead * cx.q) + 12), (0, 0, 0, 0))
             d = ImageDraw.Draw(tmp)
@@ -133,9 +147,10 @@ class Title:
         if t < el["t0"]:
             return []
         out = []
-        size = fitted(cx, p["lines"], p["font"], p["size"], p["tracking"], p.get("max_width"))
+        size = title_size(cx, p)
         for i, line in enumerate(p["lines"]):
-            if t >= el["t0"] + i * p["stagger"] + 0.2:
+            gone = p["out"] is not None and t >= el["t0"] + p["out"] + i * 0.05 + p["out_dur"]          # a line that has faded out is no longer on the screen
+            if t >= el["t0"] + i * p["stagger"] + 0.2 and not gone:
                 out.append((f"title:{line[:18]}", *line_box(cx, line, p["x"], p["y"] + i * size * p["lead"], p["font"], size, 1.0, p["anchor"], p["tracking"])))
         return out
 
@@ -155,16 +170,23 @@ class Text:
         if a <= 0:
             return
         d = ImageDraw.Draw(layer)
-        track_text(d, (p["x"] * cx.q, p["y"] * cx.q), p["text"], cx.font(p["font"], p["size"]), (*rgb(p["fill"], WHITE), int(255 * p["alpha"] * a)), p["tracking"], p["anchor"], cx.q)
+        size = fitted(cx, [p["text"]], p["font"], p["size"], p["tracking"], p.get("max_width"))
+        track_text(d, (p["x"] * cx.q, p["y"] * cx.q), p["text"], cx.font(p["font"], size), (*rgb(p["fill"], WHITE), int(255 * p["alpha"] * a)), p["tracking"], p["anchor"], cx.q)
 
     @classmethod
     def boxes(cls, t, p, cx, el):
         p = {**cls.defaults, **p}
-        return [("text", *line_box(cx, p["text"], p["x"], p["y"], p["font"], p["size"], 1.0, p["anchor"], p["tracking"]))] if t >= el["t0"] + 0.2 else []
+        size = fitted(cx, [p["text"]], p["font"], p["size"], p["tracking"], p.get("max_width"))
+        return [("text", *line_box(cx, p["text"], p["x"], p["y"], p["font"], size, 1.0, p["anchor"], p["tracking"]))] if t >= el["t0"] + 0.2 else []
 
 
 @element("chip")
 class Chip:
+    @staticmethod
+    def size(cx, p):
+        """The text's size: 30, shrunk until the whole chip (its text and 84 pixels of padding) fits `max_width`."""
+        return fitted(cx, [p["text"]], "med", 30, 5, (p["max_width"] - 84) if p.get("max_width") else None)
+
     @staticmethod
     def check(p):
         return [] if isinstance(p.get("text"), str) and isinstance(p.get("x"), (int, float)) and isinstance(p.get("y"), (int, float)) else ["text, x and y are required"]
@@ -175,7 +197,8 @@ class Chip:
         if a <= 0:
             return
         x, y, text, dot = p["x"], p["y"], p["text"], p.get("dot", True)
-        w = text_width(cx, text, "med", 30, 5) + 84
+        size = cls.size(cx, p)
+        w = text_width(cx, text, "med", size, 5) + 84
         rrect(cx, layer, (x, y, x + w * a, y + 64), 32, fill=(8, 14, 22), outline=(255, 255, 255), width=2, alpha=0.78 * a)
         if a > 0.6:
             al = int(255 * (a - 0.6) / 0.4)
@@ -183,13 +206,13 @@ class Chip:
             if dot:
                 r = 9 * cx.q
                 d.ellipse(((x + 30) * cx.q - r, (y + 32) * cx.q - r, (x + 30) * cx.q + r, (y + 32) * cx.q + r), fill=(*rgb(p.get("accent"), BLUE), int(al * (0.55 + 0.45 * math.sin(t * 7)))))
-            track_text(d, ((x + (52 if dot else 32)) * cx.q, (y + 12) * cx.q), text, cx.font("med", 30), (255, 255, 255, al), 5, "l", cx.q)
+            track_text(d, ((x + (52 if dot else 32)) * cx.q, (y + 12 + (30 - size) / 2) * cx.q), text, cx.font("med", size), (255, 255, 255, al), 5, "l", cx.q)
 
     @classmethod
     def boxes(cls, t, p, cx, el):
         if t < el["t0"] + 0.5:
             return []
-        return [("chip", p["x"], p["y"], p["x"] + text_width(cx, p["text"], "med", 30, 5) + 84, p["y"] + 64)]
+        return [("chip", p["x"], p["y"], p["x"] + text_width(cx, p["text"], "med", cls.size(cx, p), 5) + 84, p["y"] + 64)]
 
 
 @element("brackets")
@@ -266,12 +289,25 @@ class Counter:
     def check(p):
         return [] if all(isinstance(p.get(k), (int, float)) for k in ("x", "y", "target")) else ["x, y and target must be numbers"]
 
+    @staticmethod
+    def sizes(cx, p):
+        """(the number's size, the suffix's size) in design pixels: as given, both scaled down together until the number and its suffix fit `max_width` (never below half)."""
+        size, sfx = p["size"], p.get("suffix_size", p["size"])
+        mw = p.get("max_width")
+        if mw:
+            w = text_width(cx, f"{p['target']:.0f}", "black", size) + (text_width(cx, p["suffix"], p.get("suffix_font") or "black", sfx) + 6 if p["suffix"] else 0)
+            if w > mw:
+                k = max(0.5, mw / w * 0.98)
+                size, sfx = size * k, sfx * k
+        return size, sfx
+
     @classmethod
     def draw(cls, layer, t, p, cx, el):
         p = {**cls.defaults, **p}
         a = ease_out(prog(t, el["t0"], p["hold"]))
         shown = f"{p['target'] * a:.0f}"
-        f = cx.font("black", p["size"])
+        size, sfx_size = cls.sizes(cx, p)
+        f = cx.font("black", size)
         d = ImageDraw.Draw(layer)
         al = int(255 * min(1.0, (t - el["t0"]) / 0.3)) if t >= el["t0"] else 0
         if al <= 0:
@@ -280,7 +316,7 @@ class Counter:
         pop = ease_out(prog(t, el["t0"] + p["hold"], 0.35))
         if p["suffix"] and pop > 0:
             wnum = d.textlength(shown, font=f)
-            sz = p.get("suffix_size", p["size"]) * (p["suffix_scale"] + (1 - p["suffix_scale"]) * pop)
+            sz = sfx_size * (p["suffix_scale"] + (1 - p["suffix_scale"]) * pop)
             d.text((p["x"] * cx.q + wnum + 6 * cx.q, p["y"] * cx.q), p["suffix"], font=cx.font(p.get("suffix_font") or "black", sz), fill=(*rgb(p.get("accent"), BLUE), int(255 * pop)))
 
     @classmethod
@@ -288,8 +324,9 @@ class Counter:
         p = {**cls.defaults, **p}
         if t < el["t0"] + 0.3:
             return []
-        w = text_width(cx, f"{p['target']:.0f}", "black", p["size"]) + (text_width(cx, p["suffix"], p.get("suffix_font") or "black", p["size"]) + 6 if p["suffix"] else 0)
-        return [("counter", p["x"], p["y"] + p["size"] * 0.12, p["x"] + w, p["y"] + p["size"] * 0.95)]
+        size, sfx_size = cls.sizes(cx, p)
+        w = text_width(cx, f"{p['target']:.0f}", "black", size) + (text_width(cx, p["suffix"], p.get("suffix_font") or "black", sfx_size) + 6 if p["suffix"] else 0)
+        return [("counter", p["x"], p["y"] + size * 0.12, p["x"] + w, p["y"] + size * 0.95)]
 
 
 @element("steps")
@@ -337,6 +374,8 @@ class Steps:
     def boxes(cls, t, p, cx, el):
         p = {**cls.defaults, **p}
         out = []
+        if p["out"] is not None and t >= el["t0"] + p["out"] + 0.5:                                  # the list has faded out
+            return out
         for i, (num, name) in enumerate(p["items"]):
             if t >= el["t0"] + p["first"] + i * p["gap"] + 0.3:
                 size = cls.name_size(cx, p, name)
@@ -376,22 +415,41 @@ class Logo:
     def check(p):
         return [] if isinstance(p.get("asset"), str) and isinstance(p.get("x"), (int, float)) and isinstance(p.get("y"), (int, float)) else ["asset, x and y are required"]
 
+    @staticmethod
+    def size(cx, p):
+        """(width, height) in design pixels: `width`, or less when `max_height` would be passed (a square mark is not as wide as a wordmark)."""
+        key = ("logo-dims", p["asset"])
+        if key not in cx.cache:
+            with Image.open(cx.assets[p["asset"]]) as im:
+                cx.cache[key] = im.size
+        iw, ih = cx.cache[key]
+        w = p["width"]
+        if p.get("max_height") and w * ih / iw > p["max_height"]:
+            w = p["max_height"] * iw / ih
+        return w, w * ih / iw
+
     @classmethod
     def draw(cls, layer, t, p, cx, el):
         p = {**cls.defaults, **p}
         a = ease_out(prog(t, el["t0"], p["fade_in"])) * (1 - smooth(prog(t, el["t1"] - p["fade_out"], p["fade_out"])))
         if a <= 0:
             return
-        key = ("logo", p["asset"], p["width"], cx.q)
+        width, _ = cls.size(cx, p)
+        key = ("logo", p["asset"], round(width, 2), cx.q)
         if key not in cx.cache:
             im = Image.open(cx.assets[p["asset"]]).convert("RGBA")
-            w = int(p["width"] * cx.q)
+            w = max(1, int(width * cx.q))
             cx.cache[key] = im.resize((w, max(1, int(im.height * w / im.width))), Image.LANCZOS)
         lg = cx.cache[key].copy()
         lg.putalpha(lg.getchannel("A").point(lambda v: int(v * a * p["opacity"])))
-        x = p["x"] - (p["width"] / 2 if p["align"] == "m" else 0)
+        x = p["x"] - (width / 2 if p["align"] == "m" else 0)
         layer.alpha_composite(lg, (int(x * cx.q), int((p["y"] - p["rise"] * (1 - a)) * cx.q)))
 
     @classmethod
     def boxes(cls, t, p, cx, el):
-        return []
+        p = {**cls.defaults, **p}
+        if t < el["t0"] + p["fade_in"] * 0.5 or t >= el["t1"] - p["fade_out"]:
+            return []
+        w, h = cls.size(cx, p)
+        x = p["x"] - (w / 2 if p["align"] == "m" else 0)
+        return [(f"logo:{p['asset']}", x, p["y"], x + w, p["y"] + h)]

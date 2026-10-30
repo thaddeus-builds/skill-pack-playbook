@@ -79,22 +79,22 @@ even after the AAC encode; the report says what it landed on (`mix_lufs`). A fil
 
 | element | what | main params |
 |---|---|---|
-| `title` | lines of type that rise and fade in one after another, optionally out again | `lines`, `x`, `y`, `size`, `font` (black/bold/med/reg), `fill`, `anchor` (l/m/r), `tracking`, `stagger`, `out`, `max_width` (the size shrinks until the widest line fits it, never below 60 percent; the layout check sees the size used) |
-| `text` | one tracked line that fades in (a tagline, a label) | `text`, `x`, `y`, `size`, `tracking`, `anchor`, `alpha` |
-| `chip` | a rounded label with a pulsing dot | `text`, `x`, `y`, `dot`, `accent` |
+| `title` | lines of type that rise and fade in one after another, optionally out again | `lines`, `x`, `y`, `size`, `font` (black/bold/med/reg), `fill`, `anchor` (l/m/r), `tracking`, `stagger`, `out`, `max_width`, `max_height` (the size shrinks until the widest line fits the width and the lines fit the height, never below 60 percent; the layout check sees the size used) |
+| `text` | one tracked line that fades in (a tagline, a label) | `text`, `x`, `y`, `size`, `tracking`, `anchor`, `alpha`, `max_width` (shrinks to fit) |
+| `chip` | a rounded label with a pulsing dot | `text`, `x`, `y`, `dot`, `accent`, `max_width` (the whole chip: the text shrinks to fit) |
 | `brackets` | four corner brackets growing out from the centre of a box | `box` `[x0, y0, x1, y1]`, `out`, `arm`, `width`, `color` |
 | `scan` | a sweeping line with a trail and a measuring rule on the edge of a box | `box`, `period`, `color` |
-| `counter` | a number counting up to `target`, then a suffix that pops | `target`, `suffix`, `size`, `suffix_size`, `hold`, `x`, `y` |
+| `counter` | a number counting up to `target`, then a suffix that pops | `target`, `suffix`, `size`, `suffix_size`, `hold`, `x`, `y`, `max_width` (the number and its suffix scale down together to fit, never below half) |
 | `steps` | a vertical rail with numbered items appearing in turn, the whole leaving at `out` | `items` `[[number, title]...]`, `x`, `top`, `step`, `gap`, `first`, `out`, `name_size` (default 66, 54 for a long title), `max_width` (each title shrinks to fit the room right of its number) |
 | `rule` | a line that grows from its centre (or `grow: "left"`) | `x0`, `x1`, `y`, `thickness`, `dur`, `color` |
-| `logo` | the brand mark faded in and out | `asset`, `x`, `y`, `width`, `opacity`, `fade_in`, `fade_out`, `rise`, `align` |
+| `logo` | the brand mark faded in and out | `asset`, `x`, `y`, `width`, `max_height` (a square mark gets narrower so it is no taller), `opacity`, `fade_in`, `fade_out`, `rise`, `align`; the layout check sees its box |
 
 A new element is one class with `check(params)`, `draw(layer, t, params, ctx, element)` and `boxes(t, params, ctx, element)`, registered with `@element("name")`; `boxes` is what lets the
 layout check see its type.
 
 ## The checks (`check`, run before a render)
 
-- **Layout.** Each element reports where its type sits at each moment; `check` samples the film and names a line that leaves the **safe area** (`safe.profile`: `tiktok` 60/250 to 900/1250,
+- **Layout.** Each element reports where its type and logo sit at each moment (a line that has faded out, a steps list that has left, is no longer there); `check` samples the film and names a line that leaves the **safe area** (`safe.profile`: `tiktok` 60/250 to 900/1250,
   `reels`, `shorts` 60/250 to 900/1350, `full` the frame less a margin; or `safe.box`) and any two lines that sit on each other at the same moment. The `tiktok` numbers are the stricter
   reading of guides that disagree: confirm them against TikTok's own template before a client's film goes out under them.
 - **Timing.** A voice line that overlaps another or runs past the end of the film; a cut more than 80 ms off a beat of `bpm`.

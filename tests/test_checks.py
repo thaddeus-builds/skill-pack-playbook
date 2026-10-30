@@ -45,6 +45,67 @@ def test_max_width_shrinks_a_title_and_a_steps_item_until_it_fits_and_the_check_
         assert C.layout(spec, d) == [], "a smaller `name_size` fits as well"
 
 
+def test_a_counter_a_text_and_a_chip_shrink_to_max_width_and_a_title_to_max_height():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = _t.film_spec(d)
+        counter = {"element": "counter", "t0": 0.0, "t1": 3.0, "x": 64, "y": 470, "target": 12000, "suffix": "HRS", "size": 300, "hold": 0.5}
+        spec["overlays"] = [counter]
+        assert any("counter" in g and "outside" in g for g in C.layout(spec, d)), "a big number with a suffix runs past the right edge"
+        counter["max_width"] = 900 - 64
+        assert C.layout(spec, d) == [], C.layout(spec, d)
+        text = {"element": "text", "t0": 0.0, "t1": 3.0, "x": 64, "y": 600, "text": "A TAGLINE THAT IS TOO LONG HERE", "size": 40, "tracking": 7}
+        spec["overlays"] = [text]
+        assert any("outside" in g for g in C.layout(spec, d))
+        text["max_width"] = 900 - 64
+        assert C.layout(spec, d) == [], C.layout(spec, d)
+        chip = {"element": "chip", "t0": 0.0, "t1": 3.0, "x": 64, "y": 350, "text": "A SECTION TAG THAT IS TOO LONG FOR IT"}
+        spec["overlays"] = [chip]
+        assert any("outside" in g for g in C.layout(spec, d))
+        chip["max_width"] = 900 - 64
+        assert C.layout(spec, d) == [], C.layout(spec, d)
+        title = {"element": "title", "t0": 0.0, "t1": 3.0, "lines": ["ONE", "TWO", "THREE", "FOUR"], "x": 64, "y": 1000, "size": 80}
+        spec["overlays"] = [title]
+        assert any("outside" in g for g in C.layout(spec, d)), "four lines of 80 px from y 1000 end below the safe area"
+        title["max_height"] = 1250 - 1000
+        assert C.layout(spec, d) == [], C.layout(spec, d)
+
+
+def test_a_logo_has_a_box_the_check_sees_and_max_height_narrows_a_square_mark():
+    from PIL import Image
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        Image.new("RGBA", (400, 400), (46, 139, 216, 255)).save(d / "square.png")
+        spec = _t.film_spec(d)
+        spec["assets"]["sq"] = {"type": "image", "path": "square.png"}
+        title = {"element": "title", "t0": 0.0, "t1": 3.0, "lines": ["A HOOK", "IN TWO LINES."], "x": 64, "y": 420, "size": 112}
+        logo = {"element": "logo", "t0": 0.0, "t1": 3.0, "asset": "sq", "x": 64, "y": 250, "width": 280}
+        spec["overlays"] = [title, logo]
+        got = [g for g in C.layout(spec, d) if "overlap" in g]
+        assert got and "logo:sq" in got[0], ("a 280 px wide square mark is 280 px tall and sits on the hook", C.layout(spec, d))
+        logo["max_height"] = 150
+        assert [g for g in C.layout(spec, d) if "overlap" in g] == [], C.layout(spec, d)
+        wide = {"element": "logo", "t0": 0.0, "t1": 3.0, "asset": "logo", "x": 64, "y": 250, "width": 280, "max_height": 150}
+        spec["overlays"] = [title, wide]
+        assert [g for g in C.layout(spec, d) if "overlap" in g] == [], "a wordmark keeps its width: max_height does not touch what already fits"
+
+
+def test_type_that_has_faded_out_is_no_longer_checked_against_what_comes_after():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = _t.film_spec(d)
+        first = {"element": "title", "t0": 0.0, "t1": 5.0, "lines": ["FIRST", "LINES"], "x": 64, "y": 500, "size": 100, "out": 1.0}
+        second = {"element": "title", "t0": 2.5, "t1": 5.0, "lines": ["SECOND", "LINES"], "x": 64, "y": 500, "size": 100}
+        spec["duration"] = 6.0
+        spec["overlays"] = [first, second]
+        assert [g for g in C.layout(spec, d) if "overlap" in g] == [], "the first has left by 2.5 s: nothing to overlap"
+        del first["out"]
+        assert any("overlap" in g for g in C.layout(spec, d)), "without an exit the same two lines are on each other"
+        steps = {"element": "steps", "t0": 0.0, "t1": 5.0, "x": 100, "top": 500, "step": 100, "items": [["01", "FIRST"], ["02", "SECOND"]], "out": 1.0}
+        spec["overlays"] = [steps, {**second, "y": 560}]
+        assert [g for g in C.layout(spec, d) if "overlap" in g] == [], "a steps list that has left is not checked either"
+
+
 def test_two_pieces_of_type_on_each_other_are_found_with_the_time():
     with _t.tmpdir() as d:
         _t.make_assets(d)
