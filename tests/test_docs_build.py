@@ -897,7 +897,9 @@ def autonomy_problems(text: str) -> list[str]:
 def test_the_autonomy_levels_match_the_kit():
     text = doc("docs/autonomy.md")
     assert autonomy_problems(text) == [], autonomy_problems(text)
-    assert autonomy_problems(text.replace("| L4 rule-started work (not built) |", "| L4 rule-started work |")) == ["L4 name"]
+    assert autonomy_problems(text.replace("| L4 rule-started work |", "| L4 rule-started work (not built) |")) == ["L4 name"]
+    assert autonomy_problems(text.replace("| L5 full autonomy (not built) |", "| L5 full autonomy |")) == ["L5 name"]
+    assert autonomy_problems(text.replace("| `rule` | L4 |", "| `rule` | L3 |")) == ["proof rule"]
     assert autonomy_problems(text.replace("| L3 owner-switched mode |", "| L3 owner-switched mode (not built) |")) == ["L3 name"]
     assert "L5 cells" in autonomy_problems(text.replace("| none by design, which is why no skill pack is here |", "| |"))
     assert autonomy_problems(text.replace("| `undo` | none: it lowers exposure |", "| `undo` | L3 |")) == ["proof undo"]

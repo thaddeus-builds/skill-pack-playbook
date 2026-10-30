@@ -23,6 +23,17 @@ ways: the bad case refused AND the good one accepted.
   6. the record and undo: gate()/suffix() per proof, approval refused
      off tier B; undo_free() whatever the mode, not after an edit, not of a
      coded write, not twice; digest() newest first with the undo command.
+  7. the levels.
+  8. the rule switch (L4): on only with the L3 mode on and a person's
+     confirm; an agent may only switch it off; the confirm refused until
+     the override rate's bar is met (a past day never refused).
+  9. the rule's verdict: covered; each why in its order; a stale or missing
+     basis; the trip rule from the archive's events; the week's cap from the
+     manifests; stops.
+ 10. the override rate: counts per item, an override only after the publish,
+     the bar both ways, filters, a bar that names nothing refused.
+ 11. the rule proof: gate(), suffix(), proof_level(), code-free undo and the
+     digest.
 """
 
 import sys
@@ -276,14 +287,283 @@ def test_record_and_undo() -> None:
 
 def test_levels() -> None:
     print("\n[7] the levels")
-    check("six levels, L0 to L5, the first four built",
-          [l for l, _ in A.LEVELS] == ["L0", "L1", "L2", "L3", "L4", "L5"] and A.BUILT == ("L0", "L1", "L2", "L3"))
+    check("six levels, L0 to L5, the first five built (L5 never)",
+          [l for l, _ in A.LEVELS] == ["L0", "L1", "L2", "L3", "L4", "L5"]
+          and A.BUILT == ("L0", "L1", "L2", "L3", "L4"))
     check("every proof label names a built level or none (undo)",
-          set(A.PROOFS) == {"tty", "relay", "approval", "auto", "undo"}
+          set(A.PROOFS) == {"tty", "relay", "approval", "auto", "rule", "undo"}
           and {v for v in A.PROOFS.values() if v} <= set(A.BUILT))
     check("autonomy.py reads no database, file or clock of its own",
           not any(w in (Path(A.__file__).read_text(encoding="utf-8"))
                   for w in ("sqlite3", "datetime.now", "date.today", "time.time", "open(os.path.join(raw")))
+
+
+# ---- L4 ---------------------------------------------------------------------
+
+RULES = ["R01", "R02"]
+RON = ("confirm", "2026-10-20:R01", "owner@relay", "2026-10-12T09:00:00+00:00")
+
+
+def rules(history, **kw) -> dict:
+    kw = {"today": TODAY, "max_days": 28, "eligible_rules": RULES, "auto_mode": on(hist(ON)), **kw}
+    return A.rules_mode(history, **kw)
+
+
+def bar_met(**kw) -> dict:
+    return {"met": True, "why": None, **kw}
+
+
+def test_rules_mode() -> None:
+    print("\n[8] the rule switch (L4)")
+    m = rules(hist(RON))
+    check("a person's confirm turns it on with the L3 mode on: its day and the rule ids",
+          m["on"] and m["until"] == "2026-10-20" and m["ids"] == ["R01"] and m["why_off"] is None, m)
+    check("the L3 mode off turns it off (rule_off_no_auto), whatever its own confirm",
+          rules(hist(RON), auto_mode=on([]))["why_off"] == "rule_off_no_auto")
+    check("... and an L3 mode that was lowered or expired does the same",
+          rules(hist(RON), auto_mode=on(hist(ON, ("set", "2026-10-11", "agent@cli", "2026-10-13T01:00:00+00:00"))))
+          ["why_off"] == "rule_off_no_auto")
+    check("its day never passes the L3 mode's: min of the two",
+          rules(hist(("confirm", "2026-10-30:R01", "owner@relay", RON[3])))["until"] == "2026-10-20")
+    check("a shorter day of its own stands", rules(hist(("confirm", "2026-10-15:R01", "owner@relay", RON[3])))
+          ["until"] == "2026-10-15")
+    for label, h, want in (
+            ("no history", [], "rule_off_never"),
+            ("only an agent's pending set", hist(("set", "2026-10-11", "agent@cli", RON[3])), "rule_off_never"),
+            ("a later set of a past day", hist(RON, ("set", "2026-10-11", "agent@cli", "2026-10-13T01:00:00+00:00")),
+             "rule_off_lowered"),
+            ("a later withdraw", hist(RON, ("withdraw", None, "agent@cli", "2026-10-13T01:00:00+00:00")),
+             "rule_off_lowered"),
+            ("a client's confirm", hist(RON[:2] + ("client:Acme@relay", RON[3])), "rule_off_unproven"),
+            ("a confirm signed @rule", hist(RON[:2] + ("agent@rule", RON[3])), "rule_off_unproven"),
+            ("a confirm signed @auto", hist(RON[:2] + ("agent@auto", RON[3])), "rule_off_unproven"),
+            ("a confirm signed @cli", hist(RON[:2] + ("agent@cli", RON[3])), "rule_off_unproven"),
+            ("past its day", hist(("confirm", "2026-10-12:R01", "owner@relay", "2026-10-11T08:00:00+00:00")),
+             "rule_off_expired")):
+        got = rules(h)
+        check(f"off: {label} ({want})", not got["on"] and got["why_off"] == want, got)
+    check("a tty confirm counts", rules(hist(RON[:2] + ("owner@tty", RON[3])))["on"])
+    far = rules(hist(("confirm", "2027-06-01:R01", "owner@relay", "2026-09-20T08:00:00+00:00")),
+                auto_mode=on(hist(("confirm", "2027-06-01:T14", "owner@relay", "2026-09-20T08:00:00+00:00"))))
+    check("a far day is clamped to the confirm's day + max_days (2026-10-18), still on", far["until"] == "2026-10-18"
+          and far["on"], far)
+    check("... and past the clamp it is off", rules(hist(("confirm", "2027-06-01:R01", "owner@relay",
+                                                           "2026-09-01T08:00:00+00:00")))["why_off"] == "rule_off_expired")
+    check("moved paths turn it off", rules(hist(RON), own_archive=False)["why_off"] == "rule_off_paths_moved")
+    check("a registry edit narrows it and never widens it",
+          rules(hist(("confirm", "2026-10-20:R01,R02", "owner@relay", RON[3])), eligible_rules=["R02"])["ids"] == ["R02"]
+          and rules(hist(RON), eligible_rules=["R01", "R02", "R03"])["ids"] == ["R01"])
+    check("an agent may only switch it off: may_set takes the same value shape",
+          A.may_set("2026-10-12", TODAY) and not A.may_set("2026-10-20:R01", TODAY))
+    check("every rule_off code is the auto_off one renamed, plus no_auto",
+          A.RULE_OFF == ("rule_off_never", "rule_off_lowered", "rule_off_unproven", "rule_off_expired",
+                         "rule_off_paths_moved", "rule_off_no_auto"), A.RULE_OFF)
+    # the confirm's precondition
+    ok = {"today": TODAY, "eligible_rules": RULES, "auto_mode": on(hist(ON)), "rate": bar_met()}
+    check("a confirm is taken: a rule row, L3 on, the bar met", A.may_confirm_rules("2026-10-20:R01", **ok) is None)
+    for label, v, kw, want in (
+            ("a malformed value", "next week", {}, "rule_switch_malformed"),
+            ("no rule named", "2026-10-20", {}, "rule_switch_no_rules"),
+            ("a rule that is no registry row", "2026-10-20:R01,R09", {}, "rule_switch_unknown_rule"),
+            ("the L3 mode off", "2026-10-20:R01", {"auto_mode": on([])}, "rule_switch_no_auto"),
+            ("the bar not met", "2026-10-20:R01", {"rate": bar_met(met=False, why="override_too_few")},
+             "rule_switch_bar_not_met")):
+        got = A.may_confirm_rules(v, **{**ok, **kw})
+        check(f"confirm refused: {label} ({want})", got == want, got)
+    check("a past day is a way off and is never refused, bar or not",
+          A.may_confirm_rules("2026-10-12", **{**ok, "auto_mode": on([]), "rate": bar_met(met=False)}) is None)
+    check("today counts as raising: it needs the bar",
+          A.may_confirm_rules("2026-10-13:R01", **{**ok, "rate": bar_met(met=False)}) == "rule_switch_bar_not_met")
+
+
+def RG(rule: str) -> dict:  # noqa: N802
+    return {"rule": {"id": rule, "basis": "2026-10-11"}}
+
+
+def ev(event, item=1, at="2026-10-13T09:00:00+00:00", rule="R01", **kw) -> dict:
+    return {"rule": rule, "item": item, "event": event, "at": at, "kind": kw.pop("kind", "article"),
+            "proof": kw.pop("proof", "rule"), **kw}
+
+
+def rv(**kw) -> dict:
+    base = {"rules": rules(hist(RON)), "auto_mode": on(hist(ON)), "rule": "R01", "write_ids": ["T14"], "now": NOW,
+            "basis_saved": "2026-10-11", "basis_now": "2026-10-11", "last_verified": True,
+            "caps": [("rule_week_cap", 2, 1, 3)]}
+    return A.rule_verdict(**{**base, **kw})
+
+
+def test_rule_verdict() -> None:
+    print("\n[9] the rule's verdict on one write (L4)")
+    check("covered: switch on, eligible rule, L3 kind, fresh basis, no trip, under the cap",
+          rv() == {"why": None, "stop": False}, rv())
+    t = lambda *rest: [ev(e, i, at) for e, i, at in rest]  # noqa: E731
+    for label, kw, want, stop in (
+            ("the switch off", {"rules": rules([])}, "rule_off_never", False),
+            ("the L3 mode off under it", {"rules": rules(hist(RON), auto_mode=on([]))}, "rule_off_no_auto", False),
+            ("rows of two proofs", {"mixed": True}, "rule_mixed", True),
+            ("work that matched no rule", {"rule": None}, "rule_not_eligible", False),
+            ("a rule the owner did not switch on", {"rule": "R02"}, "rule_not_eligible", False),
+            ("a write kind the L3 mode leaves out", {"write_ids": ["T07"]}, "rule_write_not_covered", False),
+            ("a pair the registry does not list", {"write_ids": [None]}, "rule_write_not_covered", False),
+            ("no write ids at all", {"write_ids": []}, "rule_write_not_covered", False),
+            ("a stale basis", {"basis_now": "2026-10-13"}, "rule_basis_stale", False),
+            ("a basis never saved", {"basis_saved": None}, "rule_basis_stale", False),
+            ("a basis that cannot be recomputed now", {"basis_now": None}, "rule_basis_stale", False),
+            ("the rule's last write not read back", {"last_verified": False}, "rule_prev_unverified", True),
+            ("the pack's own check", {"check": "rule_topic_overlap"}, "rule_topic_overlap", False),
+            ("the week's cap", {"caps": [("rule_week_cap", 3, 1, 3)]}, "rule_week_cap", True),
+            ("a second cap of the pack's", {"caps": [("rule_cluster_cap", 1, 1, 1)]}, "rule_cluster_cap", True)):
+        got = rv(**kw)
+        check(f"{label}: {want}, stop={stop}", got == {"why": want, "stop": stop}, got)
+    check("no last write yet is no trip", rv(last_verified=None)["why"] is None)
+    check("a cap with room left passes", rv(caps=[("rule_week_cap", 2, 1, 3)])["why"] is None)
+    check("the switch comes first: off and stale says off", rv(rules=rules([]), basis_now="x")["why"] == "rule_off_never")
+    check("not eligible comes before the basis", rv(rule="R02", basis_now="x")["why"] == "rule_not_eligible")
+    check("a stale basis comes before the pack's check and the cap",
+          rv(basis_now="x", check="c", caps=[("rule_week_cap", 9, 1, 3)])["why"] == "rule_basis_stale")
+    check("the pack's check comes before the cap", rv(check="c", caps=[("rule_week_cap", 9, 1, 3)])["why"] == "c")
+    # trips
+    two = t(("tripped", 1, "2026-10-12T09:00:00+00:00"), ("tripped", 2, "2026-10-13T09:00:00+00:00"))
+    got = rv(events=two)
+    check("two trips in a row switch the rule off: rule_tripped, a stop", got == {"why": "rule_tripped", "stop": True}, got)
+    check("...until a week after the latest trip: the end is read from the events",
+          A.trip_until(two, "R01", now=NOW) == datetime(2026, 10, 20, 9, tzinfo=timezone.utc))
+    check("...and it covers again once that week has passed",
+          rv(events=two, now=NOW + timedelta(days=7, hours=1))["why"] is None)
+    check("one trip is a warning, not a stop",
+          rv(events=t(("tripped", 1, "2026-10-13T09:00:00+00:00")))["why"] is None)
+    check("a published outcome between two trips resets the count",
+          rv(events=t(("tripped", 1, "2026-10-11T09:00:00+00:00"), ("published", 2, "2026-10-12T09:00:00+00:00"),
+                      ("tripped", 3, "2026-10-13T09:00:00+00:00")))["why"] is None)
+    check("two trips, the order of the rows does not matter, only their times",
+          rv(events=list(reversed(two)))["why"] == "rule_tripped")
+    check("events of another rule do not trip this one", rv(events=[{**e, "rule": "R02"} for e in two])["why"] is None)
+    check("started, undone and edited are not outcomes: they neither trip nor reset",
+          rv(events=two + [ev("started", 3, "2026-10-13T10:00:00+00:00"), ev("edited", 1, "2026-10-13T11:00:00+00:00")])
+          ["why"] == "rule_tripped")
+    check("a trip whose time cannot be read counts as now: it does not end by itself",
+          rv(events=[ev("tripped", 1, "2026-10-12T09:00:00+00:00"), ev("tripped", 2, "soon")],
+             now=NOW + timedelta(days=30))["why"] == "rule_tripped"
+          and A.trip_until([ev("tripped", 1, "soon"), ev("tripped", 2, "soon")], "R01", now=NOW)
+          == NOW + timedelta(days=7))
+    check("trips in a row is a parameter: three needed, two do not trip it",
+          rv(events=two, trips=3)["why"] is None and rv(events=two, trips=2)["why"] == "rule_tripped")
+    check("a rule that trips again straight after its week is off again (no free retry)",
+          rv(events=two + t(("tripped", 3, "2026-10-21T09:00:00+00:00")), now=datetime(2026, 10, 21, 10,
+                                                                                         tzinfo=timezone.utc))["why"]
+          == "rule_tripped")
+    # the week's cap, from the archive
+    ms = [man(proof="rule", at="2026-10-12T10:00:00+00:00", gate=RG("R01")),
+          man(proof="rule", at="2026-10-08T10:00:00+00:00", gate=RG("R01")),          # 5 days: in the week
+          man(proof="rule", at="2026-10-05T10:00:00+00:00", gate=RG("R01")),          # 8 days: out
+          man(proof="rule", at="2026-10-12T11:00:00+00:00", gate=RG("R02")),
+          man(proof="auto", at="2026-10-12T12:00:00+00:00"),
+          man("unpublish", "undo", at="2026-10-12T13:00:00+00:00")]
+    check("week_cap counts the rule proof of the last 7 days from the manifests, not auto or undo",
+          A.week_cap(ms, now=NOW, cap=3) == ("rule_week_cap", 3, 1, 3), A.week_cap(ms, now=NOW, cap=3))
+    check("...of one rule when asked", A.week_cap(ms, now=NOW, cap=3, rule="R01")[1] == 2)
+    check("...an unreadable time counts, a half-done write too",
+          A.week_cap(ms + [man(proof="rule", at="unreadable", verified=False)], now=NOW, cap=3)[1] == 4)
+    check("...and the cap it feeds is a stop at the cap",
+          rv(caps=[A.week_cap(ms, now=NOW, cap=3, planned=1)]) == {"why": "rule_week_cap", "stop": True}
+          and rv(caps=[A.week_cap(ms, now=NOW, cap=4, planned=1)])["why"] is None)
+
+
+def test_override_rate() -> None:
+    print("\n[10] the override rate")
+    bar = {"min_published": 10, "max_overridden": 1}
+    pub = [ev("published", i, "2026-10-01T09:00:00+00:00", proof="auto") for i in range(1, 11)]
+    got = A.override_rate([ev("started", i, proof="auto") for i in range(1, 11)] + pub, bar=bar, kind="article")
+    check("ten published, none overridden: the bar is met",
+          got["started"] == 10 and got["published"] == 10 and got["overridden"] == 0 and got["rate"] == 0
+          and got["met"] and got["why"] is None and got["kind"] == "article" and got["bar"] == bar, got)
+    undone = ev("undone", 3, "2026-10-02T09:00:00+00:00", proof="auto")
+    edited = ev("edited", 4, "2026-10-02T10:00:00+00:00", proof="auto")
+    got = A.override_rate(pub + [undone], bar=bar)
+    check("one undone of ten is inside a bar of one", got["overridden"] == 1 and got["rate"] == 0.1 and got["met"], got)
+    got = A.override_rate(pub + [undone, edited], bar=bar)
+    check("an undo and an edit are two overridden items: over a bar of one (override_too_many)",
+          got["undone"] == 1 and got["edited"] == 1 and got["overridden"] == 2 and not got["met"]
+          and got["why"] == "override_too_many", got)
+    got = A.override_rate(pub + [undone, ev("edited", 3, "2026-10-03T09:00:00+00:00", proof="auto")], bar=bar)
+    check("one item undone and edited is one overridden item", got["overridden"] == 1 and got["met"], got)
+    got = A.override_rate(pub[:9], bar=bar)
+    check("nine published of ten needed: not met, override_too_few", not got["met"] and got["why"] == "override_too_few")
+    check("none published: rate None, and a bar of zero is met only with min_published 0",
+          A.override_rate([], bar=bar)["rate"] is None and A.override_rate([], bar={"min_published": 0})["met"])
+    check("an edit before the publish is the owner's work on a draft, not an override",
+          A.override_rate(pub + [ev("edited", 5, "2026-09-30T09:00:00+00:00", proof="auto")], bar=bar)["overridden"] == 0)
+    check("an undo whose time cannot be read counts: it cannot be shown to be earlier",
+          A.override_rate(pub + [ev("undone", 5, "?", proof="auto")], bar=bar)["overridden"] == 1)
+    check("an undo of an item that was never published is not an override of a publish",
+          A.override_rate(pub + [ev("undone", 99, "2026-10-02T09:00:00+00:00")], bar=bar)["overridden"] == 0)
+    check("the same item published twice is one", A.override_rate(pub + [pub[0]], bar=bar)["published"] == 10)
+    rate = {"min_published": 10, "max_rate": 0.05}
+    check("max_rate: one of ten is 0.1, over 0.05 (override_rate_high); the count bar alone would pass",
+          A.override_rate(pub + [undone], bar=rate)["why"] == "override_rate_high"
+          and A.override_rate(pub + [undone], bar=bar)["met"])
+    check("max_rate in range passes", A.override_rate(pub + [undone], bar={"min_published": 10, "max_rate": 0.1})["met"])
+    # filters
+    mixed = pub + [ev("published", 50 + i, "2026-10-01T09:00:00+00:00", kind="page", proof="auto") for i in range(5)]
+    check("kind keeps one kind of work", A.override_rate(mixed, bar=bar, kind="article")["published"] == 10
+          and A.override_rate(mixed, bar=bar, kind="page")["published"] == 5 and A.override_rate(mixed, bar=bar)["published"] == 15)
+    check("proof keeps what L3 earned, not what the rule did",
+          A.override_rate(pub + [ev("published", 70, proof="rule")], bar=bar, proof="auto")["published"] == 10)
+    check("rule keeps one rule's events", A.override_rate([ev("published", 1), ev("published", 2, rule="R02")],
+                                                          bar={"min_published": 1}, rule="R02")["published"] == 1)
+    check("since keeps what came after it (an unreadable time stays)",
+          A.override_rate(pub + [ev("published", 80, "2026-09-01T00:00:00+00:00", proof="auto"),
+                                 ev("published", 81, "?", proof="auto")], bar=bar,
+                          since=datetime(2026, 9, 15, tzinfo=timezone.utc))["published"] == 11)
+    check("tripped and unknown events and rows with no item are not read",
+          A.override_rate(pub + [ev("tripped", 1), ev("seen", 2), {"event": "published", "at": "2026-10-01"}],
+                          bar=bar)["published"] == 10)
+    for label, b in (("a bar that names no min_published", {"max_overridden": 1}),
+                     ("a bar with a key of nobody's", {"min_published": 1, "max_unhappy": 0}),
+                     ("an empty bar", {})):
+        check(f"refused: {label}", isinstance(raises(lambda b=b: A.override_rate(pub, bar=b), ValueError), ValueError))
+    check("the result is plain data (it goes to --json as it is)",
+          __import__("json").loads(__import__("json").dumps(A.override_rate(pub, bar=bar))) == A.override_rate(pub, bar=bar))
+
+
+def test_rule_record() -> None:
+    print("\n[11] the rule proof: record, undo and the digest")
+    rm = rules(hist(RON))
+    ref = {**rm, "rule": "R01", "basis": "2026-10-11"}
+    g = A.gate("rule", tier="A", change=["new"], ref=ref)
+    check("rule: the gate names the switch row, the rule and its basis",
+          g["proof"] == "rule" and g["rule"] == {"id": "R01", "basis": "2026-10-11"}
+          and g["mode"] == {"history_id": 1, "confirmed_by": "owner@relay", "confirmed_at": RON[3],
+                            "until": "2026-10-20", "ids": ["R01"]}, g)
+    check("rule: the reason's tail is [rule=ID basis=DATE mode=#N]",
+          A.suffix("rule", {"rule": "R01", "basis": "2026-10-11", "history_id": 7}) == " [rule=R01 basis=2026-10-11 mode=#7]")
+    for label, bad in (("no rule", {**ref, "rule": None}), ("no basis", {**ref, "basis": ""})):
+        check(f"a rule write with {label} is refused",
+              isinstance(raises(lambda bad=bad: A.gate("rule", tier="A", change=["new"], ref=bad), ValueError), ValueError))
+    check("the other proofs carry no rule key", "rule" not in A.gate("auto", tier="A", change=["new"], ref=on(hist(ON))))
+    check("proof_level: rule is L4", A.proof_level(man(proof="rule")) == "L4")
+    import pwd
+    import os
+    want = f"{pwd.getpwuid(os.geteuid()).pw_name}@rule"
+    from kit import human
+    check("changed_by(rule) is <user>@rule, and nobody's confirm", human.changed_by("rule") == want
+          and not A.signed(want))
+    pub = man(proof="rule", dir="r1", gate=RG("R01"))
+    check("undo_free: a rule write is undone with no code, as an auto write is",
+          A.undo_free(pub, undone=False, live_as_left=True))
+    check("... not after an edit, not twice", not A.undo_free(pub, undone=False, live_as_left=False)
+          and not A.undo_free(pub, undone=True, live_as_left=True))
+    check("... and a coded write still is not free", not A.undo_free(man(proof="relay"), undone=False, live_as_left=True))
+    undo = man("unpublish", "undo", at="2026-10-13T11:00:00+00:00", dir="u1", gate={"undoes": "r1"})
+    ds = A.digest([pub, undo, man(dir="a1", at="2026-10-13T09:00:00+00:00")], now=NOW, days=7,
+                  undo=lambda x: f"apply unpublish --item {x['item']}")
+    check("digest: a rule write shows its rule, level L4 and its undone state; the other proofs have none",
+          [(r["proof"], r["rule"], r["level"]) for r in ds] == [("rule", "R01", "L4"), ("auto", None, "L3")]
+          and ds[0]["undone_by"] == "u1" and ds[1]["undo"] == "apply unpublish --item 1", ds)
+    real = man(proof="rule", at="2026-10-12T10:00:00+00:00", gate=A.gate("rule", tier="A", change=["new"], ref=ref))
+    check("a manifest carrying gate()'s own output is what week_cap and digest read",
+          A.week_cap([real], now=NOW, cap=3, rule="R01")[1] == 1 and A.week_cap([real], now=NOW, cap=3, rule="R02")[1] == 0
+          and A.digest([real], now=NOW, days=7)[0]["rule"] == "R01")
 
 
 if __name__ == "__main__":
@@ -294,4 +574,8 @@ if __name__ == "__main__":
     test_caps()
     test_record_and_undo()
     test_levels()
+    test_rules_mode()
+    test_rule_verdict()
+    test_override_rate()
+    test_rule_record()
     raise SystemExit(finish())
