@@ -287,6 +287,39 @@ def test_a_suite_runs_in_the_root_leaves_no_bytecode_and_cannot_read_a_terminal(
         assert not [top for top, dirs, _ in os.walk(d) if "__pycache__" in dirs], "a suite left bytecode in the tree"
 
 
+def test_a_suite_does_not_inherit_the_repository_a_git_hook_points_at():
+    """Git exports GIT_DIR, GIT_INDEX_FILE and the like to a hook, and a pre-push hook that runs `run_all.py` hands them to every
+    suite: a suite's `git init` and `git commit` in a throwaway folder then land in the checkout that was pushing (its branch moved
+    to a test's commit, its files shown as deleted; seen 2026-10-31). The suite gets the environment without the variables git
+    lists with `git rev-parse --local-env-vars`; the rest, a token or a proxy, stays."""
+    local = {"GIT_DIR": "/nowhere/.git", "GIT_WORK_TREE": "/nowhere", "GIT_INDEX_FILE": "/nowhere/index", "GIT_PREFIX": "x/",
+             "GIT_COMMON_DIR": "/nowhere/.git", "GIT_OBJECT_DIRECTORY": "/nowhere/objects"}
+    with env(**local, GIT_AUTHOR_NAME="kept", HTTPS_PROXY="kept"):
+        got = run_all.suite_env()
+    assert not [k for k in local if k in got], [k for k in local if k in got]
+    assert got["GIT_AUTHOR_NAME"] == "kept" and got["HTTPS_PROXY"] == "kept", "only the repository-local variables go"
+    with _t.tmpdir() as d:
+        body = ("import os\n"
+                f"left = [k for k in {sorted(local)!r} if k in os.environ]\n"
+                "assert not left, left\n"
+                "print('RESULT: 1 passed')\n")
+        tree(d, {"x/run.py": body})
+        with env(**local):
+            code, out = go(d, [S("x", "x/run.py")], timeout_s=5)
+        assert code == 0, out
+
+
+def test_the_list_of_git_variables_is_the_one_git_gives_when_git_is_here():
+    try:
+        r = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True,
+                           env={k: v for k, v in os.environ.items() if k not in run_all.GIT_LOCAL_ENV})
+    except OSError:
+        return                                                  # no git here: nothing to compare with
+    if r.returncode != 0 or not r.stdout.split():
+        return
+    assert sorted(r.stdout.split()) == sorted(run_all.GIT_LOCAL_ENV), (sorted(set(r.stdout.split()) ^ set(run_all.GIT_LOCAL_ENV)))
+
+
 NO_NAME = {"USER": None, "LOGNAME": None, "LNAME": None, "USERNAME": None}     # what getpass.getuser() reads, all unset
 PLAIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,79}")                       # a name serve.py --user accepts (console/core.py TOKEN_RE)
 
