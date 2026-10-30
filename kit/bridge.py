@@ -6,6 +6,9 @@ message, read back by the id the send returned, equals what was meant.
 
   * one plain text, an ASCII `@name` (a full-width `＠` is no mention): refused
     before anything is sent, as is an empty text;
+  * a message to a GROUP must mention someone, or it is refused (`no_mention`): an agent in
+    a group answers only when it is @-mentioned, so an unmentioned message reaches no one.
+    A direct message (`dm=True`) needs none;
   * `send(text)` returns the new message id; none returned -> nothing is
     resent (it may have gone out) and the result says not sent;
   * `read(id)` returns that message's text; the two are compared after
@@ -44,10 +47,12 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import re
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 FULL_WIDTH_AT = "＠"
+_AT_NAME = re.compile(r"(?<!\w)@[^\s@]")        # an ASCII @ that starts a name, not the middle of an address
 
 
 @dataclass(frozen=True)
@@ -66,10 +71,16 @@ def _bad_text(text: str) -> str:
     return ""
 
 
-def send_and_verify(send: Callable[[str], str | None], read: Callable[[str], str | None], text: str) -> Result:
+def send_and_verify(send: Callable[[str], str | None], read: Callable[[str], str | None], text: str, *,
+                    dm: bool = False, mention_ok: bool | None = None) -> Result:
+    """`dm`: a direct message, which needs no mention. In a group the message must mention someone:
+    `mention_ok` says so when the caller sends mention objects (REST); left None, the text must hold an
+    ASCII `@name`, which the plugin turns into a mention (headless `comm_send`)."""
     why = _bad_text(text)
     if why:
         return Result(False, reason=why)
+    if not dm and not (mention_ok if mention_ok is not None else bool(_AT_NAME.search(text))):
+        return Result(False, reason="no_mention")
     resent = False
     for attempt in (1, 2):
         sent_id = send(text)
@@ -134,6 +145,7 @@ class Target:
     data_dir: str          # CLAUDE_OPENMAX_DATA_DIR of that bridge (token cache, sync cursor)
     conversation_id: str
     org_id: str
+    dm: bool = False       # a direct message: no mention needed. A group (the default) must mention someone
 
 
 def _read_config(path: str) -> dict:
@@ -304,7 +316,8 @@ def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable
 
 
 def send_to(target: Target, text: str, *, mentions: Iterable[str] = (), urlopen=urllib.request.urlopen) -> Result:
-    """Check the isolation, then send `text` to the target over REST and read it back."""
+    """Check the isolation, then send `text` to the target over REST and read it back. `mentions` are the
+    member ids to @-mention; a group message with none is refused (`no_mention`), a direct one needs none."""
     problems = check_isolation([target])
     if problems:
         return Result(False, reason="isolation: " + problems[0])
@@ -312,8 +325,9 @@ def send_to(target: Target, text: str, *, mentions: Iterable[str] = (), urlopen=
         creds = load_credentials(target.config, target.org_id)
     except (OSError, ValueError) as e:
         return Result(False, reason=f"config: {e}")
+    mentions = list(mentions)
     send, read = rest_runners(creds, target.conversation_id, mentions=mentions, urlopen=urlopen)
-    result = send_and_verify(send, read, text)
+    result = send_and_verify(send, read, text, dm=target.dm, mention_ok=bool(mentions))
     if not result.sent and result.reason == "no_id_returned" and send.last_error:
         return Result(False, result.id, result.resent, f"no_id_returned: {send.last_error}")
     return result
