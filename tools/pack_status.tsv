@@ -1,6 +1,6 @@
 pack	status	since	until	consumers	counted	note
 compliance	shared	2026-10-05		ad-copy-skill-pack,adcut-skill-pack,geo-china-skill-pack,koc-script-skill-pack	2026-10-27	copylint has four importers; claimscope and phrasebook have one (adcut)
-generation	incubating	2026-10-05	2026-12-31	adcut-skill-pack	2026-10-27	product-keyframe-video still declares the pack and imports nothing from it
+generation	incubating	2026-10-05	2026-12-31	adcut-skill-pack	2026-10-27	product-keyframe-video still declares the pack and imports nothing from it; `ai` (2026-10-31) is the module the SEO pack is to import as its second importer (its client is the same shape)
 workbook	shared	2026-10-10		creator-program-skill-pack,koc-script-skill-pack	2026-10-27	ROADMAP P1 (no importer, 2026-10-23, removed 2026-10-30) was stale: creator-program imports all five modules, koc-script imports workbook
 learning	incubating	2026-10-12	2026-12-31	adcut-skill-pack	2026-10-27	
 pages	shared	2026-10-13		adcut-skill-pack,meta-ads-skill-pack	2026-10-30	pagestyle: adcut and meta-ads import it from their main branches; daily_page has no importer yet
