@@ -35,6 +35,7 @@ one valid console ask, on the fake "shop" skill pack.
 
 import copy
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -47,6 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import _shop  # noqa: E402
 from kit import db, decisions, facts, messages, pending  # noqa: E402
 from kit import queue as q  # noqa: E402
+from kit.contract import SkillPackError  # noqa: E402
 from kit.registry import DecisionRegistry, FactKeys, Thresholds  # noqa: E402
 from kit.testing.check import (capture, check, clean_env, finish,  # noqa: E402
                                one_doc, tmp_dir)
@@ -443,6 +445,32 @@ def test_no_gate() -> None:
     got = console_add(filled([a]))
     check("that ask is still valid (evidence cells clipped)",
           got.get("ok") is True, got)
+
+    # the same limit, checked where a skill pack sets the proposal
+    core_limit = int(re.search(
+        r'"expect":\s*(\d+)', (Path(__file__).resolve().parents[2] / "console" / "core.py").read_text()
+    ).group(1))
+    check("EXPECT_MAX is the console's own expect limit",
+          pending.EXPECT_MAX == core_limit == pending.LIMITS["expect"],
+          (pending.EXPECT_MAX, core_limit))
+    fits = {"note": "x" * (pending.EXPECT_MAX - len(q.canonical({"note": ""})))}
+    over = {"note": fits["note"] + "x"}
+    check("check_expect returns the length of a binding that fits",
+          pending.check_expect(fits) == pending.EXPECT_MAX == pending.
+          expect_length(fits), pending.expect_length(fits))
+    try:
+        pending.check_expect(over)
+        err = None
+    except SkillPackError as e:
+        err = e
+    check("one character over: pending_expect_too_long with the length and "
+          "the limit", err is not None
+          and err.args[0].code == "pending_expect_too_long"
+          and err.args[0].params == {"length": pending.EXPECT_MAX + 1,
+                                     "limit": pending.EXPECT_MAX}, err)
+    check("what check_expect refuses is what _gate leaves without a gate",
+          pending._gate("x", ["a", "b"], over, False, []) is None
+          and pending._gate("x", ["a", "b"], fits, False, []) is not None)
 
 
 # ---- 5 ---------------------------------------------------------------------
