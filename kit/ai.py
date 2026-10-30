@@ -30,19 +30,23 @@ What it guards (each is a test in kit/tests/test_ai.py; the last review of it wa
     proxy, and a key that is not printable ASCII is refused (it could not be sent as a header and would leak through the exception).
   * A model with no price is refused by default (`unpriced="refuse"`): the cap could not count it. A pack that wants the call anyway says
     `unpriced="log"`; the call is then logged with a null cost, counted as nothing, and `usage()` says how many calls were unpriced.
-  * The cap is counted from the ledger for the UTC day, and holds under threads and processes: before it sends, a call takes a file lock, checks the
-    day's cost plus its estimate (the prompt counted high, the answer at `max_tokens`) and writes a reservation of that estimate; the reply settles it. A
-    reservation nobody settled (a crash) keeps counting. `run_usd` is per `Budget` object, so one object is one run, not one call.
+  * The cap is counted from the ledger for the UTC day, and holds under threads and processes: before it sends, a call takes a lock on the ledger file
+    itself (so a link or a relative path to it takes the same one), checks the day's cost plus its estimate (the prompt counted high, an image at a flat
+    1600 tokens, the answer at `max_tokens`) and writes a reservation of that estimate; the reply settles it. A reservation nobody settled (a crash)
+    keeps counting, and a ledger whose last line was cut off still takes the next one on a line of its own. `run_usd` is per `Budget` object, so one
+    object is one run, not one call, and the object's own lock makes the check and the charge one step.
   * A reply that was billed is booked as billed: a refusal or a cut-off carries its usage, a priced model whose reply has none is booked at the estimate.
-    A number that is not finite, or a token count below 0, is never believed: a price is refused, a count is treated as unknown.
+    A number that is not finite, or a token count below 0 or past a trillion, is never believed: a price is refused (a bad price passed to `ask` is a
+    ValueError), a count is treated as unknown. A reply that cannot be booked in the ledger afterwards is still returned, with `booked` False.
   * Every call, a failed one too, ends in one ledger line: time, task, model, protocol, host, status, tokens, cost (null when unpriced: never guessed),
     milliseconds, attempts, the prompt's sha256 and length (the text is not kept) and the images' sha256. The file is 0600.
   * 429, 5xx and a refused or dropped connection are retried (`BACKOFF_S`, a finite `retry-after` between 0 and `MAX_RETRY_AFTER_S` honoured); any other
-    4xx stops at once, and a read timeout is not retried (the vendor may be working on, and billing, the first request). The key is replaced in every
-    message that leaves this module, before a text is cut.
+    4xx stops at once. A read timeout, a 2xx whose body does not arrive, and a Ctrl-C while waiting are not retried and keep the call's estimate booked
+    (the vendor may have done, and billed, the work). A cut-off error body is still the error its status says. The key is replaced, in the forms a
+    message or a JSON encoder writes it, in every message that leaves this module, before a text is cut.
   * `ask_json` asks for the schema mode where the protocol has one; a vendor that refuses it (HTTP 400) or answers with text that is not one JSON
     object is asked once more, with the instruction in words; a reply that stopped on a refusal or the token limit is not asked again. The object must
-    carry the schema's required keys with the right basic types. What it means is the pack's check: the model judges, the code verifies.
+    carry the schema's required keys with the right basic types, nested ones too. What it means is the pack's check: the model judges, the code verifies.
 
 Test: kit/tests/test_ai.py (a loopback fake server; no network).
 """
@@ -89,6 +93,8 @@ UNPRICED = ("refuse", "log")
 STOPPED = "it stopped with"
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}")
+MAX_COUNT = 10 ** 12                         # a token count above this is not believed: no call is that big, and a larger int would overflow a float
+IMAGE_TOKENS = 1600                          # what an image adds to the estimate: about the most a vendor charges for a large one
 
 
 def _fail(m, *next_: str) -> SkillPackError:
@@ -96,7 +102,12 @@ def _fail(m, *next_: str) -> SkillPackError:
 
 
 def _finite(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return False
+    try:
+        return math.isfinite(v)
+    except OverflowError:                    # an int too large for a float is not a finite number of dollars either
+        return False
 
 
 @dataclass(frozen=True)
@@ -123,6 +134,7 @@ class Reply:
     attempts: int = 1
     task: str = ""
     stop_reason: str | None = None
+    booked: bool = True                  # False when the ledger line could not be written after the reply came: the reply is still returned
 
 
 class Budget:
@@ -154,7 +166,9 @@ def redact(text, key: str | None = None) -> str:
         k = key
     if not k:
         return s
-    for form in {k, k.encode("unicode_escape").decode("ascii"), repr(k)[1:-1]}:        # the key as typed and as an exception message escapes it
+    forms = {k, k.encode("unicode_escape").decode("ascii"), repr(k)[1:-1], json.dumps(k)[1:-1]}        # as typed, and as a message or a JSON encoder escapes it
+    forms |= {f.replace("/", "\\/") for f in forms}                                                   # PHP's encoder escapes the slash too
+    for form in sorted(forms, key=len, reverse=True):
         s = s.replace(form, "<key>")
     return s
 
@@ -269,8 +283,12 @@ def prices_from_rows(rows: Iterable[Mapping[str, str]]) -> dict[str, tuple[float
 
 
 def _count(v) -> int | None:
-    """A token count: a whole number of 0 or more, else None (unknown)."""
-    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+    """A token count: a whole number from 0 to MAX_COUNT, else None (unknown)."""
+    return v if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_COUNT else None
+
+
+def _price_ok(p) -> bool:
+    return isinstance(p, (tuple, list)) and len(p) == 2 and all(_finite(x) and x >= 0 for x in p)
 
 
 def cost_usd(prices: Mapping[str, tuple[float, float]] | None, model: str, tokens_in, tokens_out) -> float | None:
@@ -292,48 +310,64 @@ class Ledger:
     (a line with the same `id`). A reservation no line settled keeps counting at its estimate."""
 
     def __init__(self, path: str | os.PathLike):
-        self.path = Path(path)
+        self.path = Path(os.path.abspath(path))                       # absolute: a later chdir does not point it somewhere else
         self._tlock = threading.Lock()
+
+    def _open(self) -> int:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        return os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
 
     @contextlib.contextmanager
     def _locked(self):
+        """The lock is on the ledger file itself, so every name for it (a link, a relative path) takes the same one."""
         with self._tlock:
             if fcntl is None:
                 yield
                 return
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(str(self.path) + ".lock", os.O_WRONLY | os.O_CREAT, 0o600)
+            fd = self._open()
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX)
                 yield
             finally:
                 os.close(fd)
 
+    def unwritable(self, e: OSError) -> SkillPackError:
+        return _fail(msg("aicall_config_invalid", f"{self.path}: the call log cannot be appended to ({e.strerror}); nothing was sent", var="call log",
+                         detail="a file this process can append to"))
+
     def check_writable(self) -> None:
         """Refuse before sending when a line could not be appended afterwards: a call that is billed and cannot be booked is never repeated for free."""
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            os.close(os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600))
+            os.close(self._open())
         except OSError as e:
-            raise _fail(msg("aicall_config_invalid", f"{self.path}: the call log cannot be appended to ({e.strerror}); nothing was sent", var="call log",
-                            detail="a file this process can append to")) from None
+            raise self.unwritable(e) from None
 
     def append(self, entry: dict) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        line = (json.dumps(entry, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n").encode()
+        fd = self._open()
         try:
-            os.write(fd, (json.dumps(entry, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n").encode())
+            try:
+                with open(self.path, "rb") as f:
+                    if f.seek(0, os.SEEK_END):
+                        f.seek(-1, os.SEEK_END)
+                        if f.read(1) != b"\n":
+                            line = b"\n" + line                       # the last line was cut off (a crash): this one starts a line of its own
+            except OSError:
+                pass
+            os.write(fd, line)
         finally:
             os.close(fd)
 
     def reserve(self, entry: dict, est_usd: float, budget: Budget) -> str:
-        """Under the file lock: check the day's cost and the run's against this call's estimate, and write a reservation of the estimate. Returns the
-        id the settling line carries. Refuses (coded) when a cap would be passed; nothing is written then."""
-        with self._locked():
-            check_budget(self.spent(), est_usd, budget)
+        """Under the file lock (and the budget's): check the day's cost and the run's against this call's estimate, and write a reservation of the
+        estimate. The day is the one the entry is stamped with, which is the one the call will be booked on. Returns the id the settling line carries.
+        Refuses (coded) when a cap would be passed; nothing is written then."""
+        day = str(entry.get("at", ""))[:10]
+        with self._locked(), budget._lock:
+            check_budget(self.spent(day if _DAY.match(day) else None), est_usd, budget)
             rid = uuid.uuid4().hex
             self.append({**entry, "id": rid, "status": "reserved", "cost_usd": est_usd, "input_tokens": None, "output_tokens": None})
-            budget.charge(est_usd)
+            budget.used_usd += est_usd
             return rid
 
     def rows(self) -> list[dict]:
@@ -344,7 +378,7 @@ class Ledger:
         if not self.path.is_file():
             return [], 0
         rows, bad = [], 0
-        for ln in self.path.read_text(encoding="utf-8").splitlines():
+        for ln in self.path.read_text(encoding="utf-8", errors="replace").splitlines():      # a multibyte character cut mid-write is a cut line
             if not ln.strip():
                 continue
             try:
@@ -403,14 +437,16 @@ class Ledger:
 
 def tokens_in_text(text: str) -> int:
     """A count of a prompt's tokens that errs high for prose: 4 ASCII characters a token, one token for every other character (CJK is about that); the
-    real count comes back in the reply. It does not see images, and dense text (code, base64) can have more tokens than this."""
+    real count comes back in the reply. It does not see images (`estimate` adds a flat amount for each), and dense text (code, base64) can have more
+    tokens than this."""
     ascii_chars = sum(1 for c in text if ord(c) < 128)
     return -(-ascii_chars // 4) + (len(text) - ascii_chars) + 8
 
 
-def estimate(s: Settings, system: str, text: str, max_tokens: int, prices: Mapping[str, tuple[float, float]] | None) -> tuple[int, float | None]:
-    """(input tokens, USD) of one call: the prompt counted high, the answer at its cap; the USD is None for a model with no price."""
-    tin = tokens_in_text(system) + tokens_in_text(text)
+def estimate(s: Settings, system: str, text: str, max_tokens: int, prices: Mapping[str, tuple[float, float]] | None, images: int = 0) -> tuple[int, float | None]:
+    """(input tokens, USD) of one call: the prompt counted high, each image at IMAGE_TOKENS, the answer at its cap; the USD is None for a model with no
+    price."""
+    tin = tokens_in_text(system) + tokens_in_text(text) + IMAGE_TOKENS * images
     return tin, cost_usd(prices, s.model, tin, max_tokens)
 
 
@@ -514,18 +550,18 @@ def _opener(host: str | None) -> urllib.request.OpenerDirector:
 
 
 def _once(s: Settings, url: str, headers: dict, body: dict, timeout: float):
-    """(status, doc, retry_after) of one HTTP try. Status 0 is a network fault (retried), -1 a read timeout (not retried: the vendor may be working on
-    the request and billing it); doc is then the fault, redacted. Nothing escapes: any other failure is a network fault."""
+    """(status, doc, retry_after) of one HTTP try. Status 0 is a network fault (retried); -1 a timeout before the vendor answered and -2 a 2xx whose
+    body did not arrive (neither retried: the vendor may have done, and billed, the work); doc is then the fault, redacted. Nothing escapes: any other
+    failure before an answer is a network fault."""
     try:
         r = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers=headers)
-        with _opener(urllib.parse.urlsplit(url).hostname).open(r, timeout=timeout) as resp:
-            raw = resp.read()
-        try:
-            return 200, json.loads(raw), None
-        except (ValueError, RecursionError):
-            return 200, None, None
+        resp = _opener(urllib.parse.urlsplit(url).hostname).open(r, timeout=timeout)
     except urllib.error.HTTPError as e:
-        detail = redact(e.read().decode(errors="replace"), s.key)[:400]          # redacted first, then cut: a key across the cut would leave its prefix
+        try:
+            raw = e.read()
+        except Exception:                # a body cut off, reset or stalled: the status is still the answer
+            raw = b""
+        detail = redact(raw.decode(errors="replace"), s.key)[:400]               # redacted first, then cut: a key across the cut would leave its prefix
         ra = e.headers.get("retry-after") if e.headers else None
         try:
             ra = float(ra) if ra else None
@@ -539,8 +575,17 @@ def _once(s: Settings, url: str, headers: dict, body: dict, timeout: float):
         if isinstance(getattr(e, "reason", None), TimeoutError):
             return -1, "the connection timed out", None
         return 0, redact(str(getattr(e, "reason", e)), s.key)[:200], None
-    except Exception as e:               # IncompleteRead, BadStatusLine, InvalidURL, a header the key cannot be sent in...
+    except Exception as e:               # InvalidURL, a header the key cannot be sent in, a bad status line...
         return 0, redact(f"{type(e).__name__}: {e}", s.key)[:200], None
+    try:
+        with resp:
+            raw = resp.read()
+    except Exception as e:               # IncompleteRead, a reset, a stall: the vendor answered 2xx, so the work may be done and billed
+        return -2, type(e).__name__, None
+    try:
+        return 200, json.loads(raw), None
+    except (ValueError, RecursionError):
+        return 200, None, None
 
 
 def _send(s: Settings, url: str, headers: dict, body: dict, timeout: float, sleep: Callable[[float], None]):
@@ -571,25 +616,38 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         raise ValueError("a budget needs the ledger it is counted from")
     images = list(images)
     known = s.model in (prices or {})
+    if known and not _price_ok(prices[s.model]):
+        raise ValueError(f"the price of {s.model} is (input, output) USD per million tokens, each finite and 0 or more, not {prices[s.model]!r}")
     if not known and (unpriced == "refuse" or budget is not None):
         raise _fail(msg("aicall_model_unpriced", f"{s.model}: no price, so the cap could not count it; nothing was sent", model=s.model),
                     "add the model's list price to the pack's ai_prices.tsv, or use a priced model")
     url, headers, body = build_request(s, system, text, images, max_tokens, schema, effort)
+    try:
+        json.dumps(body, allow_nan=False)
+    except (TypeError, ValueError, RecursionError):
+        raise _fail(msg("aicall_config_invalid", "the request (the schema, most likely) cannot be written as JSON; nothing was sent", var="schema",
+                        detail="a JSON object of plain values")) from None
     entry = {"at": _dates.now().isoformat(timespec="seconds"), "task": s.task, "model": s.model, "protocol": s.protocol,
-             "host": s.host, "prompt_sha256": hashlib.sha256((system + "\n" + text).encode()).hexdigest(), "prompt_chars": len(system) + len(text),
-             "images": [_image(p)[2] for p in images]}
-    est = estimate(s, system, text, max_tokens, prices)[1] or 0.0
+             "host": s.host, "prompt_sha256": hashlib.sha256((system + "\n" + text).encode("utf-8", "replace")).hexdigest(),
+             "prompt_chars": len(system) + len(text), "images": [_image(p)[2] for p in images]}
+    est = estimate(s, system, text, max_tokens, prices, len(images))[1] or 0.0
     rid = None
     if ledger is not None:
         ledger.check_writable()
         if budget is not None:
-            rid = ledger.reserve(entry, est, budget)
-    status, doc, attempts, ms = _send(s, url, headers, body, timeout, sleep)
-    entry.update(ms=ms, attempts=attempts, id=rid)
+            try:
+                rid = ledger.reserve(entry, est, budget)
+            except OSError as e:
+                raise ledger.unwritable(e) from None
+    booked = True
 
     def settle(row: dict, actual: float) -> None:
+        nonlocal booked
         if ledger is not None:
-            ledger.append(row)
+            try:
+                ledger.append(row)
+            except OSError:              # the reply is still the caller's; a reservation, if there is one, keeps counting at its estimate
+                booked = False
         if budget is not None and rid is not None:
             budget.settle(est, actual)
 
@@ -597,11 +655,19 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         settle({**entry, "status": why, "input_tokens": tin, "output_tokens": tout, "cost_usd": billed or None}, billed)
         return err
 
+    try:
+        status, doc, attempts, ms = _send(s, url, headers, body, timeout, sleep)
+    except BaseException:                # Ctrl-C in a back-off wait, say: the request may have gone out, so its estimate stays booked
+        held = est if budget is not None else 0.0
+        settle({**entry, "id": rid, "status": "interrupted", "input_tokens": None, "output_tokens": None, "cost_usd": held or None}, held)
+        raise
+    entry.update(ms=ms, attempts=attempts, id=rid)
+
     if status <= 0:
-        why = "timeout" if status == -1 else "network"
-        raise fail(_fail(msg("aicall_network_error", f"{s.host}: {'no answer' if status == 0 else 'timed out'} after {attempts} "
-                             f"{'try' if attempts == 1 else 'tries'} ({doc}); is the base URL right?", detail=str(doc), host=s.host)), why,
-                   billed=est if status == -1 and budget is not None else 0.0)          # a timed-out request may still be billed: its estimate stays booked
+        why, what = {0: ("network", "no answer"), -1: ("timeout", "timed out"), -2: ("cut_off", "the reply was cut off")}[status]
+        hint = "is the base URL right?" if status == 0 else "the vendor may have billed it"
+        raise fail(_fail(msg("aicall_network_error", f"{s.host}: {what} after {attempts} {'try' if attempts == 1 else 'tries'} ({doc}); {hint}",
+                             detail=str(doc), host=s.host)), why, billed=est if status < 0 and budget is not None else 0.0)       # a timed-out request may still be billed
     if status != 200:
         raise fail(_fail(msg("aicall_http_error", f"{s.host} answered HTTP {status}: {doc}", status=status, detail=str(doc), host=s.host)), f"http_{status}")
     if doc is None:
@@ -618,7 +684,8 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         c = est
         entry["cost_estimated"] = True
     settle({**entry, "status": "ok", "input_tokens": tin, "output_tokens": tout, "cost_usd": c}, c or 0.0)
-    return Reply(text=out, input_tokens=tin, output_tokens=tout, model=s.model, ms=ms, cost_usd=c, attempts=attempts, task=s.task, stop_reason=stop)
+    return Reply(text=out, input_tokens=tin, output_tokens=tout, model=s.model, ms=ms, cost_usd=c, attempts=attempts, task=s.task, stop_reason=stop,
+                 booked=booked)
 
 
 def unwrap_json(text: str):
@@ -635,28 +702,38 @@ def unwrap_json(text: str):
 _TYPES = {"string": str, "boolean": bool, "object": dict, "array": list, "null": type(None)}
 
 
-def fits(obj: dict, schema: dict) -> bool:
-    """Does `obj` carry the schema's `required` keys, and do the properties it lists have the right basic type (string, number, integer, boolean,
-    array, object, null)? Nothing more: the pack's check says what the values mean."""
-    for k in schema.get("required", []) or []:
-        if k not in obj:
+def _is(v, name: str) -> bool | None:
+    """Does `v` have the JSON type `name`? None when the name is not a type this check knows."""
+    if name == "number":
+        return _finite(v)
+    if name == "integer":                                               # 1.0 is an integer in JSON Schema
+        return _finite(v) and (isinstance(v, int) or (isinstance(v, float) and v.is_integer()))
+    return isinstance(v, _TYPES[name]) if name in _TYPES else None
+
+
+def _fits(v, spec) -> bool:
+    if not isinstance(spec, dict):
+        return True
+    t = spec.get("type")
+    known = [n for n in (t if isinstance(t, list) else [t]) if isinstance(n, str) and _is(v, n) is not None]
+    if known and not any(_is(v, n) for n in known):                     # only types this check knows count; a type it does not know is not its business
+        return False
+    if isinstance(v, dict):
+        req, props = spec.get("required"), spec.get("properties")
+        if isinstance(req, list) and any(isinstance(k, str) and k not in v for k in req):
             return False
-    for k, spec in (schema.get("properties") or {}).items():
-        if k not in obj or not isinstance(spec, dict):
-            continue
-        t, v = spec.get("type"), obj[k]
-        for one in (t if isinstance(t, list) else [t]):
-            if one not in _TYPES and one not in ("number", "integer"):
-                break                                                   # no type given, or one this check does not know: not its business
-            if one == "number" and _finite(v):
-                break
-            if one == "integer" and isinstance(v, int) and not isinstance(v, bool):
-                break
-            if one in _TYPES and isinstance(v, _TYPES[one]):
-                break
-        else:
+        if isinstance(props, dict) and any(k in v and not _fits(v[k], sub) for k, sub in props.items()):
             return False
+    elif isinstance(v, list) and isinstance(spec.get("items"), dict):
+        return all(_fits(x, spec["items"]) for x in v)
     return True
+
+
+def fits(obj: dict, schema: dict) -> bool:
+    """Does `obj` carry the schema's `required` keys, and do the properties it lists (and the items of an array, to any depth the schema goes) have
+    the right basic type (string, number, integer, boolean, array, object, null)? Nothing more: the pack's check says what the values mean. A part of
+    the schema that is not well formed (`required` that is not a list, a `type` that is not a name) constrains nothing."""
+    return isinstance(obj, dict) and _fits(obj, schema if isinstance(schema, dict) else {})
 
 
 JSON_ONLY = "\n\nReply with one JSON object and nothing else: no prose, no code fence."
