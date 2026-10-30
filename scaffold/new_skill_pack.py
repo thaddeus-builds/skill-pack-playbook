@@ -4,7 +4,7 @@
     python3 scaffold/new_skill_pack.py --name acme-skill-pack --cli acme \\
         --prefix ACME --dir ../acme-skill-pack [--markets HK,TW] \\
         [--packs compliance,data] [--owner @handle] [--repo-home WHERE] \\
-        [--langs en,zh] [--dry-run]
+        [--langs en,zh] [--host github|gitlab] [--dry-run]
     python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack --update-kit
 
 What it writes (BUILD.md, B1):
@@ -13,7 +13,8 @@ What it writes (BUILD.md, B1):
     lists the others as used, not copied, or written by a later build step),
     placeholders filled ({{name}}, {{cli}}, {{env_prefix}}, {{owner}},
     {{repo_home}}, {{today}}): skill-pack.toml, CLAUDE.md, SKILL.md, README.md,
-    references/workflows.md, .gitignore, .gitlab-ci.yml, .gitlab/CODEOWNERS,
+    references/workflows.md, .gitignore, the CI (.github/workflows/ci.yml, or .gitlab-ci.yml
+    with --host gitlab) and CODEOWNERS (.github/ or .gitlab/),
     docs/ (decision rights, the install and triage checklists, the data bug
     classes, the doctor's checks, the owner review loop, vendor API
     discovery, the session handoff, the roadmap), ssot/README.md.
@@ -78,8 +79,6 @@ RENDERED = {
     "README-operator.md": "README.md",
     "workflows.md": "references/workflows.md",
     "gitignore": ".gitignore",
-    "gitlab-ci.yml": ".gitlab-ci.yml",
-    "CODEOWNERS": ".gitlab/CODEOWNERS",
     "CHANGELOG.md": "CHANGELOG.md",
     "decision-rights.md": "docs/decision-rights.md",
     "install-checklist.md": "docs/install-checklist.md",
@@ -94,6 +93,9 @@ RENDERED = {
     "prior-art-index.md": "docs/prior-art/README.md",
     "ssot/README.md": "ssot/README.md",
 }
+# where a host keeps its CI and its CODEOWNERS (the default is GitHub; GitLab with --host gitlab)
+HOSTS = {"github": {"template": "github-ci.yml", "ci": ".github/workflows/ci.yml", "codeowners": ".github/CODEOWNERS"},
+         "gitlab": {"template": "gitlab-ci.yml", "ci": ".gitlab-ci.yml", "codeowners": ".gitlab/CODEOWNERS"}}
 # the files the build writes later (B2, B8): `<<fill: …>>` may stay there
 FILLED = {"SKILL.md", "README.md", "references/workflows.md",
           "docs/decision-rights.md"}
@@ -128,7 +130,7 @@ DAY_ONE = {
         "tests/run.py", "tests/test_run_tests.py", "tests/test_clock.py",
         "tests/test_layering.py", "tests/test_release.py", "CLAUDE.md"],
     "An empty registry index": ["ssot/index.tsv", "tests/test_ssot.py"],
-    "CI from the first commit": [".gitlab-ci.yml"],
+    "CI from the first commit": ["{ci}"],
     "A story-check registry": ["ssot/story_checks.tsv",
                                "scripts/compute_stories.py"],
     "\"Declare it or refuse\"": ["scripts/{cli}.py", "scripts/facts.py",
@@ -152,8 +154,8 @@ DAY_ONE = {
     "The owner's inbox": ["console/ask.py", "console/serve.py"],
     "Writes and paid calls off": ["scripts/_lib/writer.py",
                                   "scripts/execute_actions.py"],
-    "Protected paths for the risky list": [".gitlab/CODEOWNERS"],
-    "Git rules": ["CLAUDE.md", ".gitlab-ci.yml"],
+    "Protected paths for the risky list": ["{codeowners}"],
+    "Git rules": ["CLAUDE.md", "{ci}"],
     "Releases are a `git archive`": ["tests/test_release.py",
                                      ".gitattributes",
                                      "docs/install-checklist.md"],
@@ -191,7 +193,9 @@ def toml_list(items: list[str]) -> str:
 
 
 def render_toml(text: str, markets: list[str], langs: list[str],
-                packs: list[str] = ()) -> str:
+                packs: list[str] = (), host: str = "github") -> str:
+    if host == "github":          # the template names GitLab's files in [release].internal; GitHub keeps its CI in .github
+        text = text.replace('".gitlab-ci.yml", ".gitlab", ', '".github", ', 1)
     text = re.sub(r"^markets = \[\][^\n]*", lambda m: m.group(0).replace(
         "[]", toml_list(markets), 1), text, count=1, flags=re.M)
     text = re.sub(r"^packs = \[\]", "packs = " + toml_list(list(packs)),
@@ -286,12 +290,15 @@ def plan(values: dict[str, str], markets: list[str], langs: list[str],
         text = fill((TEMPLATES / src).read_text(encoding="utf-8"), values,
                     f"templates/{src}")
         if src == "skill-pack.toml":
-            text = render_toml(text, markets, langs, packs)
+            text = render_toml(text, markets, langs, packs, values.get("host", "github"))
         files[target] = text
     vendored = {"scripts/kit/raw.py", "console/ask.py", "console/serve.py",
                 "console/ui_rules.tsv", ".gitattributes"}
-    files[".gitlab/CODEOWNERS"] = codeowners(files[".gitlab/CODEOWNERS"],
-                                             set(files) | vendored)
+    host = HOSTS[values.get("host", "github")]
+    ci = fill((TEMPLATES / host["template"]).read_text(encoding="utf-8"), values, f"templates/{host['template']}")
+    files[host["ci"]] = ci.replace("$[[", "${{").replace(" ]]", " }}")      # GitHub's expressions, spelled to pass the `{{` check
+    files[host["codeowners"]] = codeowners(fill((TEMPLATES / "CODEOWNERS").read_text(encoding="utf-8"), values, "templates/CODEOWNERS"),
+                                           set(files) | vendored)
     filled = FILLED | ({"CLAUDE.md"} if values["repo_home"].startswith(
         "<<fill:") else set())
     for target, text in files.items():
@@ -364,7 +371,7 @@ def values_of(a: argparse.Namespace) -> tuple[dict[str, str], list[str],
         raise Refused(f"--packs {a.packs!r}: distinct names of "
                       f"{', '.join(sorted(names))} (base and testkit always come)")
     return ({"name": a.name, "cli": a.cli, "env_prefix": a.prefix,
-             "owner": owner, "repo_home": home,
+             "owner": owner, "repo_home": home, "host": a.host,
              "today": date.today().isoformat()}, markets, langs, packs)
 
 
@@ -389,6 +396,8 @@ def parser() -> argparse.ArgumentParser:
                    "(default @owner)")
     p.add_argument("--repo-home", help="where the repository lives (named in "
                    "CLAUDE.md; without it CLAUDE.md keeps a <<fill: …>>)")
+    p.add_argument("--host", choices=sorted(HOSTS), default="github",
+                   help="where the repository lives: its CI and CODEOWNERS are written for it (default github)")
     p.add_argument("--dry-run", action="store_true",
                    help="print the file list, write nothing")
     p.add_argument("--update-kit", action="store_true",
