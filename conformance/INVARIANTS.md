@@ -41,7 +41,20 @@ How far a skill pack is on the kit, said once. Each level includes the one below
 | **L2** | declares in `skill-pack.toml` and vendors only the kit packs it imports, and has deleted its own copy of any module the kit holds (golden diff 0 against the copy it deleted) | each pack in `[kit] packs` owns a module that `tools/consumers.py PACK` lists as imported by it; no file of its own code has a kit module's name, except the skeleton's five verb entry points (`scripts/cli.py`, `facts.py`, `decisions.py`, `pending.py`, `verbs.py`: thin, and the skeleton ships them with those names) |
 | **L3** | has the full scaffold structure: `ssot/`, `console/`, a host adapter (`zylos/` on the Zylos host) and the thirteen day-one tests (the files under `scaffold/skeleton/tests/`) | `python3 tools/fleet.py status PACK` shows its console and host adapter copies with no `local` file; its own `scripts/<cli>.py test` ends `RESULT: N passed` |
 
-[`tools/adoption.tsv`](../tools/adoption.tsv) records each known skill pack's level, its target, the day the proofs were last run, and the next step. `tests/test_adoption.py` checks the table's shape and that each row names a folder among the sibling checkouts; it cannot know a pack's level, so `checked` is the day someone ran the commands above, and a level is trusted only as far as that day.
+[`tools/adoption.tsv`](../tools/adoption.tsv) records each known skill pack's level, its target, how much a client has used it (`use`), the day the proofs were last run, and the next step. `tests/test_adoption.py` checks the table's shape and that each row names a folder among the sibling checkouts; it cannot know a pack's level, so `checked` is the day someone ran the commands above, and a level is trusted only as far as that day.
+
+### Use
+
+A level says how far a pack is on the kit; it does not say whether anyone uses the pack. `use` says that, in four words, read from the pack's main branch and the client workspaces on the day `use_seen`:
+
+| `use` | Meaning |
+| --- | --- |
+| `earned` | a client's real data has gone through it: a pull, a report or a deliverable the client's team used |
+| `built` | its tests are green and it has run on a sample, but no client's data has gone through it |
+| `shell` | a scaffold: the verbs or the `SKILL.md` are not filled |
+| `library` | not a skill pack; a program or library other packs run (it stays at L0 to L0, and no pack at L0 to L0 is anything else) |
+
+A pack is not deleted or frozen for being `built` or `shell`; the word tells a session where a contract, a kit module or a layer above it would have no user yet.
 
 ## Adding an invariant or a check
 
