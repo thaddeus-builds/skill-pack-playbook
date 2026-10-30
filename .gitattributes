@@ -1,2 +1,0 @@
-# The one setting every pull request that touches CHANGELOG.md relies on: see docs/maintaining.md, "Merging CHANGELOG.md".
-CHANGELOG.md merge=union
