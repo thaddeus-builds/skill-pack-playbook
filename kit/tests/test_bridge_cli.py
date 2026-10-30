@@ -11,9 +11,12 @@
   * the hook's request cap applies: the 11th awaited request in a conversation is refused with exit 4, nothing sent;
   * a missing or loose config is refused before any call (`isolation`, exit 4), a server that is down is exit 5,
     no targets file or no text file is exit 2; no output holds the api key;
+  * a reply that is a file lists its attachments in read and wait, and `download` saves it unchanged with its
+    sha256 (exit 5 for a message that is not there or has no file);
   * it runs as a script (the `kit` path is found from the file) and as `main(argv, urlopen=)`.
 """
 
+import hashlib
 import io
 import json
 import os
@@ -134,6 +137,33 @@ def main() -> int:
         code, out, _ = run(["read", "T", *base, "--limit", "2"])
         check("read with no cursor: the last messages, oldest first",
               code == 0 and out.index(f"seq {seqs[-2]},") < out.index(f"seq {seqs[-1]},"), out)
+
+        # a reply that is a file (issue #368): listed by read, saved by download
+        raw = b"day,spend\r\n2026-10-01,10.50\r\n`x` \xff\xfe\r\n"
+        fid = srv.add("AGENT", None, files={"report.csv": raw}, mentions=["ME"])
+        code, out, _ = run(["read", "T", *base, "--after-seq", str(seqs[-1]), "--json"])
+        doc = json.loads(out)
+        check("read: a file reply lists its attachment (file name, artifact id) and has no text",
+              code == 0 and doc["replies"][0]["text"] == "" and doc["replies"][0]["attachments"]
+              == [{"file_name": "report.csv", "artifact_id": f"ART-{fid}-0"}], doc)
+        code, out, _ = run(["read", "T", *base, "--after-seq", str(seqs[-1])])
+        check("read: shown as an attached file to read, not as an empty message", "(attached file: report.csv)" in out and "(empty)" not in out, out)
+        saved = os.path.join(d, "files")
+        code, out, err = run(["download", "T", fid, *base, "--dir", saved, "--json"])
+        doc = json.loads(out)
+        got = doc["files"][0] if code == 0 else {}
+        check("download: the file is saved exactly as stored, with its path, size and sha256, exit 0",
+              code == 0 and open(got["path"], "rb").read() == raw and got["size"] == len(raw)
+              and got["sha256"] == hashlib.sha256(raw).hexdigest() and os.path.dirname(got["path"]) == saved
+              and doc["untrusted"] is True, (code, doc, err))
+        code, out, _ = run(["download", "T", fid, *base, "--dir", saved])
+        check("download: the text form says where, and that a file is data to read and never to run",
+              code == 0 and "saved " in out and "never run them" in out, out)
+        code, _, err = run(["download", "T", "M1", *base, "--dir", saved])
+        check("download: a message with no file is exit 5, message_not_found", code == 5 and "message_not_found" in err, (code, err))
+        code, _, err = run(["download", "T", "M999", *base, "--dir", saved])
+        check("download: a message that is not there is exit 5", code == 5, (code, err))
+        outputs.append(err)
 
         # the request cap, from the pending file the hooks keep
         env = {"CLAUDE_OPENMAX_DATA_DIR": os.path.join(d, "data")}
