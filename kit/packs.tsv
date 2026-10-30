@@ -34,6 +34,7 @@ takes	generation	paid AI calls planned, priced, approved, kept
 prices	generation	vendor prices from an owner TSV
 preflight	generation	requests checked against the vendor schema
 consent	generation	a real person's likeness under confirmed consent
+ai	generation	the pack's own model calls: env-set vendor, price per model, a call log, a daily cap that refuses before sending, ask-again for JSON
 workbook	workbook	a client's xlsx read as it is, stdlib only
 workbook_map	workbook	the client's map: tables, columns, one owner per outgoing column
 workbook_store	workbook	the generic store: tables by anchor, keyed rows, the change record
