@@ -115,7 +115,7 @@ Three design pages that the builder thought clear came back from a cold read wit
 
 ## A review's fixes get their own fresh-context review (from the product-keyframe-video skill pack, 2026-10-31)
 
-Four new image tools passed 38 checks and a cold read still reproduced 12 defects (a delivery gate that passed any record, an option that reported success and did nothing). The fixes, with 33 new tests, went to a second reader who got the diff of the fixes and the first report and was told to break each fix with a different input. It found 12 more, among them a check the fixes had loosened to a tolerance far above honest noise and a default that silently swallowed pale parts. *Paid for:* a test that names the first input only proves that input; ask the second reader for another one. *Seen once:* that pack, two reads in one night.
+Four new image tools passed 38 checks and a cold read still reproduced 12 defects (a delivery gate that passed any record, an option that reported success and did nothing). The fixes, with 33 new tests, went to a second reader who got the diff of the fixes and the first report and was told to break each fix with a different input. It found 12 more, among them a check the fixes had loosened to a tolerance far above honest noise and a default that silently swallowed pale parts. *Paid for:* a test that names the first input only proves that input; ask the second reader for another one. *Seen twice:* that pack (two reads in one night), and `kit.ai` here (98 checks passed, then a second read found six ways past its spend cap, a third five more).
 
 ## A citation is opened before it reaches an owner (from the SDR skill pack, 2026-10-31)
 
