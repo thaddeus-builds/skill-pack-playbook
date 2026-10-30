@@ -30,7 +30,7 @@ Every property has a `description` of one sentence.
 | `ads.results/1` | in use | an operator (video-ads; any operator may) | makers (adcut), measurement, creator-program | [schema](ads.results-1.schema.json) | [TSV](examples/ads.results-1.example.tsv) |
 | `ads.results/2` | draft | an operator (video-ads; any operator may) | makers (adcut), measurement, creator-program | [schema](ads.results-2.schema.json) | [TSV](examples/ads.results-2.example.tsv) |
 | `creators.roster/1` | agreed | creator-program | video-ads | [schema](creators.roster-1.schema.json) | [JSON](examples/creators.roster-1.example.json) |
-| `ads.demand/1` | draft | an operator | makers | [schema](ads.demand-1.schema.json) | [JSON](examples/ads.demand-1.example.json) |
+| `ads.demand/1` | agreed | an operator | makers | [schema](ads.demand-1.schema.json) | [JSON](examples/ads.demand-1.example.json) |
 | `handoff.batch/1` | draft | asset-handoff | operators | [schema](handoff.batch-1.schema.json) | [JSON](examples/handoff.batch-1.example.json) |
 | `copy.proposals/1` | draft | ad-copy | operators, asset-handoff | [schema](copy.proposals-1.schema.json) | [JSON](examples/copy.proposals-1.example.json) |
 | `ads.changes/1` | draft | an operator | measurement | [schema](ads.changes-1.schema.json) | [JSON](examples/ads.changes-1.example.json) |
