@@ -67,7 +67,7 @@ def _log(env, msg: str) -> None:
         d = data_dir(env)
         d.mkdir(parents=True, exist_ok=True)
         with open(d / "bridge-hooks.log", "a", encoding="utf-8") as fh:
-            fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {msg[:300]}\n")
+            fh.write(f"{int(time.time())} {msg[:300]}\n")
     except OSError:
         pass
 
