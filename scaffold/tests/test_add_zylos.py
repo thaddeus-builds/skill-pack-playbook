@@ -14,6 +14,9 @@
   [9] to [11] (a cold review): a CI file or a SKILL.md that is not safe to edit is left alone with a line; bad inputs are refused before the first write
   [12] (the second cold review): nothing is written through a link or into a place that cannot take it; a write that fails puts back what was written;
        a name, prefix or path the adapter's check would refuse is refused first; a ci.yml or SKILL.md written in a style we do not read is left alone
+  [13] (the third cold review) a CLI word the adapter refuses as an alias is refused first; an existing manifest decides the SKILL.md keys; the name is read as
+       the adapter reads it; Ctrl-C halfway puts back too, modes included; an unreadable input is a line; no node is said; a block scalar with a tag, an anchor
+       or a quoted key is a block; the adapter's files keep their modes
 """
 
 import json
@@ -455,12 +458,138 @@ def test_a_ci_or_skill_md_in_a_style_we_do_not_read_is_left_alone() -> None:
     check("a SKILL.md that mixes LF and CRLF: not edited, a line says so", skill.read_bytes() == before and "mixes LF and CRLF" in r.stdout, r.stdout[-300:])
 
 
+def test_the_cli_word_the_adapter_refuses_is_refused_first() -> None:
+    print("[13a] the alias")
+    for cli in ("acme_cli", "node", "sh", "python3", "uv"):
+        d = bare("al-" + cli[:4])
+        toml = d / "skill-pack.toml"
+        toml.write_text(toml.read_text("utf-8").replace('cli = "acme"', f'cli = "{cli}"'), encoding="utf-8")
+        (d / "scripts" / f"{cli}.py").write_text((d / "scripts" / "acme.py").read_text("utf-8"), encoding="utf-8")
+        before = tree(d)
+        r = run(d)
+        check(f"cli = {cli}: refused before any write, with a line that names the alias", r.returncode != 0 and "detach.alias" in r.stderr and "Traceback" not in r.stderr and tree(d) == before, r.stderr[-300:])
+
+
+def test_an_existing_manifest_decides_the_skill_md_keys() -> None:
+    print("[13b] the manifest wins")
+    d = bare("mf")
+    keep = (d / "SKILL.md").read_bytes()
+    run(d)
+    mf = d / "zylos" / "manifest.json"
+    m = json.loads(mf.read_text("utf-8"))
+    m["reply"] = {"channel": "ACME_NOTIFY_CHANNEL", "endpoint": "ACME_NOTIFY_ENDPOINT"}
+    m["tasks"] = [{"name": "acme-hourly", "cron": "5 * * * *", "miss_threshold": 14400, "requires": ["ACME_SERVICE_TOKEN"],
+                   "prompt": "Hourly: run {cli} compute daily. Exit 0: call done, report nothing. Otherwise send the owner the error lines, then call done."}]
+    m["defaults"] = {"ACME_REGION": {"value": "eu", "when": ["ACME_SERVICE_TOKEN"]}}
+    mf.write_text(json.dumps(m, indent=2) + "\n", encoding="utf-8")
+    (d / "SKILL.md").write_bytes(keep)                                  # the frontmatter without the Zylos keys
+    r = run(d)
+    text = (d / "SKILL.md").read_text("utf-8")
+    check("the keys come from the manifest: its reply keys, its task's requires (marked sensitive when the name looks secret) and its default",
+          "ACME_NOTIFY_CHANNEL / ACME_NOTIFY_ENDPOINT" in text and "- name: ACME_SERVICE_TOKEN\n      description: required by a scheduled task; read by zylos/ only\n      sensitive: true" in text
+          and "- name: ACME_REGION" in text and "default: eu" in text and "ACME_REPLY_CHANNEL" not in text, text[-900:])
+    if HAS_NODE:
+        check("and the adapter's own check passes on the result", r.returncode == 0 and "check: ok" in r.stdout, r.stdout[-300:] + r.stderr[-300:])
+
+
+def test_the_name_is_read_the_way_the_adapter_reads_it() -> None:
+    print("[13c] the name")
+    for label, line in (("a trailing comment", "name: acme-skill-pack # the component"), ("double quotes", 'name: "acme-skill-pack"'), ("single quotes", "name: 'acme-skill-pack'"),
+                        ("the value on the next line", "name:\\n  acme-skill-pack"), ("a folded value", "name: >\\n  acme-skill-pack")):
+        d = bare("nm-" + label.split()[0])
+        skill = d / "SKILL.md"
+        skill.write_text(skill.read_text("utf-8").replace("name: acme-skill-pack", line.replace("\\n", "\n"), 1), encoding="utf-8")
+        r = run(d)
+        check(f"{label}: not refused as a different name{' and the check passes' if HAS_NODE else ''}", "SKILL.md name is" not in r.stderr and (r.returncode == 0 or not HAS_NODE), (r.stdout[-200:], r.stderr[-300:]))
+    d = bare("nm-wrong")
+    skill = d / "SKILL.md"
+    skill.write_text(skill.read_text("utf-8").replace("name: acme-skill-pack", "name:\\n  other-skill-pack".replace("\\n", "\n"), 1), encoding="utf-8")
+    before = tree(d)
+    r = run(d)
+    check("a wrong name on the next line is refused before any write", r.returncode != 0 and "other-skill-pack" in r.stderr and tree(d) == before, r.stderr[-300:])
+
+
+def test_ctrl_c_halfway_puts_back_and_modes_come_back() -> None:
+    print("[13d] interrupted")
+    d = bare("int")
+    (d / "zylos" / "bin").mkdir(parents=True)
+    old = d / "zylos" / "bin" / "cli.js"
+    old.write_text("// the pack's own old copy\n", encoding="utf-8")
+    old.chmod(0o600)
+    (d / "SKILL.md").chmod(0o640)
+    before = tree(d)
+    modes = {k: (d / k).stat().st_mode & 0o777 for k in before}
+    real = add_zylos._write
+
+    def interrupted(to, data, mode):
+        if to.name == "ci.yml":
+            raise KeyboardInterrupt
+        real(to, data, mode)
+
+    add_zylos._write = interrupted
+    try:
+        try:
+            add_zylos.add(d)
+            got = None
+        except KeyboardInterrupt:
+            got = "interrupted"
+    finally:
+        add_zylos._write = real
+    check("Ctrl-C while writing: it is raised as it was, and every file is back (bytes and modes, a file the run had changed included), no folder is left",
+          got == "interrupted" and tree(d) == before and {k: (d / k).stat().st_mode & 0o777 for k in before} == modes and not (d / "zylos" / "manifest.json").exists(),
+          (got, [k for k in set(tree(d)) ^ set(before)][:4]))
+
+
+def test_unreadable_inputs_are_a_line_and_the_adapters_files_keep_their_modes() -> None:
+    print("[13e] unreadable inputs, no node, modes")
+    if os.geteuid() != 0:
+        for label, rel in (("skill-pack.toml", "skill-pack.toml"), ("an existing adapter file", "zylos/lib.js")):
+            d = bare("un-" + label[:4])
+            if rel.startswith("zylos/"):
+                run(d)
+            (d / rel).chmod(0)
+            r = run(d)
+            (d / rel).chmod(0o644)
+            check(f"{label} that cannot be read: one error line, no traceback", r.returncode != 0 and "error:" in r.stderr and "Traceback" not in r.stderr
+                  and (rel != "skill-pack.toml" or "cannot be read (PermissionError)" in r.stderr), r.stderr[-300:])
+        d = bare("un-skill")
+        (d / "SKILL.md").chmod(0)
+        r = run(d)
+        (d / "SKILL.md").chmod(0o644)
+        check("a SKILL.md that cannot be read is left alone with a line (the rest is still done)", "SKILL.md cannot be read" in r.stdout and "Traceback" not in r.stderr, r.stdout[-300:])
+    for label, body, said in (("[skill_pack] that is not a table", 'skill_pack = "x"\n', "is not a table"),
+                              ("a cli that is a number", '[skill_pack]\nname = "acme-skill-pack"\ncli = 5\nenv_prefix = "ACME"\n', "are text")):
+        d = bare("tb-" + label[:6])
+        (d / "skill-pack.toml").write_text(body, encoding="utf-8")
+        r = run(d)
+        check(f"{label}: one error line that says so, no traceback", r.returncode != 0 and "error:" in r.stderr and "Traceback" not in r.stderr and said in r.stderr, r.stderr[-300:])
+    d = bare("nonode")
+    r = subprocess.run([sys.executable, str(add_zylos.__file__), "--skill-pack", str(d)], capture_output=True, text=True, timeout=120, env={**ENV, "PATH": "/nonexistent"})
+    check("without node the run says the adapter's check did not run (it used to say nothing and exit 0)", r.returncode == 0 and "node is not on PATH" in r.stdout and "did not run" in r.stdout, r.stdout[-300:])
+    d = bare("modes")
+    run(d)
+    src = add_zylos.SOURCE
+    check("the adapter's files keep the source's modes (the executables stay executable)",
+          all(((d / "zylos" / rel).stat().st_mode & 0o777) == (src / rel).stat().st_mode & 0o777 for rel in EXPECTED) and any((src / rel).stat().st_mode & 0o111 for rel in EXPECTED))
+
+
+def test_a_block_scalar_with_a_tag_an_anchor_or_a_quoted_key_is_a_block() -> None:
+    print("[13f] block scalars")
+    head = "jobs:\n  t:\n    steps:\n      - run: x\n"
+    for label, opener in (("a tag", "notes: !!str |"), ("an anchor", "notes: &a |"), ("a quoted key", "'notes': |"), ("a tag and an anchor", "notes: !!str &a >-")):
+        new, note = ci_note(head + opener + "\n  steps:\n  - a\n")
+        check(f"{label} before the indicator: the lines under it are text, so the file has more after the steps and is left alone", new is None and note and "more after" in note, (new, note))
+
+
 if __name__ == "__main__":
     for fn in (test_the_scaffold_sets_it_up_by_default, test_adding_to_an_existing_pack_and_running_twice,
                test_what_the_skill_pack_owns_is_not_overwritten, test_dry_run_and_the_verdict, test_the_port, test_refusals,
                test_the_ci_step, test_a_ci_file_that_is_not_safe_to_edit_is_left_alone, test_a_skill_md_that_is_not_safe_to_edit_is_left_alone,
                test_bad_inputs_are_refused_before_anything_is_written, test_nothing_is_written_through_a_link_or_where_it_cannot_go,
                test_a_failed_write_puts_back_what_was_written, test_what_the_adapters_check_would_refuse_is_refused_first,
-               test_a_ci_or_skill_md_in_a_style_we_do_not_read_is_left_alone):
+               test_a_ci_or_skill_md_in_a_style_we_do_not_read_is_left_alone, test_the_cli_word_the_adapter_refuses_is_refused_first,
+               test_an_existing_manifest_decides_the_skill_md_keys, test_the_name_is_read_the_way_the_adapter_reads_it,
+               test_ctrl_c_halfway_puts_back_and_modes_come_back, test_unreadable_inputs_are_a_line_and_the_adapters_files_keep_their_modes,
+               test_a_block_scalar_with_a_tag_an_anchor_or_a_quoted_key_is_a_block):
         fn()
     raise SystemExit(finish())
