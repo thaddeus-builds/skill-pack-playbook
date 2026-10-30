@@ -69,6 +69,7 @@ class FakeServer:
     def __init__(self, store_empty=0, expire=False, fail_send=False):
         self.store_empty, self.expire, self.fail_send = store_empty, expire, fail_send
         self.msgs, self.log, self.exchanges, self.tokens = {}, [], 0, ["tok-1", "tok-2"]
+        self.conv_type = "GROUP"
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -108,6 +109,7 @@ class FakeServer:
                     outer.store_empty -= 1
                     text = ""
                 outer.msgs[mid] = {"id": mid, "seq": len(outer.msgs) + 1, "sender_id": "ME",
+                                   "mentions": [{"mentioned_id": x["member_id"], "is_mention_all": False} for x in body.get("mentions", [])],
                                    "content": {"content_type": "text", "body": {"text": text}}}
                 self._reply(200, {"data": {"id": mid}})
 
@@ -115,13 +117,22 @@ class FakeServer:
                 if self._blocked():
                     return
                 outer.log.append((self.path, None, self.headers.get("Authorization", "")))
-                if self.path.endswith("limit=100"):             # newest first, as the real list is
-                    return self._reply(200, {"data": sorted(outer.msgs.values(), key=lambda m: -m["seq"])})
+                bare, _, query = self.path.partition("?")
+                if not bare.endswith("/messages") and "/messages/" not in bare and "/conversations/" in bare:
+                    return self._reply(200, {"data": {"id": bare.rsplit("/", 1)[1], "type": outer.conv_type}})
+                if bare.endswith("/messages"):
+                    q = dict(x.split("=") for x in query.split("&") if "=" in x)
+                    rows = sorted(outer.msgs.values(), key=lambda m: m["seq"])
+                    if "after_seq" in q:                          # ascending after a cursor, paged
+                        rows = [m for m in rows if m["seq"] > int(q["after_seq"])][: int(q.get("limit", 100))]
+                        return self._reply(200, {"data": rows})
+                    return self._reply(200, {"data": rows[::-1]})  # newest first, as the real list is
                 mid = self.path.rsplit("/", 1)[1]
                 if mid in outer.msgs:
                     m = outer.msgs[mid]                       # the real shape: content beside the message
                     return self._reply(200, {"data": {"message": {"id": m["id"], "seq": m["seq"], "sender_id": m["sender_id"],
-                                                                  "type": "AGENT_TEXT"}, "content": m["content"]}})
+                                                                  "type": "AGENT_TEXT", "mentions": m.get("mentions", [])},
+                                                      "content": m["content"]}})
                 self._reply(404, {"error": "none"})
         self.httpd = HTTPServer(("127.0.0.1", 0), H)
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
