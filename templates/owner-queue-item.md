@@ -8,7 +8,7 @@ The owner queue holds at most 10 open asks. Each one has exactly these fields.
 | `group` | The page section it sits in: `proposals` (something to build), `merges` (risky MRs waiting), `meaning` (a story, policy or word), `unsettled` (a value or rule nobody has decided), `retire` (something to drop), `drift` (a status or doc that no longer matches main), `process` (how agents and the owner work) |
 | `kind` | What the answer does: `decision`, `merge`, `value`, `confirm-release` |
 | `title` | The question in one line, in the owner's language |
-| `why` | Plain facts: what happened, the numbers, where they came from |
+| `why` | Plain facts: what happened, the numbers, where they came from, and **real examples**: the names and the addresses the owner can open, the words on the page. A count with no example is not something the owner can judge |
 | `rec` | The recommendation, and what a "no" would mean |
 | `shipped` | What already merged without the owner, so the ask carries only the meaning change left |
 | `link` | When the answer is a value to confirm: the exact console section where it waits |

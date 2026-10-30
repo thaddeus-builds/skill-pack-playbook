@@ -1,0 +1,26 @@
+# inquiries/1
+{
+  "inquiries": [
+    {
+      "campaign": "utm_source=google&utm_campaign=demo-dealers",
+      "channel": "form",
+      "company": {
+        "country": "DE",
+        "domain": "demo-trade.example.de",
+        "name": "Demo Trade GmbH"
+      },
+      "inquiry_id": "demo-inq-0001",
+      "message": "We are a distributor of cleaning equipment. Please send your catalogue and dealer terms for Germany.",
+      "page_url": "https://client.example.com/become-a-distributor",
+      "person": {
+        "email": "a.demo@example.com",
+        "language": "en",
+        "name": "A. Demo",
+        "role": "Purchasing"
+      },
+      "received_at": "2026-10-30T14:05:00+01:00"
+    }
+  ],
+  "produced_at": "2026-10-31T08:00:00+08:00",
+  "producer": "seo"
+}
