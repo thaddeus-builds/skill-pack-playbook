@@ -1,1 +1,1 @@
-A = 'resolved'
+A = 3
