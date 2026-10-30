@@ -40,11 +40,12 @@ What it guards (each is a test in kit/tests/test_ai.py; the last review of it wa
     A number that is not finite, or a token count below 0 or past a trillion, is never believed: a price is refused (a bad price passed to `ask` is a
     ValueError), a count is treated as unknown. A reply that cannot be booked in the ledger afterwards is still returned, with `booked` False. A ledger line is
     ASCII and ends at `\n` only, and a short write is finished or refused.
-  * Every call, a failed one too, ends in one ledger line: time, task, model, protocol, host, status, tokens, cost (null when unpriced: never guessed),
+  * Every call, a failed one too, ends in a ledger line (with a Budget, a reservation line comes first and the final line replaces it): time, task, model, protocol, host, status, tokens, cost (null when unpriced: never guessed),
     milliseconds, attempts, the prompt's sha256 and length (the text is not kept) and the images' sha256. The file is 0600.
-  * 429, 5xx and a refused or dropped connection are retried (`BACKOFF_S`, a finite `retry-after` between 0 and `MAX_RETRY_AFTER_S` honoured); any other
+  * 429, 5xx and a refused connection are retried (`BACKOFF_S`, a finite `retry-after` between 0 and `MAX_RETRY_AFTER_S` honoured); any other
     4xx stops at once. A read timeout, a 2xx whose body does not arrive, a connection dropped after the request was written, and a Ctrl-C while waiting are
-    not retried and keep the call's estimate booked, with a ledger and no `Budget` too (the vendor may have done, and billed, the work). A cut-off error body is still the error its status says. The key is replaced, in the forms a
+    not retried and keep the call's estimate booked, with a ledger and no `Budget` too (the vendor may have done, and billed, the work); so are a TLS or
+    OS fault raised while the reply is read, an interim 1xx answer (urllib stops at it and the real reply is lost) and a gateway's 504 or 524. A cut-off error body is still the error its status says. The key is replaced, in the forms a
     message or a JSON encoder writes it, in every message that leaves this module, before a text is cut.
   * `ask_json` asks for the schema mode where the protocol has one; a vendor that refuses it (HTTP 400) or answers with text that is not one JSON
     object is asked once more, with the instruction in words; a reply that stopped on a refusal or the token limit is not asked again. The object must
@@ -58,6 +59,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import base64 as _b64
+import errno
 import hashlib
 import html
 import http.client
@@ -100,6 +102,7 @@ STOPPED = "it stopped with"
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}")
 MAX_PRICE = 1_000_000.0                      # USD per million tokens: a price above this is a typo, and a larger one could overflow a cost to infinity
+GATEWAY_GAVE_UP = (504, 524)                  # a gateway's timeout: the model may still have run, and been billed
 MAX_COUNT = 10 ** 12                         # a token count above this is not believed: no call is that big, and a larger int would overflow a float
 IMAGE_TOKENS = 1600                          # what an image adds to the estimate: about the most a vendor charges for a large one
 
@@ -327,7 +330,7 @@ class Ledger:
         """The ledger, opened for appending. A file that is not a regular one (a FIFO would block the call; /dev/null would count nothing, so no cap would
         ever trip) is refused as an OSError."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NONBLOCK, 0o600)
+        fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NONBLOCK", 0), 0o600)
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             os.close(fd)
             raise OSError(22, "not a regular file")
@@ -372,7 +375,10 @@ class Ledger:
                 pass
             view = memoryview(line)
             while view:                                                  # a short write (a quota, a nearly full disk) goes on, or raises: never a cut line
-                view = view[os.write(fd, view):]
+                n = os.write(fd, view)
+                if n <= 0:
+                    raise OSError(errno.EIO, "wrote nothing")
+                view = view[n:]
         finally:
             os.close(fd)
 
@@ -582,6 +588,8 @@ def _once(s: Settings, url: str, headers: dict, body: dict, timeout: float):
             raw = e.read()
         except Exception:                # a body cut off, reset or stalled: the status is still the answer
             raw = b""
+        if 100 <= e.code < 200 or e.code in GATEWAY_GAVE_UP:          # an interim answer (urllib stops at it; the real one is lost), or a gateway that gave up while the model ran
+            return -2, f"HTTP {e.code} without a result", None
         detail = redact(raw.decode(errors="replace"), s.key)[:400]               # redacted first, then cut: a key across the cut would leave its prefix
         ra = e.headers.get("retry-after") if e.headers else None
         try:
@@ -600,7 +608,9 @@ def _once(s: Settings, url: str, headers: dict, body: dict, timeout: float):
         if isinstance(getattr(e, "reason", None), TimeoutError):
             return -1, "the connection timed out", None
         return 0, redact(str(getattr(e, "reason", e)), s.key)[:200], None
-    except Exception as e:               # InvalidURL, a header the key cannot be sent in, a bad status line...
+    except OSError as e:                 # raw from getresponse (a TLS alert, no route to host): urllib wraps only what happens before the request is written
+        return -2, type(e).__name__, None
+    except Exception as e:               # a header the key cannot be sent in, a bad status line...
         return 0, redact(f"{type(e).__name__}: {e}", s.key)[:200], None
     try:
         with resp:
@@ -631,7 +641,7 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         prices: Mapping[str, tuple[float, float]] | None = None, ledger: Ledger | None = None, budget: Budget | None = None,
         unpriced: str = "refuse", timeout: float = TIMEOUT_S, sleep: Callable[[float], None] = time.sleep) -> Reply:
     """One call: refused before anything is sent when the model has no price (`unpriced="refuse"`), `max_tokens` is not a whole number of 1 or more,
-    the ledger cannot be appended to or a cap would be passed; retried on 429, 5xx and refused or dropped connections; ledgered whatever happens. A
+    the ledger cannot be appended to or a cap would be passed; retried on 429, 5xx (not a gateway's 504 or 524, which may have run the model) and refused connections; ledgered whatever happens. A
     cap needs a ledger and a price for the model."""
     if unpriced not in UNPRICED:
         raise ValueError(f"unpriced is one of {', '.join(UNPRICED)}, not {unpriced!r}")
@@ -639,11 +649,14 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
         raise ValueError(f"max_tokens is a whole number from 1 to {MAX_TOKENS_LIMIT}, not {max_tokens!r}")
     if budget is not None and ledger is None:
         raise ValueError("a budget needs the ledger it is counted from")
-    if not (_finite(timeout) and timeout > 0):
+    if not (_finite(timeout) and 0 < timeout <= threading.TIMEOUT_MAX):
         raise ValueError(f"timeout is a number of seconds above 0, not {timeout!r}")
     if not (isinstance(system, str) and isinstance(text, str)):
         raise ValueError("system and text are text")
-    images = list(images)
+    try:
+        images = list(images)
+    except TypeError:
+        raise ValueError("images is a list of image paths") from None
     known = s.model in (prices or {})
     if known and not _price_ok(prices[s.model]):
         raise ValueError(f"the price of {s.model} is (input, output) USD per million tokens, each finite and 0 or more, not {prices[s.model]!r}")
@@ -687,21 +700,21 @@ def ask(s: Settings, system: str, text: str, images=(), *, max_tokens: int = 600
     try:
         status, doc, attempts, ms = _send(s, url, headers, body, timeout, sleep)
     except BaseException:                # Ctrl-C in a back-off wait, say: the request may have gone out, so its estimate stays booked
-        held = est if known else 0.0
+        held = est
         settle({**entry, "id": rid, "status": "interrupted", "input_tokens": None, "output_tokens": None, "cost_usd": held or None}, held)
         raise
     entry.update(ms=ms, attempts=attempts, id=rid)
 
     if status <= 0:
-        why, what = {0: ("network", "no answer"), -1: ("timeout", "timed out"), -2: ("cut_off", "the reply was cut off")}[status]
+        why, what = {0: ("network", "no answer"), -1: ("timeout", "timed out"), -2: ("cut_off", "no complete reply")}[status]
         hint = "is the base URL right?" if status == 0 else "the vendor may have billed it"
         raise fail(_fail(msg("aicall_network_error", f"{s.host}: {what} after {attempts} {'try' if attempts == 1 else 'tries'} ({doc}); {hint}",
-                             detail=str(doc), host=s.host)), why, billed=est if status < 0 and known else 0.0)       # a timed-out request may still be billed
+                             detail=str(doc), host=s.host)), why, billed=est if status < 0 else 0.0)       # a timed-out request may still be billed
     if status != 200:
         raise fail(_fail(msg("aicall_http_error", f"{s.host} answered HTTP {status}: {doc}", status=status, detail=str(doc), host=s.host)), f"http_{status}")
     if doc is None:
         raise fail(_fail(msg("aicall_bad_answer", f"{s.host} answered 200 with a body that is not JSON", detail="not JSON")), "bad_reply",
-                   billed=est if known else 0.0)
+                   billed=est)
     try:
         out, tin, tout, stop = parse_response(s, doc)
     except SkillPackError as e:
@@ -721,6 +734,13 @@ def _no_constant(name: str):
     raise ValueError(name)                                              # NaN and Infinity are not JSON
 
 
+def _finite_float(text: str) -> float:
+    v = float(text)
+    if not math.isfinite(v):
+        raise ValueError(text)                                          # 1e999 is Infinity written another way
+    return v
+
+
 def unwrap_json(text: str):
     """The JSON object in a reply: strict, but a fenced block is unwrapped. None when it is not one object."""
     t = text.strip()
@@ -728,7 +748,7 @@ def unwrap_json(text: str):
         t = t[3:-3]
         t = (t[4:] if t.startswith("json") else t).strip()
     try:
-        v = json.loads(t, parse_constant=_no_constant)
+        v = json.loads(t, parse_constant=_no_constant, parse_float=_finite_float)
     except (ValueError, RecursionError):
         return None
     return v if isinstance(v, dict) else None
@@ -804,8 +824,10 @@ def count_tokens(s: Settings, system: str, text: str, images=(), *, timeout: flo
         proto_var = _name("PROTOCOL")
         raise _fail(msg("aicall_config_invalid", f"count_tokens is Anthropic's endpoint; {proto_var} must be anthropic for it; nothing was sent", var=proto_var,
                         detail="anthropic for count_tokens"))
-    if not (_finite(timeout) and timeout > 0):
+    if not (_finite(timeout) and 0 < timeout <= threading.TIMEOUT_MAX):
         raise ValueError(f"timeout is a number of seconds above 0, not {timeout!r}")
+    if not (isinstance(system, str) and isinstance(text, str)):
+        raise ValueError("system and text are text")
     url, headers, body = build_request(s, system, text, list(images), 1)
     status, doc, _, _ = _send(s, url + "/count_tokens", headers, {k: body[k] for k in ("model", "system", "messages")}, timeout, sleep)
     if status != 200 or not isinstance(doc, dict) or _count(doc.get("input_tokens")) is None:
