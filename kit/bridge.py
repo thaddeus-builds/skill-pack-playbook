@@ -26,6 +26,11 @@ called. Two ways are here:
   * headless `claude -p` with only `comm_send` or only `comm` (`prompts`,
     `parse_id`/`parse_text`, `runners`), for a machine with no key file.
 
+`wait_for_reply` reads the group (no model call) until something answers a sent
+message, or a time limit passes; `next_round` caps the follow-ups at three and
+asks for a reason each time. Whether the answer is complete is the agent's call,
+not this module's. design: docs/design/bridge-reply.md.
+
 `check_isolation(targets)` names what would make two bridges share state before
 anything is sent. No client name, group or id lives here.
 Test: kit/tests/test_bridge.py.
@@ -35,6 +40,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -210,15 +216,13 @@ def load_credentials(config: str, org_id: str) -> Credentials:
 
 
 def _unwrap(raw):
-    return raw["data"] if isinstance(raw, dict) and isinstance(raw.get("data"), dict) else raw
+    return raw["data"] if isinstance(raw, dict) and isinstance(raw.get("data"), (dict, list)) else raw
 
 
-def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable[str] = (),
-                 urlopen=urllib.request.urlopen, timeout: float = 30.0):
-    """`send` and `read` for send_and_verify over HTTP. `mentions` are member ids sent as mention objects
-    (an @name in the text wakes an agent only with one). `send.last_error` holds why a send returned None."""
+def _client(creds: Credentials, urlopen, timeout: float):
+    """`authed(method, path, body)` for the API: a token is exchanged once, held in memory, and exchanged
+    again once when a call answers 401."""
     token: list[str] = []
-    mention_objs = [{"type": "member", "member_id": m} for m in mentions]
 
     def call(method, path, body=None, bearer=None):
         data = None if body is None else json.dumps(body).encode()
@@ -228,17 +232,18 @@ def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable
         for k, v in creds.headers.items():
             req.add_header(k, v)
         req.add_header("Authorization", f"Bearer {bearer}")
+        where = path.split("?")[0].rsplit("/", 1)[0]
         try:
             with urlopen(req, timeout=timeout) as resp:
                 text = resp.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
-            raise RestError(f"{method} {path.rsplit('/', 1)[0]}: HTTP {e.code}") from None
+            raise RestError(f"{method} {where}: HTTP {e.code}") from None
         except (urllib.error.URLError, OSError) as e:
-            raise RestError(f"{method} {path.rsplit('/', 1)[0]}: {type(e).__name__}") from None
+            raise RestError(f"{method} {where}: {type(e).__name__}") from None
         try:
             return json.loads(text) if text.strip() else {}
         except ValueError:
-            raise RestError(f"{method} {path.rsplit('/', 1)[0]}: not JSON") from None
+            raise RestError(f"{method} {where}: not JSON") from None
 
     def exchange() -> str:
         d = _unwrap(call("POST", "/auth/agent/token", {"org_id": creds.org_id}, creds.api_key))
@@ -255,6 +260,15 @@ def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable
             if "HTTP 401" not in str(e):         # an expired token: one fresh exchange, then once more
                 raise
             return call(method, path, body, exchange())
+    return authed
+
+
+def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable[str] = (),
+                 urlopen=urllib.request.urlopen, timeout: float = 30.0):
+    """`send` and `read` for send_and_verify over HTTP. `mentions` are member ids sent as mention objects
+    (an @name in the text wakes an agent only with one). `send.last_error` holds why a send returned None."""
+    mention_objs = [{"type": "member", "member_id": m} for m in mentions]
+    authed = _client(creds, urlopen, timeout)
 
     base = f"{creds.prefix}/conversations/{conversation_id}/messages"
 
@@ -303,3 +317,125 @@ def send_to(target: Target, text: str, *, mentions: Iterable[str] = (), urlopen=
     if not result.sent and result.reason == "no_id_returned" and send.last_error:
         return Result(False, result.id, result.resent, f"no_id_returned: {send.last_error}")
     return result
+
+
+# --- the reply: wait for it, and cap the follow-ups ---------------------------------------------
+
+@dataclass(frozen=True)
+class Anchor:
+    """The message that was sent: the replies are what comes after it from someone else."""
+    id: str
+    seq: int
+    sender_id: str                   # who we are in the group (the sender of that message)
+
+
+@dataclass(frozen=True)
+class Reply:
+    id: str
+    seq: int
+    sender_id: str
+    text: str
+
+
+@dataclass(frozen=True)
+class Wait:
+    state: str                       # "replied" | "timeout" | "unreadable"
+    replies: tuple = ()
+    reason: str = ""
+
+
+def _text_of(content) -> str:
+    if isinstance(content, str):
+        return content
+    body = content.get("body") if isinstance(content, dict) else None
+    text = body.get("text") if isinstance(body, dict) else None
+    return text if isinstance(text, str) else ""
+
+
+def _is_reply(m: dict, anchor: Anchor, from_ids: frozenset) -> bool:
+    """After the sent message, from someone else, and either under it, to us, or from an agent we asked."""
+    if not isinstance(m.get("seq"), int) or m["seq"] <= anchor.seq or m.get("sender_id") == anchor.sender_id:
+        return False
+    mentioned = {x.get("mentioned_id") for x in (m.get("mentions") or []) if isinstance(x, dict)}
+    return (str(m.get("parent_id") or "") == anchor.id or anchor.sender_id in mentioned
+            or m.get("sender_id") in from_ids)
+
+
+def wait_for_reply(fetch: Callable[[], list], anchor: Anchor, *, from_ids: Iterable[str] = (),
+                   timeout: float = 1800.0, poll: float = 60.0, max_failures: int = 3,
+                   sleep=time.sleep, clock=time.monotonic) -> Wait:
+    """Read the group (`fetch() -> the recent messages, as dicts`) every `poll` seconds until a reply to
+    `anchor` appears or `timeout` passes. A reply is a message after the sent one, from someone else, that is
+    under it (`parent_id`), mentions us, or comes from one of `from_ids` (the member ids of the agents asked:
+    an agent often answers without any mention). `max_failures` reads in a row that fail -> "unreadable".
+    Nothing is sent and no model is called. The replies are returned as they are; whether they answer
+    the question is for the agent to judge."""
+    ids = frozenset(from_ids)
+    deadline, failures = clock() + timeout, 0
+    while True:
+        try:
+            found = [m for m in fetch() if _is_reply(m, anchor, ids)]
+            failures = 0
+        except Exception as e:                    # a read that failed: try again a few times, then say so
+            failures += 1
+            found = []
+            if failures >= max_failures:
+                return Wait("unreadable", reason=type(e).__name__)
+        if found:
+            found.sort(key=lambda m: m["seq"])
+            return Wait("replied", tuple(Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")),
+                                               _text_of(m.get("content"))) for m in found))
+        if clock() + poll > deadline:
+            return Wait("timeout")
+        sleep(poll)
+
+
+def rest_waiter(creds: Credentials, conversation_id: str, sent_id: str, *, limit: int = 100,
+                urlopen=urllib.request.urlopen, timeout: float = 30.0):
+    """`(fetch, anchor)` for wait_for_reply over HTTP: the anchor is read from the sent message itself."""
+    authed = _client(creds, urlopen, timeout)
+    base = f"{creds.prefix}/conversations/{conversation_id}/messages"
+    d = _unwrap(authed("GET", f"{base}/{sent_id}"))
+    msg = d.get("message") if isinstance(d, dict) else None
+    if not isinstance(msg, dict) or not isinstance(msg.get("seq"), int) or not msg.get("sender_id"):
+        raise RestError("the sent message has no seq or sender")
+    anchor = Anchor(str(sent_id), msg["seq"], str(msg["sender_id"]))
+
+    def fetch() -> list:
+        d = _unwrap(authed("GET", f"{base}?limit={limit}"))
+        return d if isinstance(d, list) else []
+    return fetch, anchor
+
+
+def wait_for_reply_to(target: Target, sent_id: str, *, from_ids: Iterable[str] = (), timeout: float = 1800.0,
+                      poll: float = 60.0, urlopen=urllib.request.urlopen, sleep=time.sleep, clock=time.monotonic) -> Wait:
+    """Check the isolation, then wait over REST for a reply to the message `send_to` returned."""
+    problems = check_isolation([target])
+    if problems:
+        return Wait("unreadable", reason="isolation: " + problems[0])
+    try:
+        fetch, anchor = rest_waiter(load_credentials(target.config, target.org_id), target.conversation_id,
+                                    sent_id, urlopen=urlopen)
+    except (OSError, ValueError, RestError) as e:
+        return Wait("unreadable", reason=f"anchor: {e}")
+    return wait_for_reply(fetch, anchor, from_ids=from_ids, timeout=timeout, poll=poll, sleep=sleep, clock=clock)
+
+
+@dataclass(frozen=True)
+class Round:
+    allowed: bool
+    number: int                      # the round this would be (the first request is round 1)
+    reason: str = ""                 # why not, when not allowed
+
+
+MAX_ROUNDS = 3
+
+
+def next_round(used: int, why: str, max_rounds: int = MAX_ROUNDS) -> Round:
+    """May another request follow `used` already sent? Not past `max_rounds`, and never without a reason
+    written down (what the answer lacks), so two agents cannot keep asking each other."""
+    if used >= max_rounds:
+        return Round(False, used + 1, "round_limit")
+    if not isinstance(why, str) or not why.strip():
+        return Round(False, used + 1, "no_reason")
+    return Round(True, used + 1)
