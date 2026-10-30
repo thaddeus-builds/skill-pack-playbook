@@ -13,6 +13,8 @@
   6. ask_json: the schema mode first; a vendor that refuses it, or text that is not one object, is asked once more in words; twice is refused.
   7. count_tokens is Anthropic's alone.
   8. ai.py's msg() calls are closed over its fragment.
+  12. The fourth look (kit.ai alone): a fault raised while the reply is read, an interim 1xx and a gateway's 504 or 524 keep the estimate booked and are not
+     sent again; a write that returns nothing raises; 1e999 is not a number; a few more arguments.
   9 to 11. Cold reviews: each finding is a case. The third: a dropped connection and a cut-off reply keep the estimate booked with or without a Budget, a short
      write is finished or refused, the schema is in the estimate, the ledger is one ASCII line per call and a regular file, bad arguments are refused, more
      forms of the key are hidden, `unwrap_json` cannot be made quadratic. The second: a 2xx whose body does not arrive and Ctrl-C keep the estimate booked, the lock is on the ledger
@@ -881,6 +883,57 @@ led = ai.Ledger(DATA / "ai_zero.jsonl")
 led.append({"at": ai.today() + "T01:00:00+00:00", "model": "free-1", "status": "ok", "cost_usd": 0.01})
 e = refusal(led.reserve, {"at": ai.today() + "T02:00:00+00:00", "model": "free-1"}, 0.0, ai.Budget(0.01))
 check("a free model at a cap that is already reached is refused (the day's cost counts, not only the estimate)", code_of(e) == "aicall_daily_cap_exceeded", e)
+
+
+print("[12] found by the fourth look")
+import http.client  # noqa: E402
+import ssl  # noqa: E402
+
+for label, patch in (("a TLS alert", ssl.SSLError(1, "tlsv1 alert internal error")), ("no route to host", OSError(65, "No route to host"))):
+    led = ai.Ledger(DATA / ("ai_raw_" + label.split()[1] + ".jsonl"))
+    v = Vendor([])
+    with mock.patch.object(http.client.HTTPConnection, "getresponse", side_effect=patch):
+        e = refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=ai.Budget(1.0), sleep=no_sleep([]))
+    check(f"{label} raised while the reply is read: the request was written, so one try, 'cut_off', the estimate stays booked (it was four tries booked as free)",
+          code_of(e) == "aicall_network_error" and len(v.seen) == 1 and led.rows()[-1]["status"] == "cut_off" and led.spent() == round(est, 6), (e, len(v.seen), led.rows()[-1:]))
+    v.close()
+for code in (102, 103, 504, 524):
+    led = ai.Ledger(DATA / f"ai_status_{code}.jsonl")
+    v = Vendor([(code, {}, {})] * 4)
+    e = refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=ai.Budget(1.0), sleep=no_sleep([]))
+    check(f"HTTP {code}: not sent again, 'cut_off', the estimate stays booked (an interim answer hides the real reply; a gateway gave up while the model ran)",
+          code_of(e) == "aicall_network_error" and len(v.seen) == 1 and led.rows()[-1]["status"] == "cut_off" and led.spent() == round(est, 6), (e, len(v.seen), led.rows()[-1:]))
+    v.close()
+v = Vendor([(503, {}, {})] * 4)
+e = refusal(ai.ask, route(v), "S", "t", prices=PRICES, sleep=no_sleep([]))
+check("a plain 503 is still retried to the end", code_of(e) == "aicall_http_error" and len(v.seen) == 4, (e, len(v.seen)))
+v.close()
+
+# --- a write that returns nothing must not spin while the lock is held
+led = ai.Ledger(DATA / "ai_zero_write.jsonl")
+t0 = time.monotonic()
+with mock.patch.object(os, "write", return_value=0):
+    e = raises(lambda: led.append({"at": ai.today() + "T00:00:00+00:00", "cost_usd": 0.001}), OSError)
+check("os.write returning 0 raises at once (it used to loop for ever, with the file lock held)", e is not None and time.monotonic() - t0 < 5, (e, time.monotonic() - t0))
+saved_nb = os.O_NONBLOCK
+del os.O_NONBLOCK
+try:
+    ai.Ledger(DATA / "ai_nonblock.jsonl").check_writable()
+    ok_nb = True
+except AttributeError:
+    ok_nb = False
+finally:
+    os.O_NONBLOCK = saved_nb
+check("without os.O_NONBLOCK (Windows) the ledger still opens", ok_nb)
+
+# --- parsing and arguments
+check("1e999 is not a number (it is Infinity written another way); 1.5 and 3 are", ai.unwrap_json('{"n": 1e999}') is None and ai.unwrap_json('{"n": 1.5}') == {"n": 1.5} and ai.unwrap_json('{"n": 3}') == {"n": 3})
+v = Vendor([])
+for label, kw in (("images that is None", dict(images=None)), ("a timeout of 1e300", dict(timeout=1e300))):
+    check(f"{label}: ValueError at once, nothing sent", raises(lambda k=kw: ai.ask(route(v), "S", "t", prices=PRICES, sleep=no_sleep([]), **k), ValueError) is not None and not v.seen, label)
+check("count_tokens takes the same text rule as ask", raises(lambda: ai.count_tokens(route(v), "S", {1}), ValueError) is not None and not v.seen)
+v.close()
+check("a price of exactly MAX_PRICE is allowed, one cent above is not", ai._price_ok((ai.MAX_PRICE, ai.MAX_PRICE)) and not ai._price_ok((ai.MAX_PRICE + 0.01, 1.0)))
 
 
 print("[8] messages")
