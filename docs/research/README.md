@@ -6,7 +6,7 @@ Every file says `Researched YYYY-MM-DD`, ends with its kinds of claim and where 
 
 | File | Question | Date | Answer in one line | Used by |
 | --- | --- | --- | --- | --- |
-| [2026-10-31-how-to-cut-skill-packs.md](2026-10-31-how-to-cut-skill-packs.md) | How do mature systems decide what is one component, what is a layer above it, and when to build a boundary? | 2026-10-31 | Cut by the external system and its credential (stable); put composition outside the component; build a layer only when a flow needs it | docs/design/cut-by-use.md (the next change) |
+| [2026-10-31-how-to-cut-skill-packs.md](2026-10-31-how-to-cut-skill-packs.md) | How do mature systems decide what is one component, what is a layer above it, and when to build a boundary? | 2026-10-31 | Cut by the external system and its credential (stable); put composition outside the component; build a layer only when a flow needs it | [docs/design/cut-by-use.md](../design/cut-by-use.md) |
 
 Not yet researched, in case it comes up:
 - how agencies that run many clients' accounts structure their operators' weekly work (no public primary source found in the first pass)
