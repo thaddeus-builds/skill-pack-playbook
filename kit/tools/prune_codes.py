@@ -14,8 +14,11 @@ nothing else:
   * the sources are globs relative to the root, `**` recursive; default: every `.py` file under the root (hidden folders aside), tests included, so a
     pack whose code lives outside its scripts folder is read whole and a code is pruned only when nothing anywhere emits it. Name fewer to prune more;
   * the scan must be trustworthy or nothing is deleted (exit 2): a source that matches no file (a mistyped folder would make every code look unemitted), a
-    source file that does not parse, or a `msg()` call whose code is not a literal is refused; a registry file that is a link or leads outside the
-    pack is skipped; each file is written whole to a temporary name and renamed over the original, its line endings kept;
+    source file that cannot be read or does not parse (a byte-order mark or a coding cookie too: the kit's own scan reads plain UTF-8), or a `msg()` call
+    whose code is not a literal is refused. Folders named `venv`, `node_modules` and `site-packages` are not read (nothing in them emits the pack's
+    codes). A registry file that is a link or leads outside the pack is skipped. Each file is written whole to a new file beside it (a name nobody
+    chose, so a link left at a guessable name is never written through), given the old file's mode, and renamed over the original, its line endings
+    kept; another name for the same file (a hard link) keeps the old content. Two runs at once end the same as one;
   * `--dry-run` lists what would go and changes nothing.
 
 A code that is emitted only by a call this scan cannot read (a code built at run time) would be pruned: `msg()` takes its code as a literal
@@ -27,14 +30,19 @@ Test: kit/tests/test_prune_codes.py.
 from __future__ import annotations
 
 import argparse
+import glob
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from kit import config, messages  # noqa: E402
+
+
+SKIP_DIRS = frozenset({"venv", "node_modules", "site-packages"})
 
 
 class Refused(Exception):
@@ -44,10 +52,10 @@ class Refused(Exception):
 def sources_read(root: Path, sources: list[str]) -> list[Path]:
     """The .py files the sources name. A glob that matches no file is refused (a mistyped folder would otherwise read nothing and so find every code
     unemitted), and so is a root whose own name holds a glob character that is not escaped."""
-    import glob
     found: list[Path] = []
     for s in sources:
-        hits = sorted(Path(p) for p in glob.glob(str(Path(glob.escape(str(root))) / s), recursive=True) if p.endswith(".py"))
+        hits = sorted(Path(p) for p in glob.glob(str(Path(glob.escape(str(root))) / s), recursive=True)
+                      if p.endswith(".py") and Path(p).is_file() and not SKIP_DIRS & set(Path(p).relative_to(root).parts))
         if not hits:
             raise Refused(f"the source {s!r} matches no .py file under {root}: nothing is pruned (a mistyped folder would make every code look unemitted)")
         found += hits
@@ -64,7 +72,7 @@ def unemitted(root: Path, sources: list[str]) -> dict[str, list[str]]:
     for f in files:
         try:
             ast.parse(f.read_text(encoding="utf-8"), str(f))
-        except (SyntaxError, UnicodeDecodeError) as e:
+        except (SyntaxError, UnicodeDecodeError, ValueError, RecursionError, MemoryError, OSError) as e:       # ValueError: a null byte
             raise Refused(f"{f} cannot be read as Python ({e.__class__.__name__}): its codes would look unemitted; nothing is pruned") from None
     calls = messages.msg_calls(files, root)
     loose = [where for where, c, _ in calls if c is None]
@@ -87,6 +95,20 @@ def unemitted(root: Path, sources: list[str]) -> dict[str, list[str]]:
     return out
 
 
+def write_whole(path: Path, data: bytes) -> None:
+    """`data` becomes the whole of `path`: written to a new file beside it, given the old file's mode, and renamed over it."""
+    mode = path.stat().st_mode & 0o7777
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".prune-tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.chmod(name, mode)
+        os.replace(name, path)
+    except BaseException:
+        Path(name).unlink(missing_ok=True)
+        raise
+
+
 def prune(root: Path, sources: list[str], *, dry_run: bool = False) -> dict[str, list[str]]:
     """Remove the unemitted codes from their registry files; {file: [codes removed]}. A fragment left with only its header is deleted. Each file is
     written whole to a temporary name and renamed over the original, with its line endings kept."""
@@ -96,17 +118,21 @@ def prune(root: Path, sources: list[str], *, dry_run: bool = False) -> dict[str,
     for file, codes in found.items():
         path = Path(file)
         gone = set(codes)
-        raw = path.read_bytes().decode("utf-8")
+        try:
+            raw = path.read_bytes().decode("utf-8")
+        except FileNotFoundError:                                       # another run took the fragment out first
+            continue
         eol = "\r\n" if "\r\n" in raw else "\n"
         lines = raw.replace("\r\n", "\n").split("\n")
         kept = [ln for i, ln in enumerate(lines) if i == 0 or ln.split("\t")[0].strip() not in gone]
         body = [ln for ln in kept[1:] if ln.strip()]
-        if not body and path.parent.name == messages.SKILL_PACK_FRAGMENTS and kept[0].split("\t")[0].strip() == "code":
-            path.unlink()
-            continue
-        tmp = path.with_name(path.name + ".prune-tmp")
-        tmp.write_bytes(eol.join(kept).encode("utf-8"))
-        os.replace(tmp, path)
+        try:
+            if not body and path.parent.name == messages.SKILL_PACK_FRAGMENTS and kept[0].split("\t")[0].strip() == "code":
+                path.unlink(missing_ok=True)
+            else:
+                write_whole(path, eol.join(kept).encode("utf-8"))
+        except OSError as e:
+            raise Refused(f"{path} cannot be written ({e.strerror}); files before it are done, run again once it can") from None
     return found
 
 
