@@ -141,8 +141,8 @@ def test_refusals() -> None:
 def test_tree(root: Path) -> None:
     print("\n[2] the generated tree")
     files = own_files(root)
-    leftovers = [f for f in files if "{{" in (root / f).read_text(
-        encoding="utf-8", errors="replace")]
+    leftovers = [f for f in files if "{{" in re.sub(r"\$\{\{ [^{}]+ \}\}", "", (root / f).read_text(
+        encoding="utf-8", errors="replace"))]    # GitHub's own `${{ expression }}` in the workflow is not a placeholder
     check("no `{{` left in any file it wrote", not leftovers, leftovers)
     fills = sorted(f for f in files if "<<fill:" in (root / f).read_text(
         encoding="utf-8", errors="replace"))
@@ -152,7 +152,7 @@ def test_tree(root: Path) -> None:
     log = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     check("CHANGELOG.md starts with Unreleased, and the CI has the job that asks for it",
           log.startswith("# Changelog") and "\n## [Unreleased]\n" in log
-          and "\nchangelog:\n" in (root / ".gitlab-ci.yml").read_text(encoding="utf-8"))
+          and "\n      - name: changelog\n" in (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
     table = (PLAYBOOK / "templates" / "README.md").read_text(encoding="utf-8")
     named = set(re.findall(r"^\| `tests/(test_\w+\.py)` \|", table, re.M))
     tests = {p.name for p in (root / "tests").glob("*.py")}
@@ -274,7 +274,7 @@ def test_suite(root: Path, out: str) -> None:
 
 def test_codeowners(root: Path) -> None:
     print("\n[4] CODEOWNERS")
-    lines = [ln.split() for ln in (root / ".gitlab" / "CODEOWNERS").read_text(
+    lines = [ln.split() for ln in (root / ".github" / "CODEOWNERS").read_text(
         encoding="utf-8").splitlines() if ln.strip() and not ln.startswith("#")]
     paths = [p for p, *_ in lines]
     missing = [p for p in paths if not (root / p.strip("/")).exists()]
@@ -299,12 +299,28 @@ def test_day_one(root: Path) -> None:
     check("the checklist has its items", len(items) >= 15, len(items))
     for item in items:
         keys = [k for k in nh.DAY_ONE if item.startswith(k)]
-        paths = [p.format(cli="acme") for k in keys for p in nh.DAY_ONE[k]]
+        paths = [p.format(cli="acme", **{h: v for h, v in nh.HOSTS["github"].items() if h != "template"}) for k in keys for p in nh.DAY_ONE[k]]
         missing = [p for p in paths if not (root / p).exists()]
         check(f"day one: {item[:60]}… -> {', '.join(paths) or 'NOTHING'}",
               len(keys) == 1 and paths and not missing, (keys, missing))
     stale = [k for k in nh.DAY_ONE if not any(i.startswith(k) for i in items)]
     check("every DAY_ONE key is still a checklist item", not stale, stale)
+
+
+def test_hosts(root: Path) -> None:
+    print("\n[host] GitHub by default, GitLab on request")
+    check("the default writes GitHub's CI and CODEOWNERS and nothing of GitLab's",
+          (root / ".github" / "workflows" / "ci.yml").is_file() and (root / ".github" / "CODEOWNERS").is_file()
+          and not (root / ".gitlab-ci.yml").exists() and not (root / ".gitlab").exists())
+    ci = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    check("the workflow keeps GitHub's expressions, runs the suite by hand only and the cheap checks on pull requests",
+          "${{ github.event.pull_request.title }}" in ci and "$[[" not in ci and " ]]" not in ci.replace("[[:space:]]", "")
+          and "workflow_dispatch" in ci and "acme.py test" in ci)
+    other = Path(tmp_dir("scaffold-gl-")).resolve() / "acme"
+    rc, out, err = scaffold(*args(other, "--host", "gitlab"))
+    check("--host gitlab writes the GitLab files, as before",
+          rc == 0 and (other / ".gitlab-ci.yml").is_file() and (other / ".gitlab" / "CODEOWNERS").is_file()
+          and not (other / ".github").exists(), (out[-300:], err[-300:]))
 
 
 # ------------------------------------------------------------------ [6]
@@ -392,6 +408,7 @@ def main() -> int:
     test_tree(root)
     test_suite(root, out)
     test_codeowners(root)
+    test_hosts(root)
     test_day_one(root)
     test_cli(root)
     test_update_kit(root)
