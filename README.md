@@ -109,7 +109,7 @@ Each guarantee is code in [`kit/`](kit/) with a test that fails when it breaks (
 ## Start a skill pack
 
 1. Follow [BUILD.md](BUILD.md), steps B0 to B10; an agent loads [skills/build-skill-pack/SKILL.md](skills/build-skill-pack/SKILL.md) to do the same from the files alone.
-2. B1 scaffolds it: `python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack --name acme-skill-pack --cli acme --prefix ACME --packs data`. It vendors the kit packs the skill pack takes ([kit/README.md](kit/README.md), "Packs"), the console, and the thirteen day-one tests, and is green before its first feature.
+2. B1 scaffolds it: `python3 scaffold/new_skill_pack.py --dir ../acme-skill-pack --name acme-skill-pack --cli acme --prefix ACME`. It vendors the kit packs the skill pack takes ([kit/README.md](kit/README.md), "Packs"), the console, and the thirteen day-one tests, and is green before its first feature.
 3. For a skill pack that already exists, `python3 tools/fleet.py status PATH…` says where its vendored copies stand against this playbook, and `python3 kit/tools/vendor.py --skill-pack PATH` brings them up to date.
 4. To show the owner how the project is going on one page, an agent loads [skills/progress-page/SKILL.md](skills/progress-page/SKILL.md); the handoff runs it at the end of each session.
 5. To research a question or look at prior art, an agent loads [skills/research/SKILL.md](skills/research/SKILL.md); only its description is in context until a task matches.

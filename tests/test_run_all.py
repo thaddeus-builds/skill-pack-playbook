@@ -562,7 +562,7 @@ def test_the_real_list_keeps_the_zylos_suite_and_names_the_tools_the_tests_need(
     assert by["zylos"].run == "hosts/zylos/tests/run.py" and by["zylos"].needs == ("node",)   # the host every skill pack is adapted to
     assert os.path.isfile(os.path.join(REPO, "hosts", "zylos", "tests", "run.py"))
     assert all(s.covers for s in run_all.SUITES)
-    for name, tool in (("console", "node"), ("workflows", "node"), ("kit", "git"), ("scaffold", "git"), ("golden", "git"),
+    for name, tool in (("console", "node"), ("workflows", "node"), ("scaffold", "node"), ("kit", "git"), ("scaffold", "git"), ("golden", "git"),
                        ("templates", "git"), ("console", "git"), ("workflows", "git")):
         assert name in by, name                                                               # a renamed suite fails here, not silently
         assert tool in by[name].needs, (name, tool)                                           # these build a repository or run node
