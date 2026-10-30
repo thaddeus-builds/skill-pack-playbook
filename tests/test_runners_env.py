@@ -1,7 +1,8 @@
 """The playbook's three standalone test runners (tests/run.py, console/tests/run.py, hosts/zylos/tests/run.py) hand a test file an environment without the
 variables that name a repository (GIT_DIR, GIT_INDEX_FILE ...): a pre-push hook gives them to its children, and a test's own `git init` would then act on the
-checkout that was pushing. The list is the kit's (`kit.testing.run_tests.GIT_LOCAL_ENV`) together with whatever `git rev-parse --local-env-vars` says; a git that
-cannot be asked (none on PATH) must not turn the filter off, which is what the first version of the three did (found by the second cold review).
+checkout that was pushing. The list is what `git rev-parse --local-env-vars` says together with a fallback copy of the kit's list (`kit.testing.run_tests.GIT_LOCAL_ENV`; each runner
+stands alone, console/tests/test_runner.py copies one into a sandbox, so it cannot import it); a git that cannot be asked (none on PATH) must not turn the
+filter off, which is what the first version of the three did (found by the second cold review). The copies are kept equal to the kit's list here.
 """
 
 from __future__ import annotations
@@ -55,10 +56,10 @@ def test_a_test_file_run_by_each_runner_does_not_see_them():
                 assert r["ok"], (rel, broken, r)
 
 
-def test_the_kits_comment_on_the_list_is_true():
-    """`GIT_LOCAL_ENV` says the playbook's other runners take the list from it; they do (by name)."""
+def test_the_fallback_copies_are_the_kits_list():
+    """`GIT_LOCAL_ENV` says the playbook's other runners take the list from it; each keeps a copy, and a copy that drifts fails here."""
     for rel in RUNNERS:
-        assert "GIT_LOCAL_ENV" in (ROOT / rel).read_text(encoding="utf-8"), rel
+        assert tuple(load(rel).GIT_LOCAL_FALLBACK) == tuple(run_tests.GIT_LOCAL_ENV), rel
 
 
 if __name__ == "__main__":
