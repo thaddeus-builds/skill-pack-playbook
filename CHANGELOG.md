@@ -13,6 +13,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [Unreleased]
 
 ### Kit
+- `ads.spend/1` and `ads.status/1`, two draft contracts in `contracts/` and `kit/contracts.d/` (seen once, in the Google and Meta packs, 2026-10-31: both produce a per-day spend read and a daily status in one shape, `ads.results/1` cannot carry a Search campaign because it requires `creative_code`, and measurement has no way to read either). Money may be an index of the document's own median (`amount_kind`), counts stay real.
+- Skill packs: nothing (an operator that writes a daily status or a spend read may take the schema when it re-vendors)
 - `intel.ads/1`, a draft contract in `contracts/` and `kit/contracts.d/` (seen once, in the search-intel skill pack, 2026-10-30: it reads competitors' ads off search result pages and `intel/1`'s competitors list has no room for ad text, first and last sighting or a count): one row per ad with the words as published, the days first and last seen, how many searches showed it and its wordings; the paid search packs and the copy maker read it. Producer: `search-intel`.
 - Skill packs: nothing (a pack that reads competitors' ads may take the schema when it re-vendors)
 - `ads.demand/1` is `agreed`: `video-ads` writes it (`scripts/export_demand.py`, X139) and `adcut` reads it (`adcut/contracts.py`), both from merged code, which is the README's rule for leaving `draft`; the portfolio's `ads.results/1` row now says what its schema requires.

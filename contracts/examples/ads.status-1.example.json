@@ -1,0 +1,33 @@
+# ads.status/1
+{
+  "account": "demo-account-1",
+  "day": "2026-10-31",
+  "freshness": {
+    "days_behind": 2,
+    "newest_day": "2026-10-29"
+  },
+  "platform": "google",
+  "produced_at": "2026-10-31T08:00:00+08:00",
+  "producer": "gads",
+  "sections": [
+    {
+      "items": [
+        "Spend index 250, 12% above the window before."
+      ],
+      "name": "spend",
+      "state": "ready"
+    },
+    {
+      "name": "targets",
+      "reason": "No spend target is confirmed.",
+      "state": "not_ready"
+    }
+  ],
+  "spend": {
+    "amount": 250,
+    "amount_kind": "index"
+  },
+  "waiting": [
+    "The owner confirms the weekly spend target."
+  ]
+}
