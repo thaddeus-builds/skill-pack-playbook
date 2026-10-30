@@ -145,7 +145,7 @@ A skill pack that writes into someone else's system runs each write at a level, 
 | **L1** per-change consent | A person approves each change, by retyping it or a one-time code | The Amazon Ads skill pack's queue | In use |
 | **L2** scoped approval | A person approves a work item with a scope frozen at proposal; the skill pack writes inside it, within caps | SEO: internal links, a cover image, meta title | In use, one skill pack |
 | **L3** owner-switched mode | The owner switches a mode on once, for at most 28 days; the skill pack writes only kinds the owner chose, each with a code-free undo | SEO: a new article, a new 301 | In use, one skill pack |
-| **L4** rule-started work | A tested rule picks the work itself; no per-item approval | None yet | Not built |
+| **L4** rule-started work | A tested rule picks the work itself, on a switch of its own and inside an L3 mode; no per-item approval | None yet | Mechanics built in the kit, no skill pack uses it yet |
 | **L5** full autonomy | The agent picks the goals and the writes | None, by design: public exposure and money spent do not come back | Not built |
 
 Four rules hold at every level: the skill pack classes each write, never the agent; a level is a ceiling per kind of write, not a mode of the whole skill pack; raising takes a person and lowering takes anyone (the owner's switch, an expiry, a cap or the kill switch); above L1 every write is capped, counted from the archive, and has an undo.
