@@ -74,7 +74,7 @@ class Suite(NamedTuple):
 SUITES = (
     Suite("docs", "tests/run.py", ("git",), "the build docs held to the files, and run_all.py"),
     Suite("kit", "kit/tests/run.py", ("git", "node"), "the shared skill pack modules and their guards (pagestyle's copy script runs under node)"),
-    Suite("scaffold", "scaffold/tests/run.py", ("git",), "the scaffolder: a generated skill pack is green before its first feature"),
+    Suite("scaffold", "scaffold/tests/run.py", ("git", "node"), "the scaffolder: a generated skill pack is green before its first feature (its Zylos adapter is checked under node)"),
     Suite("build", "build/tests/run.py", (), "the build-time tools: intake check, asks, apply"),
     Suite("console", "console/tests/run.py", ("git", "node"), "the owner console and its docs (console.js runs under node)"),
     Suite("zylos", "hosts/zylos/tests/run.py", ("node",), "the Zylos / OpenMax host adapter (its hooks and bin are Node)"),
