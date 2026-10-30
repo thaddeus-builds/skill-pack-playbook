@@ -170,8 +170,8 @@ def test_fresh() -> None:
     _, _, _, d2 = run(data, "--json", verbs=[
         *taught, Verb(("test",), "../tests/run.py", "dev", False, False)])
     check("every non-dev verb with examples (a dev verb needs none): no line",
-          codes(d2, "verbs")[0] in ("doctor_verbs_ok",
-                                    "doctor_verb_script_missing")
+          "doctor_verbs_ok" in codes(d2, "verbs")
+          and "doctor_verb_script_missing" not in codes(d2, "verbs")
           and "doctor_verbs_no_examples" not in codes(d2, "verbs"),
           codes(d2, "verbs"))
     check("summary and healthy", doc["summary"]["warn"] == 1
@@ -477,6 +477,17 @@ def test_hooks() -> None:
           == ["doctor_verb_script_missing"]
           and found(doc, "verbs")[0]["message_code"]["params"]
           == {"verb": "gone", "script": "gone.py"})
+    _, _, _, doc = run(data, "--json", verbs=[
+        *VERBS, Verb(("test",), "../tests/run.py", "dev", False, False)])
+    gone = found(doc, "verbs", "info")
+    check("a development verb whose script is not in the copy (a release "
+          "archive has no tests): one info line, never a warning",
+          not found(doc, "verbs", "warn")
+          and [c["message_code"]["code"] for c in gone][0]
+          == "doctor_dev_verbs_absent"
+          and gone[0]["message_code"]["params"]
+          == {"count": 1, "verbs": "test"}
+          and doc["healthy"] is True, gone)
     seen = {}
 
     def mine(ctx):
