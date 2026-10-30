@@ -508,5 +508,58 @@ def test_the_changelog_line_goes_first_under_unreleased_in_each_shape():
         assert not tool.add_changelog(Path(tmp) / "none.md", "L\n")
 
 
+def rehearse(pb: Path, out: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(FLEET), "--playbook", str(pb), "rehearse", "--out", str(out), *args],
+                          capture_output=True, text=True, env={**os.environ, **IDENTITY})
+
+
+def test_rehearse_tries_the_update_on_a_clone_and_leaves_the_checkout_alone():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        before = (git(pack, "rev-parse", "HEAD"), git(pack, "branch", "--show-current"), git(pack, "status", "--porcelain"), git(pack, "branch", "--list"),
+                  git(pack, "worktree", "list"))
+        out = Path(tmp) / "trial"
+        r = rehearse(pb, out, str(pack))
+        assert r.returncode == 0 and r.stdout.startswith("acme: green  kit 0.1.0 -> 0.2.0, suite green;"), r.stdout + r.stderr
+        work = out / "acme_worktrees" / "kit-0.2.0"
+        assert (work / "scripts" / "kit" / "VERSION").read_text().strip() == "0.2.0" and git(work, "branch", "--show-current") == "claude/kit-0.2.0"
+        assert before == (git(pack, "rev-parse", "HEAD"), git(pack, "branch", "--show-current"), git(pack, "status", "--porcelain"), git(pack, "branch", "--list"),
+                          git(pack, "worktree", "list")), "the checkout is only read"
+        assert not (pack.parent / "acme_worktrees").exists(), "nothing was made beside the checkout"
+        assert git(out / "acme", "remote", "get-url", "origin") == git(pack, "remote", "get-url", "origin"), "the clone fetches the pack's own remote"
+
+
+def test_rehearse_takes_the_remote_default_branch_not_the_checkouts_local_one():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        other = Path(tmp) / "other"                     # someone pushes to the real trunk after the checkout last looked
+        git(Path(tmp), "clone", "-q", str(Path(tmp) / "origin.git"), str(other))
+        (other / "MORE.md").write_text("pushed since\n")
+        git(other, "add", "-A")
+        git(other, "commit", "-qm", "pushed since")
+        git(other, "push", "-q", "origin", "trunk")
+        newest = git(other, "rev-parse", "HEAD")
+        git(pack, "checkout", "-q", "trunk")           # an unpushed local commit on the checkout's own trunk must not make the trial refuse
+        (pack / "LOCAL.md").write_text("not pushed\n")
+        git(pack, "add", "-A")
+        git(pack, "commit", "-qm", "local only")
+        r = rehearse(pb, Path(tmp) / "trial", str(pack))
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert git(Path(tmp) / "trial" / "acme_worktrees" / "kit-0.2.0", "rev-parse", "HEAD~1") == newest, "cut from the remote's newest trunk"
+
+
+def test_rehearse_says_red_for_a_failing_suite_and_refuses_a_folder_that_exists():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp), suite=FAIL)
+        out = Path(tmp) / "trial"
+        r = rehearse(pb, out, str(pack))
+        assert r.returncode == 1 and r.stdout.startswith("acme: red"), r.stdout + r.stderr
+        again = rehearse(pb, out, str(pack))
+        assert again.returncode == 1 and "exists" in again.stdout, again.stdout
+        assert not (pack.parent / "acme_worktrees").exists()
+        nores = rehearse(pb, Path(tmp) / "trial2", str(Path(tmp) / "origin.git"))
+        assert nores.returncode == 1 and "no remote named origin" in nores.stdout, nores.stdout
+
+
 if __name__ == "__main__":
     _t.main(globals())
