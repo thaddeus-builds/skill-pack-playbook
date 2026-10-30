@@ -4,11 +4,16 @@
 A session that sends with the OpenMax plugin's own `comm_send` never passes through `kit.bridge`, and it is
 that path that forgot the @ and then never read the answer. These hooks sit around it:
 
-  pre-send   (PreToolUse on comm_send)   a message to a GROUP with no `@name` is refused, `no_mention`; a DM is not;
+  pre-send   (PreToolUse on comm_send)   a message to a GROUP with no `@name` is refused (`no_mention`), as is one whose
+                                         @name is no member (`unknown_mention`) or that is the 11th awaited in a day; a DM is not;
   post-send  (PostToolUse on comm_send)  the sent message is written to a pending file (offline, no network);
   turn       (UserPromptSubmit)          each pending request is read from its cursor (`after_seq`), what arrived
   session    (SessionStart)              is handed to the session as untrusted data, each message once;
+  end        (SessionEnd)                the session's requests may be read by the next one;
   list, close ID, install-snippet        what is awaited and for how long; stop waiting; the settings to add.
+
+A reply is handed to the session that asked; what comes as several messages is held until 25 seconds pass with nothing
+new, then handed over together and marked read.
 
 No background process: the session is reached at the start of a turn and at session start. An idle session has
 no turn, so a reply with no @ to us waits for the next one. The pending file lives in the identity's own data
@@ -24,6 +29,7 @@ person) is `_matches`. Test: kit/tests/test_bridge_hooks.py. Design: docs/design
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import fcntl
 import json
 import os
@@ -43,6 +49,10 @@ SEND_TOOL = "mcp__plugin_openmax-channel_openmax__comm_send"
 FINAL_AFTER = 24 * 3600          # a request is no longer read after this
 DUE_AFTER = 30 * 60              # reported as overdue after this (kept: a late reply still arrives)
 POLL_EVERY = 20                  # seconds between reads of one request
+QUIET_FOR = 25                   # seconds with nothing new before what has come is handed over (one answer, many messages)
+SESSION_IDLE = 1800              # a session that has not run a hook for this long no longer owns its requests
+REQUEST_CAP = 10                 # requests awaited per conversation inside FINAL_AFTER; the next is refused
+MEMBERS_TTL = 600
 MAX_REQUESTS_PER_RUN = 5
 MAX_PAGES = 5
 HTTP_TIMEOUT = 5.0
@@ -98,10 +108,12 @@ def load(env=None) -> dict:
         if isinstance(st, dict):
             st.setdefault("requests", [])
             st.setdefault("types", {})
+            st.setdefault("sessions", {})
+            st.setdefault("members", {})
             return st
     except (OSError, ValueError):
         pass
-    return {"requests": [], "types": {}}
+    return {"requests": [], "types": {}, "sessions": {}, "members": {}}
 
 
 def save(state: dict, env=None) -> None:
@@ -144,6 +156,24 @@ def _conversation_type(state, env, org_id, conv, urlopen) -> str:
     return kind
 
 
+def _members(state, env, org_id, conv, urlopen, now) -> list:
+    """The group's members, remembered for MEMBERS_TTL; [] when they cannot be read (then nothing is refused)."""
+    hit = state["members"].get(conv)
+    if hit and now - hit["at"] < MEMBERS_TTL:
+        return hit["members"]
+    try:
+        authed, prefix = _authed(env, org_id, urlopen)
+        d = bridge._unwrap(authed("GET", f"{prefix}/conversations/{conv}/members"))
+    except Exception as e:
+        _log(env, f"members unreadable: {type(e).__name__}")
+        return []
+    members = [{"member_id": m.get("member_id"), "display_name": m.get("display_name")}
+               for m in (d if isinstance(d, list) else []) if isinstance(m, dict)]
+    if members:
+        state["members"][conv] = {"at": now, "members": members}
+    return members
+
+
 # --- the hooks -----------------------------------------------------------------------------------
 
 def _endpoint_conversation(endpoint: str) -> str:
@@ -153,29 +183,46 @@ def _endpoint_conversation(endpoint: str) -> str:
     return rest.split("|")[0].strip()
 
 
-def pre_send(event: dict, env=None, urlopen=urllib.request.urlopen) -> dict | None:
+def pre_send(event: dict, env=None, urlopen=urllib.request.urlopen, now=None) -> dict | None:
     """The hook's answer: a refusal (a dict for Claude Code), or None to let the call through. Refuses only a
-    message with no @name to a conversation known to be a GROUP; anything unknown is let through."""
+    message to a conversation known to be a GROUP that has no @name, whose @name is no member, or that would be
+    the REQUEST_CAP+1st awaited there; anything unknown is let through."""
     inp = event.get("tool_input") or {}
     text, conv = inp.get("content"), _endpoint_conversation(str(inp.get("endpoint") or ""))
-    if not isinstance(text, str) or not conv or bridge._AT_NAME.search(text):
+    if not isinstance(text, str) or not conv:
         return None
+    now = time.time() if now is None else now
+    deny = lambda why: {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",   # noqa: E731
+                                                "permissionDecisionReason": why}}
     try:
-        state = load(env)                         # no lock held over the network read: a type is written once
+        state = load(env)                         # no lock held over the network read: what is read is written once
+        org = _org_of(env, str(inp.get("orgId") or ""))
         known = conv in state["types"]
-        kind = _conversation_type(state, env, _org_of(env, str(inp.get("orgId") or "")), conv, urlopen)
-        if kind and not known:
+        kind = _conversation_type(state, env, org, conv, urlopen)
+        members = None
+        if kind == "GROUP" and bridge._AT_NAME.search(text):
+            members = _members(state, env, org, conv, urlopen, now)
+        if (kind and not known) or members is not None:
             with _lock(env, wait=True):
                 fresh = load(env)
-                fresh["types"][conv] = kind
+                fresh["types"].update(state["types"])
+                fresh["members"].update(state["members"])
                 save(fresh, env)
     except Exception as e:
         _log(env, f"pre-send unchecked: {type(e).__name__}")
         return None
     if kind != "GROUP":
         return None
-    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                    "permissionDecisionReason": NO_MENTION}}
+    open_here = [r for r in state["requests"] if r["conversation_id"] == conv and now < r["final"]]
+    if len(open_here) >= REQUEST_CAP:
+        return deny(f"request_cap: {len(open_here)} requests are still awaited in this conversation (at most {REQUEST_CAP} "
+                    "in 24 hours). Close the finished ones (`bridge_hooks.py list`, `close ID`) or ask the owner.")
+    if not bridge._AT_NAME.search(text):
+        return deny(NO_MENTION)
+    if members and bridge.unknown_mentions(text, members):
+        return deny("unknown_mention: the @name after the @ is not a member of this group, so it would wake no one. "
+                    "Members: " + ", ".join(str(m.get("display_name")) for m in members))
+    return None
 
 
 def _sent_id(response) -> str:
@@ -199,7 +246,10 @@ def post_send(event: dict, env=None, now=None) -> None:
             return
         state["requests"].append({"id": sent, "conversation_id": conv, "org_id": org, "asked_at": now,
                                   "due": now + DUE_AFTER, "final": now + FINAL_AFTER, "cursor": None,
-                                  "anchor": None, "last_poll": 0, "delivered": 0})
+                                  "anchor": None, "last_poll": 0, "delivered": 0,
+                                  "session_id": str(event.get("session_id") or ""), "held": [], "held_at": 0})
+        if event.get("session_id"):
+            state["sessions"][str(event["session_id"])] = now
         save(state, env)
 
 
@@ -223,7 +273,7 @@ _LABEL = {"reply": "a reply to your message", "mention": "mentions you", "asked"
           "person": "a person in the group (to read)"}
 
 
-def _read_request(req: dict, state, env, urlopen) -> list:
+def _read_request(req: dict, state, env, urlopen, now: float) -> list:
     """New matching messages for one request, advancing its cursor past everything read."""
     authed, prefix = _authed(env, req["org_id"], urlopen)
     base = f"{prefix}/conversations/{req['conversation_id']}/messages"
@@ -247,12 +297,26 @@ def _read_request(req: dict, state, env, urlopen) -> list:
             req["cursor"] = max(req["cursor"], m["seq"])
         if len(page) < 100:
             break
-    return out
+    held = req.get("held", []) + [dataclasses.asdict(r) | {"text": bridge.redact_secrets(r.text)} for r in out]
+    if out:
+        req["held_at"] = now
+    if not held or now - req.get("held_at", 0) < QUIET_FOR:     # one answer often comes as several messages: wait for the lull
+        req["held"] = held
+        return []
+    req["held"] = []
+    replies = [bridge.Reply(**x) for x in held]
+    try:                                                          # best effort: what was handed over is marked read
+        authed("POST", f"{prefix}/conversations/{req['conversation_id']}/read", {"read_until_seq": max(r.seq for r in replies)})
+    except Exception as e:
+        _log(env, f"mark-read failed: {type(e).__name__}")
+    return replies
 
 
-def deliver(env=None, now=None, urlopen=urllib.request.urlopen, force: bool = False) -> str:
+def deliver(env=None, now=None, urlopen=urllib.request.urlopen, force: bool = False, session_id: str = "") -> str:
     """The text to hand the session: new replies as untrusted data, and a line on what is still awaited.
-    '' when there is nothing. Reads at most every POLL_EVERY seconds per request; skips if another session holds the lock."""
+    '' when there is nothing. Reads at most every POLL_EVERY seconds per request; skips if another session holds the lock.
+    A request belongs to the session that sent it: another session reads it only once that one has ended
+    (`end_session`) or has run no hook for SESSION_IDLE seconds."""
     now = time.time() if now is None else now
     with _lock(env, wait=False) as got:
         if not got:
@@ -262,12 +326,18 @@ def deliver(env=None, now=None, urlopen=urllib.request.urlopen, force: bool = Fa
         kept = [r for r in state["requests"] if now < r["final"]]                   # past its final deadline: dropped
         changed = len(kept) != len(state["requests"])
         state["requests"] = kept
+        if session_id:
+            state["sessions"][session_id] = now
+            changed = True
         for req in state["requests"][:MAX_REQUESTS_PER_RUN]:
+            owner = req.get("session_id") or ""
+            if owner and session_id and owner != session_id and now - state["sessions"].get(owner, 0) <= SESSION_IDLE:
+                continue                                  # another live session sent it: it is that session's reply
             if not force and now - req["last_poll"] < POLL_EVERY:
                 continue
             req["last_poll"], changed = now, True
             try:
-                replies = _read_request(req, state, env, urlopen)
+                replies = _read_request(req, state, env, urlopen, now)
             except Exception as e:
                 _log(env, f"read of {req['id']} failed: {type(e).__name__}")
                 continue
@@ -277,6 +347,17 @@ def deliver(env=None, now=None, urlopen=urllib.request.urlopen, force: bool = Fa
         if changed:
             save(state, env)
     return "\n\n".join(blocks)
+
+
+def end_session(event: dict, env=None) -> None:
+    """The session is over: its requests may be read by the next session that starts."""
+    sid = str(event.get("session_id") or "")
+    if not sid:
+        return
+    with _lock(env, wait=True):
+        st = load(env)
+        st["sessions"][sid] = 0
+        save(st, env)
 
 
 def awaiting(env=None, now=None) -> list[str]:
@@ -313,6 +394,7 @@ def settings_snippet(path: str | None = None) -> dict:
         "PostToolUse": [{"matcher": SEND_TOOL, "hooks": [cmd("post-send")]}],
         "UserPromptSubmit": [{"hooks": [cmd("turn")]}],
         "SessionStart": [{"hooks": [cmd("session")]}],
+        "SessionEnd": [{"hooks": [cmd("end")]}],
     }}
 
 
@@ -333,7 +415,7 @@ def main(argv=None, stdin=None, stdout=None, env=None) -> int:
             stdout.write("\n".join(awaiting(env)) + "\n" if awaiting(env) else "nothing awaited\n")
         elif verb == "close" and len(argv) > 1:
             stdout.write("closed\n" if close(argv[1], env) else "not found\n")
-        elif verb in ("pre-send", "post-send", "turn", "session"):
+        elif verb in ("pre-send", "post-send", "turn", "session", "end"):
             try:
                 event = json.loads(stdin.read() or "{}")
             except ValueError:
@@ -344,8 +426,10 @@ def main(argv=None, stdin=None, stdout=None, env=None) -> int:
                     stdout.write(json.dumps(answer))
             elif verb == "post-send":
                 post_send(event, env)
+            elif verb == "end":
+                end_session(event, env)
             else:
-                text = deliver(env, force=(verb == "session"))
+                text = deliver(env, force=(verb == "session"), session_id=str(event.get("session_id") or ""))
                 if verb == "session":
                     aw = awaiting(env)
                     if aw:
@@ -353,7 +437,7 @@ def main(argv=None, stdin=None, stdout=None, env=None) -> int:
                 if text:
                     stdout.write(json.dumps(_context("SessionStart" if verb == "session" else "UserPromptSubmit", text)))
         else:
-            sys.stderr.write("usage: bridge_hooks.py pre-send|post-send|turn|session|list|close ID|install-snippet\n")
+            sys.stderr.write("usage: bridge_hooks.py pre-send|post-send|turn|session|end|list|close ID|install-snippet\n")
             return 2
     except Exception as e:                       # a hook never fails the session
         _log(env, f"{verb} failed: {type(e).__name__}: {e}")

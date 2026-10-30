@@ -158,6 +158,21 @@ Each case runs a few times and passes only if every grader passes in every run. 
 
 On another runner, keep the folder layout and the graders' regular expressions: `kit.guards.evals.command_pattern(...)` returns the pattern over a plain shell command, and with `trace=True` over a `{"command": "..."}` record as JSON text (spaces after `:` and `,` are read too).
 
+## Where the tokens went
+
+A case says whether the agent kept a rule. It does not say what the run cost, or whether the agent spent it using the skill pack or learning how to. `tools/eval_ledger.py`, in the vendored kit, reads the runs' transcripts (one JSON object per line, as Claude Code writes them):
+
+    python3 <kit>/tools/eval_ledger.py results/*/transcript.jsonl --cli shop --pack skill_pack/ [--json]
+
+It sorts each tool call into `help` (the entry with `--help`), `verb` (the entry run), `docs` (SKILL.md and the pack's `.md` files), `source` (the pack's other files: code, registries), `explore` and `other` (the agent's own scripts, its edits, the client's files), with the bytes each handed back; `learning` is help, docs and source. It counts tokens once per model call.
+
+*Seen once, in the SEO skill pack's comparison of four models on three tasks (30 runs, 2026-10-20):*
+
+- **Count tokens once per model call.** The runner summed the usage on every line of the session file, and a model call's usage is repeated on each of its content blocks: the totals were 1.8 to 2.6 times the real ones, and the factor differed by model, so the cost ranking between models was not sound.
+- **Learning was a fifth to almost half of the tool output** (the strongest model 20%, the others 38 to 45%), and agents read the pack's code when its help did not answer. That share is what a better SKILL.md or help should lower.
+
+Use it two ways. Before and after a change to SKILL.md or the help, on the same cases: the change worked if the learning share and the model calls fell and no case stopped passing. Between models: compare tokens and model calls only on the cases both pass in every run.
+
 ## The fixture
 
 `fixture-build.sh` builds the workspace one run starts in, outside the sandbox. It:
