@@ -54,6 +54,8 @@ from typing import NamedTuple
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+from kit.testing import run_tests  # noqa: E402
 RESULT_LINE = re.compile(r"^\s*RESULT:\s+(\d+)\s+passed(?:\s*,\s*(\d+)\s+failed)?\b", re.MULTILINE)
 TIMEOUT_S = 1800                      # per suite: scaffold's own files get 900 s each
 TAIL = 40
@@ -77,7 +79,7 @@ SUITES = (
     Suite("scaffold", "scaffold/tests/run.py", ("git", "node"), "the scaffolder: a generated skill pack is green before its first feature (its Zylos adapter is checked under node)"),
     Suite("build", "build/tests/run.py", (), "the build-time tools: intake check, asks, apply"),
     Suite("console", "console/tests/run.py", ("git", "node"), "the owner console and its docs (console.js runs under node)"),
-    Suite("zylos", "hosts/zylos/tests/run.py", ("node",), "the Zylos / OpenMax host adapter (its hooks and bin are Node)"),
+    Suite("zylos", "hosts/zylos/tests/run.py", ("git", "node"), "the Zylos / OpenMax host adapter (its hooks and bin are Node; its runner asks git which variables to withhold)"),
     Suite("templates", "templates/tests/selftest/run.py", ("git",), "the day-one test templates, installed in a sample skill pack"),
     Suite("workflows", "templates/workflows/tests/run.py", ("git", "node"), "the workflow script templates (run under a node simulator)"),
     Suite("golden", "templates/tests/golden/tests/run.py", ("git",), "the golden-diff tool, on a fake skill pack"),
@@ -157,18 +159,14 @@ def account() -> str:
     return name if PLAIN_NAME.fullmatch(name) else ACCOUNT
 
 
-# The variables git sets for a hook (`git rev-parse --local-env-vars`) that point at one repository. A suite that makes a throwaway
-# repository must not inherit them: a pre-push hook runs this file, and a suite's `git commit` then lands in the checkout that was pushing.
-GIT_LOCAL_ENV = ("GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY",
-                 "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS",
-                 "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR")
+# The variables git sets for a hook that point at one repository: a suite must not inherit them (the list and the reason are kit/testing/run_tests.py's).
+GIT_LOCAL_ENV = run_tests.GIT_LOCAL_ENV
 
 
 def suite_env() -> dict[str, str]:
     """Our environment, with no bytecode written, no repository git pointed us at, and an account name in USER (the run's own, else
     this account's)."""
-    env = {k: v for k, v in os.environ.items() if k not in GIT_LOCAL_ENV}
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env = run_tests.clean_env()
     if not env.get("USER"):
         env["USER"] = account()
     return env
