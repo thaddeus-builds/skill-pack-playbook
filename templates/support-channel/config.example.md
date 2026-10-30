@@ -7,6 +7,7 @@ Fill in on the pack's machine. Never commit the filled copy. Guide: `docs/suppor
 | bridge_command | `<the shell function for this client's organization>` |
 | conversation_id | `<id of the support group>` |
 | members | `<role: member id>` for the support agent, the onboarding agent, each working agent you may ask |
+| data_dir | `<this bridge's CLAUDE_OPENMAX_DATA_DIR, one per identity; never shared with another bridge's>` |
 | identity_config | `<path of the identity config under ~/.config/claude-openmax/ (the path only, never a key)>` |
 | organization_id | `<the client organization's id>` |
 | last_seen_file | `<scratchpad path holding the newest message id read>` |
