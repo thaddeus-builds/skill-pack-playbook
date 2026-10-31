@@ -111,6 +111,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (default behaviour is byte for byte what it was; ecommerce-seo can pass `runner="auto"` when its entry point moves onto `kit.cli.Dispatcher`, and a pack that sets `KIT_RUNNER=uv` because most of its scripts declare dependencies may choose `auto` for the few that do not)
 
 ### Other
+- `tools/pr_links.py` (the owner, 2026-10-31, after merged pull requests left their issues open: a description needs `Closes #N` for GitHub to close the issue): finds the issue from the branch name, the commit messages or `--issue`, adds the closing line (`create`, instead of `gh pr create`), checks a description before a push (`check`) and closes open issues that a merged pull request names (`sweep`); no model, `git` and `gh` only.
+- Skill packs: nothing (a pack may call it from its pre-push hook)
 - `docs/lessons.md`: two lessons from the product-keyframe-video skill pack (2026-10-31): a picture model asked to keep the product redraws it, so the product is a real layer checked by pixels; and a review's fixes get their own fresh-context review (two cold reads of four new tools, twelve defects each).
 - Skill packs: nothing
 - `docs/portfolio.md` and `tools/adoption.tsv`: the product-keyframe-video rows brought to 2026-10-31 (L2 after its M2: base and testkit only; its M3 makes the product in every frame a real cutout; no longer frozen, three client demos have run).
