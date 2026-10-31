@@ -105,6 +105,8 @@ FILLED = {"SKILL.md", "README.md", "references/workflows.md",
 # path under scaffold/skeleton/
 SKELETON_TARGETS = {"scripts/cli.py": "scripts/{cli}.py",
                     "claude/README.md": ".claude/README.md",
+                    "claude/settings.json": ".claude/settings.json",
+                    "claude/hooks/research_first.py": ".claude/hooks/research_first.py",
                     "env.example": ".env.example"}
 # ssot files a new skill pack starts with, as their header row; alert rules
 # come with the skill pack's own alert compute (B6)
