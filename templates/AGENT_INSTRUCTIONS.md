@@ -10,6 +10,8 @@ The unit that reaches main is a milestone, not a step: work on one branch per mi
 
 Nothing a later session needs lives only in a session: tools go in the repo, the owner's answers in the owner queue, a client's state (facts, decisions, the work plan, spend) in the skill pack's own rows with a write path and a reader, and build state in a dated journal. Markdown about a client is presentation only. One worktree per builder; only the orchestrator pushes, and it removes a worktree only when its commits are on main and nothing is uncommitted. Each session ends with a handoff: released vs installed, each branch in flight with its worktree and how to verify it, open owner items.
 
+Research is kept: before a web search read `docs/research/README.md` and `docs/prior-art/README.md`, and write what you found there in the same turn (the playbook's `skills/research/SKILL.md` has the steps). `.claude/hooks/research_first.py` refuses the first web call of each agent once and shows the kept rows.
+
 ## Layout
 
 | Path | What it holds |
