@@ -26,6 +26,8 @@
     wants an ASCII @name in the text, REST wants member ids to mention; a mid-word @ (an address) is no mention;
   * an id that is not a member of the group is refused (`unknown_mention`), a member list that cannot be read
     refuses nothing, an @ is compared with display names that have spaces;
+  * `seen_by` reads the reactions of a message dict (one `Seen` per member and code, our own left out, a count with no
+    ids is one anonymous entry, junk is ignored) and `fetch_messages` lists the group oldest first from a cursor;
   * check_isolation names a missing, world-readable or key-less config, a wrong organization, a data dir
     shared by two configs, and one config used with two data dirs.
 """
@@ -466,6 +468,47 @@ def attachment_tests() -> None:
         srv.close()
 
 
+def reaction_tests() -> None:
+    mk = lambda *r: {"reactions": list(r)}                                           # noqa: E731
+    eyes = {"code": "eyes", "unicode_fallback": "\U0001F440", "count": 2, "reacted_by_me": True, "reactor_ids": ["A", "ME"]}
+    check("seen_by: the other member and the code, ours left out",
+          bridge.seen_by(mk(eyes), "ME") == (bridge.Seen("A", "eyes"),), bridge.seen_by(mk(eyes), "ME"))
+    check("seen_by: a repeated id counts once; two codes are two entries",
+          bridge.seen_by(mk({"code": "eyes", "count": 2, "reactor_ids": ["A", "A"]}, {"code": "ok", "count": 1, "reactor_ids": ["B"]}))
+          == (bridge.Seen("A", "eyes"), bridge.Seen("B", "ok")))
+    check("seen_by: a count with no ids is one anonymous entry; only ours (count 1, by me) is nothing",
+          bridge.seen_by(mk({"code": "eyes", "count": 1})) == (bridge.Seen("", "eyes"),)
+          and bridge.seen_by(mk({"code": "eyes", "count": 1, "reacted_by_me": True})) == ())
+    check("seen_by: no reactions, junk and a missing code give nothing",
+          bridge.seen_by({}) == () and bridge.seen_by({"reactions": "x"}) == () and bridge.seen_by(mk(None, {"count": 1}, {"code": ""})) == ())
+    with tempfile.TemporaryDirectory() as d:
+        srv = FakeServer()
+        creds = bridge.load_credentials(write_config(d, "c.json", srv.url), "DEMO-org")
+        for i in range(5):
+            srv.add("AGENT", f"m{i}")
+        rows = bridge.fetch_messages(creds, "DEMO-conv", after_seq=2, limit=2)
+        check("fetch_messages: oldest first from the cursor, paged", [m["seq"] for m in rows] == [3, 4], rows)
+        check("fetch_messages: with no cursor, ascending too", [m["seq"] for m in bridge.fetch_messages(creds, "DEMO-conv")] == [1, 2, 3, 4, 5])
+        srv.close()
+        srv.httpd.server_close()
+        try:
+            bridge.fetch_messages(creds, "DEMO-conv")
+            raised = False
+        except bridge.RestError:
+            raised = True
+        check("fetch_messages: a failed call raises RestError", raised)
+        check("fetch_members: a failed call is [] and, strict, RestError", bridge.fetch_members(creds, "DEMO-conv") == []
+              and _raises(lambda: bridge.fetch_members(creds, "DEMO-conv", strict=True)))
+
+
+def _raises(fn) -> bool:
+    try:
+        fn()
+    except bridge.RestError:
+        return True
+    return False
+
+
 def isolation_tests() -> None:
     with tempfile.TemporaryDirectory() as d:
         a = write_config(d, "a.json", "https://api.example.test")
@@ -584,6 +627,7 @@ def main() -> int:
     check("a text that holds a ```json block with braces is kept as it is",
           bridge.parse_messages("ID: 1\nSender: S\nTime: t\n<<<BEGIN\n```json\n{\"a\": [1, 2]}\n```\nEND>>>")[0].text == '```json\n{"a": [1, 2]}\n```')
     rest_tests(t)
+    reaction_tests()
     mention_tests(t)
     unknown_tests(t)
     reply_tests(t)
