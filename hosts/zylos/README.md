@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.4.2). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.5.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -66,7 +66,7 @@ Then add `node zylos/lib.js check` to the skill pack's CI. It exits 1 and names 
 | `console` | `title_key` | The config key for the page title (default: `name`) |
 | `console` | `base_path` | The public path, e.g. `/shop`; used by the Caddy block and the warnings |
 | `console` | `user_header` | The header Caddy sets to the logged-in user, e.g. `X-Remote-User` |
-| `console` | `users_file` | The logins file in the data dir, e.g. `console.users` |
+| `console` | `users_file` | The logins file in the data dir, e.g. `console.users` (`<name> scrypt$…`, written by `lib.js passwd`) |
 | `console` | `args` | More `serve.py` flags, e.g. `--relay-verbs`, `--lang`, `--default-reason`, a static `--allow-host`; console.js owns `--dir`, `--host`, `--port`, `--user`, `--user-header`, `--relay-cmd`, `--title` |
 | `console` | `allow_host_key` | Optional. The config key holding the public domain(s) the console answers to (`--allow-host`) |
 | `detach` | `exit_marker` | The last log line of a detached job, `<MARKER> <status>`, e.g. `SHOP-EXIT` |
@@ -288,7 +288,7 @@ The owner console (the playbook's `console/serve.py`: the asks inbox and the rel
 
 Who starts it: a terminal `zylos add` (`pm2 start ecosystem.config.cjs`, `pm2 save`); in a chat install the agent runs `pm2 start <skill dir>/ecosystem.config.cjs && pm2 save`; `zylos upgrade` restarts it if it ran; `zylos uninstall` deletes it; at boot core's own pm2 ecosystem loads it. A broken manifest makes the root file export no app (and log why) rather than break core's boot.
 
-**Why not `http_routes`.** Core's declared routes support only `{path, type: reverse_proxy, target, strip_prefix}`: no `basic_auth`, no header rules. A declared route would publish the console with no login, and a visitor-sent user header would reach it from Caddy's 127.0.0.1. So the component declares no route, and the host agent pastes the block below.
+**Why not `http_routes`.** Core's declared routes support only `{path, type: reverse_proxy, target, strip_prefix}`: no login, no header rules. A declared route would publish the console with no login, and a visitor-sent user header would reach it from Caddy's 127.0.0.1. So the component declares no route, and the host agent pastes the block below.
 
 ### The Caddy block
 
@@ -301,31 +301,39 @@ For the example manifest it prints:
     # BEGIN zylos-component:shop-harness
     redir /shop /shop/ permanent
     handle_path /shop/* {
-        basic_auth {
-            import /home/<u>/zylos/components/shop-harness/console.users
-        }
-        request_header -X-Remote-User
-        reverse_proxy 127.0.0.1:8767 {
-            header_up X-Remote-User {http.auth.user.id}
+        route {
+            request_header -X-Remote-User
+            @login path /login /logout
+            handle @login {
+                reverse_proxy unix//home/<u>/zylos/components/shop-harness/console/auth.sock
+            }
+            handle {
+                forward_auth unix//home/<u>/zylos/components/shop-harness/console/auth.sock {
+                    uri /_auth
+                    copy_headers X-Remote-User
+                }
+                reverse_proxy 127.0.0.1:8767
+            }
         }
     }
     # END zylos-component:shop-harness
 
 - `redir` sends `/shop` to `/shop/`, so the console's relative links resolve under the prefix.
 - `handle_path` strips `/shop`: the console's links are all relative and it takes no base path.
-- `basic_auth` answers 401 first. `request_header -X-Remote-User` drops any copy the visitor sent; `header_up X-Remote-User` then sets the logged-in user.
+- **The login is a form, not `basic_auth`** (0.5.0). The browser's pop-up is not something password managers reliably save; a form with `autocomplete` hints is. `bin/login.js` runs inside the console service (`bin/console.js`) and listens on a unix socket in the data dir (mode 0600); a long data dir gets a directory of its own in `$XDG_RUNTIME_DIR` or the temp dir (`zylos-<uid>-<hash>/auth.sock`, mode 0700, owned by the user, never a symlink: checked at start, else the console exits), which `lib.js caddy` prints; a path with a space in it needs quoting in the Caddyfile, so keep spaces out of the data dir. `/login` and `/logout` go to it. Everything else first asks it (`forward_auth`, `GET /_auth`): a valid session answers 200 with the user in `X-Remote-User`, which Caddy copies onto the request to the console; none sends the visitor to the form and back to the page they wanted (a path under the prefix only).
+- `route` keeps the written order: `request_header -X-Remote-User` drops any copy the visitor sent before `forward_auth` sets the real one. `header_up -Cookie` keeps the session cookie from the console, its logs and the agent. The console still believes the header from a loopback peer only.
 - **The public Host is passed through unchanged.** There is no `header_up Host`: the console compares a POST's `Origin` with the `Host` it sees, so a rewritten Host gets every answer refused (403). In exchange the console must accept the public Host: set `allow_host_key` (e.g. `SHOP_CONSOLE_ALLOW_HOST=agent.example.com`) through configure, then `pm2 restart zylos-<name>`. Without it, every page through Caddy is 421. post-install warns about both.
 
 Validate, then reload: `~/zylos/bin/caddy validate --config ~/zylos/http/Caddyfile --adapter caddyfile && pm2 reload caddy`.
 
-Core never rewrites the block on upgrade (no routes are declared), but a reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it, and every skill pack upgrade is a reinstall. So pre-uninstall keeps the block (with the host's own edits) in `<data dir>/caddy-block.saved`, and post-install / post-upgrade **put it back** when `users_file` has logins and the Caddyfile has no BEGIN marker (issue #215): the saved block goes just before the closing `}` of the first site block, into a candidate file `Caddyfile.candidate-<name>` that must pass `caddy validate`; the old file is kept as `Caddyfile.before-<name>`; then `pm2 reload caddy`, and if that fails the old file is put back. When any step cannot be done (no saved copy, no `~/zylos/bin/caddy`, validate refuses, no site block) the Caddyfile is left as it was and the warning names the copy to paste by hand.
+Core never rewrites the block on upgrade (no routes are declared), but a reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it, and every skill pack upgrade is a reinstall. So pre-uninstall keeps the block (with the host's own edits) in `<data dir>/caddy-block.saved`, and post-install / post-upgrade **put it back** when `users_file` has logins and the Caddyfile has no BEGIN marker (issue #215; a saved block that still has `basic_auth` is not put back as it was: the block `lib.js caddy` prints takes its place): the saved block goes just before the closing `}` of the first site block, into a candidate file `Caddyfile.candidate-<name>` that must pass `caddy validate`; the old file is kept as `Caddyfile.before-<name>`; then `pm2 reload caddy`, and if that fails the old file is put back. When any step cannot be done (no saved copy, no `~/zylos/bin/caddy`, validate refuses, no site block) the Caddyfile is left as it was and the warning names the copy to paste by hand. A block that is in the Caddyfile and still has `basic_auth` (0.4.x) is replaced in place the same way, validated first. A host with its own vhost (no BEGIN/END block) copies the route from `lib.js caddy` by hand.
 
-**Adding a person.** The logins are `<data dir>/<users_file>` (mode 0600), one `<username> <bcrypt hash>` per line, never in the repository. Caddy fails to start on a missing or empty list, so add the first person before pasting the block. Hash at a terminal so the password never goes through chat:
+**Adding a person.** The logins are `<data dir>/<users_file>` (mode 0600), one `<username> scrypt$…` line each, never in the repository. A person sets their password at a terminal, so it never goes through chat or a command line (`passwd` refuses without a tty):
 
-    ~/zylos/bin/caddy hash-password
-    printf '%s %s\n' alice '<hash>' >> ~/zylos/components/<name>/console.users
-    chmod 600 ~/zylos/components/<name>/console.users
-    pm2 reload caddy
+    node ~/zylos/.claude/skills/<name>/zylos/lib.js passwd alice
+    node ~/zylos/.claude/skills/<name>/zylos/lib.js passwd --remove alice
+
+A new password or a removed line ends that person's sessions at once (the cookie carries a fingerprint of the stored hash). The user name is letters, digits and `. _ : -`; the password at least 10 characters. **From 0.4.x**: the old lines are bcrypt hashes made for Caddy; the form cannot verify them, post-install names each such person, and each runs `passwd` once. Sessions last 14 days; the signing key is `<data dir>/console/session.key` (kept, so a restart keeps sessions). After five wrong passwords a user and an address wait 30 s, doubling to 15 min (in memory: a restart clears it); that also means anyone who knows a user name can keep that user waiting. Logout clears the browser's cookie only: a copied cookie works until it expires or the person's password changes.
 
 The console records each answer under the header's user; everyone the proxy lets in answers.
 
@@ -333,10 +341,11 @@ The console records each answer under the header's user; everyone the proxy lets
 
     pm2 describe zylos-<name> | grep status                                   # online
     tail -n 3 ~/zylos/components/<name>/logs/console.log                      # "Console: http://127.0.0.1:<port>/"
-    curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/<base>/          # 401
-    curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Remote-User: x' https://<domain>/<base>/   # still 401
+    curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/<base>/          # 302 to the form
+    curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Remote-User: x' https://<domain>/<base>/   # still 302
+    curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/<base>/login      # 200, the form
 
-Then open the URL, log in, and check that the page names you.
+Then open the URL, sign in once with the form (the browser offers to save it), and check that the page names you.
 
 ## Known limits
 
@@ -345,6 +354,8 @@ Then open the URL, log in, and check that the page names you.
 - **A task renamed with the state file lost is orphaned.** `.zylos-tasks.json` lives in the data dir. If it is deleted, a task dropped from the manifest is no longer known to be this skill pack's; remove it with the scheduler CLI.
 - **`{cli}` and `{detach}` need `node` on the agent's PATH** (the link's shebang, the fallback form, detach). Zylos hosts have it. The console service instead calls the absolute node that runs it.
 - **The console's secret sits in `<data dir>/console/secret`**, which the agent on a single-user host can read: the signature is then an accident guard, not a wall. To keep it out of the agent's reach, give only the pm2 app a `CONSOLE_SECRET` (16+ characters) in its environment and keep that out of the data dir.
+- **The login is not run under a real Caddy yet.** Its service is tested end to end on its socket (`tests/test_login.py`); the printed block is checked for shape and order only. `forward_auth` over a unix socket and `copy_headers` need a real Caddy before the first release that carries it is trusted: `python3 hosts/zylos/tests/live_caddy.py` starts the login service, a stand-in console and Caddy with the real block on a private port, and checks the redirects, the spoofed header, the cookie and the POST; then one browser sign-in on the host.
+- **The session key sits in the data dir**, readable by the agent on a single-user host: the cookie is an accident guard there, not a wall (as the console's secret). The throttle is in memory.
 - **One client per host**, and one console per component: a second console for the same skill pack needs a second host.
 - **Windows is not supported.** Detached jobs rely on POSIX sessions and `sh`.
 - **The hooks edit the Caddyfile in one case only**: putting back the block pre-uninstall saved, validated first and undone if the reload fails. First installs, edits to an existing block and the scheduler's time zone are the host agent's job. Not yet seen under a real Caddy.

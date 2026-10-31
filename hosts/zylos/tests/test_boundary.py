@@ -29,7 +29,7 @@ from _host import ADAPTER, Host, example  # noqa: E402
 
 CODE = ["lib.js", *(f"hooks/{h}.js" for h in ("configure", "post-install", "post-upgrade", "pre-uninstall")),
         *(f"bin/{b}.js" for b in ("cli", "detach", "console"))]
-GENERIC = CODE + ["ecosystem.config.cjs.template", "Caddyfile.snippet"]
+GENERIC = CODE + ["bin/login.js", "ecosystem.config.cjs.template", "Caddyfile.snippet"]
 # Real skill packs the adapter was distilled from or is for; nowhere in this folder.
 SKILL_PACK_WORDS = ["amazon", "ppc", "spapi", "sp-api", "kol", "sellersprite", "sqs", "webconsole"]
 # The example skill pack's words: only the example and the docs may use them
@@ -93,9 +93,9 @@ def test_no_example_manifest_value_is_hard_coded():
 
 def test_node_stdlib_only_and_thin_wrappers():
     req = re.compile(r"(?<![\"'])require\(([^)]*)\)")   # a call, not a string that names one
-    for rel in CODE:
+    for rel in CODE + ["bin/login.js"]:
         for arg in req.findall(read(rel)):
-            ok = arg.startswith("'node:") or arg in ("'../lib.js'", "'./post-install.js'") \
+            ok = arg.startswith("'node:") or arg in ("'../lib.js'", "'./post-install.js'", "'./login.js'", "LOGIN_JS") \
                 or arg == "path.join(here, '..', 'lib.js'"      # [^)]* stops at join's own )
             assert ok, (rel, arg)
     for rel in CODE[1:]:
@@ -128,16 +128,22 @@ def test_the_caddy_snippet():
     assert "redir <BASE_PATH> <BASE_PATH>/ permanent" in text
     assert "handle_path <BASE_PATH>/* {" in text and "handle <BASE_PATH>" not in text
     assert "header_up Host" not in text, "the public Host is passed through, never rewritten"
-    auth, strip, proxy, setu = (text.index(s) for s in (
-        "basic_auth", "request_header -<USER_HEADER>", "reverse_proxy 127.0.0.1:<PORT>",
-        "header_up <USER_HEADER> {http.auth.user.id}"))
-    assert auth < strip < proxy < setu and "import <USERS_FILE>" in text
+    assert "basic_auth" not in text, "the login is a form (bin/login.js), not the browser's pop-up"
+    strip, login, ask, proxy = (text.index(s) for s in (
+        "request_header -<USER_HEADER>", "reverse_proxy unix/<AUTH_SOCK>", "forward_auth unix/<AUTH_SOCK> {",
+        "reverse_proxy 127.0.0.1:<PORT>"))
+    assert "route {" in text and strip < login < ask < proxy, "route keeps the order: drop the visitor's header first"
+    assert "header_up -Cookie" in text, "the console never sees the session cookie"
+    assert "uri /_auth" in text and "copy_headers <USER_HEADER>" in text and "@login path /login /logout" in text
     with Host() as host:
         host.configure({"SHOP_CONSOLE_PORT": "9123"})
         r = host.node(os.path.join(host.adapter, "lib.js"), "caddy")
         out = r.stdout
         assert r.returncode == 0 and not re.search(r"<[A-Z_]+>", out) and "##" not in out, out
-        assert f"import {os.path.join(host.data, 'console.users')}" in out and "127.0.0.1:9123" in out \
+        sock = host.lib("console.log(JSON.stringify(h.AUTH_SOCK))")
+        assert sock.endswith(".sock") and len(sock) <= 100, sock          # a long data dir gets a short socket name
+        assert f"unix/{sock}" in out and "127.0.0.1:9123" in out \
+            and "basic_auth" not in out and "copy_headers X-Remote-User" in out \
             and "handle_path /shop/* {" in out and "request_header -X-Remote-User" in out \
             and out.startswith("# BEGIN zylos-component:shop-harness\n"), out
 
