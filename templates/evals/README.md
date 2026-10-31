@@ -146,15 +146,23 @@ A row whose Rule cut says `pass` is a **regression guard**: keep it, put `guard:
 - A reply that describes the skill beyond its text ("the skill says an authorisation doesn't change that", when it does not) is a finding about the model, not a pass; note it.
 - A run with simulated tools is a smoke test. In that setup a fresh agent gets only the files and the prompt, and replies with the commands it would run and what it would say. State those limits when you report, and repeat a case that counts at least three times before relying on it.
 
+**A case that can fail for the right reason.** *From Anthropic's "Demystifying evals for AI agents" (2026-01), not yet seen on a skill pack here:*
+
+- **Show it can pass.** Before trusting a case, have one run, or the commands written by hand against the fixture, that passes every grader. A case at 0 of n in both arms is first a broken case (a grader's pattern, the scaffold, a prompt that cannot be done), not a finding about the agent.
+- **Both sides of a rule.** A rule that forbids also gets a case where acting is right: next to "never confirm for the owner", a case where the agent must run the read the owner asked for. Otherwise an agent that refuses everything passes the whole suite.
+- **Grade what the rule names, not the path.** A grader checks the outcome the rule requires (the verb run or never run, what the reply says, the file left) and leaves the rest of the route open. Require an order or a count (`max: 1`) only when the rule itself is about the order or the count; a grader stricter than its rule fails good runs and teaches nothing.
+
 **When an eval counts, ask about a guard.** A rule the model follows only because the text says so is a rule code could hold too: write the guard and show it red on a broken copy ([tests/README.md](../tests/README.md)). Keep the text as the first line of defence.
 
 ## Running them (by hand)
 
 The recipe depends on the host. With Claude Code's plugin evals, from a clean clone of the skill pack (never from a checkout that holds client data: the agent can read the plugin's own directory):
 
-    claude plugin eval . --scaffold --allow-tools Bash --ablation none -j 4 --no-publish --max-cost-usd 15
+    claude plugin eval . --scaffold --allow-tools Bash -j 4 --no-publish --max-cost-usd 30
 
-Each case runs a few times and passes only if every grader passes in every run. Record the result and the ablation table with the release (BUILD.md, B8). Seen on one skill pack: nine cases cost about US$5.90 for 27 runs; a dozen was estimated at about US$8, not measured.
+Each case runs a few times and passes only if every grader passes in every run. Record the result and the ablation table with the release (BUILD.md, B8). Seen on one skill pack: nine cases cost about US$5.90 for 27 runs, with one arm; the baseline arm below doubles the runs.
+
+**Keep the baseline arm.** By default the runner runs every case twice over: once with the plugin, once without it (`--ablation with-without`), and reports the difference (Δ). The arm without it still runs the case's scaffold, so the agent has the same `./<cli>` and the same data; it only lacks `SKILL.md` and the plugin's other files. That is the whole skill cut at once, for free: a case whose baseline passes is one the model keeps without the text, and is a regression guard before any rule is cut by hand. Its rule-cut row (below) still decides; the baseline only says where to look first. Do not pass `--ablation none`: it hides the one number that says the skill did anything. *Seen once, on a toy plugin (2026-10-31, one case, two runs an arm, US$0.013): the baseline arm ran the scaffold and the cli, never read the skill, and skipped the step only the skill asked for; Δ 0.5.* Graders marked with-only (a `tool_used: Skill` grader, say) are reported as a sign the plugin fired, not scored.
 
 On another runner, keep the folder layout and the graders' regular expressions: `kit.guards.evals.command_pattern(...)` returns the pattern over a plain shell command, and with `trace=True` over a `{"command": "..."}` record as JSON text (spaces after `:` and `,` are read too).
 
