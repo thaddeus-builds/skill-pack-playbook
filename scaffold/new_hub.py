@@ -130,15 +130,20 @@ MARKET_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,15}")
 CURRENCY_RE = re.compile(r"[A-Z]{3}")                # ISO 4217 codes
 # The keys a client's packs share, defined as the packs that hold them define
 # them: a pack copies a hub fact only when type, unit, bounds and labels match.
+# A key a pack has a registry fallback for (npr_roas) is `optional` while the
+# fallback is in use: nothing waits on it, the reports print the placeholder
+# warning, and the owner is not asked for it by the start routine (issue #361).
 # currency's type is set per hub (--currencies): `text` until the client's
 # packs name their choices.
 HUB_KEY_ROWS = [
     ("currency", "required", "text", "", "", "",
      "reporting currency of the market", "該市場的報表幣別",
      "every money amount every pack reads is in this currency"),
-    ("npr_roas", "required", "number", "x ROAS", "0.1", "50",
+    ("npr_roas", "optional", "number", "x ROAS", "0.1", "50",
      "NPR: minimum profitable ROAS", "NPR：最低獲利 ROAS",
-     "break-even ROAS: every call on spend is above or below it"),
+     "break-even ROAS: every call on spend is above or below it; a pack reads "
+     "its registry fallback until the client gives its own, and its reports "
+     "warn \"placeholder\""),
     ("avg_order_value", "optional", "number", "currency", "0", "",
      "average order value", "客單價",
      "minimum spends are judged as multiples of it"),
