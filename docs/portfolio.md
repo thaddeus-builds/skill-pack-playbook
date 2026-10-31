@@ -160,6 +160,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `ads.spend/1` | an operator | `meas`, the other operators | spend and its return per entity and day on the platform's numbers, money or index, settled or not |
 | `ads.status/1` | an operator | the daily page, the console | one day's status: freshness, spend, sections ready or not, what waits for a person |
 | `intel.ads/1` | `search-intel` | `adcopy`, `gads`, `ppc` | the ads competitors were seen running on search pages: words as published, first and last day seen, times seen |
+| `promo.calendar/1` | `product-feed` | `gads`, `meta-ads`, makers, the kit's single-day list | the sale and festival windows of each market (name, kind, first and last day, source); a market with no calendar has no rows |
 | `leads/1` | `outbound` | `sdr` | company, contacts, source, evidence |
 | `inquiries/1` | any operator that receives an inquiry (`seo` for site forms, `gads` and `meta-ads` for lead ads) | `sdr` | who wrote, from which company, the words as written, the page, the consent box text |
 | `creators.roster/1` (exists as vads K5) | `creator-program` | `meta-ads` | collaborations, codes, ad ids |
