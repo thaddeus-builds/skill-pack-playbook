@@ -2,8 +2,9 @@
 """Link a pull request to the issue it solves, mechanically (no model): GitHub closes an issue on merge only when the pull
 request's description holds `Closes #N`; a description without it leaves the issue open.
 
-An issue number is taken from three places, nothing else: the branch name (`issue-4-overlay`, `fix/12-x`), a commit message
-of the branch (`Closes #4`, `Fixes #4`, `Refs #4`), and `--issue N`. Only an open issue of this repository counts.
+An issue number is taken from three places, nothing else: the branch name when it says `issue` (`issue-4-overlay`, `fix/issue-12`; a bare
+number is a date or a version, `release-2026-10-23`), a commit message of the branch that says `Closes`, `Fixes` or `Resolves` (`Refs #4` only
+mentions an issue and never closes it), and `--issue N`. Only an open issue of this repository counts.
 
     python3 tools/pr_links.py check [--base origin/main] [--body-file F]   exit 1 and name what is missing
     python3 tools/pr_links.py create [--base main] [gh pr create args]    gh pr create, with the closing lines added
@@ -14,9 +15,8 @@ when a description lacked the line (it closes the issue with a comment naming th
 """
 import argparse, json, re, subprocess, sys
 
-BRANCH = re.compile(r"(?:^|[/_-])(?:issue[-_]?)?(\d+)(?=[-_/]|$)")
+BRANCH = re.compile(r"(?:^|[/_-])issues?[-_/]?(\d+)(?=[-_/]|$)", re.I)
 CLOSING = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)", re.I)
-REFS = re.compile(r"\b(?:refs?)\s+#(\d+)", re.I)
 
 
 def sh(*a):
@@ -27,21 +27,40 @@ def sh(*a):
 
 def mentioned(branch, messages, extra=()):
     """Issue numbers named by the branch, the commit messages and the caller, in order, once each."""
-    nums = [int(n) for n in BRANCH.findall(branch) if not (len(n) > 5)]
-    for m in messages: nums += [int(n) for n in CLOSING.findall(m) + REFS.findall(m)]
+    nums = [int(n) for n in BRANCH.findall(branch) if len(n) <= 5]
+    for m in messages: nums += [int(n) for n in CLOSING.findall(m)]
     nums += [int(n) for n in extra]
     return list(dict.fromkeys(nums))
 
 
 def missing(body, issues):
-    """The issues no `Closes/Fixes/Resolves/Refs #N` line of `body` names."""
-    have = {int(n) for n in CLOSING.findall(body or "") + REFS.findall(body or "")}
+    """The issues no `Closes/Fixes/Resolves #N` line of `body` names (`Refs #N` does not close one)."""
+    have = {int(n) for n in CLOSING.findall(body or "")}
     return [n for n in issues if n not in have]
 
 
 def with_closing(body, issues):
     add = "".join(f"Closes #{n}\n" for n in missing(body, issues))
     return (body.rstrip("\n") + "\n\n" + add) if add else body
+
+
+def body_args(rest, issues):
+    """`gh pr create` arguments with the closing lines in the description, wherever it comes from: `--body`, `--body-file` (a file, rewritten),
+    or nowhere (then the lines become the whole description). `--body=...` and `--body-file -` are refused, not guessed at."""
+    rest = list(rest)
+    if any(a.startswith(("--body=", "--body-file=", "-b=", "-F=")) or a == "-" for a in rest):
+        raise SystemExit("pr_links create: write --body TEXT or --body-file FILE as two words (not --body=..., not -)")
+    for flag, is_file in (("--body-file", True), ("-F", True), ("--body", False), ("-b", False)):
+        if flag in rest:
+            at = rest.index(flag) + 1
+            if at >= len(rest): raise SystemExit(f"pr_links create: {flag} needs a value")
+            if is_file:
+                with open(rest[at], encoding="utf-8") as f: new = with_closing(f.read(), issues)
+                with open(rest[at], "w", encoding="utf-8") as f: f.write(new)
+            else:
+                rest[at] = with_closing(rest[at], issues)
+            return rest
+    return rest + ["--body", with_closing("", issues).lstrip("\n")] if issues else rest
 
 
 def open_issues():
@@ -78,12 +97,7 @@ def main(argv=None):
         lack = missing(body, issues)
         if lack: print("the description lacks: " + ", ".join(f"Closes #{n}" for n in lack), file=sys.stderr)
         return 1 if lack else 0
-    body = ""
-    if "--body-file" in rest: body = open(rest[rest.index("--body-file") + 1], encoding="utf-8").read()
-    elif "--body" in rest: body = rest[rest.index("--body") + 1]
-    new = with_closing(body, issues)
-    if "--body-file" in rest: open(rest[rest.index("--body-file") + 1], "w", encoding="utf-8").write(new)
-    elif "--body" in rest: rest[rest.index("--body") + 1] = new
+    rest = body_args(rest, issues)
     sys.stdout.write(sh("gh", "pr", "create", "--base", a.base.split("/")[-1], *rest))
     return 0
 
