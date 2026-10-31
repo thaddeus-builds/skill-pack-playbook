@@ -398,13 +398,38 @@ def rest_runners(creds: Credentials, conversation_id: str, *, mentions: Iterable
 
 
 def fetch_members(creds: Credentials, conversation_id: str, *, authed=None, urlopen=urllib.request.urlopen,
-                  timeout: float = 10.0) -> list[dict]:
-    """The conversation's members as `{member_id, display_name, kind, ...}`; [] when the list cannot be read."""
+                  timeout: float = 10.0, strict: bool = False) -> list[dict]:
+    """The conversation's members as `{member_id, display_name, kind, ...}`; [] when the list cannot be read
+    (`strict`: the `RestError` is raised, for a caller that must tell a failed call from an empty group)."""
     try:
         d = _unwrap((authed or _client(creds, urlopen, timeout))("GET", f"{creds.prefix}/conversations/{conversation_id}/members"))
     except RestError:
+        if strict:
+            raise
         return []
     return [m for m in d if isinstance(m, dict)] if isinstance(d, list) else []
+
+
+def client(creds: Credentials, urlopen=urllib.request.urlopen, timeout: float = 30.0):
+    """The authed `(method, path, body)` call of `_client`, public: a caller that reads again and again holds one, so the
+    token is exchanged once and not at every read."""
+    return _client(creds, urlopen, timeout)
+
+
+def fetch_messages(creds: Credentials, conversation_id: str, *, after_seq: int | None = None, limit: int = 100,
+                   authed=None, urlopen=urllib.request.urlopen, timeout: float = 30.0) -> list[dict]:
+    """The group's messages as the server lists them (dicts), oldest first. With `after_seq` the server pages upward from
+    that cursor (the `limit` messages just after it); without, the newest `limit`. Raises `RestError` when the call fails."""
+    path = f"{creds.prefix}/conversations/{conversation_id}/messages?limit={limit}"
+    path += f"&after_seq={after_seq}" if after_seq is not None else ""
+    rows = _unwrap((authed or _client(creds, urlopen, timeout))("GET", path))
+    return sorted((m for m in rows if isinstance(m, dict) and isinstance(m.get("seq"), int)), key=lambda m: m["seq"]) \
+        if isinstance(rows, list) else []
+
+
+def reply_of(m: dict) -> "Reply":
+    """A message dict as a `Reply` (text and attachments read the way every reader here does)."""
+    return Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")), _text_of(m.get("content")), attachments=_attachments_of(m))
 
 
 def unknown_mentions(text: str, members: list[dict]) -> bool:
@@ -474,10 +499,36 @@ class Reply:
 
 
 @dataclass(frozen=True)
+class Seen:
+    """One reaction on a message: who put it (`member_id`, "" when the server gave a count and no ids) and its `code`
+    (`eyes` = seen, not yet answered). Our own reactions are left out."""
+    member_id: str
+    code: str
+
+
+@dataclass(frozen=True)
 class Wait:
     state: str                       # "replied" | "timeout" | "unreadable"
     replies: tuple = ()
     reason: str = ""
+    seen_by: tuple = ()              # `Seen`s on the sent message, as of the last read that listed it
+
+
+def seen_by(m: dict, me: str = "") -> tuple:
+    """The reactions other members put on message dict `m` (`reactions: [{code, count, reacted_by_me, reactor_ids}]`),
+    one `Seen` per member and code; `me` (our member id) is left out. Read-only: nothing here sends a reaction."""
+    out = []
+    for r in m.get("reactions") if isinstance(m.get("reactions"), list) else []:
+        if not isinstance(r, dict) or not isinstance(r.get("code"), str) or not r["code"]:
+            continue
+        ids = [x for x in (r.get("reactor_ids") if isinstance(r.get("reactor_ids"), list) else []) if isinstance(x, str) and x]
+        others = [x for x in ids if x != me]
+        count = r.get("count") if isinstance(r.get("count"), int) else len(ids)
+        if others:
+            out += [Seen(x, r["code"]) for x in dict.fromkeys(others)]
+        elif not ids and count - (1 if r.get("reacted_by_me") else 0) > 0:
+            out.append(Seen("", r["code"]))          # the server counted someone and named no one
+    return tuple(out)
 
 
 def _text_of(content) -> str:
@@ -518,29 +569,32 @@ def wait_for_reply(fetch: Callable[[], list], anchor: Anchor, *, from_ids: Itera
     Nothing is sent and no model is called. The replies are returned as they are; whether they answer
     the question is for the agent to judge."""
     ids = frozenset(from_ids)
-    deadline, failures = clock() + timeout, 0
+    deadline, failures, seen = clock() + timeout, 0, ()
     while True:
         try:
-            found = [m for m in fetch() if _is_reply(m, anchor, ids)]
+            rows = fetch()
+            mine = next((m for m in rows if str(m.get("id")) == anchor.id), None)
+            seen = seen_by(mine, anchor.sender_id) if mine else seen      # the sent message may have left the window
+            found = [m for m in rows if _is_reply(m, anchor, ids)]
             failures = 0
         except Exception as e:                    # a read that failed: try again a few times, then say so
             failures += 1
             found = []
             if failures >= max_failures:
-                return Wait("unreadable", reason=type(e).__name__)
+                return Wait("unreadable", reason=type(e).__name__, seen_by=seen)
         if found:
             found.sort(key=lambda m: m["seq"])
             return Wait("replied", tuple(Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")),
-                                               _text_of(m.get("content")), attachments=_attachments_of(m)) for m in found))
+                                               _text_of(m.get("content")), attachments=_attachments_of(m)) for m in found), seen_by=seen)
         if clock() + poll > deadline:
-            return Wait("timeout")
+            return Wait("timeout", seen_by=seen)
         sleep(poll)
 
 
 def rest_waiter(creds: Credentials, conversation_id: str, sent_id: str, *, limit: int = 100,
-                urlopen=urllib.request.urlopen, timeout: float = 30.0):
+                urlopen=urllib.request.urlopen, timeout: float = 30.0, authed=None):
     """`(fetch, anchor)` for wait_for_reply over HTTP: the anchor is read from the sent message itself."""
-    authed = _client(creds, urlopen, timeout)
+    authed = authed or _client(creds, urlopen, timeout)
     base = f"{creds.prefix}/conversations/{conversation_id}/messages"
     d = _unwrap(authed("GET", f"{base}/{sent_id}"))
     msg = d.get("message") if isinstance(d, dict) else None
@@ -566,6 +620,35 @@ def wait_for_reply_to(target: Target, sent_id: str, *, from_ids: Iterable[str] =
     except (OSError, ValueError, RestError) as e:
         return Wait("unreadable", reason=f"anchor: {e}")
     return wait_for_reply(fetch, anchor, from_ids=from_ids, timeout=timeout, poll=poll, sleep=sleep, clock=clock)
+
+
+@dataclass(frozen=True)
+class Status:
+    delivered: bool                  # the server holds the message (it answers a read by its id)
+    seen_by: tuple = ()              # `Seen`s on it
+    replies: tuple = ()              # `Reply`s to it, as `wait_for_reply` counts them
+    reason: str = ""                 # when the message is not found or cannot be read
+
+
+def message_status(creds: Credentials, conversation_id: str, sent_id: str, *, from_ids: Iterable[str] = (),
+                   limit: int = 100, urlopen=urllib.request.urlopen, timeout: float = 30.0) -> Status:
+    """Where a sent message stands, in one look and with no waiting: is it in the group, who reacted to it, what came
+    after it. The group is read upward from the message's own seq, so an old message is found however much was said since
+    (the newest-100 window of `rest_waiter` would have lost it). A reply is what `wait_for_reply` calls one."""
+    authed = _client(creds, urlopen, timeout)
+    try:
+        fetch, anchor = rest_waiter(creds, conversation_id, sent_id, urlopen=urlopen, timeout=timeout, authed=authed)
+    except RestError as e:
+        return Status(False, reason=("message_not_found" if "HTTP 404" in str(e) else "unreadable") + f": {e}")
+    try:
+        rows = fetch_messages(creds, conversation_id, after_seq=max(anchor.seq - 1, 0), limit=limit, authed=authed)
+    except RestError as e:
+        return Status(True, reason=f"unreadable: {e}")
+    mine = next((m for m in rows if str(m.get("id")) == anchor.id), {})
+    found = [m for m in rows if _is_reply(m, anchor, frozenset(from_ids))]
+    return Status(True, seen_by(mine, anchor.sender_id),
+                  tuple(Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")), _text_of(m.get("content")),
+                              attachments=_attachments_of(m)) for m in found))
 
 
 MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
@@ -669,6 +752,9 @@ def _plain_name(name: str) -> str:
     a line break would put a line of the sender's own choosing into the block), no secret shape."""
     base = "".join(c for c in str(name).replace("\\", "/").rsplit("/", 1)[-1] if c.isprintable()).strip()
     return redact_secrets(base)[:120] or "(unnamed)"
+
+
+plain_name = _plain_name                      # public: a sender's file name as one safe line
 
 
 def wrap_untrusted(replies: Iterable[Reply], *, request: str = "") -> str:
