@@ -1,0 +1,153 @@
+<title>技能包地图</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one column of bands (scenarios, the map by layer, the files that really move, questions); boxes are small tiles whose edge and chip carry the state. */
+:root {
+  --bg: #f6f5f1;
+  --panel: #ffffff;
+  --fg: #1d2326;
+  --muted: #5d676c;
+  --line: #d9dcd8;
+  --earned: #1f7a5a;  --earned-bg: #e3f2ec;
+  --built: #9a6a12;   --built-bg: #f8eed6;
+  --shell: #6b7479;   --shell-bg: #eceeed;
+  --library: #3b5f94; --library-bg: #e4ebf6;
+  --live: #1f7a5a;
+  --promise: #8a6d1a;
+  --font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14191b; --panel: #1c2326; --fg: #e7ebec; --muted: #9aa6ab; --line: #2f393d;
+    --earned: #5fcba2;  --earned-bg: #17332a;
+    --built: #e6b455;   --built-bg: #3a2f14;
+    --shell: #a3adb2;   --shell-bg: #262e31;
+    --library: #8fb2e8; --library-bg: #1c2b44;
+    --live: #5fcba2; --promise: #e6b455;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14191b; --panel: #1c2326; --fg: #e7ebec; --muted: #9aa6ab; --line: #2f393d;
+  --earned: #5fcba2;  --earned-bg: #17332a;
+  --built: #e6b455;   --built-bg: #3a2f14;
+  --shell: #a3adb2;   --shell-bg: #262e31;
+  --library: #8fb2e8; --library-bg: #1c2b44;
+  --live: #5fcba2; --promise: #e6b455;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--font); margin: 0; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+main { max-width: 1040px; margin: 0 auto; display: grid; gap: 32px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
+h2 { font-size: 18px; margin: 0 0 4px; letter-spacing: .02em; }
+p { margin: 0; }
+.sub { color: var(--muted); max-width: 62ch; }
+.band { display: grid; gap: 12px; min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.count { font-weight: 700; font-size: 22px; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 99px; border: 1.5px solid currentColor; white-space: nowrap; }
+.earned { color: var(--earned); } .built { color: var(--built); } .shell { color: var(--shell); } .library { color: var(--library); }
+.layer { display: grid; gap: 8px; min-width: 0; }
+.layer > h3 { font-size: 13px; margin: 0; color: var(--muted); font-weight: 600; letter-spacing: .06em; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-left-width: 6px; border-radius: 6px; padding: 10px 12px; display: grid; gap: 4px; min-width: 0; }
+.tile.earned { border-left-color: var(--earned); } .tile.built { border-left-color: var(--built); border-left-style: solid; }
+.tile.shell { border-left-color: var(--shell); border-left-style: dashed; } .tile.library { border-left-color: var(--library); }
+.tile b { font-family: var(--mono); font-size: 13.5px; overflow-wrap: anywhere; color: var(--fg); }
+.tile small { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.tile .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.door { font-size: 12px; color: var(--muted); }
+.door.on { color: var(--live); font-weight: 700; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .05em; background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.mono, .mono { font-family: var(--mono); font-size: 13px; }
+.live { color: var(--live); font-weight: 700; } .promise { color: var(--promise); font-weight: 700; }
+.note { font-size: 13px; color: var(--muted); }
+@media (max-width: 520px) { h1 { font-size: 25px; } body { font-size: 14.5px; } }
+</style>
+
+<main>
+  <header>
+    <h1>技能包地图</h1>
+    <p class="sub">21 个仓库,按“有没有客户的真实数据走过”上色。状态截至 2026-10-31,对每个包的主分支只读核对;颜色以 <span class="mono">tools/adoption.tsv</span> 的 use 列为准,<span class="mono">tests/test_map.py</span> 核对两者一致。</p>
+    <div class="legend" aria-label="图例">
+      <span><span class="count earned">9</span><span class="chip earned">已用上</span>有真实数据走过</span>
+      <span><span class="count built">8</span><span class="chip built">做好了</span>测试通过,没有客户</span>
+      <span><span class="count shell">2</span><span class="chip shell">空壳</span>只有脚手架</span>
+      <span><span class="count library">2</span><span class="chip library">库</span>不是技能包</span>
+    </div>
+  </header>
+
+  <section class="band" aria-labelledby="sc">
+    <div><h2 id="sc">客户在买什么</h2><p class="sub">字母和方案页一致。被运营的东西决定包怎么长:租来的广告账号只能“建议”,自己的网站才能真写。</p></div>
+    <div class="scroll"><table>
+      <tr><th>方案</th><th>被运营的是什么</th><th>节奏</th><th>已用上的包</th><th>还缺</th></tr>
+      <tr><td><b>A</b> 多市场零售品牌</td><td>租来的 Meta、Google 账号;品牌的店</td><td>每天看;每周一页中文;大促日</td><td>meta-ads、google-ads、video-ads</td><td>利润真相(保本 ROAS 现在是占位 2.0);大促文案谁写</td></tr>
+      <tr><td><b>B</b> 受监管品类的短视频</td><td>租来的千川、腾讯账号;创意流水线</td><td>每天一批,结果文件回流</td><td>adcut、video-ads</td><td>平台审核结论走接口;腾讯包</td></tr>
+      <tr><td><b>D</b> 中国 B2B 出海工厂</td><td>客户自己的网站;AI 回答里的可见度;线索</td><td>文章按波;每周测;线索按项目轮</td><td>seo、geo-china、sdr</td><td>国外 AI 助手;首封邮件的同意规则</td></tr>
+      <tr><td><b>C、E</b> 平台卖家 / 我们自己</td><td>Amazon 账号;自己的站</td><td>每小时流 / 按波</td><td>amazon-ppc(只读到过一次,客户已停)、seo-programmatic(自家站)</td><td>一个愿意签约的客户</td></tr>
+    </table></div>
+  </section>
+
+  <section class="band" aria-labelledby="map">
+    <div><h2 id="map">地图</h2><p class="sub">左边的粗边是状态(实线绿 = 已用上,实线黄 = 做好了,虚线灰 = 空壳,蓝 = 库)。“写入口”指能不能真的改外部系统。</p></div>
+
+    <div class="layer"><h3>② 运营包:一个平台账号一个包</h3><div class="tiles">
+      <div class="tile earned"><div class="row"><b>seo</b><span class="chip earned">已用上</span></div><small>谷歌自然搜索</small><span class="door on">写入口:真在跑(客户自己的网站)</span></div>
+      <div class="tile earned"><div class="row"><b>meta-ads</b><span class="chip earned">已用上</span></div><small>Meta;2 个客户;每周一页</small><span class="door">写入口:空(只建议)</span></div>
+      <div class="tile earned"><div class="row"><b>google-ads</b><span class="chip earned">已用上</span></div><small>Google;1 个客户;每天一次</small><span class="door">写入口:空(只建议)</span></div>
+      <div class="tile earned"><div class="row"><b>video-ads</b><span class="chip earned">已用上</span></div><small>千川、腾讯;Meta 一半在退出</small><span class="door">写入口:无</span></div>
+      <div class="tile earned"><div class="row"><b>sdr</b><span class="chip earned">已用上</span></div><small>线索按项目轮;2 个项目</small></div>
+      <div class="tile earned"><div class="row"><b>geo-china</b><span class="chip earned">已用上</span></div><small>豆包可见度;数据多在自家公司</small><span class="door">写入口:无</span></div>
+      <div class="tile earned"><div class="row"><b>amazon-ppc</b><span class="chip earned">已用上</span></div><small>只读到过一次,客户已停</small><span class="door">写入口:有,从没真用过</span></div>
+      <div class="tile earned"><div class="row"><b>seo-programmatic</b><span class="chip earned">已用上</span></div><small>自家网站的页面集</small><span class="door">写入口:空</span></div>
+      <div class="tile built"><div class="row"><b>outbound</b><span class="chip built">做好了</span></div><small>找公司和联系方式;没有客户。2026-10-31 决定并入 sdr,并不进去的先留在这里</small><span class="door">写入口:空</span></div>
+      <div class="tile built"><div class="row"><b>koc-script</b><span class="chip built">做好了</span></div><small>达人月度脚本</small><span class="door">写入口:空</span></div>
+      <div class="tile built"><div class="row"><b>creator-program</b><span class="chip built">做好了</span></div><small>达人优惠码和账目;只跑过样例</small><span class="door">写入口:空</span></div>
+    </div></div>
+
+    <div class="layer"><h3>③ 事实包:几个包都要读的事实</h3><div class="tiles">
+      <div class="tile built"><div class="row"><b>measurement</b><span class="chip built">做好了</span></div><small>平台数字对公司数字;只跑过样例周</small></div>
+      <div class="tile built"><div class="row"><b>asset-handoff</b><span class="chip built">做好了</span></div><small>一条创意的名字和标签;没上过客户</small></div>
+      <div class="tile shell"><div class="row"><b>product-feed</b><span class="chip shell">空壳</span></div><small>商品目录;等客户授权</small></div>
+      <div class="tile shell"><div class="row"><b>search-intel</b><span class="chip shell">空壳</span></div><small>需求和竞品;真代码在没合并的分支上</small></div>
+    </div></div>
+
+    <div class="layer"><h3>④ 制作包:做素材、交文件</h3><div class="tiles">
+      <div class="tile earned"><div class="row"><b>adcut</b><span class="chip earned">已用上</span></div><small>视频;约 45% 的代码是“测试再学习循环”,地图上还没有这一层</small></div>
+      <div class="tile built"><div class="row"><b>proofcut</b><span class="chip built">做好了</span></div><small>用工厂自己拍的素材做视频;1 个样片</small></div>
+      <div class="tile built"><div class="row"><b>ad-copy</b><span class="chip built">做好了</span></div><small>文案的版位限制检查;没有客户用过</small></div>
+      <div class="tile built"><div class="row"><b>product-image-to-video</b><span class="chip built">做好了</span></div><small>产品图关键帧;3 个客户样例</small></div>
+    </div></div>
+
+    <div class="layer"><h3>① 平台:大家共用</h3><div class="tiles">
+      <div class="tile library"><div class="row"><b>内核 kit + 客户中枢 hub</b><span class="chip library">共用</span></div><small>内核每个包都在用;客户中枢造好了,还没有一个真客户搬进去</small></div>
+      <div class="tile library"><div class="row"><b>cloud-gpu</b><span class="chip library">库</span></div><small>租 GPU;仓库是公开的,其他包仓库是私有的</small></div>
+      <div class="tile library"><div class="row"><b>filmkit</b><span class="chip library">库</span></div><small>渲染引擎,proofcut 在用</small></div>
+    </div></div>
+  </section>
+
+  <section class="band" aria-labelledby="flows">
+    <div><h2 id="flows">包与包之间,真在动的文件</h2><p class="sub">13 种合同里,有代码真的在写和读的只有三种。其余是画好了的接口。</p></div>
+    <div class="scroll"><table>
+      <tr><th>文件</th><th>谁写</th><th>谁读</th><th>状态</th></tr>
+      <tr><td class="mono">ads.creatives</td><td>adcut</td><td>video-ads、meta-ads</td><td class="live">在动</td></tr>
+      <tr><td class="mono">ads.results</td><td>video-ads</td><td>adcut</td><td class="live">在动</td></tr>
+      <tr><td class="mono">ads.demand</td><td>video-ads</td><td>adcut</td><td class="live">在动(已升为“议定”)</td></tr>
+      <tr><td class="mono">leads</td><td>sdr(自己写)</td><td>sdr(自己读)</td><td class="live">在动(outbound 并入 sdr 后,这条交接就不需要了)</td></tr>
+      <tr><td class="mono">messages、ads.changes</td><td>adcut、video-ads</td><td>没人</td><td class="promise">写了没人读</td></tr>
+      <tr><td class="mono">catalog、truth、intel、handoff.batch、copy.proposals</td><td>没人</td><td>—</td><td class="promise">只是承诺</td></tr>
+      <tr><td class="mono">ads.status、ads.spend、intel.ads</td><td>google-ads、meta-ads 的形状已一致</td><td>—</td><td class="promise">刚画好,还没人写</td></tr>
+    </table></div>
+  </section>
+
+  <section class="band" aria-labelledby="q">
+    <div><h2 id="q">等你判断的业务问题</h2><p class="sub">在 <a href="../ROADMAP.md">ROADMAP.md</a> 的 Waiting on owner(W10 起),每条带真实数字和建议。这页不再抄一份,免得两处说法不一致。</p></div>
+  </section>
+</main>

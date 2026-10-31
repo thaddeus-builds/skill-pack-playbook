@@ -4,6 +4,8 @@ Status: design. The owner adopted the structure on 2026-10-23. Three decisions a
 
 How the packs combine for each kind of client is [solutions.md](solutions.md).
 
+The picture, in Chinese, coloured by whether a client's data has gone through each pack: [map.html](map.html) (open it in a browser; `tests/test_map.py` keeps its colours equal to `tools/adoption.tsv`).
+
 It was drawn from a survey of the owner's repositories on 2026-10-23: about thirty, of which fifteen are live skill packs, four are new scaffolds, and the rest are superseded, client cases or data. Two more packs built the same week, `asset-handoff` and `ad-copy`, were placed on 2026-10-23.
 
 ## Two axes, and why neither alone is a pack boundary
