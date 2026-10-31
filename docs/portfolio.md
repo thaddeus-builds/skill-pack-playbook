@@ -38,6 +38,8 @@ Two packs on one account would share a credential, a change log and a write path
 | **4. Makers** | Make assets to a spec and hand them over with a manifest. They know no platform's API | `adcut` (video), `proofcut` (video from a B2B manufacturer's own footage), `product-image-to-video` (product images), `ad-copy` (text: what each placement allows, the check of candidate text against it, and the proposals) |
 | **5. Engines** | Logic that two or more packs use, in the kit | `ads-core`, `intent`, `creative`, `compliance`, `generation` (below) |
 
+A paid pack can read an account by the person as well as by the ad (a stranger, someone who looked, someone who bought): [customer-lifecycle.md](customer-lifecycle.md) is that method, for the `measurement` truth and any operator that targets by who the person already is. It is guidance, not a kit rule.
+
 Operators by axis:
 
 | | Pull | Push |
