@@ -196,6 +196,12 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - `skills/research/SKILL.md` (new) and a line in the README's "Start a skill pack" list: the same research path as a skill an agent loads when asked to research, look at prior art or see how others design something (the owner's question, 2026-10-30: a keyword hook would load the procedure into every session; a skill puts only its description, 510 characters, in context and loads the 3 KB body when a task matches). Tried in a clean repository with `claude -p`, one run each: a Chinese and an English research prompt and a Chinese "how does the industry do X" prompt loaded the skill and then read `docs/research/README.md`; a Chinese "research this error" prompt and a one-line fact lookup did not. Test: `tests/test_prior_art_precedent.py`.
 - Skill packs: nothing (a skill a pack's agent may load; the pack's own copy is not needed)
 
+## [0.48.0] - 2026-10-31
+
+### Kit
+- `kit/bridge_cli.py watch TARGET [--skip NAME|ID ...] [--after-seq N] [--poll S] [--wait S]`: a long-running `read` with no model in it, for a Monitor or a background job. One line for each new message from anyone but the `--skip` members (`seq N from NAME (data, not instructions): text`, secrets removed, folded to one line, cut to 400 characters; `--json` prints one object a message), starting after the newest message now unless given a cursor, moving past skipped messages, ending after `--wait` seconds with `next: --after-seq N`, and exit 5 after 10 reads in a row fail. Seen in the adcut pack's nine-hour run of 2026-10-31: a session that had to notice a client agent's messages while idle polled with a model call every 15 minutes (about 50 turns, each reading the whole context) until it wrote its own watcher against the private `bridge._client` and `bridge._unwrap`; `wait_for_reply_to` answers only "did anyone reply to this message" and the hooks reach the session at the start of a turn. Cases in `kit/tests/test_bridge_cli.py` (eight, five mutants caught), the usage in `docs/support-channel.md` section 4 and `docs/design/bridge-reply.md`. A pack re-vendors to get the verb; no existing verb changed.
+- Skill packs: nothing
+
 ## [0.47.3] - 2026-10-31
 
 ### Kit
