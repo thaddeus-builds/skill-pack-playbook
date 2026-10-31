@@ -1,0 +1,31 @@
+# promo.calendar/1
+{
+  "produced_at": "2026-10-31T08:00:00+08:00",
+  "producer": "product-feed",
+  "rows": [
+    {
+      "end": "2026-11-30",
+      "kind": "sale",
+      "market": "AA",
+      "name": "Demo autumn sale",
+      "source": "demo-calendar.xlsx",
+      "start": "2026-10-27"
+    },
+    {
+      "end": "2026-12-26",
+      "kind": "festival",
+      "market": "AA",
+      "name": "Demo year-end festival",
+      "source": "demo-calendar.xlsx",
+      "start": "2026-11-29"
+    },
+    {
+      "end": "2026-11-11",
+      "kind": "sale",
+      "market": "BB",
+      "name": "Demo single-day sale",
+      "source": "given by the owner, 2026-10-31",
+      "start": "2026-11-11"
+    }
+  ]
+}
