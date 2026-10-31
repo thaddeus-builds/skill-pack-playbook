@@ -312,7 +312,9 @@ facts. Never edit `hub/`, `console/` or a pack's `workspace/` by hand.
    its fix; `fact_hub_copy_stale` means `bin/hub <cli> facts sync-hub`.
 2. What waits on the owner: `bin/hub hub pending --hub --json` first, then
    `bin/hub <cli> pending --hub --json` for each pack. One cap of 10 open asks for
-   the owner across all of them; the hub's own asks first.
+   the owner across all of them; the hub's own asks first. Post only a row that
+   blocks something (no fallback in use): a value a report already reads with a
+   placeholder warning is nobody's wait, and asking fills the 10.
 3. Post asks through `bin/ask add FILE` (write `recommend.because` in each), read
    them back with `bin/ask answers --since SEQ`, close each with `bin/ask applied`.
 
