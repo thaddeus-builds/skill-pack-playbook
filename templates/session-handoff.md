@@ -43,3 +43,15 @@ Context windows end mid-project. Each session closes one turn of the build loop 
 - **The roadmap names what the owner must provide** (a token, a decision, footage) before each turn, so no session starts blocked.
 - **Delegate research and review to sub-agents with a written brief.** Examples: prompt craft, vendor docs, frame QA. Keep spending, owner contact and plan edits in the main session.
 - **When the context runs low, stop starting things.** Finish the current step, write the handoff, and say what is next.
+
+## Keep the session short (measured, 2026-10)
+
+A session does not pay for one big output; it pays for every call times the whole context the next turn reads again. Two sessions counted: a development session that ended at 936K of a 1M window (tool output 2.3M characters: Bash 79.6 percent in 1,075 calls of 1.7 KB each, a third of them test and pre-push runs; file reads 8.4; group messages 5.5; about 50 turns that only waited, each reading the whole context), and an operating agent that never compacts and instead clears at about 30 percent, writes a handoff, and does so six times a day. In the operating agent a finished video cost 4 to 5 calls and no document reads; starting a new card cost dozens. The saving is in the number of calls and in the length of the session, not in a smaller page.
+
+- **One task, one short session; the handoff is a file.** End a task when it is done, write the handoff (the section above), and start the next one clean. Do not carry a finished task's output into the next.
+- **Do not poll.** A wait is a background job plus the notification that it ended, or a watcher that is not a model. A turn that only checks whether something finished costs a full re-read of the context for nothing.
+- **A command answers in a summary line and its failures.** Tests, `git`, a forge's CLI, a pre-push hook: run them through a wrapper that writes the full output to a log file and prints the exit status, the count line and the failing lines (the adcut pack's `tools/quiet_run.py` is one). Read the log only for the failure you are fixing.
+- **Read the lines you need.** `grep -n` for the place, then `sed -n 'A,Bp'` or a read with an offset and a limit; read a whole file only when you will change most of it.
+- **A long report goes to a file** and the conversation gets the path and the three lines that matter.
+- **Make the rule a gate, not a memory.** An agent that clears its context forgets a rule once in a while; a rule a command refuses (a locked state written by hand is refused with an exit code) survives the handoff, a sentence in the handoff may not.
+
