@@ -12,7 +12,7 @@ Each skill pack is one specialist on a client's team. A client's growth work is 
 | --- | --- | --- | --- |
 | **Operator** | Holds one platform account: pulls its data, reports, proposes actions, and writes to the account once approved | Touches another platform; invents its own number for a shared fact | `meta-ads` (Meta), `video-ads` (千川, 腾讯), `google-ads`, `amazon-ppc`, `ecommerce-seo` |
 | **Truth** | Owns one kind of number the others need and publishes it | Runs ads; writes to any account | `product-feed` (price, stock), `measurement` (attribution, break-even ROAS), `search-intel` (demand, competitors) |
-| **Maker** | Makes assets to a spec and hands them over with a manifest | Knows a platform's API; uploads | `adcut` (video), `ad-copy` (text), `product-keyframe-video` (images) |
+| **Maker** | Makes assets to a spec and hands them over with a manifest | Knows a platform's API; uploads | `adcut` (video), `ad-copy` (text), `product-image-to-video` (images) |
 | **Owner** | Signs five things: meaning, stories, numbers, money, release | | |
 
 ### How the work moves

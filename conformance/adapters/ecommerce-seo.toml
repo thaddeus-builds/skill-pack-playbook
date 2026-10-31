@@ -1,4 +1,4 @@
-# ecommerce-seo-skill-pack (`seo`). `uv run scripts/seo.py` reads its own PEP 723 header; SEO_DATA_DIR is the workspace.
+# seo-skill-pack (`seo`, until 2026-10-31 ecommerce-seo-skill-pack). `uv run scripts/seo.py` reads its own PEP 723 header; SEO_DATA_DIR is the workspace.
 [skill_pack]
 name = "ecommerce-seo"
 cwd = "{root}"
