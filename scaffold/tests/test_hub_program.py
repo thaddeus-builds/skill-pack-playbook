@@ -112,12 +112,16 @@ def main() -> int:
     for want in ("`bin/hub hub doctor`", "`bin/hub <cli> doctor`",
                  "`bin/hub hub pending --hub --json`",
                  "`bin/hub <cli> pending --hub --json`", "`bin/ask add FILE`",
+                 "Post only a row that\n   blocks something (no fallback in use)",
                  "bin/ask chat ID", "only for words and choices",
                  "intake/inbox/<YYYY-MM-DD>-<source>/", "intake/INDEX.tsv",
                  "check_intake.py", "--transcript FILE",
                  "facts sync-hub", "Never run a gate verb yourself",
                  "`hub facts confirm, facts restore`"):
         check(f"it says {want}", want in brief, brief)
+    check("docs/consoles.md says the start routine posts only blocking rows",
+          "posts only the rows that block something"
+          in (HUB_PY.parents[1] / "docs" / "consoles.md").read_text(encoding="utf-8"))
     pa = fake_pack("demoa")
     r = subprocess.run([sys.executable, str(HUB_PY), "add-pack", "--hub",
                         str(hub), "--skill-pack", str(pa), "--market", "DE"],
