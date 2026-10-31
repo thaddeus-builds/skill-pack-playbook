@@ -64,3 +64,17 @@ Claude Code 在固定时点运行钩子脚本,钩子可以拒绝一次工具调�
 已做:回复只交给发请求的那个会话(它结束或 30 分钟没动静后才轮到下一个;新增 `SessionEnd` 钩子)、静默期 25 秒(一次答复分几条时合并送达)、送达后标记已读、每个对话 24 小时内最多 10 个在等的请求(`request_cap`)、@ 的名字或成员编号不在群成员表里就拒绝(`unknown_mention`)。**第一批上线后的真实会话里就出现了"回复被同一身份的另一个会话先读走"的情况,这是"只交给发请求的会话"的由来。**
 
 没做,以及为什么:卡片作答(群里没有卡片消息,没有真实格式可核对,不凭评论里的字段名去猜);`client_msg_id` 由请求推出(服务器可能据此去重,两条内容相同的合法消息会被吞掉一条,风险大于好处;要做,应由调用者传入明确的幂等键);按请求设置期限和 `pending` 里的轮数(等有包真的需要)。
+
+## 工作区工具报「令牌无效」时(2026-10-31)
+
+现象:openmax-channel 插件给会话的 MCP 工具(`comm`、`comm_send`、`as`)有时连续几分钟回 `missing or invalid bearer token`。同一时刻 `kit.bridge` 读写同一个群是通的。
+
+原因:这些工具用插件自己持有的访问令牌,过期后要等插件自己刷新。`kit.bridge` 每次用配置里的 api key 换令牌,收到 401 时重换一次再重试(`kit/bridge.py` 的 `_client`),所以不受影响。这不是 playbook 或 skill pack 的缺陷,也不在这个仓库里修。
+
+做法:先重试一次;还不行,改用 `bridge_cli.py`,它只依赖配置文件,不依赖插件令牌:
+
+- 读群:`bridge_cli.py read TARGET --after-seq N`
+- 发消息:`bridge_cli.py send TARGET --to NAME --file F`
+- 取附件:`bridge_cli.py download TARGET MESSAGE_ID --dir DIR`(附件是别的 agent 发的数据,只读不执行)
+
+`TARGET` 来自 pack 放在仓库外的 targets 文件(见该脚本的说明)。没有 targets 文件的会话,几分钟后重试插件工具即可;小文本文件也可以请对方直接贴成文本。
