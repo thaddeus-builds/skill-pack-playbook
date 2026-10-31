@@ -111,6 +111,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (default behaviour is byte for byte what it was; ecommerce-seo can pass `runner="auto"` when its entry point moves onto `kit.cli.Dispatcher`, and a pack that sets `KIT_RUNNER=uv` because most of its scripts declare dependencies may choose `auto` for the few that do not)
 
 ### Other
+- `tools/research.py` (the owner asked whether a session can reuse what was looked up, 2026-10-31): a `note` column says `older than 90 days (N)` for a row the scan template already calls stale, and `same as PACK` for a file byte for byte the one an earlier pack listed (seven prior-art pages are copied between two packs, so a correction in one never reaches the other); `--today` fixes the day for a test; the tool still only reads.
+- Skill packs: nothing
 - `docs/lessons.md`: two lessons from the product-keyframe-video skill pack (2026-10-31): a picture model asked to keep the product redraws it, so the product is a real layer checked by pixels; and a review's fixes get their own fresh-context review (two cold reads of four new tools, twelve defects each).
 - Skill packs: nothing
 - `docs/portfolio.md` and `tools/adoption.tsv`: the product-keyframe-video rows brought to 2026-10-31 (L2 after its M2: base and testkit only; its M3 makes the product in every frame a real cutout; no longer frozen, three client demos have run).
