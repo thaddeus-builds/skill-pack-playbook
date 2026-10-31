@@ -8,13 +8,17 @@
 //   --dir <data dir>/console      the console's event log and secret
 //   --host 127.0.0.1 --port P     P = console.port_key's value, else console.port
 //   --user-header H               who clicked: the header the host's Caddy sets
-//                                 after basic_auth (believed from loopback only)
+//                                 after the login (believed from loopback only)
 //   --title T                     console.title_key's value, else the manifest name
 //   --allow-host D …              console.allow_host_key's value (the public
 //                                 domain Caddy passes through as Host)
 //   --relay-cmd <cli>             this node on bin/cli.js, when console.args
 //                                 carries --relay-verbs (serve.py wants both)
 //   <console.args…>               the rest, as the manifest gives them
+//
+// The login (bin/login.js) runs in this same process, on the unix socket
+// <data dir>/console/auth.sock, for Caddy's forward_auth: the console itself
+// still believes only the header, from a loopback peer.
 //
 // Keys are read like the skill pack reads them (process env, then the .env
 // chain). <PREFIX>_CONFIRM_CODE_SECRET, which the relay's skill pack runs need
@@ -46,7 +50,12 @@ const env = h.cliEnv();
 env[h.CONFIRM_SECRET_VAR] = crypto.randomBytes(32).toString('hex');
 // the relay's skill pack runs find uv the same way
 env.PATH = [path.dirname(uv), env.PATH].filter(Boolean).join(path.delimiter);
+const login = require('./login.js').listen({
+  sock: h.AUTH_SOCK, usersFile: h.USERS_FILE, keyFile: h.SESSION_KEY, base: h.M.console.base_path,
+  title: c.argv[c.argv.indexOf('--title') + 1], userHeader: h.M.console.user_header,
+});
+login.on('error', (e) => { console.error(`${h.NAME} console: the login could not listen on ${h.AUTH_SOCK} (${e.code || e.message})`); });
 const child = spawn(uv, ['run', '--no-project', c.entry, ...c.argv], { stdio: 'inherit', env });
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => child.kill(sig));
 child.on('error', (e) => { console.error(`${h.NAME} console: ${e.message}`); process.exit(127); });
-child.on('exit', (code, signal) => process.exit(code ?? 128 + (os.constants.signals[signal] || 0)));
+child.on('exit', (code, signal) => { login.close(); process.exit(code ?? 128 + (os.constants.signals[signal] || 0)); });

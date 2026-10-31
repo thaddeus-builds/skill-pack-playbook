@@ -293,6 +293,16 @@ const BIN_LINK = path.join(ZYLOS_DIR, 'bin', BIN_NAME);
 // is removed by the next post-install / post-upgrade.
 const TASK_STATE = path.join(DATA_DIR, '.zylos-tasks.json');
 const USERS_FILE = path.join(DATA_DIR, M.console.users_file);
+// The form login's socket (bin/login.js). A unix socket path holds about 100 characters, so a long
+// data dir gets a short, still private-by-mode name in the runtime dir (or the temp dir) instead.
+const AUTH_SOCK = (() => {
+  const own = path.join(DATA_DIR, 'console', 'auth.sock');
+  if (own.length <= 100) return own;
+  const runtime = process.env.XDG_RUNTIME_DIR && fs.existsSync(process.env.XDG_RUNTIME_DIR) ? process.env.XDG_RUNTIME_DIR : os.tmpdir();
+  return path.join(runtime, `zylos-${crypto.createHash('sha256').update(DATA_DIR).digest('hex').slice(0, 12)}.sock`);
+})();
+const SESSION_KEY = path.join(DATA_DIR, 'console', 'session.key');
+const LOGIN_JS = path.join(ADAPTER_DIR, 'bin', 'login.js');
 const CADDYFILE = path.join(ZYLOS_DIR, 'http', 'Caddyfile');
 const CADDY_MARKER = `# BEGIN zylos-component:${NAME}`;
 const CADDY_SNIPPET = path.join(ADAPTER_DIR, 'Caddyfile.snippet');
@@ -798,6 +808,7 @@ function consoleCommand() {
   if (!/^\d+$/.test(raw) || port < 1024 || port > 65535) {
     return { error: `${C.port_key}=${raw} is not a port (1024-65535)` };
   }
+  if (AUTH_SOCK.length > 100) return { error: `${AUTH_SOCK} is too long for a unix socket (100 characters); set XDG_RUNTIME_DIR to a short path` };
   const hosts = allowHosts();
   const badHost = hosts.find((h) => !RE.host.test(h));
   if (badHost) return { error: `${C.allow_host_key}: ${JSON.stringify(badHost)} is not a HOST or HOST:PORT` };
@@ -845,6 +856,24 @@ function caddyBlockMissing() {
   } catch { return false; }
 }
 
+// The block between BEGIN and END as the Caddyfile has it: {from, to, text}, or null.
+function caddyBlockInFile(lines) {
+  const from = lines.findIndex((l) => l.trim() === CADDY_MARKER);
+  const to = lines.findIndex((l, i) => i > from && l.trim() === CADDY_MARKER.replace('BEGIN', 'END'));
+  return from < 0 || to < 0 ? null : { from, to, text: lines.slice(from, to + 1).join('\n') };
+}
+
+// A block from before the form login (playbook 0.5.0) still asks the browser's
+// basic_auth pop-up and imports a bcrypt list this adapter no longer writes.
+const usesBasicAuth = (text) => /^\s*basic_auth\b/m.test(text);
+
+function caddyBlockOutdated() {
+  try {
+    const b = caddyBlockInFile(fs.readFileSync(CADDYFILE, 'utf8').split('\n'));
+    return Boolean(b && usesBasicAuth(b.text));
+  } catch { return false; }
+}
+
 // pre-uninstall: `zylos uninstall` removes the BEGIN/END block, and with it the
 // hand edits of the host (e.g. a header_up Host line). Keep a copy beside the
 // data so the next post-install can name it; the Caddyfile itself is not touched.
@@ -852,12 +881,10 @@ const CADDY_SAVED = path.join(DATA_DIR, 'caddy-block.saved');
 
 function saveCaddyBlock() {
   try {
-    const lines = fs.readFileSync(CADDYFILE, 'utf8').split('\n');
-    const from = lines.findIndex((l) => l.trim() === CADDY_MARKER);
-    const to = lines.findIndex((l, i) => i > from && l.trim() === CADDY_MARKER.replace('BEGIN', 'END'));
-    if (from < 0 || to < 0) return null;
+    const b = caddyBlockInFile(fs.readFileSync(CADDYFILE, 'utf8').split('\n'));
+    if (!b) return null;
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(CADDY_SAVED, lines.slice(from, to + 1).join('\n') + '\n', { mode: 0o600 });
+    fs.writeFileSync(CADDY_SAVED, b.text + '\n', { mode: 0o600 });
     return CADDY_SAVED;
   } catch { return null; }
 }
@@ -890,16 +917,31 @@ function sitesBlockEnd(lines) {
 }
 
 function restoreCaddyBlock() {
-  if (!caddyBlockMissing()) return null;
-  if (!fs.existsSync(CADDY_SAVED)) return { skip: `no saved copy at ${CADDY_SAVED}` };
+  const outdated = caddyBlockOutdated();
+  if (!outdated && !caddyBlockMissing()) return null;
+  if (!outdated && !fs.existsSync(CADDY_SAVED)) return { skip: `no saved copy at ${CADDY_SAVED}` };
   const caddy = path.join(ZYLOS_DIR, 'bin', 'caddy');
   if (!fs.existsSync(caddy)) return { skip: `${caddy} is missing, so the candidate cannot be validated` };
   const old = fs.readFileSync(CADDYFILE, 'utf8');
   const lines = old.split('\n');
-  const end = sitesBlockEnd(lines);
-  if (end < 0) return { skip: `no site block in ${CADDYFILE} to put it in` };
-  const block = fs.readFileSync(CADDY_SAVED, 'utf8').trimEnd().split('\n').map((l) => `    ${l}`);
-  const next = [...lines.slice(0, end), ...block, ...lines.slice(end)].join('\n');
+  // A saved block from before the form login is not put back as it was: its basic_auth
+  // would import logins it can no longer read. The block this adapter prints takes its
+  // place (the host's own edits to the old one are in the saved copy / Caddyfile.before-<name>).
+  const saved = outdated ? null : fs.readFileSync(CADDY_SAVED, 'utf8');
+  const fresh = !saved || usesBasicAuth(saved);
+  const text = fresh ? caddyBlock() : saved;
+  let next;
+  if (outdated) {
+    const b = caddyBlockInFile(lines);
+    const pad = /^\s*/.exec(lines[b.from])[0];
+    const block = text.trimEnd().split('\n').map((l) => `${pad}${l}`);
+    next = [...lines.slice(0, b.from), ...block, ...lines.slice(b.to + 1)].join('\n');
+  } else {
+    const end = sitesBlockEnd(lines);
+    if (end < 0) return { skip: `no site block in ${CADDYFILE} to put it in` };
+    const block = text.trimEnd().split('\n').map((l) => `    ${l}`);
+    next = [...lines.slice(0, end), ...block, ...lines.slice(end)].join('\n');
+  }
   const candidate = `${CADDYFILE}.candidate-${NAME}`;
   const before = `${CADDYFILE}.before-${NAME}`;
   const sh = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', timeout: 60_000 });
@@ -914,7 +956,7 @@ function restoreCaddyBlock() {
       fs.copyFileSync(before, CADDYFILE);
       return { skip: `pm2 reload caddy failed (${tail(r, 3)}); the old Caddyfile is back` };
     }
-    return { done: before };
+    return { done: before, how: outdated ? 'replaced' : fresh ? 'rebuilt' : 'restored' };
   } catch (e) {
     return { skip: `could not edit ${CADDYFILE} (${e.code || e.message})` };
   } finally {
@@ -927,7 +969,7 @@ function caddyBlock() {
   const raw = envValue(M.console.port_key);
   const port = /^\d+$/.test(raw) ? raw : String(M.console.port);
   const values = { '<NAME>': NAME, '<BASE_PATH>': M.console.base_path, '<PORT>': port,
-                   '<USERS_FILE>': USERS_FILE, '<USER_HEADER>': M.console.user_header };
+                   '<USERS_FILE>': USERS_FILE, '<USER_HEADER>': M.console.user_header, '<AUTH_SOCK>': AUTH_SOCK };
   return fs.readFileSync(CADDY_SNIPPET, 'utf8')
     .split('\n').filter((l) => !l.startsWith('##')).join('\n')
     .replace(/<[A-Z_]+>/g, (k) => values[k] ?? k).trimStart();
@@ -1068,6 +1110,62 @@ function checkProblems() {
   return p;
 }
 
+// --- the console's logins (bin/login.js) -----------------------------------------------
+// Names whose line cannot log in: written for Caddy's basic_auth (bcrypt), before the
+// form login. Their owners set a password again with `passwd`.
+function staleLogins() { return require(LOGIN_JS).staleUsers(USERS_FILE); }
+
+// A password read at a terminal with no echo: it never goes through chat or argv.
+function promptSecret(label) {
+  return new Promise((resolve, reject) => {
+    const stdin = process.stdin;
+    stdin.setRawMode(true);              // before the prompt: what is typed right after it is never echoed
+    process.stderr.write(label);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+    let buf = '';
+    const done = (fn, v) => { stdin.setRawMode(false); stdin.pause(); stdin.removeListener('data', on); process.stderr.write('\n'); fn(v); };
+    const on = (chunk) => {
+      for (const c of chunk) {
+        if (c === '\r' || c === '\n' || c === '\u0004') return done(resolve, buf);
+        if (c === '\u0003') return done(reject, new Error('cancelled'));
+        if (c === '\u007f' || c === '\b') buf = buf.slice(0, -1);
+        else buf += c;
+      }
+      return undefined;
+    };
+    stdin.on('data', on);
+  });
+}
+
+// `passwd NAME` adds or replaces a person; `passwd --remove NAME` takes one out.
+// Terminal only: an agent has no tty and must not be handed a password.
+async function passwdCommand(args) {
+  const login = require(LOGIN_JS);
+  const remove = args[0] === '--remove';
+  const name = remove ? args[1] : args[0];
+  if (!name || args.length > (remove ? 2 : 1)) { console.error('usage: passwd NAME | passwd --remove NAME'); process.exit(2); }
+  try {
+    if (remove) {
+      login.setPassword(USERS_FILE, name, null);
+      console.log(`[${NAME}] ${name} removed from ${USERS_FILE}; their sessions end now`);
+      return;
+    }
+    if (!process.stdin.isTTY) {
+      console.error(`[${NAME}] passwd needs a terminal: the password is typed there, never given to an agent or put on a command line`);
+      process.exit(2);
+    }
+    const one = await promptSecret(`password for ${name} (min ${login.MIN_PASSWORD} characters): `);
+    const two = await promptSecret('again: ');
+    if (one !== two) { console.error(`[${NAME}] the two passwords differ; nothing changed`); process.exit(1); }
+    const did = login.setPassword(USERS_FILE, name, one);
+    console.log(`[${NAME}] ${name} ${did} in ${USERS_FILE}; other sessions of ${name} end now`);
+  } catch (e) {
+    console.error(`[${NAME}] ${e.message}`);
+    process.exit(1);
+  }
+}
+
 module.exports = {
   ManifestError, loadManifest, validate, M, MANIFEST_FILE, PLACEHOLDERS, SECRET_KEY, isGateSecret,
   CONFIRM_SECRET_VAR, NAME, BIN_NAME, MIN_ZYLOS, PREFIX, DATA_VAR, SERVICE, PYTHON_VERSION, UV_VERSION, UV_INSTALLER, UV_SHA256,
@@ -1080,7 +1178,7 @@ module.exports = {
   renderPrompt, unresolved, tasksNamed, addTask, updateTask, removeTask, readTaskState, requiredKeys,
   reconcileTask, reconcileAll, removeAllTasks,
   procStart, pidAlive, readJob, jobAlive, stopJobs,
-  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock,
+  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock, caddyBlockOutdated, staleLogins, AUTH_SOCK, SESSION_KEY, LOGIN_JS,
   skillProblems, checkProblems,
 };
 
@@ -1093,8 +1191,10 @@ if (require.main === module) {
     process.exit(problems.length ? 1 : 0);
   } else if (verb === 'caddy') {
     process.stdout.write(caddyBlock());
+  } else if (verb === 'passwd') {
+    passwdCommand(process.argv.slice(3));
   } else {
-    console.error('usage: node zylos/lib.js check | caddy');
+    console.error('usage: node zylos/lib.js check | caddy | passwd NAME | passwd --remove NAME');
     process.exit(2);
   }
 }
