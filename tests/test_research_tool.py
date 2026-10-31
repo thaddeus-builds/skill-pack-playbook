@@ -47,8 +47,12 @@ def write(root: Path, files: dict[str, str]) -> None:
         p.write_text(text, encoding="utf-8")
 
 
+TODAY = "2026-11-01"
+
+
 def run(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, str(TOOL), *args], capture_output=True, text=True)
+    day = [] if "--today" in args else ["--today", TODAY]
+    return subprocess.run([sys.executable, str(TOOL), *args, *day], capture_output=True, text=True)
 
 
 def packs(tmp: str) -> tuple[Path, Path, Path]:
@@ -72,10 +76,10 @@ def test_a_table_row_is_read_by_its_header():
         r = run(str(a), str(b), str(c), "--write", out)
         assert r.returncode == 0, r.stderr
         rows = [ln.split("\t") for ln in Path(out).read_text(encoding="utf-8").splitlines()]
-        assert rows[0] == ["pack", "kind", "question", "date", "answer", "file"], rows[0]
+        assert rows[0] == ["pack", "kind", "question", "date", "answer", "file", "note"], rows[0]
         by = {(x[0], x[5]): x for x in rows[1:]}
         assert by[("a-skill-pack", "fees.md")] == ["a-skill-pack", "research", "what does the vendor charge", "2026-10-01",
-                                                   "3 cents a call, `tab here`", "fees.md"], by[("a-skill-pack", "fees.md")]
+                                                   "3 cents a call, `tab here`", "fees.md", ""], by[("a-skill-pack", "fees.md")]
         assert by[("a-skill-pack", "2026-10-03-tools.md")][1:5] == ["prior-art", "Tools to buy", "2026-10-03", "keep ours"]
 
 
@@ -117,6 +121,52 @@ def test_a_missing_folder_is_refused_and_nothing_is_written():
     with _t.tmpdir() as tmp:
         r = run(tmp + "/nope", "--write", tmp + "/out.tsv")
         assert r.returncode == 2 and "not a folder" in r.stderr and not (Path(tmp) / "out.tsv").exists(), (r.returncode, r.stderr)
+
+
+def notes(tmp: str, *packs: Path, today: str = TODAY) -> dict[tuple[str, str], str]:
+    out = tmp + "/notes.tsv"
+    r = run(*map(str, packs), "--write", out, "--today", today)
+    assert r.returncode == 0, r.stderr
+    rows = [ln.split("\t") for ln in Path(out).read_text(encoding="utf-8").splitlines()[1:]]
+    return {(x[0], x[5]): x[6] for x in rows}
+
+
+def one_row(root: Path, name: str, day: str, body: str = "# Q\n") -> None:
+    write(root, {"docs/research/README.md": f"| File | Question | Date | Answer |\n| --- | --- | --- | --- |\n| [{name}](./{name}) | q | {day} | y |\n".replace("(./", "("),
+                 f"docs/research/{name}": body})
+
+
+def test_a_row_older_than_ninety_days_is_said_to_be():
+    with _t.tmpdir() as tmp:
+        a, b, c = (Path(tmp) / n for n in ("a-skill-pack", "b-skill-pack", "c-skill-pack"))
+        one_row(a, "old.md", "2026-08-01", "# a\n")      # 92 days before 2026-11-01
+        one_row(b, "edge.md", "2026-08-03", "# b\n")     # exactly 90 days: not yet
+        one_row(c, "none.md", "not a day", "# c\n")      # no date to count from
+        got = notes(tmp, a, b, c)
+        assert got == {("a-skill-pack", "old.md"): "older than 90 days (92)", ("b-skill-pack", "edge.md"): "",
+                       ("c-skill-pack", "none.md"): ""}, got
+        assert notes(tmp, b, today="2026-11-02") == {("b-skill-pack", "edge.md"): "older than 90 days (91)"}
+
+
+def test_a_file_that_is_the_same_in_an_earlier_pack_says_so_and_a_changed_copy_does_not():
+    with _t.tmpdir() as tmp:
+        a, b, c, d = (Path(tmp) / n for n in ("a-skill-pack", "b-skill-pack", "c-skill-pack", "d-skill-pack"))
+        one_row(a, "law.md", "2026-10-20", "# law\n")
+        one_row(b, "law.md", "2026-10-20", "# law\n")
+        one_row(c, "law.md", "2026-10-20", "# law, corrected\n")
+        one_row(d, "law.md", "2026-10-20", "# law\n")
+        got = notes(tmp, a, b, c, d)
+        assert got == {("a-skill-pack", "law.md"): "", ("b-skill-pack", "law.md"): "same as a-skill-pack",
+                       ("c-skill-pack", "law.md"): "", ("d-skill-pack", "law.md"): "same as a-skill-pack"}, got
+
+
+def test_two_identical_files_in_one_pack_are_not_a_copy_and_a_row_with_no_file_has_no_note():
+    with _t.tmpdir() as tmp:
+        a = Path(tmp) / "a-skill-pack"
+        write(a, {"docs/research/README.md": "| File | Question | Date | Answer |\n| --- | --- | --- | --- |\n"
+                  "| [x.md](x.md) | q | 2026-10-20 | y |\n| [y.md](y.md) | q | 2026-10-20 | y |\n| [gone.md](gone.md) | q | 2026-10-20 | y |\n",
+                  "docs/research/x.md": "# same\n", "docs/research/y.md": "# same\n"})
+        assert set(notes(tmp, a).values()) == {""}
 
 
 if __name__ == "__main__":
