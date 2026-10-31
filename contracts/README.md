@@ -41,6 +41,7 @@ Every property has a `description` of one sentence.
 | `ads.spend/1` | draft | an operator | measurement, the other operators | [schema](ads.spend-1.schema.json) | [JSON](examples/ads.spend-1.example.json) |
 | `ads.status/1` | draft | an operator | the daily page, the owner's console | [schema](ads.status-1.schema.json) | [JSON](examples/ads.status-1.example.json) |
 | `intel.ads/1` | draft | search-intel | ad-copy, gads, ppc | [schema](intel.ads-1.schema.json) | [JSON](examples/intel.ads-1.example.json) |
+| `promo.calendar/1` | draft | product-feed | operators, makers, the kit's single-day list | [schema](promo.calendar-1.schema.json) | [JSON](examples/promo.calendar-1.example.json) |
 | `leads/1` | draft | outbound | sdr | [schema](leads-1.schema.json) | [JSON](examples/leads-1.example.json) |
 | `inquiries/1` | draft | any operator that receives an inquiry (seo for site forms, gads and meta-ads for lead ads) | sdr | [schema](inquiries-1.schema.json) | [JSON](examples/inquiries-1.example.json) |
 
