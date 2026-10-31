@@ -201,6 +201,40 @@ def test_a_block_that_does_not_validate_or_reload_leaves_the_caddyfile_as_it_was
             assert label == "no saved copy" or "not put back" in r.stdout, (label, r.stdout)
 
 
+OLD_BLOCK = ("# BEGIN zylos-component:shop-harness\nredir /shop /shop/ permanent\nhandle_path /shop/* {\n"
+             "    basic_auth {\n        import /x/console.users\n    }\n    reverse_proxy 127.0.0.1:1\n}\n"
+             "# END zylos-component:shop-harness\n")
+
+
+def test_a_basic_auth_block_is_replaced_by_the_form_login_block():
+    """A host upgrading from before the form login: its block (in the Caddyfile, or only in the copy
+    pre-uninstall kept) still asks the browser pop-up. post-install writes the new block instead."""
+    for label, in_file in [("in the Caddyfile", True), ("only the saved copy", False)]:
+        with Host(scheduler=False) as host:
+            cf = _caddy_host(host, saved=not in_file, sites="agent.test {\n    respond / 200\n    " +
+                             OLD_BLOCK.replace("\n", "\n    ").rstrip() + "\n}\n" if in_file else SITES)
+            if not in_file:
+                host.write(os.path.join(host.data, "caddy-block.saved"), OLD_BLOCK)
+            r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+            text = open(cf).read()
+            assert r.returncode == 0 and "basic_auth" not in text and "forward_auth unix/" in text, (label, r.stdout, text)
+            assert text.count("# BEGIN zylos-component:shop-harness") == 1 and "reverse_proxy 127.0.0.1:" in text, label
+            assert "form-login" in r.stdout and "WARNING: the" not in r.stdout, (label, r.stdout)
+            assert open(cf + ".before-shop-harness").read() != text, label
+            again = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+            assert open(cf).read() == text and "form-login" not in again.stdout, (label, "idempotent")
+
+
+def test_an_outdated_block_that_cannot_be_replaced_is_a_warning_and_logins_that_cannot_sign_in_are_named():
+    with Host(scheduler=False) as host:
+        cf = _caddy_host(host, validate_ok=False, sites="agent.test {\n    " + OLD_BLOCK.replace("\n", "\n    ").rstrip() + "\n}\n")
+        before = open(cf).read()
+        r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+        assert r.returncode == 0 and open(cf).read() == before, r.stdout
+        assert "still uses basic_auth" in r.stdout and "not replaced" in r.stdout, r.stdout
+        assert "login(s)" in r.stdout and "(alice)" in r.stdout and "passwd NAME" in r.stdout, "the bcrypt line is named: " + r.stdout
+
+
 def test_a_missing_console_entry_is_a_note():
     with Host() as host:
         os.remove(os.path.join(host.skill, "console", "serve.py"))
