@@ -29,8 +29,17 @@ function consoleNotes() {
   const C = h.M.console;
   const restored = h.restoreCaddyBlock();
   if (restored?.done) {
-    h.log(`restored the Caddy block kept by the last uninstall into ${h.CADDYFILE} (validated, Caddy reloaded; `
-          + `the file as it was: ${restored.done})`);
+    h.log(restored.how === 'restored'
+      ? `restored the Caddy block kept by the last uninstall into ${h.CADDYFILE} (validated, Caddy reloaded; `
+        + `the file as it was: ${restored.done})`
+      : `wrote the form-login Caddy block into ${h.CADDYFILE} in place of the basic_auth one (validated, Caddy reloaded; `
+        + `the file as it was: ${restored.done}; the old block is also in ${h.CADDY_SAVED})`);
+  } else if (h.caddyBlockOutdated()) {
+    if (restored) h.log(`note: the basic_auth Caddy block was not replaced: ${restored.skip}`);
+    h.log(`WARNING: the "${h.CADDY_MARKER}" block in ${h.CADDYFILE} still uses basic_auth, which this release no longer serves. `
+          + `Replace it with the output of node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} caddy, then: `
+          + `${h.ZYLOS_DIR}/bin/caddy validate --config ${h.CADDYFILE} --adapter caddyfile && pm2 reload caddy. `
+          + 'A host with its own vhost (no BEGIN/END block) copies the route from that output by hand');
   } else if (h.caddyBlockMissing()) {
     if (restored) h.log(`note: the saved Caddy block was not put back: ${restored.skip}`);
     h.log(`WARNING: ${h.USERS_FILE} has logins but ${h.CADDYFILE} has no "${h.CADDY_MARKER}" block, `
@@ -39,6 +48,11 @@ function consoleNotes() {
                                           : 'Print the block with ')
           + `node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} caddy and paste it (zylos/README.md "The Caddy block"), then: `
           + `${h.ZYLOS_DIR}/bin/caddy validate --config ${h.CADDYFILE} --adapter caddyfile && pm2 reload caddy`);
+  }
+  const stale = h.hasLogins() ? h.staleLogins() : [];
+  if (stale.length) {
+    h.log(`WARNING: ${stale.length} login(s) in ${h.USERS_FILE} (${stale.join(', ')}) were made for the old basic_auth pop-up and cannot sign in to the form. `
+          + `Each person sets a password again, typed at a terminal (never through chat): node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} passwd NAME`);
   }
   if (h.allowHostMissing()) {
     h.log(`WARNING: ${h.USERS_FILE} has logins but the console answers no public Host, so every page `
