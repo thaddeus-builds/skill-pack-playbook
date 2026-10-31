@@ -94,5 +94,21 @@ def test_the_research_skill_has_a_trigger_description_and_the_short_path():
     assert any(p.startswith("description is") for p in skill_problems(long))
 
 
+KEPT_FIRST = ("docs/research/README.md", "python3 tools/research.py", "skills/research/SKILL.md", "in the same turn")
+
+
+def test_claude_md_sends_a_researcher_to_what_is_kept_before_it_searches():
+    text = doc("CLAUDE.md")
+    assert [w for w in KEPT_FIRST if w not in section_of(text, "Read what is kept before you search.")] == []
+    for w in KEPT_FIRST:                                     # each broken copy fails on exactly its own word
+        assert w not in section_of(text.replace(w, "x"), "Read what is kept before you search."), w
+
+
+def section_of(text: str, bold: str) -> str:
+    """The bullet of CLAUDE.md that opens with `bold`, up to the next bullet."""
+    at = text.find("- **" + bold)
+    return "" if at < 0 else text[at:].split("\n- ", 1)[0]
+
+
 if __name__ == "__main__":
     _t.main(globals())
