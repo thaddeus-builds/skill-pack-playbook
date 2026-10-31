@@ -2,14 +2,18 @@
 """What the skill packs already looked up: one table from every pack's two indexes, so a question one pack asked
 (a vendor's API, a method, a law) is found before another pack asks it again (docs/lessons.md, "Research is kept, not repeated").
 
-    python3 tools/research.py SKILL_PACK... [--write docs/research-index.tsv]
+    python3 tools/research.py SKILL_PACK... [--write docs/research-index.tsv] [--today YYYY-MM-DD]
 
 For each skill pack it reads `docs/research/README.md` (kind `research`) and `docs/prior-art/README.md` (kind `prior-art`) and prints
-one table: pack, kind, question, date, answer, file. A row is any line of the index that links a `.md` file of the same folder: in a
+one table: pack, kind, question, date, answer, file, note. A row is any line of the index that links a `.md` file of the same folder: in a
 table the cells are read by their header (question or lens or topic; date; answer or verdict or covers), in a list or a sentence the
 line is the question. A date missing from the index is the file's: `YYYY-MM-DD-` in its name, else its `Researched` or `Scan date`
 line. A skill pack with neither index is named on stderr and left out. `--write FILE` also writes the table, in full, as a TSV
 (tabs and line breaks inside a cell become spaces).
+
+The note column says what to do before quoting a row: `older than 90 days (N)` (the scan template's own rule: re-scan before quoting it to the
+owner) and `same as PACK` (the file is byte for byte the one a pack listed earlier in the command line, so a correction made in one copy has
+not reached the other). Both are said, never fixed: the tool reads.
 
 Only merged work counts: point it at checkouts of the skill packs' main branches. Read-only except for `--write`. Stdlib only.
 Test: tests/test_research_tool.py.
@@ -18,12 +22,15 @@ Test: tests/test_research_tool.py.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 FOLDERS = (("research", "docs/research"), ("prior-art", "docs/prior-art"))
-COLUMNS = ("pack", "kind", "question", "date", "answer", "file")
+COLUMNS = ("pack", "kind", "question", "date", "answer", "file", "note")
+STALE_DAYS = 90
 LINK = re.compile(r"\[([^\]]*)\]\(([\w.-]+\.md)(?:#[^)\s]*)?\)")
 DAY = re.compile(r"(\d{4}-\d{2}-\d{2})")
 STATED = re.compile(r"(?:Researched|Scan date:?)\s*\**\s*(\d{4}-\d{2}-\d{2})", re.I)
@@ -61,7 +68,7 @@ def rows(folder: Path, kind: str) -> list[dict]:
         if not link or link.group(2) == "README.md" or link.group(2) in seen:
             continue
         seen.add(link.group(2))
-        row = {"kind": kind, "question": "", "date": "", "answer": "", "file": link.group(2)}
+        row = {"kind": kind, "question": "", "date": "", "answer": "", "file": link.group(2), "note": "", "_path": folder / link.group(2)}
         if piped:
             vals = cells(ln)
             by = dict(zip(header, vals)) if len(header) == len(vals) else {}
@@ -89,6 +96,26 @@ def collect(skill_packs: list[Path]) -> tuple[list[dict], list[str]]:
     return table, bare
 
 
+def annotate(table: list[dict], today: date) -> None:
+    """Fill each row's note: a date older than STALE_DAYS, and a file identical to one an earlier pack listed."""
+    first: dict[str, str] = {}
+    for r in table:
+        notes = []
+        try:
+            age = (today - date.fromisoformat(r["date"])).days
+        except ValueError:
+            age = 0
+        if age > STALE_DAYS:
+            notes.append(f"older than {STALE_DAYS} days ({age})")
+        try:
+            digest = hashlib.sha256(r["_path"].read_bytes()).hexdigest()
+        except OSError:
+            digest = ""
+        if digest and first.setdefault(digest, r["pack"]) != r["pack"]:
+            notes.append(f"same as {first[digest]}")
+        r["note"] = "; ".join(notes)
+
+
 def clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
@@ -109,12 +136,14 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="One table of what the skill packs already looked up.")
     ap.add_argument("skill_pack", nargs="+", type=Path)
     ap.add_argument("--write", type=Path, metavar="FILE", help="also write the table in full as a TSV")
+    ap.add_argument("--today", type=date.fromisoformat, default=None, metavar="YYYY-MM-DD", help="the day ages are counted to (default: today)")
     a = ap.parse_args(argv)
     missing = [str(p) for p in a.skill_pack if not p.is_dir()]
     if missing:
         print("not a folder: " + ", ".join(missing), file=sys.stderr)
         return 2
     table, bare = collect([p.resolve() for p in a.skill_pack])
+    annotate(table, a.today or date.today())
     print(render(table))
     if bare:
         print("no docs/research or docs/prior-art index: " + ", ".join(bare), file=sys.stderr)
