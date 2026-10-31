@@ -133,6 +133,7 @@ def test_the_caddy_snippet():
         "request_header -<USER_HEADER>", "reverse_proxy unix/<AUTH_SOCK>", "forward_auth unix/<AUTH_SOCK> {",
         "reverse_proxy 127.0.0.1:<PORT>"))
     assert "route {" in text and strip < login < ask < proxy, "route keeps the order: drop the visitor's header first"
+    assert "header_up -Cookie" in text, "the console never sees the session cookie"
     assert "uri /_auth" in text and "copy_headers <USER_HEADER>" in text and "@login path /login /logout" in text
     with Host() as host:
         host.configure({"SHOP_CONSOLE_PORT": "9123"})

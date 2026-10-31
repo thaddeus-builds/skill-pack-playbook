@@ -14,7 +14,8 @@
 ##   not basic_auth: a browser or password manager can save a form.
 ##   /login and /logout go to it; everything else first asks it
 ##   (forward_auth, GET /_auth) whether the visitor has a session: yes, the
-##   console is reached with <USER_HEADER> set to the user; no, the visitor gets
+##   console is reached with <USER_HEADER> set to the user (and no Cookie: the
+##   session is the login's business, not the console's); no, the visitor gets
 ##   the form. <USERS_FILE> holds the logins (`node zylos/lib.js passwd NAME`).
 ## - `route` keeps the written order: `request_header -<USER_HEADER>` drops
 ##   any copy the visitor sent before forward_auth sets the real one.
@@ -32,7 +33,9 @@ handle_path <BASE_PATH>/* {
                 uri /_auth
                 copy_headers <USER_HEADER>
             }
-            reverse_proxy 127.0.0.1:<PORT>
+            reverse_proxy 127.0.0.1:<PORT> {
+                header_up -Cookie
+            }
         }
     }
 }

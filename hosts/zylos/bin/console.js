@@ -50,11 +50,15 @@ const env = h.cliEnv();
 env[h.CONFIRM_SECRET_VAR] = crypto.randomBytes(32).toString('hex');
 // the relay's skill pack runs find uv the same way
 env.PATH = [path.dirname(uv), env.PATH].filter(Boolean).join(path.delimiter);
-const login = require('./login.js').listen({
+let login;
+try {
+  login = require('./login.js').listen({
   sock: h.AUTH_SOCK, usersFile: h.USERS_FILE, keyFile: h.SESSION_KEY, base: h.M.console.base_path,
   title: c.argv[c.argv.indexOf('--title') + 1], userHeader: h.M.console.user_header,
-});
-login.on('error', (e) => { console.error(`${h.NAME} console: the login could not listen on ${h.AUTH_SOCK} (${e.code || e.message})`); });
+  });
+} catch (e) { console.error(`${h.NAME} console: the login could not start (${e.message})`); process.exit(2); }
+// no login service, no console: Caddy would refuse every visitor anyway, and pm2 shows the exit
+login.on('error', (e) => { console.error(`${h.NAME} console: the login could not listen on ${h.AUTH_SOCK} (${e.code || e.message})`); process.exit(2); });
 const child = spawn(uv, ['run', '--no-project', c.entry, ...c.argv], { stdio: 'inherit', env });
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => child.kill(sig));
 child.on('error', (e) => { console.error(`${h.NAME} console: ${e.message}`); process.exit(127); });

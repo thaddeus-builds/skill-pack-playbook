@@ -298,8 +298,10 @@ const USERS_FILE = path.join(DATA_DIR, M.console.users_file);
 const AUTH_SOCK = (() => {
   const own = path.join(DATA_DIR, 'console', 'auth.sock');
   if (own.length <= 100) return own;
+  // never a bare file in a shared dir: a directory of our own (mode 0700, checked by login.js)
   const runtime = process.env.XDG_RUNTIME_DIR && fs.existsSync(process.env.XDG_RUNTIME_DIR) ? process.env.XDG_RUNTIME_DIR : os.tmpdir();
-  return path.join(runtime, `zylos-${crypto.createHash('sha256').update(DATA_DIR).digest('hex').slice(0, 12)}.sock`);
+  const who = typeof process.getuid === 'function' ? process.getuid() : 0;
+  return path.join(runtime, `zylos-${who}-${crypto.createHash('sha256').update(DATA_DIR).digest('hex').slice(0, 12)}`, 'auth.sock');
 })();
 const SESSION_KEY = path.join(DATA_DIR, 'console', 'session.key');
 const LOGIN_JS = path.join(ADAPTER_DIR, 'bin', 'login.js');
@@ -936,6 +938,8 @@ function restoreCaddyBlock() {
     const pad = /^\s*/.exec(lines[b.from])[0];
     const block = text.trimEnd().split('\n').map((l) => `${pad}${l}`);
     next = [...lines.slice(0, b.from), ...block, ...lines.slice(b.to + 1)].join('\n');
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(CADDY_SAVED, `${b.text}\n`, { mode: 0o600 });   // the host's own edits to the old block
   } else {
     const end = sitesBlockEnd(lines);
     if (end < 0) return { skip: `no site block in ${CADDYFILE} to put it in` };
@@ -1119,6 +1123,7 @@ function staleLogins() { return require(LOGIN_JS).staleUsers(USERS_FILE); }
 function promptSecret(label) {
   return new Promise((resolve, reject) => {
     const stdin = process.stdin;
+    process.once('exit', () => { try { stdin.setRawMode(false); } catch { /* not a tty any more */ } });
     stdin.setRawMode(true);              // before the prompt: what is typed right after it is never echoed
     process.stderr.write(label);
     stdin.resume();
