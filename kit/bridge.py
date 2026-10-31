@@ -427,6 +427,11 @@ def fetch_messages(creds: Credentials, conversation_id: str, *, after_seq: int |
         if isinstance(rows, list) else []
 
 
+def reply_of(m: dict) -> "Reply":
+    """A message dict as a `Reply` (text and attachments read the way every reader here does)."""
+    return Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")), _text_of(m.get("content")), attachments=_attachments_of(m))
+
+
 def unknown_mentions(text: str, members: list[dict]) -> bool:
     """True when `text` has an @ and none of them is followed by a member's display name (or @all).
     Names have spaces ("E-commercial Bot"), so each @ is compared with the start of what follows it."""
@@ -636,7 +641,7 @@ def message_status(creds: Credentials, conversation_id: str, sent_id: str, *, fr
     except RestError as e:
         return Status(False, reason=("message_not_found" if "HTTP 404" in str(e) else "unreadable") + f": {e}")
     try:
-        rows = fetch_messages(creds, conversation_id, after_seq=anchor.seq - 1, limit=limit, authed=authed)
+        rows = fetch_messages(creds, conversation_id, after_seq=max(anchor.seq - 1, 0), limit=limit, authed=authed)
     except RestError as e:
         return Status(True, reason=f"unreadable: {e}")
     mine = next((m for m in rows if str(m.get("id")) == anchor.id), {})
@@ -747,6 +752,9 @@ def _plain_name(name: str) -> str:
     a line break would put a line of the sender's own choosing into the block), no secret shape."""
     base = "".join(c for c in str(name).replace("\\", "/").rsplit("/", 1)[-1] if c.isprintable()).strip()
     return redact_secrets(base)[:120] or "(unnamed)"
+
+
+plain_name = _plain_name                      # public: a sender's file name as one safe line
 
 
 def wrap_untrusted(replies: Iterable[Reply], *, request: str = "") -> str:
