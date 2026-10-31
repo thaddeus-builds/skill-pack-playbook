@@ -56,5 +56,18 @@ def test_the_real_table_is_read_and_a_run_from_a_file_exits_by_the_result():
         assert bad.returncode == 1 and json.loads(bad.stdout)["new"] == ["fresh-skill-pack"], bad.stdout
 
 
+def test_paths_lists_the_skill_pack_folders_that_exist_and_names_the_rest():
+    text = "pack\tuse\nsdr-skill-pack\tearned\nfilmkit\tlibrary\nghost-skill-pack\tbuilt\n"
+    assert r.skill_pack_names(text) == ["sdr-skill-pack", "ghost-skill-pack"]      # the library is left out
+    with tempfile.TemporaryDirectory() as d:
+        os.mkdir(os.path.join(d, "sdr-skill-pack"))
+        os.mkdir(os.path.join(d, "filmkit"))
+        found, missing = r.checkouts(r.skill_pack_names(text), r.Path(d))
+        assert [p.name for p in found] == ["sdr-skill-pack"] and missing == ["ghost-skill-pack"]
+        out = subprocess.run([sys.executable, TOOL, "--paths", "--root", d], capture_output=True, text=True)
+        assert out.returncode == 0 and out.stdout.split() == [os.path.join(d, "sdr-skill-pack")], out.stdout
+        assert "no folder for adcut-skill-pack" in out.stderr and "filmkit" not in out.stdout + out.stderr
+
+
 if __name__ == "__main__":
     _t.main(globals())

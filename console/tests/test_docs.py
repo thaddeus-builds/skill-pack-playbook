@@ -800,6 +800,7 @@ PRIVATE = (("a machine path", re.compile(r"/Us" r"ers/|/home/[a-z]|/private/" r"
                                          r"|Bearer [A-Za-z0-9._-]{20,}|-----BEGIN [A-Z ]*KEY")))
 ADDRESS = re.compile(r"[A-Za-z0-9._%+-]+@(?!example\.|evil\.example)[A-Za-z0-9.-]+\.[a-z]{2,}")
 LINKED = re.compile(r"https?://([A-Za-z0-9][A-Za-z0-9.-]*)")
+PUBLIC_DOCS = ("www.anthropic.com",)          # whole hosts of public documentation a page may cite (issue #23); never a suffix or a substring
 LITTER = re.compile(r"(^|/)(__pycache__/|\.DS_Store$)|\.py[co]$")           # build leftovers: never published, whatever they hold
 
 
@@ -810,7 +811,7 @@ def leaks(rel: str, text: str, binary: bool = False) -> list[str]:
     if not binary and not rel.startswith("console/tests/"):
         out += [f"an address in {rel}: {m}" for m in ADDRESS.findall(text)]
         out += [f"a host in {rel}: {h}" for h in LINKED.findall(text)
-                if h not in ("localhost", "127.0.0.1") and h != "example.com" and not h.endswith((".example.com", ".test"))]  # RFC 2606 names
+                if h not in ("localhost", "127.0.0.1") and h != "example.com" and not h.endswith((".example.com", ".test")) and h not in PUBLIC_DOCS]  # RFC 2606 names
     return out
 
 
@@ -858,6 +859,10 @@ def test_nothing_that_must_not_be_public_is_in_the_repository():
     assert leaks("a.md", "see https://nowhere.invalid/x") and not leaks("a.md", "https://console.example.com and http://127.0.0.1:1/")
     assert not leaks("kit/tests/t.py", "https://api.example.test/v1") and leaks("a.md", "https://example.testing.io/x")
     assert not leaks("console/tests/t.py", "a@b.co")
+    assert not leaks("a.md", "[post](https://www.anthropic.com/engineering/advanced-tool-use)")        # a listed documentation host
+    for bad in ("https://anthropic.com/x", "https://www.anthropic.com.evil.io/x", "https://evilwww.anthropic.com/x",
+                "https://blog.www.anthropic.com/x", "https://www.anthropic.co/x"):                    # suffix, substring and look-alike hosts stay refused
+        assert leaks("a.md", bad), bad
     assert leaks("x.pyc", "\x00\x00/private/" + "tmp/run/core.py\x00", binary=True)          # bytecode holds the path it was built from
     assert not leaks("x.png", "\x89PNG a@b.co https://nowhere.invalid", binary=True)
     files = published(REPO)
