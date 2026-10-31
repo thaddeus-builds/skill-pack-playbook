@@ -21,6 +21,14 @@ Researched 2026-10-31. Asked by the owner: think hard about how the clients' bus
 - **Fowler, MonolithFirst and BoundedContext.** See verdicts 3 and 4. *Does not transfer:* his case is services over a network; ours are repositories whose kit is copied, so a wrong boundary costs a re-vendor, not an outage. That is why the cost is real but smaller.
 - **Google Meridian, calibrating priors.** See verdict 7. *Does not transfer:* a media-mix model needs long geo-level history; our clients do not have it, so the lesson is the discipline (name the basis), not the model.
 
+## Kept research read afterwards
+
+This page came from a fresh search. The skill packs' kept pages were read with `tools/research.py` afterwards, not before, against step 1 of `skills/research/SKILL.md`; nothing above is contradicted, and two owner questions (W17, W18 in `ROADMAP.md`) gained facts.
+
+- **geo-china, `docs/prior-art/2026-10-05-answer-collection.md`.** The terms of 豆包, DeepSeek and Kimi were read there as banning automated use; 元宝 is unverified. Its own recommendation for the measured series is a person typing in each app, with the official APIs as a control series, and a bought app feed only after the owner accepts the vendor's terms risk in writing. A dedicated account lowers the blast radius of a suspension; it does not make the use allowed. **[documented]** (that page's own tags) and **[inference]** (the mapping to W18)
+- **video-ads, `docs/prior-art/2026-09-28-incrementality.md`.** Every report row carries one of three evidence levels (attributed, modeled, experimental), and a vendor study there found a platform's own count under-stating incrementality on average, so a haircut factor may need to rise above 1 as well as fall below it. This agrees with verdict 7 (a factor names its experiment) and with W17. **[vendor]** and **[inference]**
+- **The adcut precedent scan of 2026-10-30**, kept in `templates/prior-art-scan.md` because that pack had no `docs/research/`: extract a shared module when a second pack needs it, and keep launching on machines you have apart from provisioning rented ones. This agrees with verdict 3. **[ours]**
+
 ## What could not be read
 
 - The Anthropic page for the 5,000-token body limit: only third-party copies were found, so it is **unconfirmed**; the 500-line guidance is from Anthropic's own page.
@@ -30,6 +38,6 @@ Researched 2026-10-31. Asked by the owner: think hard about how the clients' bus
 
 ## Kinds of claim and where it is used
 
-[documented] verdicts 1, 2 (rule), 3 (tentative), 4, 5, 6, 7; [ours] verdicts 3, 6 (counts from the pack exports of 2026-10-31); [inference] verdicts 2 (mapping), 7. Used by [docs/design/cut-by-use.md](../design/cut-by-use.md).
+[documented] verdicts 1, 2 (rule), 3 (tentative), 4, 5, 6, 7; [ours] verdicts 3, 6 (counts from the pack exports of 2026-10-31); [inference] verdicts 2 (mapping), 7; the section on kept research carries its own tags. Used by [docs/design/cut-by-use.md](../design/cut-by-use.md).
 
 Sources (named by title: the repository's leak scan allows no outside host, see W1): HashiCorp provider design principles; Airbyte protocol; Anthropic, Building effective agents; Anthropic, skill authoring best practices; Fowler, MonolithFirst; Fowler, BoundedContext; Google Meridian, calibrate treatment priors.
