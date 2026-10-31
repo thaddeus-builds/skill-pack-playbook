@@ -20,7 +20,9 @@
 // fingerprint, so every session of that user ends at once; the logins file is read on
 // each question. Honest limits: the key sits in the data dir, which the agent on a
 // single-user host can read (the same as the console's secret); the login throttle is
-// in memory and starts over with the service.
+// in memory and starts over with the service. A logout clears the browser's cookie only: a copied
+// cookie works until it expires or the person's password changes. A wrong-password flood can lock
+// a known user out for up to 15 minutes (the price of a throttle with no second factor).
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -45,7 +47,7 @@ function parseHash(stored) {
   const m = /^scrypt\$(\d{1,2})\$(\d{1,2})\$(\d{1,2})\$([A-Za-z0-9_-]+)\$([A-Za-z0-9_-]+)$/.exec(stored || '');
   if (!m) return null;
   const [log2n, r, p] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (log2n < 10 || log2n > 20 || r > 16 || p > 4) return null;
+  if (log2n < 10 || log2n > 20 || r < 1 || r > 16 || p < 1 || p > 4 || 128 * (2 ** log2n) * r > SCRYPT.maxmem) return null;   // refuses what scrypt would throw on
   return { log2n, r, p, salt: Buffer.from(m[4], 'base64url'), key: Buffer.from(m[5], 'base64url') };
 }
 
@@ -54,6 +56,16 @@ function verifyPassword(pw, stored) {
   if (!h || !h.key.length) return false;
   const got = crypto.scryptSync(pw, h.salt, h.key.length,
     { N: 1 << h.log2n, r: h.r, p: h.p, maxmem: SCRYPT.maxmem });
+  return crypto.timingSafeEqual(got, h.key);
+}
+
+// The login path uses this one: scrypt runs on the thread pool, so a login attempt does not
+// stop the loop that also answers every console request's /_auth.
+async function verifyPasswordAsync(pw, stored) {
+  const h = parseHash(stored);
+  if (!h || !h.key.length) return false;
+  const got = await new Promise((resolve, reject) => crypto.scrypt(pw, h.salt, h.key.length,
+    { N: 1 << h.log2n, r: h.r, p: h.p, maxmem: SCRYPT.maxmem }, (e, k) => (e ? reject(e) : resolve(k))));
   return crypto.timingSafeEqual(got, h.key);
 }
 
@@ -131,7 +143,7 @@ function checkToken(key, users, token, now = Date.now()) {
 function loadKey(file) {
   try {
     const k = fs.readFileSync(file, 'utf8').trim();
-    if (k.length >= 32) return k;
+    if (k.length >= 32) { fs.chmodSync(file, 0o600); return k; }
   } catch { /* made below */ }
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const k = crypto.randomBytes(32).toString('hex');
@@ -199,13 +211,20 @@ function createHandler(opts) {
   // a `next` is followed only when it stays under the base: never another site
   const safeNext = (n) => {
     const s = String(n || '');
-    if (!s.startsWith(`${base}/`) || s.startsWith('//') || /[\\\r\n]/.test(s) || s.startsWith(`${base}/login`) || s.startsWith(`${base}/logout`)) return `${base}/`;
+    if (!s.startsWith(`${base}/`) || s.startsWith('//') || /[\x00-\x20\x7f\\]/.test(s) || s.startsWith(`${base}/login`) || s.startsWith(`${base}/logout`)) return `${base}/`;
     return s;
+  };
+  let inflight = 0;                                      // logins being checked: scrypt is the costly part
+  const sweep = () => {
+    if (fails.size < 5000) return;
+    for (const [k, e] of fails) if (e.until <= now() && e.n < FREE_FAILS) fails.delete(k);
+    if (fails.size >= 5000) fails.clear();               // under a flood, forgetting beats growing
   };
   const blocked = (names) => names.some((k) => (fails.get(k)?.until || 0) > now());
   const fail = (names) => names.forEach((k) => {
     const e = fails.get(k) || { n: 0, until: 0 };
     e.n += 1;
+    sweep();
     if (e.n >= FREE_FAILS) e.until = now() + Math.min(900, 30 * 2 ** (e.n - FREE_FAILS)) * 1000;
     fails.set(k, e);
   });
@@ -249,7 +268,9 @@ function createHandler(opts) {
       if (user) { res.writeHead(200, { [header]: user, 'Cache-Control': 'no-store' }); return res.end(); }
       const m = String(req.headers['x-forwarded-method'] || 'GET').toUpperCase();
       if (m !== 'GET' && m !== 'HEAD') { res.writeHead(401, { 'Cache-Control': 'no-store' }); return res.end(); }
-      const next = String(req.headers['x-forwarded-uri'] || '');
+      // Behind handle_path Caddy may send the path with the prefix stripped: put it back
+      const fwd = String(req.headers['x-forwarded-uri'] || '');
+      const next = fwd.startsWith('/') && !fwd.startsWith('//') && !(base && (fwd === base || fwd.startsWith(`${base}/`))) ? `${base}${fwd}` : fwd;
       res.writeHead(302, { Location: `${base}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`, 'Cache-Control': 'no-store' });
       return res.end();
     }
@@ -258,17 +279,26 @@ function createHandler(opts) {
     }
     if (url.pathname === '/login' && req.method === 'POST') {
       if (!sameOrigin(req)) return send(res, 403, page(lang, title, `<p class="err">${w.refused}</p>`));
-      return readForm(req, res, (f) => {
-        const name = String(f.get('username') || '').trim();
-        const next = safeNext(f.get('next'));
-        const names = [`ip:${ipOf(req)}`, `user:${name.toLowerCase()}`];
-        if (blocked(names)) return send(res, 429, formPage(lang, title, base, next, w.wait));
-        const users = readUsers(opts.usersFile);
-        const stored = users.get(name);
-        const ok = verifyPassword(String(f.get('password') || ''), stored && parseHash(stored) ? stored : DUMMY) && Boolean(stored && parseHash(stored));
-        if (!ok) { fail(names); return send(res, 401, formPage(lang, title, base, next, w.bad)); }
-        fails.delete(names[1]);
-        return go(res, next, { 'Set-Cookie': setCookie(req, makeToken(key, name, stored, now()), SESSION_DAYS * 86400) });
+      return readForm(req, res, async (f) => {
+        try {
+          const name = String(f.get('username') || '').trim().slice(0, 64);
+          const next = safeNext(f.get('next'));
+          const names = [`ip:${ipOf(req)}`, `user:${name.toLowerCase()}`];
+          if (blocked(names) || inflight >= 4) return send(res, 429, formPage(lang, title, base, next, w.wait));
+          const users = readUsers(opts.usersFile);
+          const stored = users.get(name);
+          const real = Boolean(stored && parseHash(stored));
+          inflight += 1;
+          let ok;
+          try { ok = (await verifyPasswordAsync(String(f.get('password') || '').slice(0, 1024), real ? stored : DUMMY)) && real; } finally { inflight -= 1; }
+          if (!ok) { fail(names); return send(res, 401, formPage(lang, title, base, next, w.bad)); }
+          fails.delete(names[1]);
+          return go(res, next, { 'Set-Cookie': setCookie(req, makeToken(key, name, stored, now()), SESSION_DAYS * 86400) });
+        } catch (e) {
+          console.error(`login: ${e.stack || e}`);
+          if (!res.headersSent) res.writeHead(500, { 'Cache-Control': 'no-store' });
+          return res.end();
+        }
       });
     }
     if (url.pathname === '/logout') {
@@ -293,15 +323,27 @@ function createHandler(opts) {
   };
 }
 
-// Listen on a unix socket made private before the first connection.
+// Listen on a unix socket inside a directory only this user can enter (checked: owned by us,
+// not a symlink, mode 0700), then chmod the socket itself. The process umask is left alone: the
+// console this process starts inherits it.
+function privateDir(dir) {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const st = fs.lstatSync(dir);
+  if (!st.isDirectory() || st.isSymbolicLink() || (process.getuid && st.uid !== process.getuid())) throw new Error(`${dir} is not a directory of this user`);
+  if (st.mode & 0o077) fs.chmodSync(dir, 0o700);
+}
+
 function listen(opts) {
+  privateDir(path.dirname(opts.sock));
   const server = http.createServer(createHandler(opts));
   try { fs.rmSync(opts.sock, { force: true }); } catch { /* a stale socket we cannot remove fails below */ }
-  const old = process.umask(0o177);
-  server.listen(opts.sock, () => { process.umask(old); try { fs.chmodSync(opts.sock, 0o600); } catch { /* listen already made it 0600 */ } });
-  server.on('error', () => process.umask(old));
+  server.listen(opts.sock, () => {
+    fs.chmodSync(opts.sock, 0o600);
+    const st = fs.lstatSync(opts.sock);
+    if (process.getuid && st.uid !== process.getuid()) { server.close(); server.emit('error', new Error(`${opts.sock} is not ours`)); }
+  });
   return server;
 }
 
-module.exports = { hashPassword, verifyPassword, readUsers, staleUsers, setPassword, makeToken, checkToken, loadKey,
+module.exports = { hashPassword, verifyPassword, verifyPasswordAsync, readUsers, staleUsers, setPassword, makeToken, checkToken, loadKey,
                    createHandler, listen, MIN_PASSWORD, SESSION_DAYS, USER_RE };

@@ -31,8 +31,8 @@ PW = "correct horse battery"
 
 SERVER = """
 const l = require(process.argv[1]);
-const [sock, users, keyf] = process.argv.slice(2);
-l.listen({ sock, usersFile: users, keyFile: keyf, base: '/seo', title: 'Shop', userHeader: 'X-Remote-User' })
+const [sock, users, keyf, base] = process.argv.slice(2);
+l.listen({ sock, usersFile: users, keyFile: keyf, base: base === undefined ? '/seo' : base, title: 'Shop', userHeader: 'X-Remote-User' })
   .on('listening', () => console.log('up'));
 """
 
@@ -51,9 +51,10 @@ class Conn(http.client.HTTPConnection):
 class Svc:
     """A running login service with one user, alice."""
 
-    def __init__(self, user_line=True):
+    def __init__(self, user_line=True, base="/seo", sock_dir=None):
+        self.base = base
         self.dir = tempfile.mkdtemp(prefix="login ")
-        self.sock = os.path.join(self.dir, "auth.sock")
+        self.sock = os.path.join(sock_dir or self.dir, "auth.sock")
         self.users = os.path.join(self.dir, "console.users")
         self.key = os.path.join(self.dir, "session.key")
         if user_line:
@@ -62,7 +63,7 @@ class Svc:
         self.start()
 
     def start(self):
-        self.proc = subprocess.Popen([NODE, "-e", SERVER, LOGIN, self.sock, self.users, self.key],
+        self.proc = subprocess.Popen([NODE, "-e", SERVER, LOGIN, self.sock, self.users, self.key, self.base],
                                      stdout=subprocess.PIPE, text=True)
         assert self.proc.stdout.readline().strip() == "up"
 
@@ -142,8 +143,9 @@ def test_a_good_login_sets_a_private_cookie_and_forward_auth_names_the_user():
         a, _ = s.req("GET", "/_auth", headers={"Cookie": ck})
         assert a.status == 200 and a.getheader("X-Remote-User") == "alice"
         # no cookie: a page request goes to the form with the page to come back to; a POST gets 401
-        n, _ = s.req("GET", "/_auth", headers={"X-Forwarded-Uri": "/seo/plan?x=1", "X-Forwarded-Method": "GET"})
-        assert n.status == 302 and n.getheader("Location") == "/seo/login?next=%2Fseo%2Fplan%3Fx%3D1", n.getheader("Location")
+        for sent in ("/seo/plan?x=1", "/plan?x=1"):          # Caddy may send the path with or without the prefix
+            n, _ = s.req("GET", "/_auth", headers={"X-Forwarded-Uri": sent, "X-Forwarded-Method": "GET"})
+            assert n.status == 302 and n.getheader("Location") == "/seo/login?next=%2Fseo%2Fplan%3Fx%3D1", (sent, n.getheader("Location"))
         p, _ = s.req("GET", "/_auth", headers={"X-Forwarded-Method": "POST"})
         assert p.status == 401 and not p.getheader("X-Remote-User")
         # over plain http the cookie is not marked Secure (a test on localhost still works)
@@ -200,6 +202,50 @@ def test_next_stays_under_the_base():
             assert "\n" not in (loc or ""), nxt
         r, body = s.req("GET", "/login?next=//evil.example.com")
         assert 'name="next" value="/seo/"' in body
+
+
+def test_a_site_root_console_cannot_be_used_as_an_open_redirect():
+    with Svc(base="") as s:
+        for i, nxt in enumerate(["/\t/evil.example.com", "/ /evil.example.com", "/\x0b/evil.example.com", "//evil.example.com", "/\\evil.example.com",
+                                 "/%09/evil.example.com"]):
+            r, _ = s.login(nxt=nxt, ip=f"198.51.100.{i}")
+            loc = r.getheader("Location")
+            assert r.status == 303 and (loc == "/" or loc == "/%09/evil.example.com"), (nxt, loc)   # %09 stays text: browsers do not decode a Location
+        r, _ = s.login(nxt="/materials?lang=zh")
+        assert r.getheader("Location") == "/materials?lang=zh" and "Path=/;" in r.getheader("Set-Cookie")
+
+
+def test_a_hash_scrypt_would_throw_on_is_a_refusal_not_a_crash():
+    with Svc() as s:
+        with open(s.users, "a") as fh:
+            fh.write("bob scrypt$20$16$4$QUJDRA$QUJDRA\n")      # over the memory bound
+            fh.write("carl scrypt$15$8$1$QUJDRA$QUJDRA\n")      # a valid shape, a wrong key
+        for u in ("bob", "carl"):
+            assert s.login(u, PW)[0].status == 401, u
+        assert s.login()[0].status == 303, "and the service still answers"
+
+
+def test_the_service_makes_its_directory_private_and_leaves_the_umask_alone():
+    d = tempfile.mkdtemp(prefix="login ")
+    sub = os.path.join(d, "a", "b")
+    with Svc(sock_dir=sub) as s:
+        assert stat.S_IMODE(os.stat(sub).st_mode) == 0o700 and stat.S_IMODE(os.stat(s.sock).st_mode) == 0o600
+    lax = os.path.join(d, "lax")
+    os.mkdir(lax, 0o755)
+    with Svc(sock_dir=lax):
+        assert stat.S_IMODE(os.stat(lax).st_mode) == 0o700, "a lax directory is tightened"
+    code = ("const l=require(process.argv[1]);const before=process.umask();"
+            "const s=l.listen({sock:process.argv[2],usersFile:process.argv[3],keyFile:process.argv[4],base:'/x'});"
+            "console.log(before.toString(8), process.umask().toString(8));s.close();")
+    r = subprocess.run([NODE, "-e", code, LOGIN, os.path.join(d, "u", "s.sock"), os.path.join(d, "users"), os.path.join(d, "key")],
+                       capture_output=True, text=True)
+    before, after = r.stdout.split()
+    assert before == after, (r.stdout, r.stderr)             # the console this process starts inherits the umask
+    link = os.path.join(d, "link")
+    os.symlink(d, link)
+    r2 = subprocess.run([NODE, "-e", "try{require(process.argv[1]).listen({sock:process.argv[2],usersFile:'x',keyFile:'y',base:''})}catch(e){console.log('refused')}",
+                         LOGIN, os.path.join(link, "s.sock")], capture_output=True, text=True)
+    assert "refused" in r2.stdout, (r2.stdout, r2.stderr)    # a symlinked directory is not ours to trust
 
 
 def test_five_wrong_passwords_lock_that_user_and_that_address():
