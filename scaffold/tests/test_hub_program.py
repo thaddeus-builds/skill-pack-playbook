@@ -90,6 +90,12 @@ def main() -> int:
                                        "npr_includes_creator_fee",
                                        "incremental_source",
                                        "incremental_factor"], rows)
+    group = {x["key"]: x["group"] for x in rows}
+    check("currency is required; npr_roas, which a pack has a registry "
+          "fallback for, is optional and says its reports warn placeholder",
+          group["currency"] == "required" and group["npr_roas"] == "optional"
+          and "placeholder" in {x["key"]: x["why"] for x in rows}["npr_roas"],
+          group)
     flat = root / "flat-hub"
     subprocess.run([sys.executable, str(HUB_PY), "new", "--hub", str(flat),
                     "--title", "Flat"], capture_output=True, timeout=120,
