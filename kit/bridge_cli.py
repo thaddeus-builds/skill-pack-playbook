@@ -37,7 +37,7 @@ comm tool has no way to send one, and no REST path for it is written in this rep
 or `"self"` in the target's entry: the API has no whoami we know of, so without it our own messages are printed too, and
 the first line says so): `NEW id=<message id> seq=<n> from=<name> files=<names>: <first 400 characters>`. The line is a
 pointer; the whole text is `read TARGET --after-seq <seq-1> --limit 1`. `--state FILE` keeps the last seq handled
-(written after each message, so a restart repeats nothing and skips nothing); with neither `--state` nor `--after-seq` it
+(written after each message, and at the start: a restart skips nothing, and a crash repeats at most the last line; a file that holds no number is refused); with neither `--state` nor `--after-seq` it
 starts after the newest message now. Ten failed reads in a row print one `WATCHER` line (and one when reads work again);
 a failed token exchange says so and names the key as the thing to check. It runs until stopped (`--once`: one pass).
 
@@ -128,7 +128,8 @@ def replies_doc(replies, members: list[dict]) -> list[dict]:
 
 def seen_doc(seen, members: list[dict]) -> list[dict]:
     names = {m.get("member_id"): str(m.get("display_name") or "") for m in members}
-    return [{"member_id": s.member_id, "from": names.get(s.member_id) or s.member_id or "someone", "code": s.code} for s in seen]
+    return [{"member_id": one_line(s.member_id, 80), "from": one_line(names.get(s.member_id) or s.member_id or "someone", 80),
+             "code": one_line(s.code, 40)} for s in seen]            # any member chooses these strings: one short printable line each
 
 
 def seen_line(seen: list[dict]) -> str:
@@ -188,9 +189,7 @@ def cmd_wait(a, target, creds, urlopen, sleep, clock, **_) -> dict:
     return {"id": a.sent_id, "wait": wait(a, target, a.sent_id, resolve(a.from_, members), members, urlopen, sleep, clock)}
 
 
-def as_message(m: dict) -> bridge.Reply:
-    return bridge.Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")), bridge._text_of(m.get("content")),
-                        attachments=bridge._attachments_of(m))
+as_message = bridge.reply_of
 
 
 def cmd_status(a, target, creds, urlopen, **_) -> dict:
@@ -247,10 +246,14 @@ def one_line(text: str, n: int = WATCH_TEXT) -> str:
 
 
 def read_state(path: str | None) -> int | None:
-    try:
-        return int(Path(path).expanduser().read_text(encoding="utf-8").split()[0]) if path else None
-    except (OSError, ValueError, IndexError):
+    """The seq in the state file; None when there is no file. A file that is there and holds no number is refused: starting
+    from the newest message instead would skip everything that arrived since."""
+    if not path or not Path(path).expanduser().exists():
         return None
+    try:
+        return int(Path(path).expanduser().read_text(encoding="utf-8").split()[0])
+    except (OSError, ValueError, IndexError):
+        raise Stop(USAGE, f"state: {path} exists but holds no seq; fix or remove it (removing it starts after the newest message)") from None
 
 
 def target_self(path: str, name: str) -> str | None:
@@ -264,7 +267,7 @@ def target_self(path: str, name: str) -> str | None:
 
 
 def failure_line(e: Exception) -> str:
-    if isinstance(e, bridge.RestError) and "/auth/agent" in str(e):
+    if isinstance(e, bridge.RestError) and ("/auth/agent" in str(e) or "token exchange" in str(e)):
         return (f"WATCHER: the token exchange failed ({e}): the config's api key may be revoked or expired, or the org id "
                 "is wrong; check the config, nothing is read until it works")
     return f"WATCHER: {WATCH_FAIL_AT} reads in a row failed ({type(e).__name__}: {e}); still trying"
@@ -276,8 +279,18 @@ def cmd_watch(a, target, creds, urlopen, sleep, stdout, me: str | None = None, *
     wanted, members, names, mine = a.self_ or me, None, {}, None
     if not wanted:
         emit("WATCHER: no --self (and no \"self\" in the target): our own messages are printed too")
-    last = read_state(a.state) if read_state(a.state) is not None else a.after_seq
-    failing, asked = 0, set()
+    last = read_state(a.state)
+    last = a.after_seq if last is None else last
+    failing, asked, warned = 0, set(), False
+    def save(seq) -> bool:
+        if not a.state:
+            return True
+        try:
+            atomic.write_text_atomic(os.path.expanduser(a.state), f"{seq}\n", makedirs=True)
+            return True
+        except OSError as e:
+            emit(f"WATCHER: the state file {a.state} cannot be written ({type(e).__name__}); stopping, a restart repeats the last line")
+            return False
     while True:
         try:
             if members is None:                                        # read in the loop: a failed call is a failed read, not the end
@@ -288,9 +301,14 @@ def cmd_watch(a, target, creds, urlopen, sleep, stdout, me: str | None = None, *
                 newest = bridge.fetch_messages(creds, target.conversation_id, limit=1, authed=authed)
                 last = newest[-1]["seq"] if newest else 0
                 emit(f"WATCHER: started after seq {last}")
+                if not save(last):                                     # so a restart before the first message still has a cursor
+                    return UNREADABLE
             while True:
+                start = last
                 page = bridge.fetch_messages(creds, target.conversation_id, after_seq=last, limit=WATCH_PAGE, authed=authed)
                 for m in page:
+                    if not isinstance(m.get("sender_id"), str):
+                        m = {**m, "sender_id": str(m.get("sender_id"))}
                     if m["seq"] <= last:
                         continue
                     if m.get("sender_id") not in names and m.get("sender_id") not in asked:    # a member who joined since
@@ -300,24 +318,29 @@ def cmd_watch(a, target, creds, urlopen, sleep, stdout, me: str | None = None, *
                     if m.get("sender_id") != mine:
                         r = as_message(m)
                         who = names.get(r.sender_id) or r.sender_id
-                        files = [bridge._plain_name(f.file_name) for f in r.attachments]
+                        files = [bridge.plain_name(f.file_name) for f in r.attachments]
                         if a.json:
-                            emit(json.dumps({"event": "message", "id": r.id, "seq": r.seq, "sender_id": r.sender_id, "from": who,
+                            emit(json.dumps({"event": "message", "id": one_line(r.id, 80), "seq": r.seq, "sender_id": one_line(r.sender_id, 80), "from": who,
                                              "text": one_line(r.text), "files": files}, ensure_ascii=False))
                         else:
-                            emit(f"NEW id={r.id} seq={r.seq} from={one_line(who, 80)} files={','.join(files) or '-'}: {one_line(r.text)}")
+                            emit(f"NEW id={one_line(r.id, 80)} seq={r.seq} from={one_line(who, 80)} files={','.join(files) or '-'}: {one_line(r.text)}")
                     last = m["seq"]
-                    if a.state:
-                        atomic.write_text_atomic(os.path.expanduser(a.state), f"{last}\n", makedirs=True)
-                if len(page) < WATCH_PAGE:
+                    if not save(last):
+                        return UNREADABLE
+                if last > start:
+                    failing = 0                                        # progress is not failure
+                if len(page) < WATCH_PAGE or last == start:            # the last page, or a server that ignores the cursor
                     break
-            if failing >= WATCH_FAIL_AT:
+            if warned:
                 emit("WATCHER: reads work again")
+                warned = False
             failing = 0
         except bridge.RestError as e:
             failing += 1
-            if failing == WATCH_FAIL_AT or (failing == 1 and "/auth/agent" in str(e)):     # a refused token is no blip: say it at once
+            token = "/auth/agent" in str(e) or "token exchange" in str(e)
+            if (token or failing == WATCH_FAIL_AT) and not warned:      # a refused token is no blip: say it at once; one line per streak
                 emit(failure_line(e))
+                warned = True
         if a.once:
             return OK if failing == 0 else UNREADABLE
         try:
