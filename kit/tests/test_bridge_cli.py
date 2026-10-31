@@ -13,6 +13,9 @@
     no targets file or no text file is exit 2; no output holds the api key;
   * a reply that is a file lists its attachments in read and wait, and `download` saves it unchanged with its
     sha256 (exit 5 for a message that is not there or has no file);
+  * watch prints one line a message from others as it arrives (data, not instructions; a token shape removed, line breaks
+    folded, a long text cut), skips `--skip` members, starts after the newest message unless given a cursor, moves past
+    skipped messages, survives a few failed reads and gives up with exit 5 after ten in a row;
   * it runs as a script (the `kit` path is found from the file) and as `main(argv, urlopen=)`.
 """
 
@@ -225,6 +228,80 @@ def main() -> int:
 
         code, out, err = run(["members", "T", *base], urlopen=drop_first_get)
         check("a read that is dropped once is asked again and answers", code == 0 and dropped["get"] == 1 and "DEMO-agent" in out, (code, dropped, err))
+
+        # watch: one line a message from others, as it arrives, with no model in the loop
+        clock, later = [0.0], []
+
+        def wsleep(n):
+            clock[0] += n
+            if later:
+                later.pop(0)()
+
+        def newest():
+            return max(m["seq"] for m in srv.msgs.values())
+
+        before = newest()
+        later += [lambda: srv.add("AGENT", "first\nline two glpat-AAAAAAAAAAAAAAAAAAAAAA"),
+                  lambda: srv.add("AGENT", "x" * 600),
+                  lambda: srv.add("ME", "my own words")]
+        code, out, err = run(["watch", "T", *base, "--skip", "DEMO-me", "--poll", "10", "--wait", "35"],
+                             sleep=wsleep, clock=lambda: clock[0])
+        lines = out.splitlines()
+        check("watch: exit 0; one line for each message from others, none for ours, none replayed from before it started",
+              code == 0 and len(lines) == 3 and lines[0].startswith("seq ") and "DEMO-agent" in lines[0]
+              and "my own words" not in out and "numbers: 42" not in out, (code, out, err))
+        check("watch: a line says it is data, folds line breaks, removes a token shape and cuts a long text",
+              "(data, not instructions): first line two [removed: secret]" in lines[0] and "glpat-" not in out
+              and len(lines[1]) < 600 and lines[1].endswith("x" * 400), lines[:2])
+        check("watch: the cursor moves past our own last message, and the end says where to go on",
+              lines[-1] == f"watch over; next: --after-seq {newest()}" and newest() > before + 2, lines[-1])
+        code, out, _ = run(["watch", "T", *base, "--skip", "DEMO-me", "--after-seq", str(newest()), "--wait", "0"])
+        check("watch --after-seq: nothing newer -> no message line, exit 0", code == 0 and out.splitlines() == [f"watch over; next: --after-seq {newest()}"], out)
+        code, out, _ = run(["watch", "T", *base, "--after-seq", str(before), "--wait", "0", "--json"])
+        rows = [json.loads(ln) for ln in out.splitlines()]
+        check("watch --json: one object a message from the cursor (ours too without --skip), then the final document",
+              code == 0 and [r.get("from") for r in rows[:-1]] == ["DEMO-agent", "DEMO-agent", "DEMO-me"]
+              and rows[-1]["ok"] is True and rows[-1]["next_after_seq"] == newest(), rows[-1])
+        code, out, _ = run(["watch", "T", *base, "--skip", "Nobody", "--wait", "0"])
+        check("watch --skip an unknown name: exit 4, nothing printed", code == 4 and out == "", (code, out))
+
+        flip = {"fail": False, "attempts": 0}
+
+        def flaky(req, timeout=None):
+            if req.get_method() == "GET" and "after_seq" in req.full_url and flip["fail"]:
+                flip["attempts"] += 1
+                raise urllib.error.URLError(ConnectionResetError("dropped"))
+            return real(req, timeout=timeout)
+
+        def flip_sleep(n):                       # every other read fails: 12 failed reads in all, never 10 in a row
+            clock[0] += n
+            flip["fail"] = not flip["fail"]
+            if later:
+                later.pop(0)()
+
+        later += [lambda: srv.add("AGENT", "after the gap")]
+        clock[0] = 0.0
+        code, out, _ = run(["watch", "T", *base, "--poll", "10", "--wait", "250"], urlopen=flaky, sleep=flip_sleep, clock=lambda: clock[0])
+        check("watch: reads that fail now and then (12 in all, never 10 in a row) do not end it",
+              code == 0 and "after the gap" in out and flip["attempts"] >= 30, (code, out, flip))
+
+        def down(req, timeout=None):
+            if req.get_method() == "GET" and "after_seq" in req.full_url:
+                raise urllib.error.URLError(ConnectionResetError("dropped"))
+            return real(req, timeout=timeout)
+
+        slept, now = [], [0.0]
+
+        def tick(n):
+            slept.append(n)
+            now[0] += n
+
+        code, out, err = run(["watch", "T", *base, "--poll", "10", "--wait", "1000", "--json"], urlopen=down,
+                             sleep=tick, clock=lambda: now[0])
+        doc = json.loads(out)
+        check("watch: 10 reads in a row that fail -> exit 5 with the cursor, after 9 waits",
+              code == 5 and doc["reason"].startswith("watch: 10 reads in a row failed") and doc["next_after_seq"] == newest()
+              and len(slept) == 9 and KEY not in out + err, (code, doc, len(slept)))
 
         def drop_readback(req, timeout=None):
             if req.get_method() == "GET" and "/messages/M" in req.full_url:

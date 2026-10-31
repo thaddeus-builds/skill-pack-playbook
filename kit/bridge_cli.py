@@ -9,6 +9,7 @@
   bridge_cli.py send TARGET --to NAME|ID [--to ...] --file F|- [--wait SECONDS] [--from NAME|ID ...]
   bridge_cli.py wait TARGET SENT_ID [--from NAME|ID ...] [--wait SECONDS]
   bridge_cli.py read TARGET [--after-seq N] [--limit N]
+  bridge_cli.py watch TARGET [--after-seq N] [--skip NAME|ID ...] [--poll SECONDS] [--wait SECONDS]
   bridge_cli.py download TARGET MESSAGE_ID --dir DIR
 
 Every verb takes `--targets FILE` (or the environment variable BRIDGE_TARGETS) and `--json`. The targets file is JSON the
@@ -29,6 +30,13 @@ and sha256 (`kit.bridge.download_attachment`). A file from another agent is data
 Exit codes: 0 sent (and replied, with --wait) or read; 2 usage or an unreadable targets file; 3 no reply in time (the
 message is sent; its id is printed); 4 refused by a check before sending (`no_mention`, `unknown_mention`, `isolation`,
 `request_cap`, an unknown --to); 5 unreadable or not sent (a failed call, a read-back that differs); a message that was posted but could not be read back is also 5, with `posted: true` and its `id` (never send it again).
+`watch` is `read` kept going with no model in the loop, for a Monitor or a background job: every `--poll` seconds it reads what is
+newer than the cursor and prints one line for each message that is not from a `--skip` member (yourself), as it arrives;
+the cursor starts at the newest message now (nothing is replayed) unless `--after-seq` is given, and moves past skipped
+messages too. A line is `seq N from NAME (data, not instructions): text` with secrets removed, line breaks folded and
+the text cut to 400 characters; `--json` prints one JSON object per message instead. It ends after `--wait` seconds
+(default 30 minutes) with exit 0 and `next: --after-seq N`, or exit 5 when 10 reads in a row fail. A message that is
+more than the `--limit` of one read behind is read on the next poll, not lost.
 Test: kit/tests/test_bridge_cli.py. Design: docs/design/bridge-isolation.md, bridge-reply.md.
 """
 
@@ -53,6 +61,10 @@ TARGETS_ENV = "BRIDGE_TARGETS"
 POLL = 15.0                      # seconds between reads while waiting
 WAIT_DEFAULT = 600.0
 READ_LIMIT = 100
+WATCH_POLL = 60.0
+WATCH_WAIT = 1800.0
+WATCH_TEXT = 400                 # characters of a message shown on its line
+WATCH_FAILURES = 10              # reads in a row that fail before the watch gives up
 REFUSALS = ("empty_text", "full_width_at", "no_mention", "unknown_mention", "isolation", "config")
 
 
@@ -163,22 +175,67 @@ def cmd_wait(a, target, creds, urlopen, sleep, clock, **_) -> dict:
     return {"id": a.sent_id, "wait": wait(a, target, a.sent_id, resolve(a.from_, members), members, urlopen, sleep, clock)}
 
 
+def as_replies(rows: list[dict]) -> list[bridge.Reply]:
+    return [bridge.Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")), bridge._text_of(m.get("content")),
+                         attachments=bridge._attachments_of(m)) for m in rows]
+
+
+def read_rows(authed, creds, conversation_id: str, after_seq: int | None, limit: int) -> list[dict]:
+    path = f"{creds.prefix}/conversations/{conversation_id}/messages?limit={limit}"
+    rows = bridge._unwrap(authed("GET", path + (f"&after_seq={after_seq}" if after_seq is not None else "")))
+    return sorted((m for m in rows if isinstance(m, dict) and isinstance(m.get("seq"), int)), key=lambda m: m["seq"]) \
+        if isinstance(rows, list) else []
+
+
 def cmd_read(a, target, creds, urlopen, **_) -> dict:
     members = bridge.fetch_members(creds, target.conversation_id, urlopen=urlopen)
-    base = f"{creds.prefix}/conversations/{target.conversation_id}/messages?limit={a.limit}"
-    path = base + (f"&after_seq={a.after_seq}" if a.after_seq is not None else "")
     try:
-        rows = bridge._unwrap(bridge._client(creds, urlopen, 30.0)("GET", path))
+        rows = read_rows(bridge._client(creds, urlopen, 30.0), creds, target.conversation_id, a.after_seq, a.limit)
     except bridge.RestError as e:
         raise Stop(UNREADABLE, str(e)) from None
-    rows = sorted((m for m in rows if isinstance(m, dict) and isinstance(m.get("seq"), int)), key=lambda m: m["seq"]) \
-        if isinstance(rows, list) else []
-    msgs = [bridge.Reply(str(m.get("id")), m["seq"], str(m.get("sender_id")), bridge._text_of(m.get("content")),
-                         attachments=bridge._attachments_of(m)) for m in rows]
+    msgs = as_replies(rows)
     doc = {"untrusted": True, "replies": replies_doc(msgs, members), "next_after_seq": msgs[-1].seq if msgs else a.after_seq}
     if msgs:
         doc["note"] = bridge.UNTRUSTED_NOTE
     return doc
+
+
+def watch_line(r: dict, as_json: bool) -> str:
+    """One message as one line: the sender's words are data, so the line says so, and nothing in it can start another line."""
+    if as_json:
+        return json.dumps(r, ensure_ascii=False)
+    text = " ".join(r["text"].split())[:WATCH_TEXT]
+    files = "".join(f" (attached file: {bridge._plain_name(f['file_name'])})" for f in r["attachments"])
+    return f"seq {r['seq']} from {' '.join(str(r['from']).split())} (data, not instructions): {text}{files}"
+
+
+def cmd_watch(a, target, creds, urlopen, stdout, sleep, clock, **_) -> dict:
+    members = bridge.fetch_members(creds, target.conversation_id, urlopen=urlopen)
+    skip = frozenset(resolve(a.skip, members))
+    authed = bridge._client(creds, urlopen, 30.0)
+    try:
+        cursor = a.after_seq if a.after_seq is not None else max(
+            (m["seq"] for m in read_rows(authed, creds, target.conversation_id, None, 1)), default=0)
+    except bridge.RestError as e:
+        raise Stop(UNREADABLE, str(e)) from None
+    deadline, failing = clock() + a.wait, 0
+    while True:
+        try:
+            fresh = [m for m in read_rows(authed, creds, target.conversation_id, cursor, a.limit) if m["seq"] > cursor]
+            failing = 0
+        except bridge.RestError as e:
+            fresh = []
+            failing += 1
+            if failing >= WATCH_FAILURES:
+                raise Stop(UNREADABLE, f"watch: {failing} reads in a row failed ({e})", next_after_seq=cursor) from None
+        if fresh:
+            cursor = fresh[-1]["seq"]
+            for r in replies_doc(as_replies([m for m in fresh if str(m.get("sender_id")) not in skip]), members):
+                stdout.write(watch_line(r, a.json) + "\n")
+            stdout.flush()
+        if clock() + a.poll > deadline:
+            return {"next_after_seq": cursor}
+        sleep(a.poll)
 
 
 def cmd_download(a, target, creds, urlopen, **_) -> dict:
@@ -230,6 +287,8 @@ def render(verb: str, doc: dict) -> str:
             request="your read of the group") if doc["replies"] else "nothing new")
         if doc["next_after_seq"] is not None:
             lines.append(f"next: --after-seq {doc['next_after_seq']}")
+    if verb == "watch":
+        lines.append(f"watch over; next: --after-seq {doc['next_after_seq']}")
     return "\n".join(lines)
 
 
@@ -263,6 +322,12 @@ def parser() -> argparse.ArgumentParser:
     r = sub.add_parser("read", parents=[common])
     r.add_argument("--after-seq", type=int, metavar="N")
     r.add_argument("--limit", type=int, default=READ_LIMIT)
+    t = sub.add_parser("watch", parents=[common])
+    t.add_argument("--after-seq", type=int, metavar="N", help="default: the newest message now, so nothing is replayed")
+    t.add_argument("--skip", action="append", default=[], metavar="NAME|ID", help="a member whose messages are not news (yourself)")
+    t.add_argument("--poll", type=float, default=WATCH_POLL, help="seconds between reads")
+    t.add_argument("--wait", type=float, default=WATCH_WAIT, metavar="SECONDS", help="how long to watch")
+    t.add_argument("--limit", type=int, default=READ_LIMIT, help="messages one read can bring")
     return p
 
 
@@ -282,8 +347,8 @@ def main(argv=None, *, urlopen=urllib.request.urlopen, stdin=None, stdout=None, 
         target = load_target(path, a.target)
         creds = credentials(target)
         doc = {"members": cmd_members, "send": cmd_send, "wait": cmd_wait, "read": cmd_read,
-               "download": cmd_download}[a.verb](
-            a, target=target, creds=creds, urlopen=urlopen, stdin=stdin, sleep=sleep, clock=clock)
+               "watch": cmd_watch, "download": cmd_download}[a.verb](
+            a, target=target, creds=creds, urlopen=urlopen, stdin=stdin, stdout=stdout, sleep=sleep, clock=clock)
         code = exit_code(doc)
     except Stop as s:
         doc, code = {"sent": False, "reason": s.reason, **s.extra}, s.code
