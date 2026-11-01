@@ -499,7 +499,8 @@ def test_a_stray_gone_double_or_unexplained_run_py_fails_the_run():
 GATE_RUNNER = ("import sys\nfrom pathlib import Path\nfrom kit.testing import run_tests\n"
                "raise SystemExit(run_tests.main(sys.argv[1:], root=Path(__file__).resolve().parents[{up}], tests_dir={tests_dir!r}))\n")
 OWN_FOLDER_RUNNERS = {"docs": "tests/run.py", "console": "console/tests/run.py", "zylos": "hosts/zylos/tests/run.py",
-                      "templates": "templates/tests/selftest/run.py"}      # these glob their own folder (HERE) and use no gate
+                      "templates": "templates/tests/selftest/run.py",
+                      "filmkit": "engines/filmkit/tests/run.py"}      # these glob their own folder (HERE) and use no gate
 
 
 def searched(runner: str) -> list[str]:
