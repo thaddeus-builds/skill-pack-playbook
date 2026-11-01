@@ -5,11 +5,15 @@ and graphics, own-synthesis music and effects around the voice lines you bring, 
 a voice line running long), shows any frame as a still, and renders it with ffmpeg. It is the engine under a maker pack: the pack owns the story, the facts and who may appear; filmkit owns how
 the film is made; the spec is all they share.
 
+filmkit lives in the skill-pack playbook, in `engines/filmkit/` (it moved there from its own repository on 2026-11-01, history kept). It has its own `VERSION`, its own tests and its own
+dependencies, and is not part of `kit/`: a pack that makes no films never carries ffmpeg. Who should use it: [docs/who-should-use.md](docs/who-should-use.md).
+
 ```
 filmkit/            the package: spec, elements (title, text, chip, brackets, scan, counter, steps, rule, logo), media (shots, camera), transitions, grade, audio, check, render, cli, demo
 docs/filmkit.md     the spec, the elements, the checks, the craft rules, the limits
 skills/filmkit/     an agent's order of work
-tests/              python3 tests/run.py  (offline: synthetic clips)
+tests/              python3 engines/filmkit/tests/run.py  (offline: synthetic clips; from the playbook's root, `python3 run_all.py filmkit`)
+VERSION             the version a pack's copy names (equal to pyproject.toml and filmkit.__version__; tests/test_parts.py holds them together)
 ```
 
 ```
@@ -24,5 +28,5 @@ python3 -m filmkit inspect /tmp/demo/film.mp4                  # duration, size,
 Needs Python 3.10+, numpy, Pillow, scipy and `ffmpeg`/`ffprobe` on the PATH (`uv run --with numpy --with pillow --with scipy python3 -m filmkit ...`). Fonts are not shipped: a spec names four
 (black, bold, medium, regular) or the Noto Sans CJK on the machine is used. Nothing third-party ends up in a film.
 
-Use it from another project by installing it or by vendoring the `filmkit/` folder as a plain copy (never edit the copy: fix it here and take it again). It is not stdlib-only, so a pack that
+Use it from another project by vendoring `engines/filmkit/filmkit/` as a plain copy (never edit the copy: fix it in the playbook and take it again; the proofcut pack's `tools/vendor_filmkit.py` is the worked example). It is not stdlib-only, so a pack that
 holds to the kit's stdlib rule calls it as a program (`python3 -m filmkit`) rather than importing it into its own package.
