@@ -82,6 +82,7 @@ SUITES = (
     Suite("zylos", "hosts/zylos/tests/run.py", ("git", "node"), "the Zylos / OpenMax host adapter (its hooks and bin are Node; its runner asks git which variables to withhold)"),
     Suite("templates", "templates/tests/selftest/run.py", ("git",), "the day-one test templates, installed in a sample skill pack"),
     Suite("workflows", "templates/workflows/tests/run.py", ("git", "node"), "the workflow script templates (run under a node simulator)"),
+    Suite("filmkit", "engines/filmkit/tests/run.py", ("ffmpeg", "ffprobe", "git"), "the filmkit engine (a film spec in, a film out): its tests render synthetic clips; numpy, Pillow and scipy come from uv when the Python has none"),
     Suite("golden", "templates/tests/golden/tests/run.py", ("git",), "the golden-diff tool, on a fake skill pack"),
 )
 

@@ -1,0 +1,111 @@
+"""The small parts: transitions at their ends, the grade's LUT, the audio synthesis and mix."""
+import numpy as np
+
+import _t
+from filmkit import audio, grade
+from filmkit.transitions import TYPES, blend
+
+
+def test_every_transition_starts_on_the_first_frame_and_ends_on_the_second():
+    a = np.full((8, 6, 3), 10.0)
+    b = np.full((8, 6, 3), 200.0)
+    for kind in TYPES:
+        if kind == "cut":
+            continue
+        assert np.allclose(blend(a, b, 0.0, kind), a), kind
+        assert np.allclose(blend(a, b, 1.0, kind), b), kind
+        mid = blend(a, b, 0.5, kind)
+        assert mid.shape == a.shape, kind
+    mid = blend(a, b, 0.5, "flash")
+    assert mid.mean() > blend(a, b, 0.5, "dissolve").mean(), "the flash pulses white at the middle"
+    assert blend(a, b, 0.5, "dip").mean() < 1.0, "dip goes through black at the middle"
+    assert np.allclose(blend(a, b, 0.5, "cut"), b)
+
+
+def test_the_grade_lut_is_a_valid_cube_and_the_natural_look_leaves_colour_alone():
+    with _t.tmpdir() as d:
+        p = grade.write_cube(d / "n.cube", grade.look("natural"), size=5)
+        lines = p.read_text().splitlines()
+        assert lines[1] == "LUT_3D_SIZE 5" and len(lines) == 2 + 125, len(lines)
+        vals = np.array([[float(x) for x in ln.split()] for ln in lines[2:]])
+        g = np.linspace(0, 1, 5)
+        r = np.tile(g, 25)                                                                      # red varies fastest
+        assert np.allclose(vals[:, 0], r, atol=1e-5), "the natural look is the identity"
+        q = grade.write_cube(d / "t.cube", grade.look("teal_warm_soft"), size=5)
+        v2 = np.array([[float(x) for x in ln.split()] for ln in q.read_text().splitlines()[2:]])
+        assert v2[0, 2] > v2[0, 0], "the black of the sample's look leans blue"
+        assert v2[-1, 0] > v2[-1, 2], "and its white leans warm"
+    try:
+        grade.look("neon")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("an unknown look is refused")
+
+
+def test_the_mix_has_the_length_the_loudness_and_the_voice_is_ducked_under():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec_audio = {"voice": [{"t": 0.5, "file": "vo.wav"}], "music": {"bpm": 90, "pluck_from": 1.0, "impacts": [0.0], "risers": [[0.5, 1.0]], "whooshes": [], "pings": [2.0]}, "lufs": -16}
+        info = audio.mix(spec_audio, 4.0, d, d / "mix.wav")
+        sig = audio.read_audio(d / "mix.wav")
+        assert abs(len(sig) / audio.SR - 4.0) < 0.05, len(sig) / audio.SR
+        assert info["voice_ends"] == [1.7], info
+        got = audio.measure_lufs(["-i", str(d / "mix.wav")])
+        assert got is not None and abs(got - (-16)) < 1.0 and abs(info["mix_lufs"] - got) < 0.2, (got, info)       # the target is delivered, not approached
+        assert np.abs(sig).max() < 0.86, np.abs(sig).max()                                       # the limiter holds the sample peak under -1.4 dBFS even on a short mix
+        # without a voice the same bed is louder in the span where the voice would be: it is ducked under speech
+        loud = audio.mix({**spec_audio, "lufs": -12}, 4.0, d, d / "loud.wav")
+        assert abs(loud["mix_lufs"] - (-12)) < 1.0, loud
+        bare = {**spec_audio, "voice": []}
+        audio.mix(bare, 4.0, d, d / "bare.wav")
+        a, b = audio.read_audio(d / "mix.wav"), audio.read_audio(d / "bare.wav")
+        span = slice(int(0.8 * audio.SR), int(1.4 * audio.SR))
+        assert a[span].std() > 0.0 and b[span].std() > 0.0
+        silent = {"voice": [], "music": {"bed": False}, "lufs": -16}
+        audio.mix(silent, 1.0, d, d / "s.wav")
+        assert np.abs(audio.read_audio(d / "s.wav")).max() < 0.01, "no music, no voice: silence"
+
+
+def test_the_synthesis_is_deterministic_and_stays_in_range():
+    a, b = audio.bed(3.0, 90, pluck_from=0.0), audio.bed(3.0, 90, pluck_from=0.0)
+    assert np.array_equal(a, b) and np.abs(a).max() < 4.0 and np.abs(a).max() > 0.01
+    rng = np.random.default_rng(1)
+    assert len(audio.impact(rng, 1.0)) == audio.SR and len(audio.whoosh(rng, 0.5)) == audio.SR // 2
+    assert len(audio.ping(0)) == int(0.9 * audio.SR)
+
+
+def test_a_voice_line_is_brought_to_a_fixed_level_whatever_the_file_and_a_silent_one_is_refused():
+    """Review M7: a voice file 46 dB down sat 15 dB under the bed and did not duck it; one with the voice on the right channel only was read as silence."""
+    rng = np.random.default_rng(1)
+    t = np.arange(44100) / audio.SR
+    for amp in (0.9, 0.05, 0.0005):
+        sig = amp * np.sin(2 * np.pi * 220 * t) * (1 + 0.3 * rng.standard_normal(len(t)))
+        out = audio.level_voice(sig, "v.wav")
+        active = out[np.abs(out) > 0.05 * np.abs(out).max()]
+        assert abs(float(np.sqrt(np.mean(active ** 2))) - audio.VOICE_RMS) < 0.03 or np.abs(out).max() >= 0.89, (amp, np.sqrt(np.mean(active ** 2)))
+        assert np.abs(out).max() <= 0.9 + 1e-9
+    try:
+        audio.level_voice(np.zeros(1000), "silent.wav")
+    except _t.FilmkitError as e:
+        assert "silent" in str(e)
+    else:
+        raise AssertionError("a silent voice line was accepted")
+    with _t.tmpdir() as d:
+        _t.ffmpeg("-f", "lavfi", "-i", "sine=f=220:r=44100:d=1", "-af", "pan=stereo|c0=0*c0|c1=c0", str(d / "right.wav"))
+        sig = audio.read_audio(d / "right.wav")
+        assert float(np.abs(sig).max()) > 0.03, "the voice on the right channel is heard (the sine is 0.125, the mean of the channels half that)"
+
+
+def test_a_very_short_film_and_a_zero_fade_do_not_break_the_mix_and_the_report_says_when_the_target_was_missed():
+    with _t.tmpdir() as d:
+        got = audio.mix({"music": {"bed": True, "bpm": 90}, "fade_out": 0.01}, 0.2, d, d / "short.wav")
+        assert got["mix_lufs"] is None and got["lufs_met"] is False, got                          # under 0.4 s there is no loudness to measure: said, not hidden
+        got = audio.mix({"music": {"bed": True, "bpm": 90}, "lufs": -5}, 3.0, d, d / "loud.wav")
+        assert got["lufs_met"] is False and got["mix_lufs"] < -5.5, got                            # the limiter cannot reach -5: the report shows both numbers and says so
+        got = audio.mix({"music": {"bed": True, "bpm": 90}}, 3.0, d, d / "ok.wav")
+        assert got["lufs_met"] is True, got
+
+
+if __name__ == "__main__":
+    _t.main(globals())
