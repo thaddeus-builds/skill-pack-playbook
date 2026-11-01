@@ -166,6 +166,22 @@ function readSetup(file, now) {
   } catch { return []; }
 }
 
+// The CLI and the service both rewrite the file: one at a time (a lock directory, atomic to make; a lock
+// older than 10 s is a dead process's and is taken over).
+function locked(file, fn) {
+  const lock = `${file}.lock`;
+  const wait = new Int32Array(new SharedArrayBuffer(4));
+  for (let i = 0; ; i++) {
+    try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.mkdirSync(lock); break; } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      try { if (Date.now() - fs.statSync(lock).mtimeMs > 10_000) fs.rmdirSync(lock); } catch { /* gone */ }
+      if (i > 200) throw new Error(`${lock} is held`);
+      Atomics.wait(wait, 0, 0, 10);
+    }
+  }
+  try { return fn(); } finally { try { fs.rmdirSync(lock); } catch { /* gone */ } }
+}
+
 function writeSetup(file, rows) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}`;
@@ -179,9 +195,11 @@ function writeSetup(file, rows) {
 function makeSetupToken(file, user, now = Date.now()) {
   if (!USER_RE.test(user)) throw new Error(`${JSON.stringify(user)} is not a user name (letters, digits, . _ : -)`);
   const token = crypto.randomBytes(32).toString('base64url');
-  const rows = readSetup(file, now).filter((r) => r.user !== user);
-  rows.push({ h: sha(token), user, exp: now + SETUP_MINUTES * 60_000 });
-  writeSetup(file, rows);
+  locked(file, () => {
+    const rows = readSetup(file, now).filter((r) => r.user !== user);
+    rows.push({ h: sha(token), user, exp: now + SETUP_MINUTES * 60_000 });
+    writeSetup(file, rows);
+  });
   return { token, minutes: SETUP_MINUTES };
 }
 
@@ -195,11 +213,13 @@ function peekSetupToken(file, token, now = Date.now()) {
 // Use it up: the user, or null when unknown, expired or already used.
 function takeSetupToken(file, token, now = Date.now()) {
   const h = sha(String(token || ''));
-  const rows = readSetup(file, now);
-  const r = rows.find((x) => x.h === h);
-  if (!r) return null;
-  writeSetup(file, rows.filter((x) => x.h !== h));
-  return r.user;
+  return locked(file, () => {
+    const rows = readSetup(file, now);
+    const r = rows.find((x) => x.h === h);
+    if (!r) return null;
+    writeSetup(file, rows.filter((x) => x.h !== h));
+    return r.user;
+  });
 }
 
 // --- the page ---------------------------------------------------------------------------
@@ -372,7 +392,7 @@ function createHandler(opts) {
       if (req.method === 'GET') {
         const t = url.searchParams.get('token') || '';
         const user = peekSetupToken(opts.setupFile, t, now());
-        if (!user) { fail([ipKey]); return dead(); }
+        if (!user) { if (t.length >= 40) fail([ipKey]); return dead(); }     // a guess looks like a token; a preview bot's stale link is no attack
         return setupPage(t, user, '');
       }
       if (!sameOrigin(req)) return send(res, 403, page(lang, title, `<p class="err">${w.refused}</p>`));
@@ -384,8 +404,8 @@ function createHandler(opts) {
           const pw = String(f.get('password') || '');
           if (pw.length > 1024 || pw.length < 10) return setupPage(t, user, w.short, 400);
           if (pw !== String(f.get('password2') || '')) return setupPage(t, user, w.differ, 400);
-          if (takeSetupToken(opts.setupFile, t, now()) !== user) return dead();        // used between the check and now
-          setPassword(opts.usersFile, user, pw);
+          setPassword(opts.usersFile, user, pw);                // the link is used up only once the password is written
+          takeSetupToken(opts.setupFile, t, now());
           const stored = readUsers(opts.usersFile).get(user);
           return go(res, `${base}/`, { 'Set-Cookie': setCookie(req, makeToken(key, user, stored, now()), SESSION_DAYS * 86400) });
         } catch (e) {
