@@ -69,7 +69,7 @@ def main() -> None:
     subprocess.run(["node", "-e", "require(process.argv[1]).setPassword(process.argv[2],'alice',process.argv[3])", LOGIN, users, PW], check=True)
     procs = []
     try:
-        srv = subprocess.Popen(["node", "-e", "const l=require(process.argv[1]);l.listen({sock:process.argv[2],usersFile:process.argv[3],keyFile:process.argv[4],"
+        srv = subprocess.Popen(["node", "-e", "const l=require(process.argv[1]);l.listen({sock:process.argv[2],usersFile:process.argv[3],keyFile:process.argv[4],setupFile:process.argv[4]+'.setup',"
                                 "base:'/seo',title:'Live',userHeader:'X-Remote-User'}).on('listening',()=>console.log('up'))",
                                 LOGIN, sock, users, key], stdout=subprocess.PIPE, text=True)
         procs.append(srv)
@@ -126,7 +126,7 @@ def main() -> None:
         r, body = req("GET", "/seo/login")
         ok(r.status == 200 and 'type="password"' in body and 'autocomplete="current-password"' in body, "the form is served through Caddy")
         r, body = req("GET", "/seo/setup?token=nope")
-        ok(r.status == 410 and "expired" in body or r.status == 410, f"/seo/setup reaches the login service, not the console ({r.status})")
+        ok(r.status == 410, f"/seo/setup reaches the login service, not the console ({r.status})")
         r, _ = req("POST", "/seo/materials", "x=1", headers=spoof)
         ok(r.status == 401, f"a POST with no session is 401, got {r.status}")
         r, _ = req("GET", "/seo/LOGIN")
