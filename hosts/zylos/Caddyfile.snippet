@@ -12,7 +12,7 @@
 ##   --allow-host (console.allow_host_key).
 ## - The login is a form (zylos/bin/login.js on the unix socket <AUTH_SOCK>),
 ##   not basic_auth: a browser or password manager can save a form.
-##   /login and /logout go to it; everything else first asks it
+##   /login, /logout and /setup (the one-time password link) go to it; everything else first asks it
 ##   (forward_auth, GET /_auth) whether the visitor has a session: yes, the
 ##   console is reached with <USER_HEADER> set to the user (and no Cookie: the
 ##   session is the login's business, not the console's); no, the visitor gets
@@ -24,7 +24,7 @@ redir <BASE_PATH> <BASE_PATH>/ permanent
 handle_path <BASE_PATH>/* {
     route {
         request_header -<USER_HEADER>
-        @login path /login /logout
+        @login path /login /logout /setup
         handle @login {
             reverse_proxy unix/<AUTH_SOCK>
         }

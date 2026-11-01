@@ -304,6 +304,7 @@ const AUTH_SOCK = (() => {
   return path.join(runtime, `zylos-${who}-${crypto.createHash('sha256').update(DATA_DIR).digest('hex').slice(0, 12)}`, 'auth.sock');
 })();
 const SESSION_KEY = path.join(DATA_DIR, 'console', 'session.key');
+const SETUP_FILE = path.join(DATA_DIR, 'console', 'setup-tokens.json');
 const LOGIN_JS = path.join(ADAPTER_DIR, 'bin', 'login.js');
 const CADDYFILE = path.join(ZYLOS_DIR, 'http', 'Caddyfile');
 const CADDY_MARKER = `# BEGIN zylos-component:${NAME}`;
@@ -865,14 +866,16 @@ function caddyBlockInFile(lines) {
   return from < 0 || to < 0 ? null : { from, to, text: lines.slice(from, to + 1).join('\n') };
 }
 
-// A block from before the form login (playbook 0.5.0) still asks the browser's
-// basic_auth pop-up and imports a bcrypt list this adapter no longer writes.
+// A block from before the form login (0.5.0) still asks the browser's basic_auth pop-up and imports
+// a bcrypt list this adapter no longer writes; one from 0.5.x does not route /setup (the one-time
+// password link, 0.6.0), so the link would reach the console and be refused there.
 const usesBasicAuth = (text) => /^\s*basic_auth\b/m.test(text);
+const outdatedBlock = (text) => usesBasicAuth(text) || !/@login path [^\n]*\/setup\b/.test(text);
 
 function caddyBlockOutdated() {
   try {
     const b = caddyBlockInFile(fs.readFileSync(CADDYFILE, 'utf8').split('\n'));
-    return Boolean(b && usesBasicAuth(b.text));
+    return Boolean(b && outdatedBlock(b.text));
   } catch { return false; }
 }
 
@@ -930,7 +933,7 @@ function restoreCaddyBlock() {
   // would import logins it can no longer read. The block this adapter prints takes its
   // place (the host's own edits to the old one are in the saved copy / Caddyfile.before-<name>).
   const saved = outdated ? null : fs.readFileSync(CADDY_SAVED, 'utf8');
-  const fresh = !saved || usesBasicAuth(saved);
+  const fresh = !saved || outdatedBlock(saved);
   const text = fresh ? caddyBlock() : saved;
   let next;
   if (outdated) {
@@ -1143,21 +1146,32 @@ function promptSecret(label) {
   });
 }
 
-// `passwd NAME` adds or replaces a person; `passwd --remove NAME` takes one out.
-// Terminal only: an agent has no tty and must not be handed a password.
+// `passwd NAME` adds or replaces a person at a terminal; `passwd --remove NAME` takes one out;
+// `passwd NAME --link` makes a one-time link (30 minutes, once) where the person sets their own
+// password on a page: that one needs no terminal, and the password never reaches the agent.
 async function passwdCommand(args) {
   const login = require(LOGIN_JS);
   const remove = args[0] === '--remove';
+  const link = args.length === 2 && args[1] === '--link';
   const name = remove ? args[1] : args[0];
-  if (!name || args.length > (remove ? 2 : 1)) { console.error('usage: passwd NAME | passwd --remove NAME'); process.exit(2); }
+  if (!name || (!link && args.length > (remove ? 2 : 1)) || (link && args[0] === '--remove')) {
+    console.error('usage: passwd NAME | passwd NAME --link | passwd --remove NAME'); process.exit(2);
+  }
   try {
     if (remove) {
       login.setPassword(USERS_FILE, name, null);
       console.log(`[${NAME}] ${name} removed from ${USERS_FILE}; their sessions end now`);
       return;
     }
+    if (link) {
+      const made = login.makeSetupToken(SETUP_FILE, name);
+      const host = allowHosts()[0];
+      const where = `${host ? `https://${host}` : '<the console\'s public address>'}${M.console.base_path}/setup?token=${made.token}`;
+      console.log(`[${NAME}] one-time link for ${name} (works once, ${made.minutes} minutes; whoever opens it first sets the password):\n${where}`);
+      return;
+    }
     if (!process.stdin.isTTY) {
-      console.error(`[${NAME}] passwd needs a terminal: the password is typed there, never given to an agent or put on a command line`);
+      console.error(`[${NAME}] passwd needs a terminal: the password is typed there, never given to an agent or put on a command line; without one use: passwd ${name} --link`);
       process.exit(2);
     }
     const one = await promptSecret(`password for ${name} (min ${login.MIN_PASSWORD} characters): `);
@@ -1183,7 +1197,7 @@ module.exports = {
   renderPrompt, unresolved, tasksNamed, addTask, updateTask, removeTask, readTaskState, requiredKeys,
   reconcileTask, reconcileAll, removeAllTasks,
   procStart, pidAlive, readJob, jobAlive, stopJobs,
-  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock, caddyBlockOutdated, staleLogins, AUTH_SOCK, SESSION_KEY, LOGIN_JS,
+  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock, caddyBlockOutdated, staleLogins, AUTH_SOCK, SESSION_KEY, SETUP_FILE, LOGIN_JS,
   skillProblems, checkProblems,
 };
 
@@ -1199,7 +1213,7 @@ if (require.main === module) {
   } else if (verb === 'passwd') {
     passwdCommand(process.argv.slice(3));
   } else {
-    console.error('usage: node zylos/lib.js check | caddy | passwd NAME | passwd --remove NAME');
+    console.error('usage: node zylos/lib.js check | caddy | passwd NAME [--link] | passwd --remove NAME');
     process.exit(2);
   }
 }

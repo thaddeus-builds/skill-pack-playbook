@@ -14,6 +14,9 @@
 //   POST /login    checks the password (scrypt), sets the cookie, goes back to `next`
 //                  (a path under the base only).
 //   POST /logout   clears the cookie. GET /logout shows the button.
+//   GET/POST /setup?token=…  a person sets their own password on a page: the link comes from
+//                  `lib.js passwd NAME --link` (an agent can run it, there is no password in it),
+//                  lives 30 minutes and works once. The agent never types or sees the password.
 //
 // The cookie holds user, expiry, a fingerprint of the user's stored hash and an HMAC
 // with <console dir>/session.key. Removing a user or changing a password changes the
@@ -152,14 +155,67 @@ function loadKey(file) {
   return k;
 }
 
+// --- the setup link: a token that is shown once and kept only as a hash --------------------------------
+const SETUP_MINUTES = 30;
+const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+function readSetup(file, now) {
+  try {
+    const rows = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(rows) ? rows.filter((r) => r && typeof r.h === 'string' && r.exp > now) : [];
+  } catch { return []; }
+}
+
+function writeSetup(file, rows) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(rows), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+  fs.chmodSync(file, 0o600);
+}
+
+// A new token for `user` (who need not exist yet: the page creates the line). Earlier unused
+// tokens of the same user are dropped, so the newest link is the only one.
+function makeSetupToken(file, user, now = Date.now()) {
+  if (!USER_RE.test(user)) throw new Error(`${JSON.stringify(user)} is not a user name (letters, digits, . _ : -)`);
+  const token = crypto.randomBytes(32).toString('base64url');
+  const rows = readSetup(file, now).filter((r) => r.user !== user);
+  rows.push({ h: sha(token), user, exp: now + SETUP_MINUTES * 60_000 });
+  writeSetup(file, rows);
+  return { token, minutes: SETUP_MINUTES };
+}
+
+// The user a token is for (not consumed), or null.
+function peekSetupToken(file, token, now = Date.now()) {
+  const h = sha(String(token || ''));
+  const r = readSetup(file, now).find((x) => x.h === h);
+  return r ? r.user : null;
+}
+
+// Use it up: the user, or null when unknown, expired or already used.
+function takeSetupToken(file, token, now = Date.now()) {
+  const h = sha(String(token || ''));
+  const rows = readSetup(file, now);
+  const r = rows.find((x) => x.h === h);
+  if (!r) return null;
+  writeSetup(file, rows.filter((x) => x.h !== h));
+  return r.user;
+}
+
 // --- the page ---------------------------------------------------------------------------
 const WORDS = {
   en: { title: 'Sign in', user: 'Username', pass: 'Password', go: 'Sign in', bad: 'Wrong username or password.',
         wait: 'Too many tries. Wait a little and try again.', out: 'Sign out', gone: 'You are signed out.', again: 'Sign in again',
-        refused: 'The request did not come from this page.' },
+        refused: 'The request did not come from this page.',
+        setup: 'Set your password', new: 'New password (at least 10 characters)', again2: 'Type it again', save: 'Save and sign in',
+        short: 'The password needs at least 10 characters.', differ: 'The two passwords differ.',
+        dead: 'This link has been used or has expired. Ask for a new one.', for: 'Account' },
   zh: { title: '登录', user: '用户名', pass: '密码', go: '登录', bad: '用户名或密码不对。',
         wait: '试得太多了，请稍等再试。', out: '退出登录', gone: '你已退出登录。', again: '重新登录',
-        refused: '这个请求不是从本页发出的。' },
+        refused: '这个请求不是从本页发出的。',
+        setup: '设置密码', new: '新密码（至少 10 个字符）', again2: '再输入一次', save: '保存并登录',
+        short: '密码至少 10 个字符。', differ: '两次输入不一样。',
+        dead: '这个链接已经用过或已过期。请重新要一个。', for: '账号' },
 };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -187,7 +243,7 @@ function formPage(lang, title, base, next, message) {
 }
 
 // --- the service ------------------------------------------------------------------------
-// opts: usersFile, keyFile, base ('/seo', '' for a site root), title, userHeader, now()
+// opts: usersFile, keyFile, setupFile, base ('/seo', '' for a site root), title, userHeader, now()
 function createHandler(opts) {
   const base = (opts.base || '').replace(/\/+$/, '');
   const title = opts.title || 'Console';
@@ -301,6 +357,44 @@ function createHandler(opts) {
         }
       });
     }
+    if (url.pathname === '/setup' && (req.method === 'GET' || req.method === 'POST')) {
+      const setupPage = (token, user, message, code = 200) => send(res, code, page(lang, title, `<h1>${w.setup}</h1>${message ? `<p class="err" role="alert">${esc(message)}</p>` : ''}
+<p>${w.for}: <b>${esc(user)}</b></p>
+<form method="post" action="${esc(base)}/setup"><input type="hidden" name="token" value="${esc(token)}">
+<input type="text" name="username" value="${esc(user)}" autocomplete="username" hidden readonly>
+<label for="password">${w.new}</label><input id="password" name="password" type="password" autocomplete="new-password" required minlength="10" autofocus>
+<label for="password2">${w.again2}</label><input id="password2" name="password2" type="password" autocomplete="new-password" required minlength="10">
+<button type="submit">${w.save}</button></form>`));
+      const dead = (code = 410) => send(res, code, page(lang, title, `<p class="err">${w.dead}</p>`));
+      if (!opts.setupFile) return dead(404);
+      const ipKey = `setup:${ipOf(req)}`;
+      if (blocked([ipKey])) return send(res, 429, page(lang, title, `<p class="err">${w.wait}</p>`));
+      if (req.method === 'GET') {
+        const t = url.searchParams.get('token') || '';
+        const user = peekSetupToken(opts.setupFile, t, now());
+        if (!user) { fail([ipKey]); return dead(); }
+        return setupPage(t, user, '');
+      }
+      if (!sameOrigin(req)) return send(res, 403, page(lang, title, `<p class="err">${w.refused}</p>`));
+      return readForm(req, res, (f) => {
+        try {
+          const t = String(f.get('token') || '');
+          const user = peekSetupToken(opts.setupFile, t, now());
+          if (!user) { fail([ipKey]); return dead(); }
+          const pw = String(f.get('password') || '');
+          if (pw.length > 1024 || pw.length < 10) return setupPage(t, user, w.short, 400);
+          if (pw !== String(f.get('password2') || '')) return setupPage(t, user, w.differ, 400);
+          if (takeSetupToken(opts.setupFile, t, now()) !== user) return dead();        // used between the check and now
+          setPassword(opts.usersFile, user, pw);
+          const stored = readUsers(opts.usersFile).get(user);
+          return go(res, `${base}/`, { 'Set-Cookie': setCookie(req, makeToken(key, user, stored, now()), SESSION_DAYS * 86400) });
+        } catch (e) {
+          console.error(`login: ${e.stack || e}`);
+          if (!res.headersSent) res.writeHead(500, { 'Cache-Control': 'no-store' });
+          return res.end();
+        }
+      });
+    }
     if (url.pathname === '/logout') {
       if (req.method === 'POST') {
         if (!sameOrigin(req)) return send(res, 403, page(lang, title, `<p class="err">${w.refused}</p>`));
@@ -345,5 +439,5 @@ function listen(opts) {
   return server;
 }
 
-module.exports = { hashPassword, verifyPassword, verifyPasswordAsync, readUsers, staleUsers, setPassword, makeToken, checkToken, loadKey,
+module.exports = { makeSetupToken, peekSetupToken, takeSetupToken, SETUP_MINUTES, hashPassword, verifyPassword, verifyPasswordAsync, readUsers, staleUsers, setPassword, makeToken, checkToken, loadKey,
                    createHandler, listen, MIN_PASSWORD, SESSION_DAYS, USER_RE };
