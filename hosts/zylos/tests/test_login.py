@@ -32,7 +32,7 @@ PW = "correct horse battery"
 SERVER = """
 const l = require(process.argv[1]);
 const [sock, users, keyf, base] = process.argv.slice(2);
-l.listen({ sock, usersFile: users, keyFile: keyf, base: base === undefined ? '/seo' : base, title: 'Shop', userHeader: 'X-Remote-User' })
+l.listen({ sock, usersFile: users, keyFile: keyf, setupFile: users + '.setup', base: base === undefined ? '/seo' : base, title: 'Shop', userHeader: 'X-Remote-User' })
   .on('listening', () => console.log('up'));
 """
 
@@ -70,6 +70,12 @@ class Svc:
     def stop(self):
         self.proc.terminate()
         self.proc.wait(10)
+
+    def link(self, user="alice", now=None):
+        code = ("const l=require(process.argv[1]);console.log(l.makeSetupToken(process.argv[2],process.argv[3]" + (f",{now}" if now else "") + ").token)")
+        r = subprocess.run([NODE, "-e", code, LOGIN, self.users + ".setup", user], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        return r.stdout.strip()
 
     def set(self, name, pw):
         r = subprocess.run([NODE, "-e", "require(process.argv[1]).setPassword(process.argv[2], process.argv[3], process.argv[4])",
@@ -246,6 +252,64 @@ def test_the_service_makes_its_directory_private_and_leaves_the_umask_alone():
     r2 = subprocess.run([NODE, "-e", "try{require(process.argv[1]).listen({sock:process.argv[2],usersFile:'x',keyFile:'y',base:''})}catch(e){console.log('refused')}",
                          LOGIN, os.path.join(link, "s.sock")], capture_output=True, text=True)
     assert "refused" in r2.stdout, (r2.stdout, r2.stderr)    # a symlinked directory is not ours to trust
+
+
+def test_a_one_time_link_lets_a_person_set_their_own_password():
+    from urllib.parse import urlencode
+    with Svc(user_line=False) as s:
+        tok = s.link("newperson")
+        assert len(tok) >= 40 and tok not in open(s.users + ".setup").read(), "only a hash of the token is kept"
+        r, body = s.req("GET", f"/setup?token={tok}")
+        assert r.status == 200 and 'autocomplete="new-password"' in body and "newperson" in body and 'name="token"' in body
+        assert stat.S_IMODE(os.stat(s.users + ".setup").st_mode) == 0o600
+        # a typo does not burn the link
+        bad = s.req("POST", "/setup", urlencode({"token": tok, "password": "short", "password2": "short"}))[0]
+        diff = s.req("POST", "/setup", urlencode({"token": tok, "password": PW, "password2": PW + "x"}))[0]
+        assert bad.status == 400 and diff.status == 400
+        ok = s.req("POST", "/setup", urlencode({"token": tok, "username": "x", "password": PW, "password2": PW}))[0]
+        assert ok.status == 303 and ok.getheader("Location") == "/seo/" and "HttpOnly" in ok.getheader("Set-Cookie")
+        a, _ = s.req("GET", "/_auth", headers={"Cookie": s.cookie(ok)})
+        assert a.status == 200 and a.getheader("X-Remote-User") == "newperson", "signed in as the link's user, not the form's"
+        assert s.login("newperson", PW)[0].status == 303, "and the password works at the login form"
+        # once only
+        again = s.req("POST", "/setup", urlencode({"token": tok, "password": "another password", "password2": "another password"}))[0]
+        gone = s.req("GET", f"/setup?token={tok}")[0]
+        assert again.status == 410 and gone.status == 410
+        assert s.login("newperson", "another password")[0].status == 401
+
+
+def test_a_setup_link_expires_is_replaced_by_a_newer_one_and_guessing_is_throttled():
+    with Svc(user_line=False) as s:
+        old = s.link("amy", now=int(time.time() * 1000) - 31 * 60_000)
+        assert s.req("GET", f"/setup?token={old}")[0].status == 410, "30 minutes"
+        first = s.link("amy")
+        second = s.link("amy")
+        assert s.req("GET", f"/setup?token={first}")[0].status == 410, "a newer link replaces the older one"
+        assert s.req("GET", f"/setup?token={second}")[0].status == 200
+        assert s.req("GET", "/setup")[0].status == 410 and s.req("GET", "/setup?token=%00")[0].status == 410
+        for i in range(8):                                   # short, stale-looking values (a bot's old link) are not guesses
+            s.req("GET", f"/setup?token=old{i}", headers={"X-Forwarded-For": "198.51.100.201"})
+        assert s.req("GET", f"/setup?token={second}", headers={"X-Forwarded-For": "198.51.100.201"})[0].status == 200
+        for i in range(6):                                   # token-shaped ones are
+            s.req("GET", "/setup?token=" + ("g%d" % i) * 25, headers={"X-Forwarded-For": "198.51.100.200"})
+        assert s.req("GET", f"/setup?token={second}", headers={"X-Forwarded-For": "198.51.100.200"})[0].status == 429
+        assert s.req("POST", "/setup", "token=x&password=aaaaaaaaaaaa&password2=aaaaaaaaaaaa",
+                     {"Origin": "https://evil.example.com", "Host": "agent.example.com"})[0].status == 403
+
+
+def test_passwd_link_needs_no_terminal_and_prints_the_public_address():
+    with Host() as host:
+        host.configure({"SHOP_CONSOLE_ALLOW_HOST": "agent.example.com"})
+        lib = os.path.join(host.adapter, "lib.js")
+        r = host.node(lib, "passwd", "alice", "--link")
+        assert r.returncode == 0 and "https://agent.example.com/shop/setup?token=" in r.stdout and "works once" in r.stdout, (r.stdout, r.stderr)
+        tok = r.stdout.strip().split("token=")[1].strip()
+        assert not os.path.exists(os.path.join(host.data, "console.users")), "nothing is created until the person sets a password"
+        saved = open(os.path.join(host.data, "console", "setup-tokens.json")).read()
+        assert tok not in saved and "alice" in saved
+        assert host.node(lib, "passwd", "--remove", "alice", "--link").returncode == 2
+        assert host.node(lib, "passwd", "a b", "--link").returncode == 1
+        assert host.node(lib, "passwd", "--link").returncode == 2 and host.node(lib, "passwd", "-x", "--link").returncode == 2
 
 
 def test_five_wrong_passwords_lock_that_user_and_that_address():

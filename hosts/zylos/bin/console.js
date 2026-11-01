@@ -53,7 +53,7 @@ env.PATH = [path.dirname(uv), env.PATH].filter(Boolean).join(path.delimiter);
 let login;
 try {
   login = require('./login.js').listen({
-  sock: h.AUTH_SOCK, usersFile: h.USERS_FILE, keyFile: h.SESSION_KEY, base: h.M.console.base_path,
+  sock: h.AUTH_SOCK, usersFile: h.USERS_FILE, keyFile: h.SESSION_KEY, setupFile: h.SETUP_FILE, base: h.M.console.base_path,
   title: c.argv[c.argv.indexOf('--title') + 1], userHeader: h.M.console.user_header,
   });
 } catch (e) { console.error(`${h.NAME} console: the login could not start (${e.message})`); process.exit(2); }
