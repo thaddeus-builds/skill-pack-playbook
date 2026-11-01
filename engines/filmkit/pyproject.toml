@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filmkit"
+version = "0.1.4"
+description = "A film spec in, a finished film out: camera moves, transitions, a grade, animated graphics, own-synthesis sound, a loudness target"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "pillow>=10.1", "scipy>=1.11"]
+
+[tool.setuptools]
+packages = ["filmkit"]

@@ -29,4 +29,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+      # the filmkit suite renders synthetic clips: ffmpeg is on the runner image; its Python libraries are not
+      - run: python3 -m pip install numpy pillow scipy
       - run: python3 run_all.py
