@@ -7,7 +7,7 @@ not a model, it makes no shots and no voice, and it decides nothing about what a
 |---|---|---|
 | `proofcut` | Yes, today | It builds films from a client's own footage, stills and voice lines, and vendors filmkit for the render. |
 | `adcut` | Not now | It has its own ffmpeg-based render code and its own tests for it. Moving it is the adcut pack's decision, to be made when there is a reason; nothing here asks for it. |
-| `product-image-to-video` | Not now | It produces keyframes only. If it later has to cut keyframes and clips into a finished film (type, a grade, sound, a loudness target), start from filmkit rather than another renderer. |
+| `product-image-to-video` | Not now | It makes keyframes and a preview animatic through its own ffmpeg calls, not a finished film. If it later has to cut keyframes and clips into a finished film (type, a grade, sound, a loudness target), start from filmkit rather than another renderer. |
 | Any other pack | Only if it composes video | A pack that reports, plans or writes copy has no use for it. |
 
 ## What using it costs
