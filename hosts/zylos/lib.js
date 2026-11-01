@@ -870,7 +870,8 @@ function caddyBlockInFile(lines) {
 // a bcrypt list this adapter no longer writes; one from 0.5.x does not route /setup (the one-time
 // password link, 0.6.0), so the link would reach the console and be refused there.
 const usesBasicAuth = (text) => /^\s*basic_auth\b/m.test(text);
-const outdatedBlock = (text) => usesBasicAuth(text) || !/@login path [^\n]*\/setup\b/.test(text);
+const outdatedBlock = (text) => usesBasicAuth(text)
+  || !text.split('\n').some((l) => /^\s*@login\b/.test(l) && /(^|\s)\/setup(\s|$)/.test(l));
 
 function caddyBlockOutdated() {
   try {
@@ -1154,7 +1155,7 @@ async function passwdCommand(args) {
   const remove = args[0] === '--remove';
   const link = args.length === 2 && args[1] === '--link';
   const name = remove ? args[1] : args[0];
-  if (!name || (!link && args.length > (remove ? 2 : 1)) || (link && args[0] === '--remove')) {
+  if (!name || name.startsWith('-') || (!link && args.length > (remove ? 2 : 1)) || (link && args[0] === '--remove')) {
     console.error('usage: passwd NAME | passwd NAME --link | passwd --remove NAME'); process.exit(2);
   }
   try {
@@ -1167,7 +1168,7 @@ async function passwdCommand(args) {
       const made = login.makeSetupToken(SETUP_FILE, name);
       const host = allowHosts()[0];
       const where = `${host ? `https://${host}` : '<the console\'s public address>'}${M.console.base_path}/setup?token=${made.token}`;
-      console.log(`[${NAME}] one-time link for ${name} (works once, ${made.minutes} minutes; whoever opens it first sets the password):\n${where}`);
+      console.log(`[${NAME}] one-time link for ${name} (works once, ${made.minutes} minutes; anyone who sees this line can use it, so send it only to ${name}):\n${where}`);
       return;
     }
     if (!process.stdin.isTTY) {

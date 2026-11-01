@@ -287,8 +287,11 @@ def test_a_setup_link_expires_is_replaced_by_a_newer_one_and_guessing_is_throttl
         assert s.req("GET", f"/setup?token={first}")[0].status == 410, "a newer link replaces the older one"
         assert s.req("GET", f"/setup?token={second}")[0].status == 200
         assert s.req("GET", "/setup")[0].status == 410 and s.req("GET", "/setup?token=%00")[0].status == 410
-        for i in range(6):
-            s.req("GET", f"/setup?token=guess{i}", headers={"X-Forwarded-For": "198.51.100.200"})
+        for i in range(8):                                   # short, stale-looking values (a bot's old link) are not guesses
+            s.req("GET", f"/setup?token=old{i}", headers={"X-Forwarded-For": "198.51.100.201"})
+        assert s.req("GET", f"/setup?token={second}", headers={"X-Forwarded-For": "198.51.100.201"})[0].status == 200
+        for i in range(6):                                   # token-shaped ones are
+            s.req("GET", "/setup?token=" + ("g%d" % i) * 25, headers={"X-Forwarded-For": "198.51.100.200"})
         assert s.req("GET", f"/setup?token={second}", headers={"X-Forwarded-For": "198.51.100.200"})[0].status == 429
         assert s.req("POST", "/setup", "token=x&password=aaaaaaaaaaaa&password2=aaaaaaaaaaaa",
                      {"Origin": "https://evil.example.com", "Host": "agent.example.com"})[0].status == 403
@@ -306,6 +309,7 @@ def test_passwd_link_needs_no_terminal_and_prints_the_public_address():
         assert tok not in saved and "alice" in saved
         assert host.node(lib, "passwd", "--remove", "alice", "--link").returncode == 2
         assert host.node(lib, "passwd", "a b", "--link").returncode == 1
+        assert host.node(lib, "passwd", "--link").returncode == 2 and host.node(lib, "passwd", "-x", "--link").returncode == 2
 
 
 def test_five_wrong_passwords_lock_that_user_and_that_address():

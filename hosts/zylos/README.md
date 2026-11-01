@@ -332,7 +332,7 @@ Core never rewrites the block on upgrade (no routes are declared), but a reinsta
 
     node ~/zylos/.claude/skills/<name>/zylos/lib.js passwd alice --link
 
-and sends the printed address to alice; it works once and for 30 minutes, and alice types the password on that page (the agent never sees it; only a hash of the link's token is kept in `<data dir>/console/setup-tokens.json`). A newer link for the same name replaces the older. A person with a terminal can type it there instead (`passwd` refuses without a tty):
+and sends the printed address to alice; it works once and for 30 minutes, and alice types the password on that page (the agent never sees it; only a hash of the link's token is kept in `<data dir>/console/setup-tokens.json`). A newer link for the same name replaces the older. The token is in the address's query string, so it can appear in Caddy's access log: leave `log` out of the console's block (the printed block has none), and treat the link like a password for its 30 minutes; whoever sees it first can use it, **including the agent that printed it**. A person with a terminal can type it there instead (`passwd` refuses without a tty):
 
     node ~/zylos/.claude/skills/<name>/zylos/lib.js passwd alice
     node ~/zylos/.claude/skills/<name>/zylos/lib.js passwd --remove alice
