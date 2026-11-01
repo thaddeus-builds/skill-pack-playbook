@@ -125,6 +125,8 @@ def main() -> None:
         ok("%2Fseo%2Fmaterials%3Flang%3Dzh" in loc, "the page the visitor wanted is kept under the prefix in next=" + loc)
         r, body = req("GET", "/seo/login")
         ok(r.status == 200 and 'type="password"' in body and 'autocomplete="current-password"' in body, "the form is served through Caddy")
+        r, body = req("GET", "/seo/setup?token=nope")
+        ok(r.status == 410 and "expired" in body or r.status == 410, f"/seo/setup reaches the login service, not the console ({r.status})")
         r, _ = req("POST", "/seo/materials", "x=1", headers=spoof)
         ok(r.status == 401, f"a POST with no session is 401, got {r.status}")
         r, _ = req("GET", "/seo/LOGIN")
