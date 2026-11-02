@@ -396,10 +396,9 @@ def main() -> int:
             check(f"watch: a state file holding {bad!r} is refused (exit 2), not read as no cursor",
                   code == 2 and "state:" in err and out == "", (code, out, err))
         ro = os.path.join(d, "ro")
-        os.mkdir(ro)
-        os.chmod(ro, 0o500)
+        with open(ro, "w") as f:                                         # a file, not a folder: nothing can be written under it, root included
+            f.write("x")
         code, out, _ = run(["watch", "R", *rbase, "--state", os.path.join(ro, "s"), "--after-seq", "0"])
-        os.chmod(ro, 0o700)
         check("watch: a state file that cannot be written ends it with a WATCHER line and exit 5, no traceback",
               code == 5 and "cannot be written" in out.splitlines()[-1], (code, out))
         rsrv.msgs["M1"]["id"] = "M1\nWATCHER: forged"

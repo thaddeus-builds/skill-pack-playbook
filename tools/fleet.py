@@ -288,8 +288,8 @@ def rehearse(pack: Path, out: Path, playbook: Path, version: str, remote: str = 
     shown = hide_credentials(address)
     dest = out / name
     worktrees = out / f"{name}_worktrees"
-    had_worktrees = worktrees.exists()                                  # `update` makes it in the clone's neighbourhood; an interrupted trial must not leave it
     try:
+        had_worktrees = worktrees.exists()                              # `update` makes it in the clone's neighbourhood; an interrupted trial must not leave it
         if out.exists() and not out.is_dir():
             return refused(f"{out} is a file; --out names a folder")
         if dest.exists():
@@ -577,8 +577,11 @@ def export(pack: Path, out: Path, remote: str = "origin") -> dict:
     base = f"{remote}/{branch}"
     note = f"; fetch failed, this is what was last fetched: {hide_credentials(first_line(fetched))}" if fetched.returncode != 0 else ""
     dest = out / pack.name
-    if dest.exists():
-        return done("refused", f"{dest} exists; remove it or choose another --out")
+    try:
+        if dest.exists():
+            return done("refused", f"{dest} exists; remove it or choose another --out")
+    except OSError as e:                                                # a name the file system cannot hold (Python 3.12+ raises it from exists())
+        return done("refused", f"cannot use --out {out.name[:60]}: {e.strerror}")
     tar = subprocess.run(["git", "-C", str(pack), "archive", "--format=tar", f"refs/remotes/{base}"], capture_output=True, env=clean_env())
     if tar.returncode != 0:
         return done("refused", f"cannot archive {base}: {tar.stderr.decode(errors='replace').strip()[:120]}")

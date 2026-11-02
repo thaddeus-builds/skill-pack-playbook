@@ -894,6 +894,9 @@ for label, patch in (("a TLS alert", ssl.SSLError(1, "tlsv1 alert internal error
     v = Vendor([])
     with mock.patch.object(http.client.HTTPConnection, "getresponse", side_effect=patch):
         e = refusal(ai.ask, route(v), "S", "t", max_tokens=400, prices=PRICES, ledger=led, budget=ai.Budget(1.0), sleep=no_sleep([]))
+    until = time.monotonic() + 5                                          # the server's thread records the request; the client may be done first
+    while not v.seen and time.monotonic() < until:
+        time.sleep(0.01)
     check(f"{label} raised while the reply is read: the request was written, so one try, 'cut_off', the estimate stays booked (it was four tries booked as free)",
           code_of(e) == "aicall_network_error" and len(v.seen) == 1 and led.rows()[-1]["status"] == "cut_off" and led.spent() == round(est, 6), (e, len(v.seen), led.rows()[-1:]))
     v.close()
