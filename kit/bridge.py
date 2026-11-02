@@ -759,7 +759,7 @@ def download_attachment(creds: Credentials, conversation_id: str, message: dict,
             data = resp.read(max_bytes + 1)
     except urllib.error.HTTPError as e:
         raise RestError(f"download: HTTP {e.code}") from None
-    except (urllib.error.URLError, OSError) as e:
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:     # InvalidURL's text holds the signed link
         raise RestError(f"download: {type(e).__name__}") from None
     if len(data) > max_bytes:
         raise RestError("download: the file is larger than the limit")
