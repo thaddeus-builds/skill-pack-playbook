@@ -390,7 +390,7 @@ def main() -> int:
     git(r, "worktree", "add", "-q", "-b", "wtb", str(wt))
     seen, made = d / "seen.txt", d / "made.txt"
     git(r, "config", "skillpack.prepush-tests",
-        f'env | grep -c "^GIT_DIR=" > {seen}; t=$(mktemp -d) && cd "$t" && git init -q && git rev-parse --absolute-git-dir > {made}')
+        f'env | grep -c "^GIT_DIR=" > {seen}; t=$(mktemp -d) && (cd "$t" && git init -q && git rev-parse --absolute-git-dir > {made}); s=$?; rm -rf "$t"; exit $s')
     p = subprocess.run([*hooked, "push", "-q", "origin", "HEAD:refs/heads/wtb"], cwd=wt, capture_output=True, text=True, env=env)
     check("the push from the worktree goes through and the test command ran", p.returncode == 0 and seen.exists() and made.exists(), p.stdout + p.stderr)
     check("the test command sees no GIT_DIR", seen.read_text().strip() == "0", seen.read_text())
