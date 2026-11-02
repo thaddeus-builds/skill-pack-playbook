@@ -746,6 +746,13 @@ def attachment_tests() -> None:
         for link in ("file:///etc/hosts", "http://downloads.example.test/x?sig=1", "ftp://downloads.example.test/x"):
             srv.resolve_to = link
             refused(f"a download link that is not https and not the API's own address ({link.split(':')[0]})", dest_dir=Path(d) / "elsewhere")
+        srv.resolve_to = f"{srv.url}/f ile?X-Amz-Signature=SIGSECRET"            # http.client refuses it with a text that holds the link
+        try:
+            bridge.download_attachment(creds, "DEMO-conv", msg, att, Path(d) / "elsewhere")
+            text = ""
+        except bridge.RestError as e:
+            text = str(e)
+        check("a link http.client refuses -> a RestError by class, with no part of the signed link", text.startswith("download: ") and "SIGSECRET" not in text and "ile" not in text, text)
         srv.resolve_to = None
         check("nothing was written for those links", not (Path(d) / "elsewhere").exists(), list(Path(d).iterdir()))
         (out / "DEMO-export.csv").write_bytes(b"other")
