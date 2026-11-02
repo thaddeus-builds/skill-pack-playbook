@@ -592,7 +592,8 @@ def main() -> int:
         owner_file = os.path.join(wdir, "owner.txt")
         Path(owner_file).write_text("SESS-1\n")
         base_env = {**os.environ, "PATH": os.path.join(wdir, "bin") + os.pathsep + os.environ["PATH"], "WAKE_TARGETS": vtf, "WAKE_TARGET": "V",
-                    "WAKE_SELF": "DEMO-me", "WAKE_STATE": wstate, "WAKE_OWNER_FILE": owner_file, "WAKE_MAX_SECONDS": "0", "WAKE_POLL": "1"}
+                    "WAKE_SELF": "DEMO-me", "WAKE_STATE": wstate, "WAKE_OWNER_FILE": owner_file, "WAKE_MAX_SECONDS": "0", "WAKE_POLL": "1",
+                    "WAKE_RETRIES": "2", "WAKE_BACKOFF": "1", "WAKE_FAIL_GRACE": "1"}
         for k in [k for k in base_env if k == "WAKE_CONF"]:
             del base_env[k]
 
@@ -714,8 +715,9 @@ def main() -> int:
                                    "pathlib.Path(state).write_text('5\\n'); sys.exit(5)\n")
         os.remove(wstate)
         rc, out, err = hook_run(WAKE_BRIDGE_CLI=fail_stub)
-        check("hook: a first run whose --once fails after saving the cursor is exit 0 and keeps the cursor (no message is skipped later)",
-              (rc, out, err) == (0, "", "") and Path(wstate).read_text().strip() == "5" and not os.path.lexists(wstate + ".lock"), (rc, err))
+        check("hook: a first run whose --once fails after saving the cursor keeps that cursor (no message is skipped later); the watch then fails too = one WATCHER FAILED wake",
+              rc == 2 and err.startswith("WATCHER FAILED:") and Path(wstate).read_text().strip() == "5" and not os.path.lexists(wstate + ".lock"), (rc, err))
+        os.remove(wstate + ".failed")
         Path(wstate).write_text("0\n")
 
         # no cursor file yet: it is made first ("after the newest message now"), so nothing that arrives later is skipped
@@ -730,16 +732,44 @@ def main() -> int:
         check("hook: the message that came after that cursor is delivered", rc == 2 and "arrives after the first cursor" in err and "hello from the group" not in err, (rc, err))
         Path(wstate).write_text("0\n")
 
-        # a failure is logged and moves nothing
+        # a persistent failure wakes the session once ("WATCHER FAILED:"), names the log, and then does not spam
         missing = os.path.join(d, "wake-missing.json")
         Path(missing).write_text("{}")
         Path(wstate).write_text("0\n")
         Path(wstate + ".bak").write_text("77\n")
+        t0 = time.time()
         rc, out, err = hook_run(WAKE_TARGETS=missing)
         errlog = Path(wstate + ".err").read_text() if os.path.exists(wstate + ".err") else ""
-        check("hook: a failed watch (no such target) = exit 0, nothing on stdout or stderr, the reason in the .err file, cursor and .bak untouched",
-              (rc, out, err) == (0, "", "") and "rc=2" in errlog and "targets" in errlog and Path(wstate).read_text().strip() == "0"
-              and Path(wstate + ".bak").read_text().strip() == "77" and leftovers() == [], (rc, out, err, errlog))
+        check("hook: a watch that keeps ending with an error (no such target) is retried with a backoff, then wakes once: one line, WATCHER FAILED, the log file named",
+              rc == 2 and out == "" and err.startswith("WATCHER FAILED:") and err.count("\n") == 1 and wstate + ".err" in err and "rc=2" in err
+              and time.time() - t0 >= 1 and "targets" in errlog and os.path.exists(wstate + ".failed"), (rc, out, err))
+        check("hook: that failed run moved nothing (cursor and .bak as they were) and left no work files",
+              Path(wstate).read_text().strip() == "0" and Path(wstate + ".bak").read_text().strip() == "77" and leftovers() == [], os.listdir(wdir))
+        rc, out, err = hook_run(WAKE_TARGETS=missing)
+        check("hook: the same failure streak does not wake again (exit 0, not a word)", (rc, out, err) == (0, "", ""), (rc, out, err))
+        rc, out, err = hook_run()
+        check("hook: a good run ends the streak (marker gone) and a message still wakes normally", rc == 2 and err.startswith("GROUP WAKE") and not os.path.exists(wstate + ".failed"), (rc, err))
+        shutil.copy(wstate + ".bak", wstate)
+        rc, out, err = hook_run(WAKE_TARGETS=missing)
+        check("hook: a failure after a good run is a new streak and wakes again", rc == 2 and err.startswith("WATCHER FAILED:"), (rc, err))
+        os.remove(wstate + ".failed")
+
+        # a server that always errors: the watch itself prints its WATCHER failure line and keeps trying; the hook wakes once after a grace period
+        down_tf = os.path.join(d, "wake-down.json")
+        with open(vtf) as fh:
+            down = json.load(fh)
+        down["V"]["config"] = write_config(d, "down.json", "http://127.0.0.1:1")
+        with open(down_tf, "w") as fh:
+            json.dump(down, fh)
+        Path(wstate).write_text("0\n")
+        t0 = time.time()
+        rc, out, err = hook_run(WAKE_TARGETS=down_tf, WAKE_MAX_SECONDS="600", WAKE_FAIL_GRACE="2")
+        check("hook: a server that always errors (the watch keeps running and says WATCHER once) = one WATCHER FAILED wake with the watch's own line, after the grace",
+              rc == 2 and err.startswith("WATCHER FAILED: WATCHER:") and wstate + ".err" in err and err.count("\n") == 1 and time.time() - t0 >= 2
+              and os.path.exists(wstate + ".failed") and leftovers() == [] and not os.path.lexists(wstate + ".lock"), (rc, err, os.listdir(wdir)))
+        rc, out, err = hook_run(WAKE_TARGETS=down_tf, WAKE_MAX_SECONDS="600", WAKE_FAIL_GRACE="2")
+        check("hook: and the next start while it is still down is quiet (exit 0)", (rc, out, err) == (0, "", ""), (rc, err))
+        os.remove(wstate + ".failed")
 
         # SIGTERM ends the script and the watch it started; kill -9 leaves a watch that touches only its own copy of the cursor
         Path(wstate).write_text(f"{len(vsrv.msgs)}\n")
@@ -753,7 +783,8 @@ def main() -> int:
                     break
                 time.sleep(0.05)
             time.sleep(0.5)
-            kids = subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True, text=True).stdout.split()
+            kids = [k for k in subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True, text=True).stdout.split()
+                    if "bridge_cli.py" in subprocess.run(["ps", "-p", k, "-o", "command="], capture_output=True, text=True).stdout]
             check(f"hook ({sig.name}): the watch runs as its child and the script holds the lock", len(kids) == 1 and os.path.lexists(wstate + ".lock"), (kids, os.listdir(wdir)))
             proc.send_signal(sig)
             proc.wait(timeout=10)
