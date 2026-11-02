@@ -409,9 +409,9 @@ def _client(creds: Credentials, urlopen, timeout: float):
         req = urllib.request.Request(creds.base_url + path, data=data, method=method)
         req.add_header("Content-Type", "application/json")
         req.add_header("User-Agent", USER_AGENT)         # Cloudflare answers Python's own with 403, error 1010
-        for k, v in creds.headers.items():
-            req.add_header(k, v)
-        req.add_header("Authorization", f"Bearer {bearer}")
+        for k, v in creds.headers.items():                      # unredirected: urllib copies only the ordinary headers to a redirect's target,
+            req.add_unredirected_header(k, v)                  # so no opener, wrapper or patched urlopen can forward a credential
+        req.add_unredirected_header("Authorization", f"Bearer {bearer}")
         where = path.split("?")[0].rsplit("/", 1)[0]
         idempotent = method == "GET" or path.endswith("/auth/agent/token")      # a read or a token: safe to ask again; never the send
         try:
@@ -779,14 +779,14 @@ def download_attachment(creds: Credentials, conversation_id: str, message: dict,
     try:
         with _no_redirect(urlopen)(req, timeout=timeout) as resp:      # no credential goes to the link, but a redirect could leave the https check behind
             data = resp.read(max_bytes + 1)
-            announced = resp.headers.get("Content-Length") if getattr(resp, "headers", None) is not None else None
+            left = getattr(resp, "length", None)           # http.client's own count of the announced bytes still unread (None: chunked or unannounced)
     except urllib.error.HTTPError as e:
         raise RestError(f"download: HTTP {e.code}") from None
     except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:     # InvalidURL's text holds the signed link
         raise RestError(f"download: {type(e).__name__}") from None
     if len(data) > max_bytes:
         raise RestError("download: the file is larger than the limit")
-    if announced is not None and announced.strip().isdigit() and len(data) < int(announced):
+    if isinstance(left, int) and left > 0:
         raise RestError("download: the file was cut short")                # nothing is written: no partial file is left behind
     out = Path(dest_dir) / name
     if out.exists() and out.read_bytes() != data:

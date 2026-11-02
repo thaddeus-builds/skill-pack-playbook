@@ -564,7 +564,7 @@ CF = {"CF-Access-Client-Id": "cf-id-DEMO", "CF-Access-Client-Secret": "cf-secret
 class Recorder:
     """A local server that records the headers of every request it gets. With `redirect_to` set, it answers a request to a
     path in `redirect` with `code` and that address, and answers the token exchange and the link resolve itself."""
-    def __init__(self, redirect_to=None, redirect=(), code=302, body=None, cut=None):
+    def __init__(self, redirect_to=None, redirect=(), code=302, body=None, cut=None, cl="100"):
         self.seen, outer = [], self
         self.redirect_to, self.redirect, self.code = redirect_to, tuple(redirect), code
 
@@ -589,7 +589,7 @@ class Recorder:
                     return self._json({"data": {"resolved": {uri: {"download_url": f"{outer.url}/dl/f"}}}})
                 if path.startswith("/dl/") and cut is not None:               # promises 100 bytes, sends `cut` of them
                     self.send_response(200)
-                    self.send_header("Content-Length", "100")
+                    self.send_header("Content-Length", cl)
                     self.end_headers()
                     return self.wfile.write(cut)
                 if path.startswith("/dl/"):
@@ -681,6 +681,32 @@ def redirect_tests() -> None:
             api.close()
             other.close()
 
+            # a patched or wrapped urlopen is no way round it: the credentials are not among the headers urllib copies to a redirect
+            import functools
+            from unittest import mock
+            other = Recorder()
+            api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/members",))
+            creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+            orig = urllib.request.urlopen
+            for what, opener in (("a function that wraps urlopen", lambda r, timeout=None: orig(r, timeout=timeout)),
+                                 ("a functools.partial of it", functools.partial(orig))):
+                try:
+                    bridge.client(creds, opener)("GET", "/api/v1/conversations/C/members")
+                except bridge.RestError:
+                    pass
+                lk = [h for _, _, h in other.seen if "Authorization" in h or "Cf-Access-Client-Secret" in h or "Cf-Access-Client-Id" in h]
+                check(f"{what}: if it follows the redirect, no credential header goes along", not lk, other.seen)
+                other.seen.clear()
+            with mock.patch("urllib.request.urlopen", lambda r, timeout=None: orig(r, timeout=timeout)):
+                try:
+                    bridge.client(creds)("GET", "/api/v1/conversations/C/members")
+                except bridge.RestError:
+                    pass
+            lk = [h for _, _, h in other.seen if "Authorization" in h or "Cf-Access-Client-Secret" in h]
+            check("urllib.request.urlopen patched at module level: no credential header reaches the other host", not lk, other.seen)
+            api.close()
+            other.close()
+
             # a download whose body is shorter than its Content-Length is refused and leaves nothing behind; a whole one is saved
             for cut, ok in ((b"abc", False), (b"x" * 100, True)):
                 api = Recorder(cut=cut)
@@ -695,6 +721,18 @@ def redirect_tests() -> None:
                     check("a body that matches its Content-Length is saved as before", got is not None and got.size == 100 and (out / "a.csv").read_bytes() == cut, (got, err))
                 else:
                     check("a body shorter than its Content-Length is refused and no file is left", err == "download: the file was cut short" and not (out / "a.csv").exists(), (err, list(out.glob("*")) if out.exists() else None))
+                api.close()
+            # the announced length is read the way http.client reads it (1_0 and +10 are 10 to it)
+            for cl in ("1_0", "+10"):
+                api = Recorder(cut=b"abc", cl=cl)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                out = Path(d) / f"odd{cl}"
+                try:
+                    bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+                    err = ""
+                except bridge.RestError as e:
+                    err = str(e)
+                check(f"Content-Length {cl} and a short body: refused, no file", err == "download: the file was cut short" and not (out / "a.csv").exists(), (err,))
                 api.close()
             # a file that was there is not touched by a cut download
             api = Recorder(cut=b"abc")
