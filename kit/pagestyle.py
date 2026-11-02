@@ -120,15 +120,15 @@ EN = {
 }
 
 ZH = {
-    "state_untested": "未测", "state_testing": "在测", "state_promising": "有希望", "state_down": "降权",
-    "state_closed": "关闭",
+    "state_untested": "未测", "state_testing": "在测", "state_promising": "表现良好", "state_down": "表现下滑",
+    "state_closed": "已停止",
     "sep": "，",
     "money": "{n}",
     "dots": "10 次里约 {n} 次比账户平均好",
-    "warnings": "留意",
+    "warnings": "需要关注",
     "more": "另有 {n} 条，在页尾“给负责人看”里。",
-    "if_works": "如果行",
-    "if_fails": "如果不行",
+    "if_works": "如果有效",
+    "if_fails": "如果无效",
     "details": "详情",
     "owner": "给负责人看：怎么算的",
     "copy": "复制",
