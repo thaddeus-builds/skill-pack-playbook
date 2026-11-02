@@ -5,8 +5,8 @@ daily_doubt_budget_from_ad_sets		its budget is the sum of its ad groups', not on
 daily_doubt_no_budget_change_seen		no budget change of this campaign has been seen yet, so how it responds is not measured	还没看过这个 campaign 调整预算后的结果，反应没有实际量过
 daily_limit_min_daily_budget		stopped by the platform's minimum daily budget: the move is smaller than the rule wanted	被平台的最低日预算挡住：调整幅度比规则算的小
 daily_limit_max_daily_budget		stopped by the platform's maximum daily budget: the move is smaller than the rule wanted	被平台的最高日预算挡住：调整幅度比规则算的小
-daily_move	campaign,name,frm,to,change,low,high	{name}: change its daily budget from {frm} to {to} ({change:+.1%}); its marginal return reads {low} to {high}	{name}：日预算由 {frm} 调到 {to}（{change:+.1%}）；边际回报区间 {low} 到 {high}
-daily_move_evidence	value,se,level,z,cap	marginal return {value} (± {se}) against the common level {level}, z {z}, at most {cap:.0%} a day	边际回报 {value}（±{se}），所有 campaign 的共同水平 {level}，证据 z 值 {z}，每天最多调 {cap:.0%}
+daily_move	campaign,name,frm,to,change,low,high	{name}: change its daily budget from {frm} to {to} ({change:+.1%}); its marginal return reads {low} to {high}	{name}：日预算由 {frm} 调到 {to}（{change:+.1%}）；边际 ROAS区间 {low} 到 {high}
+daily_move_evidence	value,se,level,z,cap	marginal return {value} (± {se}) against the common level {level}, z {z}, at most {cap:.0%} a day	边际 ROAS {value}（±{se}），所有 campaign 的共同水平 {level}，证据 z 值 {z}，每天最多调 {cap:.0%}
 daily_move_step1		in the platform's ads manager set that campaign's daily budget to the proposed number (or, when its budget sits on its ad groups, scale them by the same share)	在平台的广告管理后台把这个 campaign 的日预算改成建议的数（预算设在 ad group 的，就按同一比例调整各个 ad group）
 daily_move_step2		report it with the command below, then read the next pull: spend should follow the budget within a day or two	用下面的指令回报；下次拉取后看花费是否在一两天内跟着预算动
 daily_request	n,batches,size	ask the maker for {n} creatives in {batches} batch(es) of up to {size}	向制作端要 {n} 条 creative，分 {batches} 批（每批最多 {size} 条）
