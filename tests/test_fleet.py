@@ -611,7 +611,9 @@ def test_a_git_call_is_kept_from_hanging_or_asking():
     spec = importlib.util.spec_from_file_location("fleet_tool2", FLEET)
     fleet = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fleet)
-    env = fleet.git_env()
+    own = {k: v for k, v in os.environ.items() if k not in ("GIT_TERMINAL_PROMPT", "GIT_HTTP_LOW_SPEED_LIMIT", "GIT_HTTP_LOW_SPEED_TIME", "GIT_SSH_COMMAND", "GIT_SSH")}
+    with mock.patch.dict(os.environ, own, clear=True):                  # the caller's own knobs win, so read the defaults with none set
+        env = fleet.git_env()
     assert env["GIT_TERMINAL_PROMPT"] == "0" and "ConnectTimeout" in env["GIT_SSH_COMMAND"] and env["GIT_HTTP_LOW_SPEED_TIME"] == "30", env
     with mock.patch.dict(os.environ, {"GIT_TERMINAL_PROMPT": "1"}):
         assert "GIT_TERMINAL_PROMPT" not in fleet.git_env(), "a value the caller set wins"

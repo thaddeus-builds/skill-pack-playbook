@@ -97,7 +97,7 @@ def test_words() -> None:
         check(f"{name}: no other word holds {{n}}", not [k for k, v in ws.items() if "{n}" in v and k not in ps.TEMPLATES])
     check("ZH: the words the source page uses", (ps.ZH["state_promising"], ps.ZH["if_fails"], ps.ZH["owner"],
                                                  ps.ZH["copied"], ps.ZH["collapse_all"])
-          == ("有希望", "如果不行", "给负责人看：怎么算的", "已复制", "全部收起"))
+          == ("表现良好", "如果无效", "给负责人看：怎么算的", "已复制", "全部收起"))
     check("ZH's more line names the owner's fold, where the rest are", "给负责人看" in ps.ZH["more"]
           and ps.ZH["owner"].startswith("给负责人看"))
     check("EN's more line names the owner's fold too", "For the owner" in ps.EN["more"]
@@ -208,7 +208,7 @@ def test_small_parts() -> None:
           and "<i " not in ps.bar({"down": None}) and ps.legend_text({"down": None, "testing": 2}) == "testing 2")
     check("the legend line in English", ps.legend_text(counts) == "promising 2, testing 6, down 1, untested 30",
           ps.legend_text(counts))
-    check("the legend line in Chinese, its own separator", ZHS.legend_text(counts) == "有希望 2，在测 6，降权 1，未测 30",
+    check("the legend line in Chinese, its own separator", ZHS.legend_text(counts) == "表现良好 2，在测 6，表现下滑 1，未测 30",
           ZHS.legend_text(counts))
     for p, n in ((0.0, 0), (0.21, 3), (0.5, 5), (0.79, 7), (0.8, 8), (0.97, 9), (1.0, 10)):
         d = ps.dots(p)
@@ -374,8 +374,8 @@ def test_warnings() -> None:
           five.count("<li>") == 3 and "w3" not in five
           and '<li class="more">2 more, under “For the owner” at the foot of the page.</li>' in five, five)
     zh = ZHS.warnings([f"w{i}" for i in range(4)])
-    check("in Chinese: 留意, and the more line names 给负责人看",
-          "<h2>留意</h2>" in zh and '<li class="more">另有 1 条，在页尾“给负责人看”里。</li>' in zh, zh)
+    check("in Chinese: 需要关注, and the more line names 给负责人看",
+          "<h2>需要关注</h2>" in zh and '<li class="more">另有 1 条，在页尾“给负责人看”里。</li>' in zh, zh)
     one = ps.warnings(["a", "b", "c"], limit=1)
     check("a lower limit: one shown, 2 more", one.count("<li>") == 1 and "2 more" in one)
     own = ps.warnings(["a", "b", "c", "d"], more="{n} more" + EVIL)
@@ -397,7 +397,7 @@ def test_cards() -> None:
     check("one line when only one is given", "If it does not" not in ps.story("x", None)
           and "If it works" not in ps.story(None, "y"))
     z = ZHS.story("a", "b")
-    check("the story in Chinese", "<b>如果行</b>" in z and "<b>如果不行</b>" in z)
+    check("the story in Chinese", "<b>如果有效</b>" in z and "<b>如果无效</b>" in z)
     c = ps.card("promising", anchor="p-0a1b2c3d4e", head='<span class="why">likely better</span>',
                 combo="<span>Opening A</span>", nums=["2 made", EVIL], p=0.83, works="Change the ending",
                 fails="Make less of it", note='<p class="note">n</p>', tech="id <code>0a1b2c3d4e</code>")

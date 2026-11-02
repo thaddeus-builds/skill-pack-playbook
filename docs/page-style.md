@@ -28,13 +28,13 @@ Every word a page shows that the caller does not pass in is in one mapping. `Sty
 
 | Key | `EN` | `ZH` | What it is |
 | --- | --- | --- | --- |
-| `state_untested` … `state_closed` | untested, testing, promising, down, closed | 未测, 在测, 有希望, 降权, 关闭 | the five states |
+| `state_untested` … `state_closed` | untested, testing, promising, down, closed | 未测, 在测, 表现良好, 表现下滑, 已停止 | the five states |
 | `sep` | `, ` | `，` | between the parts of a legend line |
 | `money` | `{n}` | `{n}` | an amount of money; the currency is the skill pack's (`¥{n}`, `${n}`, `{n} €`), so neither set names one |
 | `dots` | about {n} times in 10 better than the account | 10 次里约 {n} 次比账户平均好 | the line beside ten dots |
-| `warnings` | Watch | 留意 | the warnings box's title |
+| `warnings` | Watch | 需要关注 | the warnings box's title |
 | `more` | {n} more, under “For the owner” at the foot of the page. | 另有 {n} 条，在页尾“给负责人看”里。 | the one line for the warnings not shown: it names the fold where they are |
-| `if_works`, `if_fails` | If it works, If it does not | 如果行, 如果不行 | a card's two lines |
+| `if_works`, `if_fails` | If it works, If it does not | 如果有效, 如果无效 | a card's two lines |
 | `details` | Details | 详情 | the fold of a card's codes |
 | `owner` | For the owner: how it was worked out | 给负责人看：怎么算的 | the owner's fold |
 | `copy`, `copied`, `selected` | Copy, Copied, Selected: press ⌘C or Ctrl+C | 复制, 已复制, 已选中，按 ⌘C | the copy button, once copied, and when the browser refuses to copy |
