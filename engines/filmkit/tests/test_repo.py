@@ -8,7 +8,7 @@ import filmkit
 
 ROOT = Path(__file__).resolve().parents[1]
 # what may be tracked here: code and text; everything else (a font, a clip, a photo, a voice line) is a client's or a licence's to keep
-ALLOWED = {".py", ".md", ".toml", ".json", ".txt", ".gitignore"}
+ALLOWED = {".py", ".md", ".toml", ".json", ".txt", ".gitignore", "VERSION"}
 
 
 def test_the_version_is_the_same_in_VERSION_pyproject_and_the_package():
