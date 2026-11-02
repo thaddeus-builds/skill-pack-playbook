@@ -324,6 +324,33 @@ def test_dry_run() -> None:
           and doc["client"] == "acme", doc)
 
 
+def test_not_a_file() -> None:
+    print("\n[8] a socket or a fifo in the workspace is left out and named (issue #475)")
+    import socket
+    w = build()
+    (w["data"] / "console").mkdir()
+    here = os.getcwd()
+    os.chdir(w["data"] / "console")           # a relative name: a socket path has a short length limit
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.bind("auth.sock")
+        os.mkfifo("pipe")
+    finally:
+        os.chdir(here)
+    try:
+        dry = run(w, dry_run=True)
+        doc = run(w)
+    finally:
+        sock.close()
+    left = {"console/auth.sock", "console/pipe"}
+    check("a dry run counts neither as a file to pack and names both as left out",
+          left <= set(dry["left_out"]), dry["left_out"])
+    _, names = extract(doc["package"])
+    check("the snapshot is made, with neither in it, and the report names both",
+          not any(n.endswith(("auth.sock", "pipe")) for n in names)
+          and left <= set(doc["left_out"]), (names, doc["left_out"]))
+
+
 def test_closure() -> None:
     print("\n[7] snapshot.py's msg() calls are closed over its fragment")
     problems = messages.check_registry_closed(
@@ -345,5 +372,6 @@ if __name__ == "__main__":
     test_refusals()
     test_keep()
     test_dry_run()
+    test_not_a_file()
     test_closure()
     raise SystemExit(finish())
