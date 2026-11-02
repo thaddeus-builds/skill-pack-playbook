@@ -7,8 +7,10 @@ true. This file checks what a test can: the header, a level and a target in L0 t
 the target not below the level, a `use` from the four words (earned, built, shell, library)
 seen on a day that is not in the future, a library that sits at L0 and stays there, a
 non-library that is not at L0 only by being a library, `checked` a day that is not in the future, a next step on
-every row that has a distance to cover, one row per pack, and, when the sibling checkouts
-are present, that each row names a folder among them (CI has none and skips that check).
+every row that has a distance to cover, and one row per pack. A row with no checkout beside
+the playbook is printed, never failed: a machine or a cloud session may hold only some of the
+packs (`python3 tools/roster.py --paths` names them the same way). `problems` still takes the
+folder, for a caller that holds every pack.
 Each check is first tried on a planted break, so it cannot pass by reading nothing. The one
 calendar read is `today()`, injected into `problems`.
 """
@@ -171,11 +173,13 @@ def test_siblings_is_the_parent_of_the_main_checkout_even_from_a_worktree():
 
 def test_every_known_skill_pack_has_a_sound_row():
     header, rows = table(TABLE.read_text("utf-8"))
-    folder = siblings()
-    if folder is not None and not any((folder / r["pack"]).is_dir() for r in rows):
-        folder = None                      # no checkouts here (CI): only the table's own shape
-    found = problems(header, rows, today(), folder)
+    found = problems(header, rows, today(), None)
     assert found == [], "\n".join(found)
+    folder = siblings()
+    if folder is not None:                 # a note, not a failure: which packs this machine does not hold
+        absent = [r["pack"] for r in rows if "/" not in r["pack"] and not (folder / r["pack"]).is_dir()]
+        if absent:
+            print(f"  note: {len(absent)} of {len(rows)} rows have no checkout in {folder}: {', '.join(absent)}")
 
 
 PROMPTS = ROOT / "docs" / "skill-pack-agent-prompts.md"
