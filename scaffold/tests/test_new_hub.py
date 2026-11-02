@@ -149,6 +149,8 @@ def main() -> int:
     check("CLIENT.md: fill rows, a pack table, the console's port row",
           cm.count("<<fill:") >= 5 and new_hub.PACK_HEADER in cm
           and f"| {port} | this hub's console (`bin/console`) |" in cm, cm)
+    check("CLIENT.md: a `Who answers` table with the owner's console and a client row to fill (login, log folder)",
+          "## Who answers" in cm and "| owner (`bin/console`) |" in cm and "| client | <<fill:" in cm and "no shared account" in cm, cm)
     check("intake: README, INDEX.tsv header, inbox/",
           "inbox/<YYYY-MM-DD>-<source>/" in t["intake/README.md"]
           and t["intake/INDEX.tsv"].startswith("id\tdate\tsource\t")

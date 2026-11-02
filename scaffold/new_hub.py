@@ -458,6 +458,16 @@ The client's own details (roster, fees, codes) stay in the pack folders and
 {PORT_HEADER}
 |---|---|
 | {h['port']} | this hub's console (`bin/console`) |
+
+## Who answers
+
+One row for each console that people answer on. A client's own people use their own instance, never the
+owner's ([the client console](../docs/consoles.md#the-clients-own-console-where-it-runs-and-who-logs-in)).
+
+| Console | Who answers | Login | Log folder |
+|---|---|---|---|
+| owner (`bin/console`) | {fill("the builder-owner")} | loopback, one OS user | `console/` |
+| client | {fill("each person of the client, by name")} | {fill("the login proxy that names them; no shared account")} | {fill("its own folder, never the owner's")} |
 """
 
 
