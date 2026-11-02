@@ -48,6 +48,7 @@ import os
 import re
 import shutil
 import sqlite3
+import stat
 import tarfile
 import tempfile
 from datetime import datetime, timezone
@@ -146,7 +147,10 @@ def scan(root: str, values: list[bytes],
 def _walk(src: str, pats: list[str], on_file, on_left) -> None:
     """The one walk behind the plan and the copy: `on_file(rel)` for every
     file that goes in, `on_left(rel)` for what is left out (a directory with
-    a trailing slash). Symlinks are skipped."""
+    a trailing slash). Symlinks are skipped. Anything else that is not a
+    regular file (a unix socket a running service keeps, a fifo, a device)
+    is left out and named, never copied: copying one raises and would stop
+    the whole snapshot (issue #475)."""
     for r, dirs, fs in os.walk(src):
         rel_dir = os.path.relpath(r, src).replace(os.sep, "/")
         rel_dir = "" if rel_dir == "." else rel_dir
@@ -162,8 +166,15 @@ def _walk(src: str, pats: list[str], on_file, on_left) -> None:
             rel = f"{rel_dir}/{f}".lstrip("/")
             if excluded(rel, pats):
                 on_left(rel)
-            elif not os.path.islink(os.path.join(r, f)):
+                continue
+            try:
+                mode = os.lstat(os.path.join(r, f)).st_mode
+            except OSError:              # gone since the folder was listed
+                continue
+            if stat.S_ISREG(mode):
                 on_file(rel)
+            elif not stat.S_ISLNK(mode):
+                on_left(rel)
 
 
 def client_of(data_dir: str,
