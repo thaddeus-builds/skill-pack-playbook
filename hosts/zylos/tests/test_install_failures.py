@@ -155,10 +155,10 @@ BLOCK = ("# BEGIN zylos-component:shop-harness\nredir /shop /shop/ permanent\nha
 SITES = "{\n    email a@example.test\n}\nagent.test {\n    respond / 200\n}\nother.test {\n}\n"
 
 
-def _caddy_host(host, *, validate_ok=True, reload_ok=True, saved=True, sites=SITES):
+def _caddy_host(host, *, validate_ok=True, reload_ok=True, saved=True, sites=SITES, logins=True):
     """users + a Caddyfile without the block + the copy pre-uninstall kept + a
     fake caddy (validate passes only if the candidate holds the block) and pm2."""
-    host.write(os.path.join(host.data, "console.users"), "alice $2a$hash\n")
+    host.write(os.path.join(host.data, "console.users"), "alice $2a$hash\n" if logins else "")
     host.write(os.path.join(host.zylos, "http", "Caddyfile"), sites)
     if saved:
         host.write(os.path.join(host.data, "caddy-block.saved"), BLOCK)
@@ -186,6 +186,22 @@ def test_a_missing_caddy_block_is_restored_validated_and_reloaded():
         assert not os.path.exists(cf + ".candidate-shop-harness")
         again = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
         assert open(cf).read() == text and "restored" not in again.stdout, "idempotent: nothing to do when it is there"
+
+
+def test_the_saved_block_comes_back_before_anyone_has_a_login():
+    """Issue #484: a host that set no password yet (the form login's /setup link is its first step) did uninstall + add;
+    the copy pre-uninstall kept is put back, and with no copy the hook says the route is gone."""
+    with Host(scheduler=False) as host:
+        cf = _caddy_host(host, logins=False)
+        r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+        assert r.returncode == 0 and "restored the Caddy block" in r.stdout, r.stdout
+        assert open(cf).read().count("# BEGIN zylos-component:shop-harness") == 1
+    with Host(scheduler=False) as host:
+        cf = _caddy_host(host, logins=False, saved=False)
+        before = open(cf).read()
+        r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+        assert r.returncode == 0 and open(cf).read() == before, "a host that never had the block: Caddy is not touched"
+        assert "has no route" in r.stdout and "lib.js" in r.stdout and "caddy" in r.stdout, ("but the hook says so, with the command", r.stdout)
 
 
 def test_a_block_that_does_not_validate_or_reload_leaves_the_caddyfile_as_it_was():
