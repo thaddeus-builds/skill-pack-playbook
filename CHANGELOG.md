@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Kit
+- `kit/docs/`: the six checklists every skill pack read as copies (`bug-classes.md`, `doctor-checks.md`, `owner-review-loop.md`, `triage-checklist.md`, `vendor-api-discovery.md`, `install-checklist.md`) move from `templates/` into the kit and arrive with every copy of it; `scaffold/new_skill_pack.py` no longer copies them into `docs/` (eight packs held 48 identical copies; the owner's C5, R29; X38)
+- Skill packs: mechanical (after the re-vendor, delete each of the six from `docs/` when it equals the kit's `scripts/kit/docs/` copy, and point any link to it there; a pack that changed one keeps it and says why)
+
 ### Other
 - `tools/seen_once.py list|close`: an issue labelled `seen-once` with no activity for 90 days is listed, and closed as not planned with a comment naming the rule (the owner's C10, R29; X40)
 - Skill packs: nothing (a playbook tool)

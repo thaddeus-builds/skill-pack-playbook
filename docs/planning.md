@@ -92,7 +92,7 @@ People who run the skill pack for real clients file issues. Three templates, in 
 | 体验 (experience) | no error, but too many steps, an unclear message, repeated confirms | what they wanted, the steps, where they got stuck, a suggestion |
 | 需求 (need) | a new story | milestone, human step, I want, so that, given, then, evidence; the agent fills in the smallest change and any owner question |
 
-Every template begins with what must never be pasted: secrets, codes, env files, contact data of the client's customers. Labels carry the milestone, the type and the client (`client:<domain>`). Triage sends each issue to one of three places: a fix under an existing story, a new story row in the registry, or the client's own data (a fact, a decision) when nothing in the skill pack is wrong ([triage checklist](../templates/triage-checklist.md)). A rule seen on one client stays proposed until a client with another business model confirms it ([operating](operating.md#when-agents-file-the-issues), rule 7).
+Every template begins with what must never be pasted: secrets, codes, env files, contact data of the client's customers. Labels carry the milestone, the type and the client (`client:<domain>`). Triage sends each issue to one of three places: a fix under an existing story, a new story row in the registry, or the client's own data (a fact, a decision) when nothing in the skill pack is wrong ([triage checklist](../kit/docs/triage-checklist.md)). A rule seen on one client stays proposed until a client with another business model confirms it ([operating](operating.md#when-agents-file-the-issues), rule 7).
 
 ## Who works where
 
