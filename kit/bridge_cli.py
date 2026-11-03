@@ -10,7 +10,7 @@
   bridge_cli.py wait TARGET SENT_ID [--from NAME|ID ...] [--wait SECONDS]
   bridge_cli.py read TARGET [--after-seq N] [--limit N]
   bridge_cli.py status TARGET SENT_ID [--from NAME|ID ...]
-  bridge_cli.py watch TARGET [--after-seq N] [--poll 60] [--state FILE] [--self NAME|ID] [--once]
+  bridge_cli.py watch TARGET [--after-seq N] [--poll 60] [--state FILE] [--self NAME|ID] [--once | --until-message [--max-seconds N]]
   bridge_cli.py download TARGET MESSAGE_ID --dir DIR
 
 Every verb takes `--targets FILE` (or the environment variable BRIDGE_TARGETS) and `--json`. The targets file is JSON the
@@ -41,9 +41,18 @@ pointer; the whole text is `read TARGET --after-seq <seq-1> --limit 1`. `--state
 starts after the newest message now. Ten failed reads in a row print one `WATCHER` line (and one when reads work again);
 a failed token exchange says so and names the key as the thing to check. It runs until stopped (`--once`: one pass).
 
+`--until-message` is `watch` for a caller that wants to be woken, not to read a stream (a Claude Code `asyncRewake` hook,
+docs/design/bridge-delivery.md): the same loop, polling, `--state`, `--self` and `WATCHER` lines, but as soon as a pass has
+printed at least one NEW line it stops and exits 6 (`MESSAGE`). The lines are already on stdout and the state file already
+holds their seq when it exits (if it cannot be written after a line was printed, the exit is still 6 and a restart repeats that last line), so a restart skips nothing it has shown: the caller owns getting those lines to the reader, and
+backs the state file up first to put it back if that fails (the doorbell recipe does the same). A message from us (`--self`)
+and a `WATCHER` line are not messages, a failed-read streak never ends it, and it needs `--self` (or `"self"` in the target):
+without it our own sends would wake the session that sent them. `--max-seconds N` ends it after N seconds with no message:
+exit 0, or 5 when the last pass could not read. It cannot be combined with `--once`, and `--max-seconds` needs it (exit 2).
+
 Exit codes: 0 sent (and replied, with --wait) or read; 2 usage or an unreadable targets file; 3 no reply in time (the
 message is sent; its id is printed); 4 refused by a check before sending (`no_mention`, `unknown_mention`, `isolation`,
-`request_cap`, an unknown --to); 5 unreadable or not sent (a failed call, a read-back that differs); a message that was posted but could not be read back is also 5, with `posted: true` and its `id` (never send it again).
+`request_cap`, an unknown --to); 5 unreadable or not sent (a failed call, a read-back that differs); a message that was posted but could not be read back is also 5, with `posted: true` and its `id` (never send it again). 6 only from `watch --until-message`: a message was printed (the state file could not be written is also 6 when a line was already out: the last line repeats on a restart).
 Test: kit/tests/test_bridge_cli.py. Design: docs/design/bridge-isolation.md, bridge-reply.md, bridge-delivery.md.
 """
 
@@ -63,7 +72,7 @@ if __name__ == "__main__":                       # run as a script: find `kit`
 
 from kit import atomic, bridge, bridge_hooks  # noqa: E402
 
-OK, USAGE, TIMEOUT, REFUSED, UNREADABLE = 0, 2, 3, 4, 5
+OK, USAGE, TIMEOUT, REFUSED, UNREADABLE, MESSAGE = 0, 2, 3, 4, 5, 6
 TARGETS_ENV = "BRIDGE_TARGETS"
 POLL = 15.0                      # seconds between reads while waiting
 WAIT_DEFAULT = 600.0
@@ -273,15 +282,18 @@ def failure_line(e: Exception) -> str:
     return f"WATCHER: {WATCH_FAIL_AT} reads in a row failed ({type(e).__name__}: {e}); still trying"
 
 
-def cmd_watch(a, target, creds, urlopen, sleep, stdout, me: str | None = None, **_) -> int:
+def cmd_watch(a, target, creds, urlopen, sleep, stdout, me: str | None = None, clock=time.monotonic, **_) -> int:
     emit = lambda line: (stdout.write(line.rstrip() + "\n"), stdout.flush())    # noqa: E731
     authed = bridge.client(creds, urlopen, 30.0)                       # one token for the whole watch
     wanted, members, names, mine = a.self_ or me, None, {}, None
+    if a.until_message and not wanted:                                 # a session woken by its own sends would wake itself for ever
+        raise Stop(USAGE, "--until-message needs --self NAME|ID (or \"self\" in the target's entry): without it our own messages would wake us")
+    deadline = clock() + a.max_seconds if a.max_seconds is not None else None
     if not wanted:
         emit("WATCHER: no --self (and no \"self\" in the target): our own messages are printed too")
     last = read_state(a.state)
     last = a.after_seq if last is None else last
-    failing, asked, warned = 0, set(), False
+    failing, asked, warned, shown = 0, set(), False, 0
     def save(seq) -> bool:
         if not a.state:
             return True
@@ -319,6 +331,7 @@ def cmd_watch(a, target, creds, urlopen, sleep, stdout, me: str | None = None, *
                         r = as_message(m)
                         who = names.get(r.sender_id) or r.sender_id
                         files = [bridge.plain_name(f.file_name) for f in r.attachments]
+                        shown += 1
                         if a.json:
                             emit(json.dumps({"event": "message", "id": one_line(r.id, 80), "seq": r.seq, "sender_id": one_line(r.sender_id, 80), "from": who,
                                              "text": one_line(r.text), "files": files}, ensure_ascii=False))
@@ -326,7 +339,7 @@ def cmd_watch(a, target, creds, urlopen, sleep, stdout, me: str | None = None, *
                             emit(f"NEW id={one_line(r.id, 80)} seq={r.seq} from={one_line(who, 80)} files={','.join(files) or '-'}: {one_line(r.text)}")
                     last = m["seq"]
                     if not save(last):
-                        return UNREADABLE
+                        return MESSAGE if a.until_message and shown else UNREADABLE     # lines are out: deliver them, a restart repeats the last
                 if last > start:
                     failing = 0                                        # progress is not failure
                 if len(page) < WATCH_PAGE or last == start:            # the last page, or a server that ignores the cursor
@@ -343,8 +356,16 @@ def cmd_watch(a, target, creds, urlopen, sleep, stdout, me: str | None = None, *
                 warned = True
         if a.once:
             return OK if failing == 0 else UNREADABLE
+        if a.until_message and shown:                                   # lines are out and the cursor is saved: the caller takes it from here
+            return MESSAGE
+        wait_s = a.poll
+        if deadline is not None:
+            left = deadline - clock()
+            if left <= 0:
+                return OK if failing == 0 else UNREADABLE
+            wait_s = min(a.poll, left)
         try:
-            sleep(a.poll)
+            sleep(wait_s)
         except KeyboardInterrupt:
             return OK
 
@@ -423,6 +444,9 @@ def parser() -> argparse.ArgumentParser:
     wt.add_argument("--state", metavar="FILE", help="keeps the last seq handled")
     wt.add_argument("--self", dest="self_", metavar="NAME|ID", help="our own member: its messages are not printed")
     wt.add_argument("--once", action="store_true", help="one pass, then exit")
+    wt.add_argument("--until-message", action="store_true",
+                    help=f"exit {MESSAGE} as soon as a pass has printed a new message (needs --self); for a hook that wakes a session")
+    wt.add_argument("--max-seconds", type=float, metavar="N", help="with --until-message: exit 0 after N seconds with no message")
     d = sub.add_parser("download", parents=[common])
     d.add_argument("message_id")
     d.add_argument("--dir", required=True, metavar="DIR", help="where the files are saved (made if missing)")
@@ -442,13 +466,20 @@ def main(argv=None, *, urlopen=urllib.request.urlopen, stdin=None, stdout=None, 
     except SystemExit as e:
         return int(e.code or 0)
     try:
+        if a.verb == "watch":
+            if a.until_message and a.once:
+                raise Stop(USAGE, "watch: --until-message and --once cannot be combined (--once is one pass and always exits; --until-message waits for a message)")
+            if a.max_seconds is not None and not a.until_message:
+                raise Stop(USAGE, "watch: --max-seconds only goes with --until-message")
+            if a.max_seconds is not None and not a.max_seconds >= 0:
+                raise Stop(USAGE, "watch: --max-seconds must be a number of seconds, 0 or more")
         path = a.targets or env.get(TARGETS_ENV)
         if not path:
             raise Stop(USAGE, f"targets: give --targets FILE or set {TARGETS_ENV}")
         target = load_target(path, a.target)
         creds = credentials(target)
         if a.verb == "watch":
-            return cmd_watch(a, target=target, creds=creds, urlopen=urlopen, sleep=sleep, stdout=stdout,
+            return cmd_watch(a, target=target, creds=creds, urlopen=urlopen, sleep=sleep, stdout=stdout, clock=clock,
                              me=target_self(path, a.target))
         doc = {"members": cmd_members, "send": cmd_send, "wait": cmd_wait, "read": cmd_read, "status": cmd_status,
                "download": cmd_download}[a.verb](
