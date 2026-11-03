@@ -1,0 +1,12 @@
+pack	cli	bin	port	base_path	note
+seo-skill-pack	seo	openmax-seo	8766	/seo	on hosts since 0.3.0; port kept
+sdr-skill-pack	sdr	openmax-sdr	18768	/sdr	on hosts as coco-sdr; renamed at its adapter update (R19); port kept
+adcut-skill-pack	adcut	openmax-adcut	8771	/adcut-asks	on hosts as adcut-skill-pack; renamed at its adapter update (R19); port kept, though it sits in the range a hub console takes (8770 and up): a hub and adcut on one host need another port by config
+amazon-ppc-skill-pack	amzads	openmax-amzads	8808	/amzads	its own adapter (R3); its code still says 8766, the seo port, and moves here at its next adapter change
+meta-ads-skill-pack	mads	openmax-mads	8801	/mads	first real host install of Stage 3 (R19)
+google-ads-skill-pack	gads	openmax-gads	8802	/gads	
+proofcut-skill-pack	proof	openmax-proof	8803	/proof	
+product-image-to-video	keyframe	openmax-keyframe	8804	/keyframe	
+asset-handoff-skill-pack	handoff	openmax-handoff	8805	/handoff	
+ad-copy-skill-pack	adcopy	openmax-adcopy	8806	/adcopy	
+video-recipes-skill-pack	vrec	openmax-vrec	8807	/vrec	

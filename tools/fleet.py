@@ -106,7 +106,7 @@ SKIP_DIRS = {"tests", "__pycache__"}
 SKIP_FILES = {"MANIFEST.sha256", ".DS_Store"}
 # The adapter files a skill pack does not copy (hosts/zylos/README.md), and the
 # one it writes itself.
-ZYLOS_NOT_COPIED = {"ecosystem.config.cjs.template", "manifest.example.json"}
+ZYLOS_NOT_COPIED = {"ecosystem.config.cjs.template", "manifest.example.json", "fleet.tsv"}
 ZYLOS_OWN = {"manifest.json"}
 
 
