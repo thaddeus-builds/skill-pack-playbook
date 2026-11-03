@@ -88,8 +88,8 @@ while :; do
     case "$(last_watcher)" in
       *"reads work again"*) rm -f "$STATE.failed"; since=0;;
       *"token exchange failed"*|*"reads in a row failed"*|*"cannot be written"*)
-        [ "$since" -eq 0 ] && since=$((SECONDS + 1))
-        [ $((SECONDS + 1 - since)) -ge "$GRACE" ] && fail_wake "$(last_watcher)";;
+        [ "$since" -eq 0 ] && since=$(date +%s)                         # POSIX sh has no seconds counter (dash, /bin/sh on Debian and Ubuntu)
+        [ $(($(date +%s) - since)) -ge "$GRACE" ] && fail_wake "$(last_watcher)";;
       *) since=0;;
     esac
   done
