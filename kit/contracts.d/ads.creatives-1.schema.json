@@ -15,7 +15,8 @@
     "A code is on one row only.",
     "A code's md5 never changes: the reader refuses a later manifest that moves it.",
     "A material id is on one row only, per platform.",
-    "A later version only adds columns at the end."
+    "A later version only adds columns at the end.",
+    "insight_id, when given, is an insight_id of the messages/1 document of the same product, whose ids are never reused, so it names the same row in every later document; a reader that does not know the column ignores it."
   ],
   "type": "object",
   "required": ["code", "md5", "file", "platform", "exported_at", "product"],
@@ -47,6 +48,10 @@
     "material_ids": {
       "description": "Optional, last. The ids the platform gave the file once it was uploaded (千川's 素材ID): digits, separated by ';'. Written only when a row has one; blank on a row without. The reader maps report rows filed under these ids to the code.",
       "type": "string", "pattern": "^[0-9]+(;[0-9]+)*$"
+    },
+    "insight_id": {
+      "description": "Optional, last. The row of messages/1 the creative was made to serve: that document's insight_id, for the same product; one row per creative, written only when a row has one, blank on a row without.",
+      "type": "string", "minLength": 1
     }
   }
 }

@@ -15,6 +15,7 @@
     "An operator uses only a proposal whose status is clean, or to_decide after a person decided; a blocked one is never used.",
     "length is counted the way the placement counts (a double-width character may count as 2), not as plain characters, unless the finding says the rule was not sourced.",
     "A proposal's id is stable: the same text keeps its id in every document that lists it.",
+    "insight_id, when given, is an insight_id of the messages/1 document the text was written from, whose ids are never reused, so it names the same row in every later document; a reader that does not know the key ignores it.",
     "An absent optional key means unknown, never null and never an empty string."
   ],
   "type": "object",
@@ -38,6 +39,7 @@
           "length": {"description": "The text's length counted the way the placement counts it.", "type": "integer", "minimum": 0},
           "status": {"description": "clean: nothing found; to_decide: a person decides (a recommended limit passed, a draft rule matched); blocked: it cannot be used as it is.", "enum": ["clean", "to_decide", "blocked"]},
           "direction": {"description": "The selling-point direction the text tests, in the client's words, so results can be read by direction.", "type": "string", "minLength": 1},
+          "insight_id": {"description": "The row of messages/1 the text was written for: that document's insight_id, so results can be read by row; direction stays the free-text account of it.", "type": "string", "minLength": 1},
           "findings": {
             "description": "What the check found; empty when the status is clean.",
             "type": "array",
