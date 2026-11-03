@@ -47,7 +47,6 @@ Updated: 2026-11-03
 - [X37] 2026-11-03 C4: amazon-ppc onto the kit, one module per PR (`atomic`, `dates`, `paths`, `messages` first; `human` and `db` last, as they are on its risky list), each with its golden diff at 0 and a clean run before the merge; after C2's re-vendor
 - [X38] 2026-11-03 C5: the scaffold docs copied into eight packs (175 identical copies, 6,069 lines: `docs/bug-classes.md`, `ssot/README.md`, `docs/doctor-checks.md` and the rest) become links to the playbook's copy; the thin test wrappers stay; one PR in the scaffold, then one per pack; found 2026-11-03: `scaffold/new_skill_pack.py` RENDERED copies `templates/{bug-classes,doctor-checks,owner-review-loop,triage-checklist,vendor-api-discovery,install-checklist}.md` with no placeholder, so every pack holds the template unchanged; the way that keeps them readable on a host is to ship them with the vendored kit (a kit change and a VERSION bump) and leave each pack's `docs/` a one-line pointer, with the DAY_ONE map pointing at the kit's copy
 - [X39] 2026-11-03 C6: the CLAUDE.md lines shared word for word by five or more packs (35 lines, 277 copies) live once, in the vendored kit, and each pack's CLAUDE.md imports them and keeps its own lines; first prove that Claude Code reads the import in a cloud session and on a host
-- [X40] 2026-11-03 C10: a `seen-once` issue with no second sighting in 90 days is closed (`state_reason: not_planned`, a comment naming the rule), with a check that lists the ones due
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)
@@ -97,6 +96,7 @@ Updated: 2026-11-03
 - [D46] 2026-11-03 a new hub has the people's layers of docs/consoles.md, `intake/`, `sources/` and `reports/`, with `intake/INDEX.tsv` and `intake/inbox` kept as links into `sources/`; `.machine/` waits (#479, the owner's scope "People's layers first") (PR #492)
 - [D47] 2026-11-03 SEO v1.20.2 carries the adapter 0.6.2 to every SEO host, one patch for #484, #485 and #488 on the owner's yes; cut by a parallel session as its S289 (seo-skill-pack PR #104)
 - [D48] 2026-11-03 kit 0.48.0, the train the day after 0.47.4 on the owner's yes (R27): `tools/release.py --owner-approved RNN` lets a ROADMAP decision quoting the owner allow it (PR #506); 17 judgement, 11 mechanical, 81 nothing (PR #507)
+- [D49] 2026-11-03 C10 (R29): `tools/seen_once.py` lists the open `seen-once` issues with no activity for 90 days and closes them as not planned with a comment naming the rule; docs/maintaining.md's loop says when (PR #510)
 ## Parked
 ## Decisions
 - [R1] 2026-10-05 which console copy stays (#24): "the playbook's" (as recorded in this roadmap's open decisions, 2026-10-05)
