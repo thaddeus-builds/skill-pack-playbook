@@ -14,7 +14,7 @@ A contract is named `<name>/<version>`, for example `ads.results/1`. It has one 
 ## Two formats
 
 - **JSON** (every new contract): the first line, then one JSON document. The schema describes the document.
-- **TSV** (`ads.creatives/1`, `ads.results/1` and its second version `ads.results/2` only, because they were already in use): the first line, a header line, then one line per row, tab-separated. The schema describes **one row**: its columns are `properties`, each cell is text, `"type": "number"` means the cell parses as a finite decimal, and a blank cell of a column that is not in `required` means unknown, never 0. `x-columns` lists the columns the header must have, in the order they are written; `required` lists those whose cell may not be blank; a column in `properties` but not in `x-columns` is optional and written last. The two schemas state the existing formats and change nothing in them.
+- **TSV** (`ads.creatives/1`, `ads.results/1` and its second version `ads.results/2` only, because they were already in use): the first line, a header line, then one line per row, tab-separated. The schema describes **one row**: its columns are `properties`, each cell is text, `"type": "number"` means the cell parses as a finite decimal, and a blank cell of a column that is not in `required` means unknown, never 0. `x-columns` lists the columns the header must have, in the order they are written; `required` lists those whose cell may not be blank; a column in `properties` but not in `x-columns` is optional and written last. The three schemas state the existing formats and change nothing in them, except that a column added later is optional and last (`ads.creatives/1`: `material_ids`, then `insight_id`, which no pack writes yet).
 
 ## The schema keywords
 
@@ -45,16 +45,17 @@ Every property has a `description` of one sentence.
 | `inquiries/1` | draft | any operator that receives an inquiry (seo for site forms, gads and meta-ads for lead ads) | sdr | [schema](inquiries-1.schema.json) | [JSON](examples/inquiries-1.example.json) |
 
 **Status** (`x-status`):
-- `in-use`: two packs already write and read it. The schema states the format they hold; it changes nothing in it, and the packs' definitions (adcut's `adcut/contracts.py`, the video-ads skill pack's `docs/contract.md`) stay the longer account of what the columns mean.
+- `in-use`: two packs already write and read it. The schema states the format they hold; it changes nothing in it except an optional column added last (`ads.creatives/1`: `material_ids`, `insight_id`), and the packs' definitions (adcut's `adcut/contracts.py`, the video-ads skill pack's `docs/contract.md`) stay the longer account of what the columns mean.
 - `agreed`: both sides have named the fields. The producer builds it as written here.
 - `draft`: drawn from the portfolio page's table. It may change **without** a new version until a producer writes it and a consumer reads it from merged code; whichever pack gets there first settles the fields by a change to this schema. After that it is `agreed`, and rule 3 applies.
 
 ## Open points
 
 - `creators.roster/1`: the video-ads skill pack's K5 (`docs/creator-split.md`) names the creator key `creator_ref`; creator-program's `crp compute roster` prints `creator`, and also `tier`, `script_id` and `permission_expired`. The schema lists both creator keys as optional and the rest as the verb prints them. creator-program and video-ads settle one key; until then a reader takes `creator_ref` if present, else `creator`.
+- `messages/1` is still `draft`: adcut writes it and no pack reads it from merged code yet. On 2026-11-03 it gained, all optional, what the pack that takes over the customer-insight card needs to publish the card as it is: `card_version`; `status` and `source` on an `insights` row; a `matrix` that lists every row ever issued (a dropped or held one too) with its tags, so an id missing from `insights` can be told from one that never existed; the confirmation fields and `lexicon_sha` in `claims_scope`, and `status` `pending` for a scope nobody has confirmed (never acted on). `ads.creatives/1` (column `insight_id`) and `copy.proposals/1` (key `insight_id`) can name the row they serve. The pack that reads it first settles what it needs by a change to this schema before its code merges; after that rule 3 applies.
 - Only the keywords above are checked by a validator. A rule across rows (a code on one row only, `nk` unique) or across fields (a `fission` needs its `scored_at`) is in `x-rules` and stays with the packs' own readers.
 
 ## Changing a contract
 
-1. A change to a schema is a pull request here, with the example changed to match and the schema copied to `kit/contracts.d/` (a vendored byte: `kit/VERSION`, the manifest and `CHANGELOG.md` move with it). `kit/tests/test_contracts.py` fails when the two copies differ. `tests/test_contracts.py` holds the shape of every schema and that the table above, the files and [docs/portfolio.md](../docs/portfolio.md) list the same contracts.
+1. A change to a schema is a pull request here, with the example changed to match and the schema copied to `kit/contracts.d/` (a vendored byte: the manifest is regenerated and the entry goes under `[Unreleased]` in `CHANGELOG.md`; `kit/VERSION` moves on the release train, [docs/maintaining.md](../docs/maintaining.md)). `kit/tests/test_contracts.py` fails when the two copies differ. `tests/test_contracts.py` holds the shape of every schema and that the table above, the files and [docs/portfolio.md](../docs/portfolio.md) list the same contracts.
 2. A new contract starts as `draft` with a row in the portfolio's table, which names its producer and its consumers.

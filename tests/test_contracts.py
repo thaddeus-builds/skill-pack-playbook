@@ -4,7 +4,7 @@ Checked: the file names follow `<name>-<version>.schema.json`; each schema parse
 in `x-contract`, uses only the keywords contracts/README.md lists, never forbids unknown fields
 (rule 2: a consumer ignores them), has a one-sentence `description` on every property and one of
 the three statuses; a TSV schema's columns, `required` and `x-columns` agree; every `$ref` points
-into the file; each example's first line is its mark; contracts/README.md's table and the table in
+into the file; every property has a type or an enum; each example's first line is its mark; contracts/README.md's table and the table in
 docs/portfolio.md list exactly the schemas that exist, the portfolio's with its producer and
 consumers; the portfolio links to contracts/.
 """
@@ -107,6 +107,15 @@ def test_every_property_is_described():
                 d = node.get("description")
                 assert d, f"{kind}{path}: no description"
                 assert len(d) <= 600, f"{kind}{path}: a description is one sentence, this one is {len(d)} characters"
+
+
+def test_every_property_has_a_type():
+    for kind, s in schemas().items():
+        for path, node in walk(s):
+            if path.rsplit("/", 2)[-2:-1] == ["properties"]:
+                resolved = s["$defs"][node["$ref"].rsplit("/", 1)[1]] if "$ref" in node else node
+                assert "type" in resolved or "enum" in resolved, \
+                    f"{kind}{path}: a property says its type (or its words), so a reader can check it"
 
 
 def test_refs_point_into_the_file():
