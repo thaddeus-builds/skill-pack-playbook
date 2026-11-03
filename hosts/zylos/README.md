@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.6.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.6.2). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -322,7 +322,7 @@ For the example manifest it prints:
 - `handle_path` strips `/shop`: the console's links are all relative and it takes no base path.
 - **The login is a form, not `basic_auth`** (0.5.0). The browser's pop-up is not something password managers reliably save; a form with `autocomplete` hints is. `bin/login.js` runs inside the console service (`bin/console.js`) and listens on a unix socket in the data dir (mode 0600); a long data dir gets a directory of its own in `$XDG_RUNTIME_DIR` or the temp dir (`zylos-<uid>-<hash>/auth.sock`, mode 0700, owned by the user, never a symlink: checked at start, else the console exits), which `lib.js caddy` prints; a path with a space in it needs quoting in the Caddyfile, so keep spaces out of the data dir. `/login`, `/logout` and `/setup` go to it. Everything else first asks it (`forward_auth`, `GET /_auth`): a valid session answers 200 with the user in `X-Remote-User`, which Caddy copies onto the request to the console; none sends the visitor to the form and back to the page they wanted (a path under the prefix only).
 - `route` keeps the written order: `request_header -X-Remote-User` drops any copy the visitor sent before `forward_auth` sets the real one. `header_up -Cookie` keeps the session cookie from the console, its logs and the agent. The console still believes the header from a loopback peer only.
-- **The public Host is passed through unchanged.** There is no `header_up Host`: the console compares a POST's `Origin` with the `Host` it sees, so a rewritten Host gets every answer refused (403). In exchange the console must accept the public Host: set `allow_host_key` (e.g. `SHOP_CONSOLE_ALLOW_HOST=agent.example.com`) through configure, then `pm2 restart zylos-<name>`. Without it, every page through Caddy is 421. post-install warns about both.
+- **The public Host is passed through unchanged.** There is no `header_up Host`: the console compares a POST's `Origin` with the `Host` it sees, so a rewritten Host gets every answer refused (403). In exchange the console must accept the public Host: set `allow_host_key` (e.g. `SHOP_CONSOLE_ALLOW_HOST=agent.example.com`) through configure, then `pm2 restart zylos-<name>`. Without it, every page through Caddy is 421. post-install warns about both. The login service (`bin/login.js`) takes the same list: a POST passes its Origin check when the Origin is the host the request names or one of these public names, so a platform entry in front of Caddy that rewrites `Host` to `localhost` (Caddy then sends `X-Forwarded-Host: localhost` too) no longer gets every login, `/setup` and approval refused (0.6.2, issue #488; `tests/live_caddy.py` checks it under a real Caddy). A foreign Origin is still 403.
 
 Validate, then reload: `~/zylos/bin/caddy validate --config ~/zylos/http/Caddyfile --adapter caddyfile && pm2 reload caddy`.
 
