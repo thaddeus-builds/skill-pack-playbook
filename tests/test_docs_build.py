@@ -182,7 +182,7 @@ def test_every_template_the_scaffolder_renders_is_listed_with_the_target_it_writ
     assert dict(ROW.findall("| [a.md](a.md) | B1 | `docs/a.md` | x |")) == {"a.md": "docs/a.md"}
     assert rendered_problems({"a.md": "docs/a.md"}, "| [a.md](a.md) | B1 | `docs/b.md` | x |") != []       # the check would notice
     assert rendered_problems({"a.md": "docs/a.md"}, "") != []
-    assert len(new_skill_pack.RENDERED) >= 15, new_skill_pack.RENDERED
+    assert len(new_skill_pack.RENDERED) >= 14, new_skill_pack.RENDERED   # six docs moved to kit/docs/ (R29, C5)
     assert rendered_problems(new_skill_pack.RENDERED, doc(TREADME)) == []
 
 

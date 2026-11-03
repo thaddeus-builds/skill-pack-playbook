@@ -83,12 +83,6 @@ RENDERED = {
     "gitignore": ".gitignore",
     "CHANGELOG.md": "CHANGELOG.md",
     "decision-rights.md": "docs/decision-rights.md",
-    "install-checklist.md": "docs/install-checklist.md",
-    "triage-checklist.md": "docs/triage-checklist.md",
-    "bug-classes.md": "docs/bug-classes.md",
-    "doctor-checks.md": "docs/doctor-checks.md",
-    "owner-review-loop.md": "docs/owner-review-loop.md",
-    "vendor-api-discovery.md": "docs/vendor-api-discovery.md",
     "session-handoff.md": "docs/session-handoff.md",
     "ROADMAP.md": "docs/ROADMAP.md",
     "research-index.md": "docs/research/README.md",
@@ -126,8 +120,8 @@ GENERATED_TESTS = ("test_run_tests.py", "test_ssot.py", "test_layering.py",
 # fails scaffold/tests/test_new_skill_pack.py until it is mapped here.
 DAY_ONE = {
     "Meeting intake": ["ssot/stages.agent.tsv"],
-    "A review page before the first paid batch": ["docs/owner-review-loop.md",
-                                                  "docs/vendor-api-discovery.md"],
+    "A review page before the first paid batch": ["scripts/kit/docs/owner-review-loop.md",
+                                                  "scripts/kit/docs/vendor-api-discovery.md"],
     "`docs/ROADMAP.md`": ["docs/ROADMAP.md", "tests/test_roadmap.py",
                           "docs/session-handoff.md"],
     "The test kit before the first feature": [
@@ -139,9 +133,9 @@ DAY_ONE = {
                                "scripts/compute_stories.py"],
     "\"Declare it or refuse\"": ["scripts/{cli}.py", "scripts/facts.py",
                                  "tests/test_gate.py",
-                                 "docs/doctor-checks.md"],
+                                 "scripts/kit/docs/doctor-checks.md"],
     "Raw that only grows": ["scripts/kit/raw.py"],
-    "One fixture test per data bug class": ["docs/bug-classes.md"],
+    "One fixture test per data bug class": ["scripts/kit/docs/bug-classes.md"],
     "Human tables apart from the cache": ["scripts/_lib/schema.py",
                                           "tests/test_human_tables.py"],
     "The `--json` contract": ["tests/test_json_contract.py",
@@ -162,8 +156,8 @@ DAY_ONE = {
     "Git rules": ["CLAUDE.md", "{ci}"],
     "Releases are a `git archive`": ["tests/test_release.py",
                                      ".gitattributes",
-                                     "docs/install-checklist.md"],
-    "Before the first hosted client": ["docs/install-checklist.md"],
+                                     "scripts/kit/docs/install-checklist.md"],
+    "Before the first hosted client": ["scripts/kit/docs/install-checklist.md"],
 }
 
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,40}$")

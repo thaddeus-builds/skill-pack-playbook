@@ -1,7 +1,7 @@
 """What the host agent may do on Zylos, and what a refusal means (issue #370), held to the two files that say it.
 
 `hosts/zylos/README.md` has the section, and it names the refusal, the console inbox as the gate and the
-pseudo-terminal as the thing never done; `templates/install-checklist.md` says in its Rules line that a refusal is
+pseudo-terminal as the thing never done; `kit/docs/install-checklist.md` says in its Rules line that a refusal is
 a stop. Each check is first tried on a copy with the words taken out, so it cannot pass by looking at nothing.
 """
 
@@ -41,12 +41,12 @@ def problems(readme: str, checklist: str) -> list[str]:
         return [f"hosts/zylos/README.md has no section {SECTION!r}"]
     out += [f"the section does not say {w!r}" for w in README_WORDS if w not in body]
     rules = next((ln for ln in checklist.splitlines() if ln.startswith("Rules:")), "")
-    out += [f"templates/install-checklist.md Rules line does not say {w!r}" for w in CHECKLIST_WORDS if w not in rules]
+    out += [f"kit/docs/install-checklist.md Rules line does not say {w!r}" for w in CHECKLIST_WORDS if w not in rules]
     return out
 
 
 def test_the_check_refuses_each_word_taken_out():
-    readme, checklist = read("hosts/zylos/README.md"), read("templates/install-checklist.md")
+    readme, checklist = read("hosts/zylos/README.md"), read("kit/docs/install-checklist.md")
     assert not problems(readme, checklist), problems(readme, checklist)
     assert problems(readme.replace(SECTION, "## Something else"), checklist)
     for w in README_WORDS:
@@ -56,7 +56,7 @@ def test_the_check_refuses_each_word_taken_out():
 
 
 def test_the_guidance_is_there():
-    got = problems(read("hosts/zylos/README.md"), read("templates/install-checklist.md"))
+    got = problems(read("hosts/zylos/README.md"), read("kit/docs/install-checklist.md"))
     assert got == [], got
 
 
