@@ -68,6 +68,10 @@ def test_add_zylos_takes_the_port_from_here():
     import add_zylos  # noqa: E402
     assert add_zylos.default_port("meta-ads-skill-pack") == 8801 and add_zylos.default_port("seo-skill-pack") == 8766
     assert 8800 <= add_zylos.default_port("not-in-the-table-skill-pack") < 9800, "a pack with no row: the hash, as before"
+    # a toml name that is not the repository's (seen 2026-11-03: product-keyframe-video took 9730, not 8804) is found by its CLI word
+    assert add_zylos.default_port("product-keyframe-video", "keyframe") == 8804
+    assert add_zylos.default_port("ecommerce-seo-skill-pack", "seo") == 8766 and add_zylos.default_port("adcut", "adcut") == 8771
+    assert 8800 <= add_zylos.default_port("product-keyframe-video", "nokeyframe") < 9800, "neither name nor CLI word: the hash"
 
 
 if __name__ == "__main__":
