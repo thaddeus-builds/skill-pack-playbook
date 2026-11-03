@@ -102,6 +102,8 @@ def test_bad_values_are_named():
         bad(lambda x: x.update(name="Shop Skill pack"), "name", "component name")
         bad(lambda x: x["cli"].update(bin="shop"), "cli.bin", "<brand>-<cli>")
         bad(lambda x: x["cli"].update(entry="../x.py"), "cli.entry", "inside the skill dir")
+        bad(lambda x: x["cli"].update(old_bin="shop"), "cli.old_bin", "a second link for one release")
+        bad(lambda x: x["cli"].update(old_bin=x["cli"]["bin"]), "cli.old_bin", "before cli.bin")
         bad(lambda x: x["env"].update(data_dir="DATA_DIR"), "env.data_dir", "SHOP_")
         bad(lambda x: x["env"].update(files=[".shop.env"]), "env.files[0]", "absolute")
         bad(lambda x: x["runtime"].update(uv_installer_sha256="abc"), "runtime.uv_installer_sha256", "sha256")
@@ -160,6 +162,21 @@ def test_required_from_elsewhere_it_throws_and_boot_stays_safe():
                       os.path.join(host.skill, "ecosystem.config.cjs"))
         assert r.returncode == 0 and json.loads(r.stdout) == {"apps": []}, r.stdout + r.stderr
         assert "cli.bin: missing" in r.stderr, r.stderr
+
+
+def test_a_renamed_command_keeps_its_old_link():
+    """R19: a command renamed to <brand>-<cli> keeps its old name as a second link for one release: cli.old_bin, and SKILL.md links both, cli.bin first."""
+    m = example()
+    m["cli"]["old_bin"] = "old-shop"
+    new, old = f"  {m['cli']['bin']}: zylos/bin/cli.js\n", "  old-shop: zylos/bin/cli.js\n"
+    both = skill_md(m).replace(new, new + old)
+    with Host() as host:
+        host.write_manifest(m)
+        for label, text, ok in (("both", both, True), ("the new name only", skill_md(m), False), ("the old name first", both.replace(new + old, old + new), False)):
+            host.write(os.path.join(host.skill, "SKILL.md"), text)
+            r = check(host)
+            assert (r.returncode == 0) == ok, (label, r.stdout + r.stderr)
+            assert ok or f"SKILL.md bin must be exactly {{{m['cli']['bin']}: zylos/bin/cli.js, old-shop: zylos/bin/cli.js}}" in r.stderr, (label, r.stderr)
 
 
 def test_the_manifest_is_frozen_after_load():
