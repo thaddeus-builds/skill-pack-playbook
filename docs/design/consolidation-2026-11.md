@@ -4,6 +4,10 @@ The owner asked whether much can be merged or cleared up to make the job easier.
 
 How it was measured: each pack's `origin/main` was checked out in full into a scratch folder. `git archive` is not enough, because it drops CLAUDE.md and CI through `export-ignore`. Lines were counted in `.py`, `.js`, `.ts`, `.sh`, `.cjs` and `.mjs` files. A file is "vendored" when it sits under `scripts/kit/`, `kit/`, `console/`, `zylos/` or `tests/golden/`. A file counts as "identical" when its hash is the same in three or more packs and it has 15 lines or more.
 
+## The owner's answers (R29, 2026-11-03)
+
+"C2 C3 C4 C5 C6 C10 都 yes，C8 no". C1 and C9 were already decided (R26, R25). C7 waits until the last host has left GitLab. The work is in ROADMAP: C2 is X34 then X25, C3 is N4, C4 is X37, C5 is X38, C6 is X39, C10 is X40.
+
 ## The fleet today
 
 | Pack | Own lines | Vendored lines | Kit | Zylos adapter | Use |
