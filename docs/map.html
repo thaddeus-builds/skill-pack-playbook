@@ -69,13 +69,15 @@ tr:last-child td { border-bottom: 0; }
 td.mono, .mono { font-family: var(--mono); font-size: 13px; }
 .live { color: var(--live); font-weight: 700; } .promise { color: var(--promise); font-weight: 700; }
 .note { font-size: 13px; color: var(--muted); }
+.list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.ok { color: var(--earned); font-weight: 700; } .warn { color: var(--built); font-weight: 700; } .none { color: var(--shell); }
 @media (max-width: 520px) { h1 { font-size: 25px; } body { font-size: 14.5px; } }
 </style>
 
 <main>
   <header>
     <h1>技能包地图</h1>
-    <p class="sub">21 个仓库,按“有没有客户的真实数据走过”上色。状态截至 2026-10-31,对每个包的主分支只读核对;颜色以 <span class="mono">tools/adoption.tsv</span> 的 use 列为准,<span class="mono">tests/test_map.py</span> 核对两者一致。</p>
+    <p class="sub">21 个仓库,按“有没有客户的真实数据走过”上色。状态截至 2026-11-03,对每个包的主分支只读核对;颜色以 <span class="mono">tools/adoption.tsv</span> 的 use 列为准,<span class="mono">tests/test_map.py</span> 核对两者一致。</p>
     <div class="legend" aria-label="图例">
       <span><span class="count earned">9</span><span class="chip earned">已用上</span>有真实数据走过</span>
       <span><span class="count built">8</span><span class="chip built">做好了</span>测试通过,没有客户</span>
@@ -83,6 +85,49 @@ td.mono, .mono { font-family: var(--mono); font-size: 13px; }
       <span><span class="count library">2</span><span class="chip library">库</span>不是技能包</span>
     </div>
   </header>
+
+  <section class="band" aria-labelledby="news">
+    <div><h2 id="news">这周变了什么(2026-11-02 到 11-03)</h2><p class="sub">评审的前两个阶段做完了。每一条都已经合并,链接在 <a href="design/review-2026-11.md">评审页</a>。</p></div>
+    <ul class="list">
+      <li><b>playbook 自己的测试</b>在 Linux 上全绿了(之前有 6 处只在 Mac 上过)。</li>
+      <li><b>每个包在 Python 3.12 上测试都过</b>(sdr 只剩速度测试,包自己判断)。顺手修了 4 个真问题:proofcut 的警告没带代码;amazon-ppc 的后台任务结束后挡住自己重跑;sdr 在 3.12 上会接受伪造的发件人;adcut 的一处测试只认 3.13 的写法。</li>
+      <li><b>Python 统一用 3.12</b>,不再每台机器各用各的(你的决定,R18)。</li>
+      <li><b>Zylos 主机的登录</b>修好三处:平台入口后公网域名每次提交都被拒(403);卸载再装后 /seo 路由悄悄消失;一次性链接是 localhost。SEO 已发 v1.20.2 带上。</li>
+      <li><b>新客户文件夹</b>分成给人看的 <span class="mono">intake/</span>(简介、决定、待定问题、会议)、<span class="mono">sources/</span>(客户给的原件)、<span class="mono">reports/</span>(给人看的报告)。</li>
+      <li><b>消息桥</b>:发消息更稳;空闲会话有新消息时会被叫醒(修好了它在 Linux 上永远不叫醒的问题)。</li>
+    </ul>
+  </section>
+
+  <section class="band" aria-labelledby="health">
+    <div><h2 id="health">每个包的健康度</h2><p class="sub">你主要用 Zylos,所以单列“能不能装到 Zylos 上”。只查了 GitHub 上的 11 个仓库;其余 10 个还在 GitLab,本次没查。</p></div>
+    <div class="scroll"><table>
+      <tr><th>包</th><th>测试(Python 3.12)</th><th>能装到 Zylos</th><th>内核版本</th></tr>
+      <tr><td class="mono">seo</td><td class="ok">9533 通过</td><td class="ok">能(0.6.2)</td><td>0.47.0</td></tr>
+      <tr><td class="mono">sdr</td><td class="warn">4186 通过,2 个速度测试慢</td><td class="warn">能,适配器旧(0.3.1)</td><td>0.47.3</td></tr>
+      <tr><td class="mono">adcut</td><td class="ok">337 个文件全过(要装中文字体)</td><td class="warn">能,适配器旧(0.4.2)</td><td>0.47.3</td></tr>
+      <tr><td class="mono">amazon-ppc</td><td class="ok">7828 通过</td><td class="ok">能(自己的适配器)</td><td>不用内核</td></tr>
+      <tr><td class="mono">meta-ads</td><td class="ok">1027 通过</td><td class="none">还不能(第 3 阶段第一个装)</td><td>0.47.0</td></tr>
+      <tr><td class="mono">google-ads</td><td class="ok">428 通过</td><td class="none">还不能</td><td>0.44.0(最旧)</td></tr>
+      <tr><td class="mono">product-image-to-video</td><td class="ok">205 通过</td><td class="none">还不能</td><td>0.47.2</td></tr>
+      <tr><td class="mono">proofcut</td><td class="ok">157 通过</td><td class="none">还不能</td><td>0.47.0</td></tr>
+      <tr><td class="mono">asset-handoff</td><td class="ok">111 通过</td><td class="none">还不能</td><td>0.47.0</td></tr>
+      <tr><td class="mono">ad-copy</td><td class="ok">75 通过</td><td class="none">还不能</td><td>0.47.0</td></tr>
+      <tr><td class="mono">cloud-gpu</td><td class="ok">14 个文件全过</td><td>不需要(是库)</td><td>不用内核</td></tr>
+    </table></div>
+  </section>
+
+  <section class="band" aria-labelledby="stages">
+    <div><h2 id="stages">评审的六个阶段</h2><p class="sub">每个阶段结束时,所有包都还能装、测试都绿。</p></div>
+    <div class="scroll"><table>
+      <tr><th>阶段</th><th>做什么</th><th>状态</th></tr>
+      <tr><td>1</td><td>修 playbook 自己:测试、旧 issue、积压的 PR</td><td class="live">完成</td></tr>
+      <tr><td>2</td><td>每个包在自己主分支上测试全绿(Python 3.12)</td><td class="live">完成</td></tr>
+      <tr><td>3</td><td>每个包都能装到 Zylos;统一命令名 <span class="mono">openmax-…</span> 和端口表;先在真主机上装 meta-ads</td><td class="promise">下一步</td></tr>
+      <tr><td>4</td><td>所有包用同一个内核版本(先发 0.48.0)</td><td>等发版日期</td></tr>
+      <tr><td>5</td><td>内核变小;重叠的包合并或归档</td><td>等你的判断</td></tr>
+      <tr><td>6</td><td>文档变短,给 agent 读得快</td><td>之后</td></tr>
+    </table></div>
+  </section>
 
   <section class="band" aria-labelledby="sc">
     <div><h2 id="sc">客户在买什么</h2><p class="sub">字母和方案页一致。被运营的东西决定包怎么长:租来的广告账号只能“建议”,自己的网站才能真写。</p></div>
@@ -99,11 +144,11 @@ td.mono, .mono { font-family: var(--mono); font-size: 13px; }
     <div><h2 id="map">地图</h2><p class="sub">左边的粗边是状态(实线绿 = 已用上,实线黄 = 做好了,虚线灰 = 空壳,蓝 = 库)。“写入口”指能不能真的改外部系统。</p></div>
 
     <div class="layer"><h3>② 运营包:一个平台账号一个包</h3><div class="tiles">
-      <div class="tile earned"><div class="row"><b>seo</b><span class="chip earned">已用上</span></div><small>谷歌自然搜索</small><span class="door on">写入口:真在跑(客户自己的网站)</span></div>
+      <div class="tile earned"><div class="row"><b>seo</b><span class="chip earned">已用上</span></div><small>谷歌自然搜索;v1.20.2 已发,主机登录修好</small><span class="door on">写入口:真在跑(客户自己的网站)</span></div>
       <div class="tile earned"><div class="row"><b>meta-ads</b><span class="chip earned">已用上</span></div><small>Meta;2 个客户;每周一页</small><span class="door">写入口:空(只建议)</span></div>
       <div class="tile earned"><div class="row"><b>google-ads</b><span class="chip earned">已用上</span></div><small>Google;1 个客户;每天一次</small><span class="door">写入口:空(只建议)</span></div>
       <div class="tile earned"><div class="row"><b>video-ads</b><span class="chip earned">已用上</span></div><small>千川、腾讯;Meta 一半在退出</small><span class="door">写入口:无</span></div>
-      <div class="tile earned"><div class="row"><b>sdr</b><span class="chip earned">已用上</span></div><small>线索按项目轮;2 个项目</small></div>
+      <div class="tile earned"><div class="row"><b>sdr</b><span class="chip earned">已用上</span></div><small>线索按项目轮;2 个项目;outbound 的引擎已并入</small></div>
       <div class="tile earned"><div class="row"><b>geo-china</b><span class="chip earned">已用上</span></div><small>豆包可见度;数据多在自家公司</small><span class="door">写入口:无</span></div>
       <div class="tile earned"><div class="row"><b>amazon-ppc</b><span class="chip earned">已用上</span></div><small>只读到过一次,客户已停</small><span class="door">写入口:有,从没真用过</span></div>
       <div class="tile earned"><div class="row"><b>seo-programmatic</b><span class="chip earned">已用上</span></div><small>自家网站的页面集</small><span class="door">写入口:空</span></div>
@@ -148,6 +193,16 @@ td.mono, .mono { font-family: var(--mono); font-size: 13px; }
   </section>
 
   <section class="band" aria-labelledby="q">
-    <div><h2 id="q">等你判断的业务问题</h2><p class="sub">在 <a href="../ROADMAP.md">ROADMAP.md</a> 的 Waiting on owner(W10 起),每条带真实数字和建议。这页不再抄一份,免得两处说法不一致。</p></div>
+    <div><h2 id="q">请你给专家意见</h2><p class="sub">这些要懂增长的人来定,代码定不了。每条是一句问题和我的建议;真实数字和细节在 <a href="../ROADMAP.md">ROADMAP.md</a>,按括号里的编号找。</p></div>
+    <div class="scroll"><table>
+      <tr><th>问题</th><th>我的建议</th><th>编号</th></tr>
+      <tr><td>工厂出海的视频,哪个包是家?adcut、proofcut、product-image-to-video 都在做视频。</td><td>B2B 实拍素材归 proofcut;adcut 专做短视频广告,不再长实拍模式;产品图关键帧留在 product-image-to-video。</td><td class="mono">W13</td></tr>
+      <tr><td>没有客户用过的包(ad-copy、asset-handoff)留还是归档?</td><td>先留,标“做好了”;到 12 月底还没有客户就归档。</td><td class="mono">X27</td></tr>
+      <tr><td>租来的广告账号,哪个先开“真写”?meta-ads 已提交再营销的写入口(PR 47)。</td><td>客户书面同意之前不开;开的话先 Meta,一次一个改动,人批。</td><td class="mono">W12</td></tr>
+      <tr><td>用哪个数字判断生意好坏?现在保本 ROAS 是占位的 2.0。</td><td>用客户自己的财务数字;增量系数只认对照实验的结果。</td><td class="mono">W17</td></tr>
+      <tr><td>无人值守时,每个客户每天在付费数据上最多花多少?</td><td>每个客户每天 5 美元,超过就等人。</td><td class="mono">W16</td></tr>
+      <tr><td>首封冷邮件可以发到哪些国家?</td><td>欧盟和英国不发首封冷邮件,只走询盘和熟人介绍。</td><td class="mono">W15</td></tr>
+      <tr><td>内核 0.48.0 哪天发?第 4 阶段等它。</td><td>尽快(本周),一次带上所有包在等的模块。</td><td class="mono">W21</td></tr>
+    </table></div>
   </section>
 </main>
