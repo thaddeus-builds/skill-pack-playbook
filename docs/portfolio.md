@@ -151,10 +151,10 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `ads.results/2` | an operator | makers, `measurement`, `creator-program` | `ads.results/1` with the money columns in the row's own currency (`currency`, ISO 4217) instead of `_cny`; both are written for one release |
 | `ads.demand/1` | an operator | makers | how many creatives, of which format and slot, by when |
 | `handoff.batch/1` | `asset-handoff` | operators | each creative's name across its sizes, its files, its UTM tags, its form rows, and whether the names match in the media library and the form |
-| `copy.proposals/1` | `ad-copy` | operators | candidate text per placement, its check result, the selling-point direction it tests |
+| `copy.proposals/1` | `ad-copy` | operators | candidate text per placement, its check result, the selling-point direction it tests, and (optionally) the `messages/1` row it was written for |
 | `ads.changes/1` | an operator | `measurement` | each change: when, what, who or which client type |
 | `catalog/1` | `product-feed` | operators, makers, `seo` | SKU, price, availability, promotion windows |
-| `messages/1` | the messaging owner | makers, `ad-copy`, `gads` (search ad assets), `kos` (briefs) | segment, pain, objection, sayable facts, the claims scope |
+| `messages/1` | the messaging owner | makers, `ad-copy`, `gads` (search ad assets), `kos` (briefs) | segment, pain, objection, sayable facts, the claims scope with its confirmation; optionally every row ever issued with its tags (dropped and held ones too) and the objection list |
 | `truth/1` | `measurement` | operators | coefficient per campaign type, break-even ROAS, trust per campaign type; confirmed values go into the hub's facts |
 | `intel/1` | `search-intel` | `gads`, `ppc`, `seo`, `pseo` | keyword demand, trends, competitors seen, with sources and dates |
 | `ads.spend/1` | an operator | `meas`, the other operators | spend and its return per entity and day on the platform's numbers, money or index, settled or not |
