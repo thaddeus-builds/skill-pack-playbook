@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.7.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.7.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -48,6 +48,7 @@ Then add `node zylos/lib.js check` to the skill pack's CI. It exits 1 and names 
 | | `name` | The component name: equals `SKILL.md` `name`; the data dir is `$ZYLOS_DIR/components/<name>`, the pm2 service `zylos-<name>` |
 | | `min_zylos` | The oldest zylos-core this skill pack supports; post-install and post-upgrade refuse an older one |
 | `cli` | `bin` | The linked command, `<brand>-<cli>` (a generic name clashes, and core overwrites clashing links); equals the `SKILL.md` `bin` key |
+| `cli` | `old_bin` | Optional (0.7.1). The command's name before a rename, linked too for one release so that what a host calls by it keeps working (the playbook's R19: `coco-sdr` became `openmax-sdr`); `SKILL.md` `bin` then names both, `bin` first. Drop it at the next release |
 | `cli` | `entry` | The skill pack CLI inside the skill dir, a PEP 723 script run with `uv run --no-project` |
 | `cli` | `doctor` | The CLI arguments of its health check, run by post-install (`[]` skips it) |
 | `env` | `prefix` | The skill pack's env prefix, e.g. `SHOP`; it also names the test knobs `<PREFIX>_ZYLOS_HOOK_*` and `<PREFIX>_AUTH_ENV_PATHS` |

@@ -125,8 +125,12 @@ function validate(m) {
   str(m.name, 'name', re(RE.name), 'the component name = SKILL.md name (a-z, 0-9, -)');
   str(m.min_zylos, 'min_zylos', re(RE.semver), 'a zylos-core version X.Y.Z');
 
-  shape(m.cli, 'cli', ['bin', 'entry', 'doctor']);
+  shape(m.cli, 'cli', ['bin', 'entry', 'doctor'], ['old_bin']);
   str(m.cli.bin, 'cli.bin', re(RE.bin), 'the SKILL.md bin name, <brand>-<cli> (a generic name clashes)');
+  if ('old_bin' in m.cli) {
+    str(m.cli.old_bin, 'cli.old_bin', (s) => RE.bin.test(s) && s !== m.cli.bin,
+        'the name the command had before cli.bin, a second link for one release (a-z, 0-9, one - or more)');
+  }
   str(m.cli.entry, 'cli.entry', relPath, 'a path inside the skill dir, e.g. scripts/acme.py');
   list(m.cli.doctor, 'cli.doctor', word);
 
@@ -250,6 +254,7 @@ try {
 
 const NAME = M.name;
 const BIN_NAME = M.cli.bin;
+const OLD_BIN = M.cli.old_bin;              // a renamed command's old name: SKILL.md links it too, for one release
 const MIN_ZYLOS = M.min_zylos;
 const PREFIX = M.env.prefix;
 const CONFIRM_SECRET_VAR = `${PREFIX}_CONFIRM_CODE_SECRET`;
@@ -1080,8 +1085,9 @@ function skillProblems(text) {
     want(steps.includes(w), `SKILL.md next-steps must mention ${JSON.stringify(w)}`);
   }
   const bin = yamlBlock(lines, 'bin') || {};
-  want(JSON.stringify(bin) === JSON.stringify({ [BIN_NAME]: 'zylos/bin/cli.js' }),
-       `SKILL.md bin must be exactly {${BIN_NAME}: zylos/bin/cli.js} (manifest cli.bin)`);
+  const links = OLD_BIN ? [BIN_NAME, OLD_BIN] : [BIN_NAME];
+  want(JSON.stringify(bin) === JSON.stringify(Object.fromEntries(links.map((b) => [b, 'zylos/bin/cli.js']))),
+       `SKILL.md bin must be exactly {${links.map((b) => `${b}: zylos/bin/cli.js`).join(', ')}} (manifest cli.bin${OLD_BIN ? ', then cli.old_bin' : ''})`);
   const life = yamlBlock(lines, 'lifecycle') || {};
   const expected = {
     npm: 'false',

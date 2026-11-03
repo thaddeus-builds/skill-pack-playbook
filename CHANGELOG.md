@@ -17,6 +17,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: mechanical (after the re-vendor, delete each of the five from `docs/` when it equals the kit's `scripts/kit/docs/` copy, and point any link to it there; a pack that changed one keeps it and says why)
 
 ### Other
+- `hosts/zylos` 0.7.1: a manifest may name `cli.old_bin`, the command's name before a rename, and `node zylos/lib.js check` then wants it as the second `SKILL.md` `bin` entry, so a pack renamed to `openmax-<cli>` (R19) keeps its old link for one release; 0.7.0 refused any second entry (seen once, 2026-11-03: sdr's `coco-sdr`; adcut's `adcut-skill-pack` is the other rename R19 names)
+- Skill packs: mechanical (a pack with `zylos/` copies the adapter again; one that renames its command adds `cli.old_bin` and the second `bin` line for one release, then removes both)
 - `tools/seen_once.py list|close`: an issue labelled `seen-once` with no activity for 90 days is listed, and closed as not planned with a comment naming the rule (the owner's C10, R29; X40)
 - Skill packs: nothing (a playbook tool)
 
