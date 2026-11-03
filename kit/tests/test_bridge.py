@@ -28,6 +28,13 @@
     refuses nothing, an @ is compared with display names that have spaces;
   * `seen_by` reads the reactions of a message dict (one `Seen` per member and code, our own left out, a count with no
     ids is one anonymous entry, junk is ignored) and `fetch_messages` lists the group oldest first from a cursor;
+  * a send over REST is asked again only when the failure proves nothing was written (a name that does not resolve, a
+    refused connection, a connect timeout, a TLS handshake that failed): the same request, at most twice more, one post
+    in the end; a reset or a timeout after the write, and any HTTP status, are never asked again; the reason names the
+    transport failure by class and holds no query, header, key or exception text;
+  * no call follows a redirect: a local server answers 301/302/303/307 to another host:port and the second host sees no request, so
+    no Authorization and no Cloudflare Access header reaches it, for the token exchange, a read, a send and a download; the
+    reason is the status only; a download whose body is shorter than its Content-Length is refused and leaves no file;
   * check_isolation names a missing, world-readable or key-less config, a wrong organization, a data dir
     shared by two configs, and one config used with two data dirs.
 """
@@ -35,9 +42,15 @@
 import hashlib
 import json
 import os
+import socket
+import struct
 import sys
 import tempfile
 import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -80,6 +93,7 @@ class FakeServer:
     the first authed call answer 401; `fail_send` answers 500 to a send."""
     def __init__(self, store_empty=0, expire=False, fail_send=False):
         self.store_empty, self.expire, self.fail_send = store_empty, expire, fail_send
+        self.reset_send = False                  # True: a send is read, stored, and the connection dropped with no answer
         self.msgs, self.log, self.exchanges, self.tokens = {}, [], 0, ["tok-1", "tok-2"]
         self.conv_type = "GROUP"
         self.blobs, self.downloads, self.resolve_to = {}, [], None      # resolve_to: a download link to force
@@ -115,6 +129,13 @@ class FakeServer:
                     outer.exchanges += 1
                     return self._reply(200, {"data": {"access_token": outer.tokens[min(outer.exchanges, 2) - 1]}})
                 outer.log.append((self.path, body, auth))
+                if outer.reset_send and self.path.endswith("/messages"):
+                    mid = f"M{len(outer.msgs) + 1}"
+                    outer.msgs[mid] = {"id": mid, "seq": len(outer.msgs) + 1, "sender_id": "ME",
+                                       "content": {"content_type": "text", "body": {"text": body["content"]["body"]["text"]}}}
+                    self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))   # a reset, not a close
+                    self.close_connection = True
+                    return
                 if self.path.endswith("/artifacts/resolve"):
                     return self._reply(200, {"data": {"resolved": {u: {"download_url": outer.resolve_to or f"{outer.url}/dl/{u.split('://', 1)[1]}"}
                                                                    for u in body["uris"] if u.split("://", 1)[1] in outer.blobs}}})
@@ -256,6 +277,477 @@ def rest_tests(t: str) -> None:
         a = bridge.Target(write_config(d, "h1.json", "https://api.example.test"), os.path.join(d, "dh1"), "C1", "DEMO-org")
         bad = bridge.send_to(bridge.Target(a.config, a.data_dir, "C1", "OTHER-org"), t, mentions=M)
         check("send_to: refuses before any call when the isolation check fails", not bad.sent and bad.reason.startswith("isolation:"), bad)
+
+
+class RawServer:
+    """A bare TCP listener: `close` hangs up on every connection at once, `hold` reads what is sent and never answers."""
+    def __init__(self, mode):
+        self.mode, self.accepted, self.stop = mode, 0, threading.Event()
+        self.sock = socket.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(8)
+        self.port = self.sock.getsockname()[1]
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        self.sock.settimeout(0.1)
+        held = []
+        while not self.stop.is_set():
+            try:
+                c, _ = self.sock.accept()
+            except OSError:
+                continue
+            self.accepted += 1
+            if self.mode == "close":
+                c.close()
+            else:
+                held.append(c)
+        for c in held:
+            c.close()
+        self.sock.close()
+
+    def close(self):
+        self.stop.set()
+
+
+def dead_port() -> int:
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def transport_tests(t: str) -> None:
+    """A send is asked again only when the failure proves the request was never written."""
+    saved = bridge.READ_BACKOFF
+    bridge.READ_BACKOFF = 0.0
+    real = urllib.request.urlopen
+    KEYQ = "k-" + KEY
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            srv = FakeServer()
+            creds = bridge.load_credentials(write_config(d, "t.json", srv.url), "DEMO-org")
+            path = f"{creds.prefix}/conversations/DEMO-conv/messages"
+
+            def runners(urlopen, timeout=30.0):
+                return bridge.rest_runners(creds, "DEMO-conv", mentions=M, urlopen=urlopen, authed=bridge.client(creds, urlopen, timeout))
+
+            def posts():
+                return [x for x in srv.log if x[1] is not None]
+
+            # (a) the connect fails twice, the third try goes through: one post, the same client id every time
+            for what, make in (("a name that does not resolve", lambda: urllib.error.URLError(socket.gaierror(8, "nodename nor servname"))),
+                               ("a refused connection", lambda: urllib.error.URLError(ConnectionRefusedError(61, "refused")))):
+                tries = []
+
+                def flaky(req, timeout=None):
+                    if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                        tries.append(json.loads(req.data)["client_msg_id"])
+                        if len(tries) <= 2:
+                            raise make()
+                    return real(req, timeout=timeout)
+                srv.log.clear()
+                send, read = runners(flaky)
+                r = bridge.send_and_verify(send, read, t, mention_ok=True)
+                check(f"send: {what} twice, then it goes through -> sent once, three tries with one client id",
+                      r.sent and not r.resent and len(posts()) == 1 and len(tries) == 3 and len(set(tries)) == 1, (r, tries, len(posts())))
+
+            # the connect never works: three tries (READ_RETRIES + 1), nothing posted, and the reason says it never got there
+            tries = []
+
+            def never(req, timeout=None):
+                if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                    tries.append(1)
+                    raise urllib.error.URLError(socket.gaierror(8, f"nodename nor servname {creds.base_url}?token={KEYQ}"))
+                return real(req, timeout=timeout)
+            srv.log.clear()
+            send, read = runners(never)
+            check("send: a connect that never works -> three tries, none posted, no id",
+                  send(t) is None and len(tries) == bridge.READ_RETRIES + 1 and not posts(), (tries, send.last_error))
+            check("send: its reason names the class and says it never reached the server",
+                  send.last_error.startswith("POST ") and "URLError: gaierror" in send.last_error and "never reached the server" in send.last_error
+                  and "3 times" in send.last_error, send.last_error)
+            check("send: the reason holds no exception text, URL host, query or key",
+                  "nodename" not in send.last_error and "token" not in send.last_error and KEYQ not in send.last_error and KEY not in send.last_error
+                  and creds.base_url not in send.last_error, send.last_error)
+
+            # (b) the request was written and the connection reset: one post, not asked again, said to be maybe posted
+            srv.reset_send = True
+            srv.log.clear()
+            tg = bridge.Target(write_config(d, "u.json", srv.url), os.path.join(d, "data-u"), "DEMO-conv", "DEMO-org")
+            r = bridge.send_to(tg, t, mentions=M)
+            check("send: a reset after the write -> one POST, not sent, no resend",
+                  not r.sent and not r.resent and len(posts()) == 1, (r, srv.log))
+            check("send: the reset's reason names the class and says it may have reached the server",
+                  r.reason.startswith("no_id_returned: POST ") and ("ConnectionResetError" in r.reason or "RemoteDisconnected" in r.reason)
+                  and "may have reached the server" in r.reason and "never reached" not in r.reason and KEY not in r.reason, r.reason)
+            srv.reset_send = False
+
+            # the same through a hand-made URLError(reset): a reason built by hand is no proof; the post stands once
+            wrote = []
+
+            def reset_after_write(req, timeout=None):
+                if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                    real(req, timeout=timeout).close()              # the server got it and stored it
+                    wrote.append(1)
+                    raise urllib.error.URLError(ConnectionResetError(54, "reset"))
+                return real(req, timeout=timeout)
+            srv.log.clear()
+            send, read = runners(reset_after_write)
+            check("send: URLError(ConnectionResetError) after a stored post -> asked once, not again",
+                  send(t) is None and len(wrote) == 1 and len(posts()) == 1 and "URLError: ConnectionResetError" in send.last_error
+                  and "may have reached" in send.last_error, (wrote, send.last_error))
+
+            # a timeout, a broken pipe, an unreachable network built by hand: ambiguous, never asked again
+            for exc in (urllib.error.URLError(TimeoutError("timed out")), TimeoutError("timed out"), BrokenPipeError(32, "pipe"),
+                        urllib.error.URLError(OSError(51, "unreachable")), OSError(51, "unreachable"), urllib.error.URLError("who knows")):
+                tries = []
+
+                def ambiguous(req, timeout=None, exc=exc):
+                    if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                        tries.append(1)
+                        raise exc
+                    return real(req, timeout=timeout)
+                send, read = runners(ambiguous)
+                send(t)
+                check(f"send: {type(exc).__name__}({getattr(exc, 'reason', exc)!r}) built by hand is ambiguous -> one try",
+                      len(tries) == 1 and "may have reached the server" in send.last_error, (tries, send.last_error))
+
+            # (c) any HTTP status: one try, the status named
+            for code in (500, 502, 503, 504):
+                tries = []
+
+                def status(req, timeout=None, code=code):
+                    if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                        tries.append(1)
+                        raise urllib.error.HTTPError(req.full_url, code, "x", {}, None)
+                    return real(req, timeout=timeout)
+                send, read = runners(status)
+                send(t)
+                check(f"send: HTTP {code} -> one try, no retry", len(tries) == 1 and f"HTTP {code}" in send.last_error
+                      and "reached the server" not in send.last_error, (tries, send.last_error))
+
+            # real sockets: what urllib really raises, and where
+            def to(port, scheme="http"):
+                def go(req, timeout=None):
+                    if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                        req = urllib.request.Request(f"{scheme}://127.0.0.1:{port}" + urllib.parse.urlsplit(req.full_url).path,
+                                                     data=req.data, headers=dict(req.header_items()), method="POST")
+                        go.n += 1
+                    return real(req, timeout=timeout)
+                go.n = 0
+                return go
+
+            go = to(dead_port())
+            srv.log.clear()
+            send, read = runners(go)
+            check("real socket: a refused connection is asked again and says it never reached the server",
+                  send(t) is None and go.n == 3 and "never reached the server" in send.last_error and "ConnectionRefusedError" in send.last_error,
+                  (go.n, send.last_error))
+
+            raw = RawServer("close")
+            go = to(raw.port, "https")                                   # a TLS handshake against a server that hangs up
+            send, read = runners(go)
+            check("real socket: a TLS handshake that fails before any request is asked again (three connections)",
+                  send(t) is None and go.n == 3 and raw.accepted == 3 and "never reached the server" in send.last_error, (go.n, raw.accepted, send.last_error))
+            raw.close()
+
+            raw = RawServer("hold")
+            go = to(raw.port)
+            send, read = runners(go, timeout=0.3)
+            check("real socket: a server that read the request and never answered -> one connection, timed out, may have been posted",
+                  send(t) is None and go.n == 1 and raw.accepted == 1 and "timed out" in send.last_error and "may have reached the server" in send.last_error,
+                  (go.n, raw.accepted, send.last_error))
+            raw.close()
+
+            def connect_times_out(req, timeout=None):
+                if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                    connect_times_out.n += 1
+                    saved_cc = socket.create_connection
+                    socket.create_connection = lambda *a, **k: (_ for _ in ()).throw(TimeoutError("timed out"))
+                    try:
+                        return real(req, timeout=timeout)
+                    finally:
+                        socket.create_connection = saved_cc
+                return real(req, timeout=timeout)
+            connect_times_out.n = 0
+            send, read = runners(connect_times_out)
+            check("real urllib: a connect timeout (raised in socket.create_connection) is asked again, three tries",
+                  send(t) is None and connect_times_out.n == 3 and "timed out" in send.last_error and "never reached the server" in send.last_error,
+                  (connect_times_out.n, send.last_error))
+
+            # a redirect: urllib turns a POST answered 302 into a GET; if that second hop cannot connect, the first request WAS received
+            hits = []
+
+            class Redirect(BaseHTTPRequestHandler):
+                def log_message(self, *a):
+                    pass
+
+                def do_POST(self):
+                    self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                    hits.append(1)
+                    self.send_response(302)
+                    self.send_header("Location", f"http://127.0.0.1:{dead_port()}/x")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+            red = HTTPServer(("127.0.0.1", 0), Redirect)
+            threading.Thread(target=red.serve_forever, daemon=True).start()
+            send, read = runners(to(red.server_address[1]))
+            check("real socket: a POST answered 302 whose second hop cannot connect -> one POST, not asked again, may have reached the server",
+                  send(t) is None and len(hits) == 1 and "may have reached the server" in send.last_error and "never reached" not in send.last_error,
+                  (len(hits), send.last_error))
+            red.shutdown()
+            red.server_close()
+
+            # a garbage status line or a cut body is an HTTPException: a RestError, one try, not a raw exception out of send()
+            class Garbage(BaseHTTPRequestHandler):
+                def log_message(self, *a):
+                    pass
+
+                def do_POST(self):
+                    self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                    hits.append(1)
+                    self.wfile.write(b"NOT-HTTP " + KEYQ.encode() + b"\r\n\r\n")
+            hits.clear()
+            gar = HTTPServer(("127.0.0.1", 0), Garbage)
+            threading.Thread(target=gar.serve_forever, daemon=True).start()
+            send, read = runners(to(gar.server_address[1]))
+            check("real socket: a garbage status line -> a RestError by class, one POST, the server's bytes not shown",
+                  send(t) is None and len(hits) == 1 and "BadStatusLine" in send.last_error and KEYQ not in send.last_error
+                  and "may have reached the server" in send.last_error, (len(hits), send.last_error))
+            gar.shutdown()
+            gar.server_close()
+
+            # a key http.client refuses as a header value (a newline inside): ValueError whose text holds the value -> class only
+            bad = bridge.Credentials(srv.url, "DEMO-org", "KEY-secret\nrest")
+            try:
+                bridge.client(bad)("GET", "/api/v1/x")
+                err = ""
+            except bridge.RestError as e:
+                err = str(e)
+            check("a header value http.client refuses -> a RestError naming ValueError, not the value", err.startswith("POST ") and "ValueError" in err and "secret" not in err, err)
+
+            # a reason built from class names only: a hostile exception text, URL or header never reaches the error
+            for exc in (urllib.error.URLError(OSError(0, f"{KEYQ} Authorization: Bearer {KEYQ} {creds.base_url}{path}?access_token={KEYQ}")),
+                        OSError(f"{KEYQ} ?token={KEYQ}"), urllib.error.URLError(f"{KEYQ} ?token={KEYQ}"),
+                        urllib.error.URLError(KeyError(KEYQ))):
+                def leak(req, timeout=None, exc=exc):
+                    if req.get_method() == "POST" and req.full_url.endswith("/messages"):
+                        raise exc
+                    return real(req, timeout=timeout)
+                send, read = runners(leak)
+                send(t)
+                check("send: the error text of an exception never reaches the reason", KEYQ not in send.last_error and "token" not in send.last_error
+                      and "Bearer" not in send.last_error and creds.base_url not in send.last_error, send.last_error)
+
+            # a read that has a query: the query is not in the error either
+            def dead_read(req, timeout=None):
+                if req.get_method() == "GET" and "/messages" in req.full_url:
+                    raise urllib.error.URLError(socket.gaierror(8, req.full_url))
+                return real(req, timeout=timeout)
+            try:
+                bridge.fetch_messages(creds, "DEMO-conv", after_seq=7, urlopen=dead_read)
+                err = ""
+            except bridge.RestError as e:
+                err = str(e)
+            check("a failed read is named by class too, with no query and no URL",
+                  err.startswith("GET ") and "URLError: gaierror" in err and "after_seq" not in err and creds.base_url not in err and "reached" not in err, err)
+            srv.close()
+    finally:
+        bridge.READ_BACKOFF = saved
+
+
+CF = {"CF-Access-Client-Id": "cf-id-DEMO", "CF-Access-Client-Secret": "cf-secret-DEMO"}
+
+
+class Recorder:
+    """A local server that records the headers of every request it gets. With `redirect_to` set, it answers a request to a
+    path in `redirect` with `code` and that address, and answers the token exchange and the link resolve itself."""
+    def __init__(self, redirect_to=None, redirect=(), code=302, body=None, cut=None, cl="100"):
+        self.seen, outer = [], self
+        self.redirect_to, self.redirect, self.code = redirect_to, tuple(redirect), code
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _any(self):
+                n = int(self.headers.get("Content-Length", 0) or 0)
+                raw = self.rfile.read(n) if self.command == "POST" else b""
+                outer.seen.append((self.command, self.path, dict(self.headers)))
+                path = self.path.split("?")[0]
+                if outer.redirect_to and any(path.endswith(x) for x in outer.redirect):
+                    self.send_response(outer.code)
+                    self.send_header("Location", outer.redirect_to + self.path)
+                    self.send_header("Content-Length", "0")
+                    return self.end_headers()
+                if path.endswith("/auth/agent/token"):
+                    return self._json({"data": {"access_token": "tok-DEMO"}})
+                if path.endswith("/artifacts/resolve"):
+                    uri = json.loads(raw)["uris"][0]
+                    return self._json({"data": {"resolved": {uri: {"download_url": f"{outer.url}/dl/f"}}}})
+                if path.startswith("/dl/") and cut is not None:               # promises 100 bytes, sends `cut` of them
+                    self.send_response(200)
+                    self.send_header("Content-Length", cl)
+                    self.end_headers()
+                    return self.wfile.write(cut)
+                if path.startswith("/dl/"):
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    return self.wfile.write(body)
+                self._json({"data": []})
+
+            def _json(self, obj):
+                raw = json.dumps(obj).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+            do_GET = do_POST = _any
+        self.httpd = HTTPServer(("127.0.0.1", 0), H)
+        self.port = self.httpd.server_address[1]
+        self.url = f"http://127.0.0.1:{self.port}"
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+def redirect_tests() -> None:
+    """No call follows a redirect, so no credential header goes to another host."""
+    saved = bridge.READ_BACKOFF
+    bridge.READ_BACKOFF = 0.0
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            for code in (301, 302, 303, 307):
+                other = Recorder()                                       # the second host: it must never be asked
+                api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/auth/agent/token",), code=code)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                for name, call in (("token exchange", lambda: bridge.client(creds)("GET", "/api/v1/conversations/C/members")),):
+                    try:
+                        call()
+                        err = ""
+                    except bridge.RestError as e:
+                        err = str(e)
+                    check(f"{code} on the {name}: refused, the status only, nothing reached the other host",
+                          err.endswith(f"HTTP {code}") and not other.seen and KEY not in err and "localhost" not in err, (err, other.seen))
+                api.close()
+
+                api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/members", "/messages", "/messages/M1"), code=code)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                authed = bridge.client(creds)
+                for what, method, path, body in (("a read", "GET", "/api/v1/conversations/C/members", None),
+                                                 ("a read with a query", "GET", "/api/v1/conversations/C/messages?after_seq=1", None),
+                                                 ("a send", "POST", "/api/v1/conversations/C/messages", {"x": 1})):
+                    try:
+                        authed(method, path, body)
+                        err = ""
+                    except bridge.RestError as e:
+                        err = str(e)
+                    check(f"{code} on {what}: refused with the status only", err.endswith(f"HTTP {code}") and "localhost" not in err and "after_seq" not in err, err)
+                posted = [x for x in api.seen if x[0] == "POST" and x[1].endswith("/messages")]
+                check(f"{code} on a send: one POST to the API, none anywhere else", len(posted) == 1 and not other.seen, (len(posted), other.seen))
+                check("the token and the Cloudflare pair went to the API host only",
+                      any(x[2].get("Authorization") == "Bearer tok-DEMO" for x in api.seen)
+                      and all(x[2].get("Cf-Access-Client-Secret") == CF["CF-Access-Client-Secret"] for x in api.seen), api.seen[:2])
+
+                # a download: the link is on the API's own address and redirects away
+                api.redirect = ("/dl/f",)
+                msg = {"id": "M1", "conversation_id": "C", "attachments": [{"file_name": "a.csv", "artifact_id": "ART1"}]}
+                out = Path(d) / f"dl{code}"
+                try:
+                    bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+                    err = ""
+                except bridge.RestError as e:
+                    err = str(e)
+                check(f"{code} on a download: refused with the status only, no file, nothing reached the other host",
+                      err == f"download: HTTP {code}" and not out.exists() and not other.seen, (err, other.seen))
+                api.close()
+                other.close()
+
+            # the plain urlopen a caller passes (bridge_cli does) is made the refusing one too
+            other = Recorder()
+            api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/members",))
+            creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+            try:
+                bridge.client(creds, urllib.request.urlopen)("GET", "/api/v1/conversations/C/members")
+                err = ""
+            except bridge.RestError as e:
+                err = str(e)
+            check("urllib.request.urlopen passed explicitly refuses a redirect too", err.endswith("HTTP 302") and not other.seen, (err, other.seen))
+            api.close()
+            other.close()
+
+            # a patched or wrapped urlopen is no way round it: the credentials are not among the headers urllib copies to a redirect
+            import functools
+            from unittest import mock
+            other = Recorder()
+            api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/members",))
+            creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+            orig = urllib.request.urlopen
+            for what, opener in (("a function that wraps urlopen", lambda r, timeout=None: orig(r, timeout=timeout)),
+                                 ("a functools.partial of it", functools.partial(orig))):
+                try:
+                    bridge.client(creds, opener)("GET", "/api/v1/conversations/C/members")
+                except bridge.RestError:
+                    pass
+                lk = [h for _, _, h in other.seen if "Authorization" in h or "Cf-Access-Client-Secret" in h or "Cf-Access-Client-Id" in h]
+                check(f"{what}: if it follows the redirect, no credential header goes along", not lk, other.seen)
+                other.seen.clear()
+            with mock.patch("urllib.request.urlopen", lambda r, timeout=None: orig(r, timeout=timeout)):
+                try:
+                    bridge.client(creds)("GET", "/api/v1/conversations/C/members")
+                except bridge.RestError:
+                    pass
+            lk = [h for _, _, h in other.seen if "Authorization" in h or "Cf-Access-Client-Secret" in h]
+            check("urllib.request.urlopen patched at module level: no credential header reaches the other host", not lk, other.seen)
+            api.close()
+            other.close()
+
+            # a download whose body is shorter than its Content-Length is refused and leaves nothing behind; a whole one is saved
+            for cut, ok in ((b"abc", False), (b"x" * 100, True)):
+                api = Recorder(cut=cut)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                out = Path(d) / ("cut" if not ok else "whole")
+                try:
+                    got = bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+                    err = ""
+                except bridge.RestError as e:
+                    got, err = None, str(e)
+                if ok:
+                    check("a body that matches its Content-Length is saved as before", got is not None and got.size == 100 and (out / "a.csv").read_bytes() == cut, (got, err))
+                else:
+                    check("a body shorter than its Content-Length is refused and no file is left", err == "download: the file was cut short" and not (out / "a.csv").exists(), (err, list(out.glob("*")) if out.exists() else None))
+                api.close()
+            # the announced length is read the way http.client reads it (1_0 and +10 are 10 to it)
+            for cl in ("1_0", "+10"):
+                api = Recorder(cut=b"abc", cl=cl)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                out = Path(d) / f"odd{cl}"
+                try:
+                    bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+                    err = ""
+                except bridge.RestError as e:
+                    err = str(e)
+                check(f"Content-Length {cl} and a short body: refused, no file", err == "download: the file was cut short" and not (out / "a.csv").exists(), (err,))
+                api.close()
+            # a file that was there is not touched by a cut download
+            api = Recorder(cut=b"abc")
+            creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+            out = Path(d) / "keep"
+            out.mkdir()
+            (out / "a.csv").write_bytes(b"older")
+            try:
+                bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+            except bridge.RestError:
+                pass
+            check("a cut download leaves an older file of that name as it was", (out / "a.csv").read_bytes() == b"older")
+            api.close()
+    finally:
+        bridge.READ_BACKOFF = saved
 
 
 def mention_tests(t: str) -> None:
@@ -449,6 +941,13 @@ def attachment_tests() -> None:
         for link in ("file:///etc/hosts", "http://downloads.example.test/x?sig=1", "ftp://downloads.example.test/x"):
             srv.resolve_to = link
             refused(f"a download link that is not https and not the API's own address ({link.split(':')[0]})", dest_dir=Path(d) / "elsewhere")
+        srv.resolve_to = f"{srv.url}/f ile?X-Amz-Signature=SIGSECRET"            # http.client refuses it with a text that holds the link
+        try:
+            bridge.download_attachment(creds, "DEMO-conv", msg, att, Path(d) / "elsewhere")
+            text = ""
+        except bridge.RestError as e:
+            text = str(e)
+        check("a link http.client refuses -> a RestError by class, with no part of the signed link", text.startswith("download: ") and "SIGSECRET" not in text and "ile" not in text, text)
         srv.resolve_to = None
         check("nothing was written for those links", not (Path(d) / "elsewhere").exists(), list(Path(d).iterdir()))
         (out / "DEMO-export.csv").write_bytes(b"other")
@@ -627,6 +1126,8 @@ def main() -> int:
     check("a text that holds a ```json block with braces is kept as it is",
           bridge.parse_messages("ID: 1\nSender: S\nTime: t\n<<<BEGIN\n```json\n{\"a\": [1, 2]}\n```\nEND>>>")[0].text == '```json\n{"a": [1, 2]}\n```')
     rest_tests(t)
+    transport_tests(t)
+    redirect_tests()
     reaction_tests()
     mention_tests(t)
     unknown_tests(t)
