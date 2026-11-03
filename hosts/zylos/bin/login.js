@@ -315,11 +315,17 @@ function createHandler(opts) {
   };
   const go = (res, to, extra = {}) => { res.writeHead(303, { Location: to, 'Cache-Control': 'no-store', ...extra }); res.end(); };
 
-  // the Origin of a POST must be the host the visitor used (a login CSRF is still a CSRF)
+  // the Origin of a POST must be the host the visitor used (a login CSRF is still a CSRF): the host the
+  // request names, or one of the console's own public names (`allowHosts`, the console's --allow-host
+  // list). The second is needed behind a platform entry that rewrites Host to localhost, after which
+  // Caddy sends X-Forwarded-Host: localhost too, so every POST on the public domain was refused (issue #488).
+  const allowed = new Set((opts.allowHosts || []).map((x) => String(x).trim().toLowerCase()).filter(Boolean));
   const sameOrigin = (req) => {
     const o = req.headers.origin;
     if (!o) return true;
-    try { return new URL(o).host === (req.headers['x-forwarded-host'] || req.headers.host); } catch { return false; }
+    let host;
+    try { host = new URL(o).host.toLowerCase(); } catch { return false; }
+    return host === String(req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase() || allowed.has(host);
   };
 
   // The form, or a 413 and a closed connection once the body passes BODY_MAX.

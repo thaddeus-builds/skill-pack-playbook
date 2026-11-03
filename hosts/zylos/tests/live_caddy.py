@@ -70,7 +70,7 @@ def main() -> None:
     procs = []
     try:
         srv = subprocess.Popen(["node", "-e", "const l=require(process.argv[1]);l.listen({sock:process.argv[2],usersFile:process.argv[3],keyFile:process.argv[4],setupFile:process.argv[4]+'.setup',"
-                                "base:'/seo',title:'Live',userHeader:'X-Remote-User'}).on('listening',()=>console.log('up'))",
+                                "base:'/seo',title:'Live',userHeader:'X-Remote-User',allowHosts:['seo.example.com']}).on('listening',()=>console.log('up'))",
                                 LOGIN, sock, users, key], stdout=subprocess.PIPE, text=True)
         procs.append(srv)
         assert srv.stdout.readline().strip() == "up", "login service did not start"
@@ -84,7 +84,7 @@ def main() -> None:
         assert not re.search(r"<[A-Z_]+>", block), block
         cf = os.path.join(tmp, "Caddyfile")
         open(cf, "w").write("{\n    admin off\n    auto_https off\n}\n"
-                            f"http://127.0.0.1:{SITE_PORT} {{\n{block}\n}}\n")
+                            f"http://127.0.0.1:{SITE_PORT}, http://localhost:{SITE_PORT} {{\n{block}\n}}\n")
         v = subprocess.run([caddy, "validate", "--config", cf, "--adapter", "caddyfile"], capture_output=True, text=True)
         assert v.returncode == 0, f"caddy validate refused the block:\n{v.stderr[-1500:]}"
         cp = subprocess.Popen([caddy, "run", "--config", cf, "--adapter", "caddyfile"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -146,6 +146,15 @@ def main() -> None:
         ok(r.status == 200 and json.loads(body)["method"] == "POST", "a POST with a session reaches the console as a POST")
         r, _ = req("GET", "/seo/materials", headers={"Cookie": cookie[:-3] + "AAA"})
         ok(r.status == 302, "a tampered cookie is sent to the form")
+        # issue #488: a platform entry in front of Caddy rewrites Host to localhost, and Caddy then sends X-Forwarded-Host: localhost
+        entry = {"Host": f"localhost:{SITE_PORT}", "Origin": "https://seo.example.com"}
+        r, _ = req("POST", "/seo/login", urlencode({"username": "alice", "password": "wrong password!", "next": "/seo/"}), headers=entry)
+        ok(r.status == 401, f"behind a Host-rewriting entry, a POST from the console's public name reaches the password check (got {r.status}; 403 is the bug of issue #488)")
+        r, _ = req("POST", "/seo/login", urlencode({"username": "alice", "password": PW, "next": "/seo/"}), headers=entry)
+        ok(r.status == 303 and "Path=/seo" in (r.getheader("Set-Cookie") or ""), f"and the right password signs in there ({r.status})")
+        r, _ = req("POST", "/seo/login", urlencode({"username": "alice", "password": PW, "next": "/seo/"}),
+                   headers={**entry, "Origin": "https://evil.example.com"})
+        ok(r.status == 403 and not r.getheader("Set-Cookie"), f"a foreign Origin is still refused there ({r.status})")
         print(f"RESULT: {n} passed")
     finally:
         for p in procs:
