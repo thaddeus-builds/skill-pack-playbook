@@ -10,7 +10,14 @@ message, read back by the id the send returned, equals what was meant.
     a group answers only when it is @-mentioned, so an unmentioned message reaches no one.
     A direct message (`dm=True`) needs none;
   * `send(text)` returns the new message id; none returned -> nothing is
-    resent (it may have gone out) and the result says not sent;
+    resent (it may have gone out) and the result says not sent. Over REST the
+    one exception is a failure that proves the request was never written (a name
+    that does not resolve, a refused connection, a connect timeout, a TLS
+    handshake that failed): that is asked again, at most READ_RETRIES more times,
+    the same request with the same client_msg_id. A reset, a timeout after the
+    write or any HTTP status is not, and the reason in the result names the
+    transport failure by class (`URLError: ConnectionResetError`) and says
+    whether it can have been posted;
   * `read(id)` returns that message's text; the two are compared after
     stripping surrounding whitespace, nothing else;
   * a read-back that is empty or different -> ONE resend and a second
@@ -44,6 +51,10 @@ not this module's. design: docs/design/bridge-reply.md.
 A reply can be a file (a client agent's export arrives as an attached csv under a message with no text):
 `Reply.attachments` names each one, and `download_attachment` saves it exactly as stored, over REST.
 
+Which way to send: a live session with the plugin loaded replies with the plugin's `comm_send`. `kit/bridge_cli.py` (this
+module over REST) is for anything with no model in the loop (a script, a hook), for reads, `watch` and downloads, and
+for a send that needs this module's own checks (mention resolution, isolation, read-back by id).
+
 `check_isolation(targets)` names what would make two bridges share state before
 anything is sent. No client name, group or id lives here.
 Test: kit/tests/test_bridge.py.
@@ -51,9 +62,12 @@ Test: kit/tests/test_bridge.py.
 
 from __future__ import annotations
 
+import errno
 import hashlib
+import http.client
 import json
 import os
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -266,7 +280,8 @@ USER_AGENT = "claude-openmax-kit-bridge/1"
 
 
 class RestError(Exception):
-    """An HTTP call failed. The text names the status and the step, never a body, a token or a key."""
+    """An HTTP call failed. The text names the status or the transport reason (class names only) and the step, never a
+    body, a query, a header, a token or a key."""
 
 
 @dataclass(frozen=True)
@@ -298,16 +313,66 @@ READ_RETRIES = 2                 # extra tries for a read that failed in transit
 READ_BACKOFF = 0.5               # seconds before the first retry, doubling
 
 
-def _open(urlopen, req, timeout: float):
-    """`urlopen(req)`, asked again after a transport failure. Reads and the token exchange only: a send that failed in
-    transit may have been posted, and asking again would post it twice (the caller reads it back instead)."""
+def _reached_nothing(exc: BaseException) -> bool:
+    """True only when the failure PROVES the request was not written to the server: the error was raised while the
+    connection was being made. Conservative: anything else (a reset, a broken pipe, a timeout that may have come while
+    reading the answer, any HTTP status) is False, and the caller treats the send as maybe posted.
+
+    urllib wraps both a failed connect and a failed write in `URLError(reason)`, so the type of the reason alone does not
+    tell them apart. Two proofs are taken: the reason is a name-resolution failure (`socket.gaierror`) or a refused
+    connection (`ConnectionRefusedError`), which can only happen at the connect; or the reason's own traceback passes
+    through `http.client`'s `connect` or `socket.create_connection` (a connect timeout, an unreachable network, a TLS
+    handshake that failed before the first byte). A reason built by hand carries no traceback and is not proof. A
+    connect that failed on the second hop of a redirect is no proof either (the first hop was received)."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return False                                       # the server answered
+    tb = exc.__traceback__
+    while tb is not None:                                  # urllib followed a redirect (a POST answered 301/302/303 becomes a
+        if (tb.tb_frame.f_globals.get("__name__") == "urllib.request"      # GET): the first request WAS received and this is the
+                and tb.tb_frame.f_code.co_name.startswith(("http_error_3", "redirect_request"))):   # second hop failing to connect
+            return False
+        tb = tb.tb_next
+    cause = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    if not isinstance(cause, BaseException):
+        return False
+    if isinstance(cause, (socket.gaierror, ConnectionRefusedError)):
+        return True
+    tb = cause.__traceback__
+    while tb is not None:
+        code, mod = tb.tb_frame.f_code.co_name, tb.tb_frame.f_globals.get("__name__")
+        if (mod, code) in (("http.client", "connect"), ("socket", "create_connection")):
+            return True
+        tb = tb.tb_next
+    return False
+
+
+def _why(exc: BaseException) -> str:
+    """A short reason for a transport failure, made of class names only: never the exception's text (it can carry the
+    URL, a host, a header), so no query, token or key can reach a RestError. `URLError: ConnectionResetError`,
+    `URLError: gaierror`, `timed out`, `SSLError`."""
+    wrapped = isinstance(exc, urllib.error.URLError)
+    cause = exc.reason if wrapped and isinstance(exc.reason, BaseException) else exc
+    if isinstance(cause, (TimeoutError, socket.timeout)):
+        name = "timed out"
+    elif type(cause) is OSError and cause.errno in errno.errorcode:
+        name = f"OSError({errno.errorcode[cause.errno]})"
+    else:
+        name = type(cause).__name__
+    return f"URLError: {name}" if wrapped and cause is not exc else name
+
+
+def _open(urlopen, req, timeout: float, *, only_unsent: bool = False):
+    """`urlopen(req)`, asked again after a transport failure, at most READ_RETRIES more times with a doubling pause.
+    Reads and the token exchange retry on any transport failure. A send (`only_unsent`) retries only a failure that
+    proves nothing was written (`_reached_nothing`): one that may have been posted is raised at once, and the caller
+    reads it back instead. A retried send is the same request, with the same `client_msg_id`."""
     for attempt in range(READ_RETRIES + 1):
         try:
             return urlopen(req, timeout=timeout)
         except urllib.error.HTTPError:
             raise                                    # the server answered: not a transport failure
-        except (urllib.error.URLError, OSError):
-            if attempt == READ_RETRIES:
+        except (urllib.error.URLError, OSError) as e:
+            if attempt == READ_RETRIES or (only_unsent and not _reached_nothing(e)):
                 raise
             time.sleep(READ_BACKOFF * 2 ** attempt)
 
@@ -328,12 +393,16 @@ def _client(creds: Credentials, urlopen, timeout: float):
         where = path.split("?")[0].rsplit("/", 1)[0]
         idempotent = method == "GET" or path.endswith("/auth/agent/token")      # a read or a token: safe to ask again; never the send
         try:
-            with (_open(urlopen, req, timeout) if idempotent else urlopen(req, timeout=timeout)) as resp:
+            with _open(urlopen, req, timeout, only_unsent=not idempotent) as resp:
                 text = resp.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             raise RestError(f"{method} {where}: HTTP {e.code}") from None
-        except (urllib.error.URLError, OSError) as e:
-            raise RestError(f"{method} {where}: {type(e).__name__}") from None
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:   # the last two: a header http.client refuses (its text holds the value), a bad status line, a cut body
+            note = ""
+            if not idempotent:                       # a send: say whether it can have been posted
+                note = (f" (never reached the server, tried {READ_RETRIES + 1} times)" if _reached_nothing(e)
+                        else " (may have reached the server)")
+            raise RestError(f"{method} {where}: {_why(e)}{note}") from None
         try:
             return json.loads(text) if text.strip() else {}
         except ValueError:
@@ -690,7 +759,7 @@ def download_attachment(creds: Credentials, conversation_id: str, message: dict,
             data = resp.read(max_bytes + 1)
     except urllib.error.HTTPError as e:
         raise RestError(f"download: HTTP {e.code}") from None
-    except (urllib.error.URLError, OSError) as e:
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:     # InvalidURL's text holds the signed link
         raise RestError(f"download: {type(e).__name__}") from None
     if len(data) > max_bytes:
         raise RestError("download: the file is larger than the limit")
