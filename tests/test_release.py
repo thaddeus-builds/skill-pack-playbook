@@ -128,7 +128,8 @@ def test_the_owner_may_allow_a_train_inside_the_week():
 def test_the_real_changelog_is_ready_for_a_train():
     """A dry run on this repository: a train on 2999-01-01 would be accepted, so the entries merged since the last train are all paired."""
     r = subprocess.run([sys.executable, TOOL, "999.0.0", "--date", "2999-01-01", "--dry-run"], capture_output=True, text=True, cwd=ROOT)
-    assert r.returncode == 0, r.stderr
+    # right after a train [Unreleased] is empty, and that is ready too (seen once: the 0.48.0 train, the first one with no entry in its own PR)
+    assert r.returncode == 0 or "has no entry" in r.stderr, r.stderr
 
 
 if __name__ == "__main__":
