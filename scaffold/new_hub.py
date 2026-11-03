@@ -11,13 +11,21 @@
 
 One client is served by several skill packs. The hub is the client's folder
 (a git repository; its content git-ignored): one CLIENT.md, one intake, one
-owner console, and one folder per pack. What `new` writes, under <hub>/:
+owner console, and one folder per pack. Its top has the layers a person opens
+(docs/consoles.md, "Where a client's folder lives"); the hub's own tools stay
+beside them for now (no `.machine/` yet). What `new` writes, under <hub>/:
 
   * CLIENT.md: who the client is (`<<fill: …>>` rows), the pack table and
     the port table; client_terms.txt (0600), the leak-guard list, seeded
     with the title;
-  * intake/README.md, intake/INDEX.tsv (its header) and intake/inbox/: the
-    one intake every pack reads;
+  * intake/: what a person reads to recall the client and corrects the agent
+    by editing: README.md, brief.md, decisions.md (a mirror of the confirmed
+    decision rows), open-questions.md, meetings/;
+  * sources/README.md, sources/INDEX.tsv (its header) and sources/inbox/:
+    what the client or a platform gave, kept as received, one INDEX row each;
+    intake/INDEX.tsv and intake/inbox are links to them, the paths every
+    pack read before (issue #479); reports/README.md: what the packs made
+    for people;
   * exchange/README.md and exchange/.gitkeep: the folder where packs hand
     each other versioned --json documents, one file per contract, producer
     and day (`exchange/<contract>/<producer>/<date>.json`, written by
@@ -340,9 +348,12 @@ A number, a confirmation or an approval needs the owner's click on the console.
 
 ## Intake
 
-New material lands in `intake/inbox/<YYYY-MM-DD>-<source>/` and gets its
-`intake/INDEX.tsv` row at once (`intake/README.md`). Check a meeting's intake with
-`python3 {PLAYBOOK / 'build' / 'check_intake.py'} intake/*.json --packs {packs_arg}
+Read `intake/brief.md`, `intake/decisions.md` and `intake/open-questions.md` at the
+start; a person corrects you by editing them. New material lands in
+`sources/inbox/<YYYY-MM-DD>-<source>/` and gets its `sources/INDEX.tsv` row at once
+(`sources/README.md`; `intake/inbox` and `intake/INDEX.tsv` are links to them). What
+the packs make for people goes in `reports/`. Check a meeting's intake with
+`python3 {PLAYBOOK / 'build' / 'check_intake.py'} intake/meetings/*/*.json --packs {packs_arg}
 --transcript FILE`.
 
 ## Exchange
@@ -441,9 +452,11 @@ def client_md(h: dict) -> str:
 | Decision rule | {fill("in the client's words")} |
 
 This folder is the client's hub: one console for the asks of every pack
-(`bin/console`, one cap of 10 open), one intake (`intake/`), one exchange
-folder (`exchange/`, the versioned files packs hand each other), and one folder
-per pack. `bin/hub <cli> <args…>` runs that pack's own wrapper. Packs are
+(`bin/console`, one cap of 10 open), one intake for people (`intake/`: the brief,
+the decisions, the open questions, the meetings), what the client gave as it came
+(`sources/`, one `INDEX.tsv` row each) and what the packs made for people
+(`reports/`), one exchange folder (`exchange/`, the versioned files packs hand each
+other), and one folder per pack. `bin/hub <cli> <args…>` runs that pack's own wrapper. Packs are
 added with the playbook's `scaffold/new_hub.py add-pack`, never by hand.
 The client's own details (roster, fees, codes) stay in the pack folders and
 `hub/`, never in git.
@@ -471,7 +484,49 @@ owner's ([the client console](../docs/consoles.md#the-clients-own-console-where-
 """
 
 
-INTAKE_README = """# intake: everything the client or a platform gave us, and what we made of it
+INTAKE_README = """# intake: what a person reads to recall this client, and edits to correct the agent
+
+A handful of short files, read by the agent at the start of every session:
+
+- `brief.md`: who the client is, the goal, the limits, the plan in force.
+- `decisions.md`: what was decided, on which day, by whom. A mirror: the record that counts is a pack's decision
+  row, confirmed through the gate; each line says whether it has been entered.
+- `open-questions.md`: what is not decided yet.
+- `meetings/<YYYY-MM-DD>/`: a meeting's recording, transcript, notes and its intake file.
+
+What the client or a platform gave is in `../sources/`; what the packs made for people is in `../reports/`.
+`INDEX.tsv` and `inbox` here are links to `../sources/`, for the tools that used these paths before.
+Meeting content is never in git; these files and this README are (like `../CLIENT.md`).
+"""
+
+BRIEF_MD = """# Brief
+
+- Who: <<fill: who the client is and what it sells>>
+- Goal: <<fill: what the client wants, in their words>>
+- Limits: <<fill: what may not be done, spent or said>>
+- Plan in force: <<fill: what we do now, and until when>>
+"""
+
+DECISIONS_MD = """# Decisions
+
+A mirror of what was decided. The record that counts is the pack's decision row, confirmed through the gate.
+
+| Day | Decision | Who | Entered (pack, key) |
+|---|---|---|---|
+"""
+
+OPEN_QUESTIONS_MD = """# Open questions
+
+What is not decided yet, one line each: the question, who answers, by when.
+"""
+
+REPORTS_README = """# reports: what the packs made for people
+
+Pages, exports and summaries a person reads. A pack writes here or links its own output here; nothing in this
+folder is a source of numbers (the packs' databases are). Content is never in git; only this README is.
+"""
+
+SOURCES_README = """# sources: everything the client or a platform gave us, kept as it came
 
 One place per client, shared by every pack. `INDEX.tsv` lists each item once: id (never reused), date, source
 (`client`, `platform`, `meeting`, `ask`, `digest`), kind, title, path, size, file count, sha256 (a directory's digest
@@ -482,7 +537,7 @@ Rules:
    renamed, edited or removed (the packs' stores identify files by their bytes).
 2. **A value is read from intake into a pack only through that pack's own door** (`bin/hub <cli> import …`, then the
    human gate). The INDEX is a map, not a source of numbers.
-3. Intake content is never in git; only this README and `INDEX.tsv` are (and the hub's `CLIENT.md`).
+3. Source content is never in git; only this README and `INDEX.tsv` are (and the hub's `CLIENT.md`).
 """
 
 EXCHANGE_README = """# exchange: the documents the packs of this client hand to each other
@@ -511,10 +566,22 @@ GITIGNORE = """# The client's content, the console log and the hub's data: never
 !/exchange/.gitkeep
 /intake/*
 !/intake/README.md
+!/intake/brief.md
+!/intake/decisions.md
+!/intake/open-questions.md
 !/intake/INDEX.tsv
-!/intake/inbox/
-/intake/inbox/*
-!/intake/inbox/.gitkeep
+!/intake/inbox
+!/intake/meetings/
+/intake/meetings/*
+!/intake/meetings/.gitkeep
+/sources/*
+!/sources/README.md
+!/sources/INDEX.tsv
+!/sources/inbox/
+/sources/inbox/*
+!/sources/inbox/.gitkeep
+/reports/*
+!/reports/README.md
 .DS_Store
 __pycache__/
 """
@@ -540,9 +607,10 @@ def hub_brief(text: str, cli: str, port: int, name: str | None = None) -> str:
     hub: the console, ask and intake are the hub's, one folder up."""
     swaps = [
         (r"(?m)^\| `workspace/intake/` \|.*$",
-         "| `../intake/` | the client's intake, one for every pack of this client "
-         "(`../intake/README.md`): new material lands in `../intake/inbox/<date>-<source>/` "
-         "with an `INDEX.tsv` row. Read the compact facts file first, never the raw transcript |"),
+         "| `../intake/` | the client's intake for people, one for every pack of this client: read "
+         "`../intake/brief.md`, `decisions.md` and `open-questions.md` first. What the client gave lands in "
+         "`../sources/inbox/<date>-<source>/` with a `../sources/INDEX.tsv` row (`../sources/README.md`). "
+         "Read the compact facts file first, never the raw transcript |"),
         (r"(?m)^\| `workspace/console/` \|.*$",
          "| `../console/` | the hub's console log: one console for every pack of this client "
          f"(`../bin/console`, http://127.0.0.1:{port}/) |"),
@@ -589,6 +657,10 @@ def default_folder(name: str) -> str:
 
 
 # --- verbs ---------------------------------------------------------------
+
+# The paths every pack and tool read before the three layers (issue #479), kept as links into sources/.
+LEGACY_LINKS = {"intake/INDEX.tsv": "../sources/INDEX.tsv", "intake/inbox": "../sources/inbox"}
+
 
 def write(base: Path, out: dict[str, tuple[str, int]]) -> None:
     for rel, (text, mode) in out.items():
@@ -668,18 +740,28 @@ def cmd_new(a) -> int:
                                  f"'#' a comment, 're:' a regular expression\n"
                                  f"{a.title}\n", 0o600),
             "intake/README.md": (INTAKE_README, 0o644),
-            "intake/INDEX.tsv": (INDEX_HEADER, 0o644),
-            "intake/inbox/.gitkeep": ("", 0o644),
+            "intake/brief.md": (BRIEF_MD, 0o644),
+            "intake/decisions.md": (DECISIONS_MD, 0o644),
+            "intake/open-questions.md": (OPEN_QUESTIONS_MD, 0o644),
+            "intake/meetings/.gitkeep": ("", 0o644),
+            "sources/README.md": (SOURCES_README, 0o644),
+            "sources/INDEX.tsv": (INDEX_HEADER, 0o644),
+            "sources/inbox/.gitkeep": ("", 0o644),
+            "reports/README.md": (REPORTS_README, 0o644),
             "exchange/README.md": (EXCHANGE_README, 0o644),
             "exchange/.gitkeep": ("", 0o644),
             ".gitignore": (GITIGNORE, 0o644),
             ".claude/settings.json": (settings(h, hub, None), 0o644)}
     for rel in sorted(out):
         print(("would write " if a.dry_run else "write ") + str(hub / rel))
+    for rel, target in LEGACY_LINKS.items():
+        print(("would link " if a.dry_run else "link ") + f"{hub / rel} -> {target}")
     print(f"console port: {h['port']}")
     if a.dry_run:
         return 0
     write(hub, out)
+    for rel, target in LEGACY_LINKS.items():
+        (hub / rel).symlink_to(target)
     problems = init_facts(hub, markets)
     if problems:
         print(f"the hub is written, but its facts store is not: {'; '.join(problems)}; "
