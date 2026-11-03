@@ -43,7 +43,7 @@ def read(rel):
 
 
 def test_the_adapter_files_are_all_there():
-    want = set(GENERIC) | {"manifest.example.json", "README.md", "VERSION"}
+    want = set(GENERIC) | {"manifest.example.json", "README.md", "VERSION", "fleet.tsv"}   # fleet.tsv: the playbook's table, never copied
     have = {os.path.relpath(os.path.join(d, f), ADAPTER) for d, dirs, files in os.walk(ADAPTER)
             for f in files if "tests" not in os.path.relpath(d, ADAPTER).split(os.sep)
             and f != ".DS_Store"}

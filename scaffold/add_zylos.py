@@ -105,7 +105,28 @@ def settings(skill_pack: Path) -> dict:
     return got
 
 
+FLEET = SOURCE / "fleet.tsv"      # one row per skill pack: its linked command, console port and path on a host (no two alike)
+
+
+def fleet_row(name: str) -> dict | None:
+    """The pack's row of hosts/zylos/fleet.tsv, or None when it has none."""
+    try:
+        lines = FLEET.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    head = lines[0].split("\t") if lines else []
+    for line in lines[1:]:
+        row = dict(zip(head, line.split("\t")))
+        if row.get("pack") == name:
+            return row
+    return None
+
+
 def default_port(name: str) -> int:
+    """The port fleet.tsv gives the pack; for a pack not in it, 8800 plus a hash of the name (add its row: a hash collides)."""
+    row = fleet_row(name)
+    if row and row.get("port", "").isdigit():
+        return int(row["port"])
     return 8800 + zlib.crc32(name.encode()) % 1000
 
 
