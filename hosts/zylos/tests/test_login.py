@@ -31,8 +31,9 @@ PW = "correct horse battery"
 
 SERVER = """
 const l = require(process.argv[1]);
-const [sock, users, keyf, base] = process.argv.slice(2);
-l.listen({ sock, usersFile: users, keyFile: keyf, setupFile: users + '.setup', base: base === undefined ? '/seo' : base, title: 'Shop', userHeader: 'X-Remote-User' })
+const [sock, users, keyf, base, allow] = process.argv.slice(2);
+l.listen({ sock, usersFile: users, keyFile: keyf, setupFile: users + '.setup', base: base === undefined ? '/seo' : base, title: 'Shop', userHeader: 'X-Remote-User',
+           allowHosts: allow ? allow.split(',') : [] })
   .on('listening', () => console.log('up'));
 """
 
@@ -51,8 +52,9 @@ class Conn(http.client.HTTPConnection):
 class Svc:
     """A running login service with one user, alice."""
 
-    def __init__(self, user_line=True, base="/seo", sock_dir=None):
+    def __init__(self, user_line=True, base="/seo", sock_dir=None, allow=""):
         self.base = base
+        self.allow = allow
         self.dir = tempfile.mkdtemp(prefix="login ")
         self.sock = os.path.join(sock_dir or self.dir, "auth.sock")
         self.users = os.path.join(self.dir, "console.users")
@@ -63,7 +65,7 @@ class Svc:
         self.start()
 
     def start(self):
-        self.proc = subprocess.Popen([NODE, "-e", SERVER, LOGIN, self.sock, self.users, self.key, self.base],
+        self.proc = subprocess.Popen([NODE, "-e", SERVER, LOGIN, self.sock, self.users, self.key, self.base, self.allow],
                                      stdout=subprocess.PIPE, text=True)
         assert self.proc.stdout.readline().strip() == "up"
 
@@ -338,6 +340,25 @@ def test_five_wrong_passwords_lock_that_user_and_that_address():
         # a visitor from elsewhere with a good login, for a user nobody attacked
         s.set("bob", PW)
         assert s.login("bob", ip="198.51.100.77")[0].status == 303
+
+
+def test_behind_a_platform_entry_that_rewrites_host_the_public_origin_passes():
+    """Issue #488: Host and X-Forwarded-Host both arrive as localhost; the console's own public name is the allow list."""
+    behind = {"Host": "localhost", "X-Forwarded-Host": "localhost"}
+    with Svc(allow="seo.example.com,LOCALHOST") as s:
+        r, _ = s.login(headers={"Origin": "https://seo.example.com", **behind})
+        assert r.status == 303 and s.cookie(r), "a login on the public domain works behind the entry"
+        bad, _ = s.login(pw="wrong-password-1", headers={"Origin": "https://SEO.example.com", **behind})
+        assert bad.status == 401, "a bad password is a 401 there, not a 403 (the Origin passed)"
+        for evil in ("https://evil.example.com", "https://seo.example.com.evil.example.com", "https://seo.example.com:8443", "null"):
+            r, _ = s.login(headers={"Origin": evil, **behind})
+            assert r.status == 403 and not s.cookie(r), evil
+        tok = s.link()
+        ok, _ = s.req("POST", "/setup", f"token={tok}&password=a-new-password-1&password2=a-new-password-1", {"Origin": "https://seo.example.com", **behind})
+        assert ok.status == 303, ("the one-time link works behind the entry", ok.status)
+    with Svc() as s:
+        r, _ = s.login(headers={"Origin": "https://seo.example.com", **behind})
+        assert r.status == 403, "with no allow list, as before: only the host the request names"
 
 
 def test_a_post_from_another_origin_is_refused():
