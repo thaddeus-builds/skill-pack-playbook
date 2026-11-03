@@ -81,7 +81,7 @@ What a repository is and where it sits in the layers. Whether a client has used 
 | koc-script-skill-pack | `kos` | Operator, earned push, creator briefs | built | Its claims check moves to the kit's `compliance` |
 | creator-program-skill-pack | `crp` | Operator, earned push, creator economics and affiliate | built | Publishes `creators.roster/1`; takes affiliate commissions |
 | social-marketing-harness | `smh` | Operator, own social (RedNote) | dormant since 2026-10-01 (R8) | Keep; its browser reader is the model for a kit browser module |
-| outbound-skill-pack | `obd` | Operator, sales-led, sourcing | built | Merging into `sdr` (the owner, 2026-10-31); what cannot merge stays until its place is decided |
+| outbound-skill-pack | `obd` | Operator, sales-led, sourcing | built | Merged into `sdr` (the owner, 2026-10-31; sdr PRs 57 to 66); what stays here (console pages, operator docs, one old branch) has no decided place |
 | sdr-skill-pack | `sdr` | Operator, sales-led, pipeline | earned | Reads `leads/1` (companies another pack found) and `inquiries/1` (what people wrote to the client); a first email in a country that needs consent goes out only with the recipient's own message as evidence, so an inquiry is the lawful way in |
 | product-feed-skill-pack | `feed` | Truth: catalog | shell | Publishes `catalog/1`; owns the merchant-feed override fields |
 | measurement-skill-pack | `meas` | Truth: outcomes | built | Publishes `truth/1`; reads `ads.results/1` and `ads.changes/1` |
@@ -218,5 +218,5 @@ Phases run in order; the sessions inside a phase touch disjoint repositories and
 ## Open decisions
 
 1. **YouTube and Display go to `google-ads`.** Recommended: yes, by rule 1 (one operator per account). `video-ads` keeps no Google surface.
-2. **`outbound` and `sdr`.** Recommended: two packs joined by `leads/1`. Sourcing scrapes and spends on its own budget, while the pipeline writes to a CRM; their risks differ.
+2. **`outbound` and `sdr`.** Decided 2026-10-31: one pack. The engine of `outbound` is inside `sdr` (`sdr sweep`, PRs 57 to 66); the old recommendation was two packs joined by `leads/1`.
 3. **Messaging.** Recommended: take the insight matrix and the claims scope out of adcut into a small truth pack that publishes `messages/1`, once a second consumer (`gads` or `ad-copy`) is ready. Until then adcut emits `messages/1` itself.
