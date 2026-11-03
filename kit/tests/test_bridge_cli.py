@@ -26,6 +26,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -603,6 +604,10 @@ def main() -> int:
                                text=True, timeout=60, env=e)
             return r.returncode, r.stdout, r.stderr
 
+        script = Path(hook).read_text()
+        check("hook: the script is POSIX sh (no $SECONDS, $RANDOM, [[ or ==: dash has none of them, and dash is /bin/sh on Debian and Ubuntu)",
+              not re.search(r"\$\{?(SECONDS|RANDOM|BASH\w*|EPOCHSECONDS)\b|\[\[|\s==\s", script), [ln for ln in script.splitlines() if "SECONDS" in ln or "[[" in ln])
+
         def leftovers():
             return sorted(f for f in os.listdir(wdir) if ".run." in f or f.endswith(".take"))
         vsrv.add("AGENT", "hello from the group")
@@ -763,7 +768,8 @@ def main() -> int:
             json.dump(down, fh)
         Path(wstate).write_text("0\n")
         t0 = time.time()
-        rc, out, err = hook_run(WAKE_TARGETS=down_tf, WAKE_MAX_SECONDS="600", WAKE_FAIL_GRACE="2")
+        posix_sh = shutil.which("dash") or "/bin/sh"                    # /bin/sh is bash on macOS, dash on Debian and Ubuntu: try the strict one when it is here
+        rc, out, err = hook_run(shell=posix_sh, WAKE_TARGETS=down_tf, WAKE_MAX_SECONDS="600", WAKE_FAIL_GRACE="2")
         check("hook: a server that always errors (the watch keeps running and says WATCHER once) = one WATCHER FAILED wake with the watch's own line, after the grace",
               rc == 2 and err.startswith("WATCHER FAILED: WATCHER:") and wstate + ".err" in err and err.count("\n") == 1 and time.time() - t0 >= 2
               and os.path.exists(wstate + ".failed") and leftovers() == [] and not os.path.lexists(wstate + ".lock"), (rc, err, os.listdir(wdir)))
