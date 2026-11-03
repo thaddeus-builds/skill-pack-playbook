@@ -70,6 +70,50 @@
         "1080x1920"
       ],
       "status": "blocked"
+    },
+    {
+      "family": "DEMO-C001",
+      "files": [
+        {
+          "bytes": 812345,
+          "height": 1800,
+          "location": {
+            "artifact_id": "DEMO-art-1",
+            "kb_id": "DEMO-kb-1",
+            "kind": "openmax-kb",
+            "node_id": "DEMO-node-1"
+          },
+          "name": "demo-c001_4x5",
+          "path": "DEMO-1_Demo Top/2_成品/DEMO-C001/4x5.jpg",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "size": "4x5",
+          "width": 1440
+        }
+      ],
+      "findings": [
+        {
+          "check": "size_missing",
+          "message": "a required size is missing",
+          "severity": "block",
+          "subject": "DEMO-C001"
+        },
+        {
+          "check": "rights_pending",
+          "message": "a source that needs a licence is not confirmed",
+          "severity": "block",
+          "subject": "DEMO-C001"
+        }
+      ],
+      "maker": "adcut",
+      "missing_sizes": [
+        "9x16"
+      ],
+      "rights": "pending",
+      "sources": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "status": "blocked"
     }
   ],
   "findings": [],

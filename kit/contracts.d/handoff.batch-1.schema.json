@@ -56,6 +56,19 @@
                 "name": {"description": "The final name from the client's naming template; empty only when the file is blocked.", "type": "string"},
                 "bytes": {"description": "The file's size in bytes.", "type": "integer", "minimum": 0},
                 "sha256": {"description": "The file's SHA-256, hex.", "type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "width": {"description": "The image's width in pixels, EXIF orientation applied; absent for a file that is not an image or was not measured.", "type": "integer", "minimum": 1},
+                "height": {"description": "The image's height in pixels, EXIF orientation applied; absent as width is.", "type": "integer", "minimum": 1},
+                "location": {
+                  "description": "Where the bytes can be fetched from, when the batch was read from a shelf. The document never holds the bytes; a reader checks what it fetched against sha256.",
+                  "type": "object",
+                  "required": ["kind"],
+                  "properties": {
+                    "kind": {"description": "The kind of store, for example openmax-kb.", "type": "string", "minLength": 1},
+                    "kb_id": {"description": "The knowledge base the file is in.", "type": "string", "minLength": 1},
+                    "node_id": {"description": "The file's node in that knowledge base; it stays when the file is renamed or moved.", "type": "string", "minLength": 1},
+                    "artifact_id": {"description": "The stored file behind the node, the id its bytes are fetched by.", "type": "string", "minLength": 1}
+                  }
+                },
                 "places": {
                   "description": "Whether the name is in each place it should be, once those were given.",
                   "type": "object",
@@ -67,6 +80,9 @@
               }
             }
           },
+          "maker": {"description": "Who made the creative, as the maker declared it (for example adcut, an agent, the client); absent when none was declared.", "type": "string", "minLength": 1},
+          "sources": {"description": "The SHA-256 of each source image the maker declared the creative was made from; absent when the maker declared none.", "type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+          "rights": {"description": "Why a creative that needs a licence is or is not cleared: ok (every source that needs one is confirmed), pending (one is unconfirmed or undeclared) or blocked (one was judged not cleared). It is the reason; the gate is status, which a reader must follow without knowing this key. Absent when the batch was not read from a shelf.", "enum": ["ok", "pending", "blocked"]},
           "utm": {
             "description": "The family's tracking, present only when it is ready.",
             "type": "object",
