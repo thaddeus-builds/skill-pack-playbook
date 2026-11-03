@@ -798,6 +798,15 @@ function allowHosts() {
   return raw.split(/[\s,]+/).filter(Boolean);
 }
 
+// The first allowed host a person elsewhere can reach: not localhost, 127.x or [::1]
+// (with or without a port), which a link sent to someone else cannot use (issue #485).
+function isLoopbackHost(h) {
+  const bare = h.toLowerCase().replace(/^\[([^\]]*)\](:\d+)?$/, '$1').replace(/^([^:]+):\d+$/, '$1');
+  return bare === 'localhost' || bare.endsWith('.localhost') || bare === '::1' || /^127\.\d+\.\d+\.\d+$/.test(bare);
+}
+
+const publicHost = () => allowHosts().find((h) => !isLoopbackHost(h)) || null;
+
 // How the console's relay calls the skill pack: this node on bin/cli.js, which
 // sets the data dir itself (no link or PATH needed under pm2). serve.py
 // splits it like a shell does.
@@ -845,18 +854,24 @@ function ecosystem() {
   };
 }
 
-// The hooks warn when people have logins but the block is gone, as after
+// The hooks warn when the block is gone but this host needs it, as after
 // uninstall + add (restoreCaddyBlock below puts it back when it can do so
-// safely). Missing or unreadable files: no warning.
+// safely): people have logins, or the last uninstall kept a copy of the block.
+// A copy is enough: since the form login the first thing a person needs is the
+// /setup route, before any login exists (issue #484). A fresh install with
+// neither is left to the owner (`lib.js caddy`). Missing or unreadable files: no warning.
 function hasLogins() {
   try { return fs.readFileSync(USERS_FILE, 'utf8').trim() !== ''; } catch { return false; }
 }
 
-function caddyBlockMissing() {
-  if (!hasLogins()) return false;
+function caddyBlockAbsent() {
   try {
     return !fs.readFileSync(CADDYFILE, 'utf8').split('\n').some((l) => l.trim() === CADDY_MARKER);
   } catch { return false; }
+}
+
+function caddyBlockMissing() {
+  return (hasLogins() || fs.existsSync(CADDY_SAVED)) && caddyBlockAbsent();
 }
 
 // The block between BEGIN and END as the Caddyfile has it: {from, to, text}, or null.
@@ -1166,9 +1181,13 @@ async function passwdCommand(args) {
     }
     if (link) {
       const made = login.makeSetupToken(SETUP_FILE, name);
-      const host = allowHosts()[0];
+      const host = publicHost();
       const where = `${host ? `https://${host}` : '<the console\'s public address>'}${M.console.base_path}/setup?token=${made.token}`;
       console.log(`[${NAME}] one-time link for ${name} (works once, ${made.minutes} minutes; anyone who sees this line can use it, so send it only to ${name}):\n${where}`);
+      if (!host) {
+        console.log(`[${NAME}] the link needs the console's public name in place of <the console's public address>: `
+                    + `${M.console.allow_host_key ? `${M.console.allow_host_key} names` : 'the console answers'} no host but this machine's own`);
+      }
       return;
     }
     if (!process.stdin.isTTY) {
@@ -1198,7 +1217,7 @@ module.exports = {
   renderPrompt, unresolved, tasksNamed, addTask, updateTask, removeTask, readTaskState, requiredKeys,
   reconcileTask, reconcileAll, removeAllTasks,
   procStart, pidAlive, readJob, jobAlive, stopJobs,
-  allowHosts, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock, caddyBlockOutdated, staleLogins, AUTH_SOCK, SESSION_KEY, SETUP_FILE, LOGIN_JS,
+  allowHosts, isLoopbackHost, publicHost, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockAbsent, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock, caddyBlockOutdated, staleLogins, AUTH_SOCK, SESSION_KEY, SETUP_FILE, LOGIN_JS,
   skillProblems, checkProblems,
 };
 
