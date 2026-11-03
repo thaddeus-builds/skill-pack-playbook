@@ -125,6 +125,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (default behaviour is byte for byte what it was; ecommerce-seo can pass `runner="auto"` when its entry point moves onto `kit.cli.Dispatcher`, and a pack that sets `KIT_RUNNER=uv` because most of its scripts declare dependencies may choose `auto` for the few that do not)
 
 ### Other
+- `tools/release.py --owner-approved RNN`: a train inside the week, any bump, when ROADMAP.md's Decisions has that row quoting the owner (seen once, 2026-11-03: the owner said yes to 0.48.0 the day after 0.47.4, R27, and the tool only knew an urgent patch)
+- Skill packs: nothing (a playbook tool)
 - `scaffold/add_zylos.py` finds a pack's row of `hosts/zylos/fleet.tsv` by its CLI word too, not only by the repository name (seen once, 2026-11-03: product-image-to-video's toml name is `product-keyframe-video`, so it took a hashed port, 9730, not 8804; the SEO and adcut packs' toml names differ from their rows the same way)
 - Skill packs: nothing (a pack that ran `add_zylos.py` with `--port` keeps its port; the next run without it gets the same one)
 - `hosts/zylos/fleet.tsv`: one row per skill pack with its linked command (`openmax-<cli>`, the owner's R19), its console's default port and path; `scaffold/add_zylos.py` takes the port from it, and `hosts/zylos/tests/test_fleet_table.py` refuses two packs sharing one (the seo and amazon-ppc consoles both defaulted to 8766). Packs already on hosts keep their ports; amazon-ppc moves to 8808 and sdr and adcut take their `openmax-` names at their next adapter update.

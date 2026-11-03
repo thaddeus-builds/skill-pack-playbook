@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The release train as one command (docs/maintaining.md, "The release train"; issue #222).
 
-    python3 tools/release.py X.Y.Z [--date YYYY-MM-DD] [--urgent "why"] [--dry-run] [--root DIR]
+    python3 tools/release.py X.Y.Z [--date YYYY-MM-DD] [--urgent "why" | --owner-approved RNN] [--dry-run] [--root DIR]
 
 Sets `kit/VERSION`, turns `## [Unreleased]` into `## [X.Y.Z] - DATE` (a new empty `## [Unreleased]` above it), regenerates
 `kit/MANIFEST.sha256` and runs `tests/test_changelog.py`. It commits nothing: read `git diff`, then commit, then run
@@ -11,7 +11,9 @@ It refuses, so that the train cannot be started wrongly:
   - an `[Unreleased]` with no entry, or an entry without its own `- Skill packs: nothing | mechanical (...) | judgement (...)` line
     right after it (`nothing` may carry a parenthesis saying why) (the train would otherwise ship a version a pack's session cannot act on);
   - a version that is not above `kit/VERSION`, or one the CHANGELOG already has (a release note is never rewritten);
-  - a train less than 7 days after the last one, unless `--urgent "why"` is given and the bump is a patch;
+  - a train less than 7 days after the last one, unless `--urgent "why"` is given and the bump is a patch, or
+    `--owner-approved RNN` names the owner's decision in ROADMAP.md's Decisions that allows it (any bump; seen once,
+    2026-11-03: the owner wanted 0.48.0 the day after 0.47.4, R27, and the tool had no way to say so);
   - a date earlier than the last release's.
 It prints what the entries ask of a skill pack (nothing / mechanical / judgement, counted) for the pull request.
 
@@ -79,7 +81,13 @@ def asks(body: str) -> dict[str, int]:
     return kinds
 
 
-def check(log: str, current: str, version: str, day: date, urgent: str | None) -> dict[str, int]:
+def decision_exists(roadmap: str, rid: str) -> bool:
+    """True when ROADMAP.md's Decisions section has the row `- [RID] ...` quoting the owner."""
+    m = re.search(r"^## Decisions\n(.*?)(?=^## |\Z)", roadmap, re.M | re.S)
+    return bool(m and re.search(rf"^- \[{re.escape(rid)}\] .*\"", m.group(1), re.M))
+
+
+def check(log: str, current: str, version: str, day: date, urgent: str | None, approved: str | None = None) -> dict[str, int]:
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise Refused(f"{version!r} is not X.Y.Z")
     if key(version) <= key(current):
@@ -99,6 +107,8 @@ def check(log: str, current: str, version: str, day: date, urgent: str | None) -
             raise Refused(f"the date {day} is earlier than the last release's {last}")
         if (day - last).days < 7:
             cur, new = key(current), key(version)
+            if approved:
+                return asks(body)
             if not urgent:
                 raise Refused(f"the last train ran on {last}, {(day - last).days} day(s) ago: at most weekly; "
                               "an urgent patch says why with --urgent \"...\"")
@@ -107,11 +117,18 @@ def check(log: str, current: str, version: str, day: date, urgent: str | None) -
     return asks(body)
 
 
-def release(root: Path, version: str, day: date, urgent: str | None = None, dry_run: bool = False) -> dict:
+def release(root: Path, version: str, day: date, urgent: str | None = None, dry_run: bool = False,
+            approved: str | None = None) -> dict:
     log_path, ver_path = root / "CHANGELOG.md", root / "kit" / "VERSION"
     log = log_path.read_text("utf-8")
     current = ver_path.read_text("utf-8").strip()
-    kinds = check(log, current, version, day, urgent)
+    if approved:
+        if urgent:
+            raise Refused("--urgent and --owner-approved are two different reasons: give one")
+        rm = root / "ROADMAP.md"
+        if not re.fullmatch(r"R\d+", approved) or not rm.is_file() or not decision_exists(rm.read_text("utf-8"), approved):
+            raise Refused(f"--owner-approved {approved!r} is not a decision row of ROADMAP.md that quotes the owner")
+    kinds = check(log, current, version, day, urgent, approved)
     done = {"version": version, "previous": current, "date": day.isoformat(), "asks": kinds, "written": not dry_run}
     if dry_run:
         return done
@@ -130,11 +147,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("version")
     ap.add_argument("--date", default=date.today().isoformat())
     ap.add_argument("--urgent", help="why a train runs less than 7 days after the last one (a patch only)")
+    ap.add_argument("--owner-approved", metavar="RNN", help="the ROADMAP decision in which the owner allowed a train inside the week (any bump)")
     ap.add_argument("--dry-run", action="store_true", help="check and report, write nothing")
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     a = ap.parse_args(argv)
     try:
-        r = release(a.root, a.version, date.fromisoformat(a.date), a.urgent, a.dry_run)
+        r = release(a.root, a.version, date.fromisoformat(a.date), a.urgent, a.dry_run, a.owner_approved)
     except Refused as e:
         print(f"REFUSED: {e}", file=sys.stderr)
         return 2
