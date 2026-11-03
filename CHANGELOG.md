@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Other
+- `tools/seen_once.py list|close`: an issue labelled `seen-once` with no activity for 90 days is listed, and closed as not planned with a comment naming the rule (the owner's C10, R29; X40)
+- Skill packs: nothing (a playbook tool)
+
 ## [0.48.0] - 2026-11-03
 
 ### Kit

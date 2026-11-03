@@ -11,7 +11,7 @@ For the owner. The playbook is the parent of every skill pack. It changes only w
    | --- | --- |
    | A bug in a module that exists | Fixed after one report, with a test. A new kit patch version. |
    | A new module | Goes in the pack named for its concern, never in `base`. Moves to `base` when two skill packs import it from merged code. |
-   | A lesson | Goes in [docs/lessons.md](lessons.md) once, labelled "seen once" if it was. |
+   | A lesson | Goes in [docs/lessons.md](lessons.md) once, labelled "seen once" if it was. An issue still labelled `seen-once` after 90 days with no activity is closed as not planned: `python3 tools/seen_once.py list`, then `close` (the owner, R29). |
    | Channel-specific (one platform's API, fields, words) | Stays in that skill pack. The issue is closed with that said. |
 
 3. **One small pull request, one concern, with a test.** The pull request template lists the checks. A change to a byte the vendor tool copies also needs a `kit/VERSION` bump, a regenerated `kit/MANIFEST.sha256` and a line in `CHANGELOG.md`.
