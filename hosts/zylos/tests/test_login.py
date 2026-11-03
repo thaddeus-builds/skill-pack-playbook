@@ -312,6 +312,19 @@ def test_passwd_link_needs_no_terminal_and_prints_the_public_address():
         assert host.node(lib, "passwd", "--link").returncode == 2 and host.node(lib, "passwd", "-x", "--link").returncode == 2
 
 
+def test_passwd_link_skips_a_loopback_host_for_the_public_one():
+    """Issue #485: the first allowed host may be the machine's own (localhost); the link names the public one."""
+    for allow, want in (("localhost,seo.example.com", "https://seo.example.com/shop/setup?token="),
+                        ("127.0.0.1:8766 [::1]:8766 seo.example.com:8443", "https://seo.example.com:8443/shop/setup?token="),
+                        ("localhost", "<the console's public address>/shop/setup?token="),
+                        ("localhost.example.com", "https://localhost.example.com/shop/setup?token=")):
+        with Host() as host:
+            host.configure({"SHOP_CONSOLE_ALLOW_HOST": allow})
+            r = host.node(os.path.join(host.adapter, "lib.js"), "passwd", "alice", "--link")
+            assert r.returncode == 0 and want in r.stdout, (allow, r.stdout, r.stderr)
+            assert ("needs the console's public name" in r.stdout) == want.startswith("<"), (allow, r.stdout)
+
+
 def test_five_wrong_passwords_lock_that_user_and_that_address():
     with Svc() as s:
         for i in range(5):
