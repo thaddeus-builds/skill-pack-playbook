@@ -43,7 +43,7 @@ Rules: no confirm, approve or apply on the owner's behalf; a refusal (`confirm_n
 
 ## A private skill pack: a read-only deploy key per host and repository
 
-Once, before the first install from a private repository (why: the playbook's `docs/lessons.md`, "A host pulls a private skill pack with a read-only deploy key"):
+Once, before the first install from a private repository (why: [lessons](../docs/lessons.md#a-host-pulls-a-private-skill-pack-with-a-read-only-deploy-key-one-per-host-and-repository-from-the-adcut-skill-pack-2026-10-27)):
 
 1. On the host: `ssh-keygen -t ed25519 -N "" -f <key file>`, used for nothing else; point that repository's remote at it (an ssh `Host` alias per repository when a host holds two).
 2. Send the owner the public half only. The owner adds it under the repository's Settings, Deploy keys, without write access.

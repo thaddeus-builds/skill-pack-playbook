@@ -49,7 +49,7 @@ Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/p
 | [`kit/docs/doctor-checks.md`](../kit/docs/doctor-checks.md) | 4–5, 9 | What the doctor checks: when each warns, the fix it names, the bug it caught |
 | [`templates/console/ui_rules.tsv`](../templates/console/ui_rules.tsv) | 8 | UI rules as an owner file, each checked by name |
 | [`templates/gitattributes`](../templates/gitattributes) | 9 | Copied to the root as `.gitattributes`: the internal files every release leaves out |
-| [`kit/docs/install-checklist.md`](../kit/docs/install-checklist.md) | 9 | The install message, the host report, and what a host agent can read |
+| [`templates/install-checklist.md`](../templates/install-checklist.md) | 9 | The install message, the host report, and what a host agent can read |
 | [`templates/owner-queue-item.md`](../templates/owner-queue-item.md) | 10 | The shape of one owner ask |
 | [`console/`](../console/) | 10 | A module, not a template: the agent's ask CLI and the owner's one-page console |
 | [`kit/docs/triage-checklist.md`](../kit/docs/triage-checklist.md) | 10 | Judging an agent-filed issue; the triage line |
