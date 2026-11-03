@@ -1123,6 +1123,15 @@ function checkProblems() {
   if (!ecoText.includes("require('./zylos/lib.js')")) {
     p.push('ecosystem.config.cjs at the skill root must load ./zylos/lib.js (copy zylos/ecosystem.config.cjs.template)');
   }
+  // One Python (the playbook's R18): uv runs a script on the version a `.python-version` beside it names,
+  // else on the newest it finds; post-install installs runtime.python, so the two must be the same version.
+  let pin = null;
+  try { pin = fs.readFileSync(path.join(SKILL_DIR, '.python-version'), 'utf8').trim(); } catch { /* reported below */ }
+  if (pin === null) {
+    p.push(`.python-version is missing at the skill root: write ${PYTHON_VERSION} (manifest runtime.python), or uv runs the newest Python it finds`);
+  } else if (pin !== PYTHON_VERSION) {
+    p.push(`.python-version says ${JSON.stringify(pin)} but manifest runtime.python is ${PYTHON_VERSION}: make them the same version`);
+  }
   let skill = null;
   try { skill = fs.readFileSync(path.join(SKILL_DIR, 'SKILL.md'), 'utf8'); } catch { p.push('SKILL.md is missing'); }
   if (skill !== null) p.push(...skillProblems(skill));

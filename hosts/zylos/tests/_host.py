@@ -216,6 +216,7 @@ class Host:
             dst = os.path.join(self.adapter, rel)
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
         shutil.copy2(TEMPLATE, os.path.join(self.skill, "ecosystem.config.cjs"))
+        self.write(os.path.join(self.skill, ".python-version"), self.m["runtime"]["python"] + "\n")
         self.write_manifest(self.m)
         self.write(os.path.join(self.skill, "SKILL.md"), skill_md(self.m))
         self.write(os.path.join(self.skill, self.m["cli"]["entry"]), "# the skill pack CLI (a stub)\n")

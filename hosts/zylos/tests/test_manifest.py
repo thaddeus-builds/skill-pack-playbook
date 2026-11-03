@@ -54,6 +54,21 @@ def test_the_example_is_valid_and_checks_clean():
         assert r.returncode == 0 and "check: ok" in r.stdout, r.stdout + r.stderr
 
 
+def test_the_python_pin_must_match_runtime_python():
+    """R18: uv runs a script on the `.python-version` beside it, else on the newest it finds; post-install installs runtime.python."""
+    with Host() as host:
+        pin = os.path.join(host.skill, ".python-version")
+        want = host.m["runtime"]["python"]
+        os.remove(pin)
+        r = check(host)
+        assert r.returncode == 1 and ".python-version is missing" in r.stderr and want in r.stderr, r.stderr
+        host.write(pin, "3.13\n" if want != "3.13" else "3.12\n")
+        r = check(host)
+        assert r.returncode == 1 and "manifest runtime.python is " + want in r.stderr, r.stderr
+        host.write(pin, want + "\n")
+        assert check(host).returncode == 0
+
+
 def test_every_missing_key_is_named():
     m = example()
     paths = [p for p in key_paths(m) if p not in OPTIONAL]
