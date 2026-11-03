@@ -309,6 +309,27 @@ def _unwrap(raw):
     return raw["data"] if isinstance(raw, dict) and isinstance(raw.get("data"), (dict, list)) else raw
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: urllib copies every request header, the Authorization and the Cloudflare Access pair
+    included, to the address it is sent to, so a redirect to another host would hand over the key. The answer
+    (301, 302, 303, 307) surfaces as an HTTPError, and the caller's reason names only its status."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def _api_urlopen(req, timeout=None):
+    return _NO_REDIRECT_OPENER.open(req, timeout=timeout)
+
+
+def _no_redirect(urlopen):
+    """The plain `urllib.request.urlopen` (what every caller passes by default, `bridge_cli.py` included) becomes the
+    opener that refuses redirects; a function a test or a caller injects is used as it is."""
+    return _api_urlopen if urlopen is urllib.request.urlopen else urlopen
+
+
 READ_RETRIES = 2                 # extra tries for a read that failed in transit (a dropped connection, a timeout)
 READ_BACKOFF = 0.5               # seconds before the first retry, doubling
 
@@ -381,15 +402,16 @@ def _client(creds: Credentials, urlopen, timeout: float):
     """`authed(method, path, body)` for the API: a token is exchanged once, held in memory, and exchanged
     again once when a call answers 401."""
     token: list[str] = []
+    urlopen = _no_redirect(urlopen)
 
     def call(method, path, body=None, bearer=None):
         data = None if body is None else json.dumps(body).encode()
         req = urllib.request.Request(creds.base_url + path, data=data, method=method)
         req.add_header("Content-Type", "application/json")
         req.add_header("User-Agent", USER_AGENT)         # Cloudflare answers Python's own with 403, error 1010
-        for k, v in creds.headers.items():
-            req.add_header(k, v)
-        req.add_header("Authorization", f"Bearer {bearer}")
+        for k, v in creds.headers.items():                      # unredirected: urllib copies only the ordinary headers to a redirect's target,
+            req.add_unredirected_header(k, v)                  # so no opener, wrapper or patched urlopen can forward a credential
+        req.add_unredirected_header("Authorization", f"Bearer {bearer}")
         where = path.split("?")[0].rsplit("/", 1)[0]
         idempotent = method == "GET" or path.endswith("/auth/agent/token")      # a read or a token: safe to ask again; never the send
         try:
@@ -755,14 +777,17 @@ def download_attachment(creds: Credentials, conversation_id: str, message: dict,
         raise RestError("download: the download link is not https")      # file:// and ftp:// would read a local file or a stranger's host
     req = urllib.request.Request(link, headers={"User-Agent": USER_AGENT})
     try:
-        with urlopen(req, timeout=timeout) as resp:
+        with _no_redirect(urlopen)(req, timeout=timeout) as resp:      # no credential goes to the link, but a redirect could leave the https check behind
             data = resp.read(max_bytes + 1)
+            left = getattr(resp, "length", None)           # http.client's own count of the announced bytes still unread (None: chunked or unannounced)
     except urllib.error.HTTPError as e:
         raise RestError(f"download: HTTP {e.code}") from None
     except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:     # InvalidURL's text holds the signed link
         raise RestError(f"download: {type(e).__name__}") from None
     if len(data) > max_bytes:
         raise RestError("download: the file is larger than the limit")
+    if isinstance(left, int) and left > 0:
+        raise RestError("download: the file was cut short")                # nothing is written: no partial file is left behind
     out = Path(dest_dir) / name
     if out.exists() and out.read_bytes() != data:
         raise RestError("download: a different file of that name is already there")

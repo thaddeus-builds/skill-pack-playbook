@@ -32,6 +32,9 @@
     refused connection, a connect timeout, a TLS handshake that failed): the same request, at most twice more, one post
     in the end; a reset or a timeout after the write, and any HTTP status, are never asked again; the reason names the
     transport failure by class and holds no query, header, key or exception text;
+  * no call follows a redirect: a local server answers 301/302/303/307 to another host:port and the second host sees no request, so
+    no Authorization and no Cloudflare Access header reaches it, for the token exchange, a read, a send and a download; the
+    reason is the status only; a download whose body is shorter than its Content-Length is refused and leaves no file;
   * check_isolation names a missing, world-readable or key-less config, a wrong organization, a data dir
     shared by two configs, and one config used with two data dirs.
 """
@@ -555,6 +558,198 @@ def transport_tests(t: str) -> None:
         bridge.READ_BACKOFF = saved
 
 
+CF = {"CF-Access-Client-Id": "cf-id-DEMO", "CF-Access-Client-Secret": "cf-secret-DEMO"}
+
+
+class Recorder:
+    """A local server that records the headers of every request it gets. With `redirect_to` set, it answers a request to a
+    path in `redirect` with `code` and that address, and answers the token exchange and the link resolve itself."""
+    def __init__(self, redirect_to=None, redirect=(), code=302, body=None, cut=None, cl="100"):
+        self.seen, outer = [], self
+        self.redirect_to, self.redirect, self.code = redirect_to, tuple(redirect), code
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _any(self):
+                n = int(self.headers.get("Content-Length", 0) or 0)
+                raw = self.rfile.read(n) if self.command == "POST" else b""
+                outer.seen.append((self.command, self.path, dict(self.headers)))
+                path = self.path.split("?")[0]
+                if outer.redirect_to and any(path.endswith(x) for x in outer.redirect):
+                    self.send_response(outer.code)
+                    self.send_header("Location", outer.redirect_to + self.path)
+                    self.send_header("Content-Length", "0")
+                    return self.end_headers()
+                if path.endswith("/auth/agent/token"):
+                    return self._json({"data": {"access_token": "tok-DEMO"}})
+                if path.endswith("/artifacts/resolve"):
+                    uri = json.loads(raw)["uris"][0]
+                    return self._json({"data": {"resolved": {uri: {"download_url": f"{outer.url}/dl/f"}}}})
+                if path.startswith("/dl/") and cut is not None:               # promises 100 bytes, sends `cut` of them
+                    self.send_response(200)
+                    self.send_header("Content-Length", cl)
+                    self.end_headers()
+                    return self.wfile.write(cut)
+                if path.startswith("/dl/"):
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    return self.wfile.write(body)
+                self._json({"data": []})
+
+            def _json(self, obj):
+                raw = json.dumps(obj).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+            do_GET = do_POST = _any
+        self.httpd = HTTPServer(("127.0.0.1", 0), H)
+        self.port = self.httpd.server_address[1]
+        self.url = f"http://127.0.0.1:{self.port}"
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+def redirect_tests() -> None:
+    """No call follows a redirect, so no credential header goes to another host."""
+    saved = bridge.READ_BACKOFF
+    bridge.READ_BACKOFF = 0.0
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            for code in (301, 302, 303, 307):
+                other = Recorder()                                       # the second host: it must never be asked
+                api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/auth/agent/token",), code=code)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                for name, call in (("token exchange", lambda: bridge.client(creds)("GET", "/api/v1/conversations/C/members")),):
+                    try:
+                        call()
+                        err = ""
+                    except bridge.RestError as e:
+                        err = str(e)
+                    check(f"{code} on the {name}: refused, the status only, nothing reached the other host",
+                          err.endswith(f"HTTP {code}") and not other.seen and KEY not in err and "localhost" not in err, (err, other.seen))
+                api.close()
+
+                api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/members", "/messages", "/messages/M1"), code=code)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                authed = bridge.client(creds)
+                for what, method, path, body in (("a read", "GET", "/api/v1/conversations/C/members", None),
+                                                 ("a read with a query", "GET", "/api/v1/conversations/C/messages?after_seq=1", None),
+                                                 ("a send", "POST", "/api/v1/conversations/C/messages", {"x": 1})):
+                    try:
+                        authed(method, path, body)
+                        err = ""
+                    except bridge.RestError as e:
+                        err = str(e)
+                    check(f"{code} on {what}: refused with the status only", err.endswith(f"HTTP {code}") and "localhost" not in err and "after_seq" not in err, err)
+                posted = [x for x in api.seen if x[0] == "POST" and x[1].endswith("/messages")]
+                check(f"{code} on a send: one POST to the API, none anywhere else", len(posted) == 1 and not other.seen, (len(posted), other.seen))
+                check("the token and the Cloudflare pair went to the API host only",
+                      any(x[2].get("Authorization") == "Bearer tok-DEMO" for x in api.seen)
+                      and all(x[2].get("Cf-Access-Client-Secret") == CF["CF-Access-Client-Secret"] for x in api.seen), api.seen[:2])
+
+                # a download: the link is on the API's own address and redirects away
+                api.redirect = ("/dl/f",)
+                msg = {"id": "M1", "conversation_id": "C", "attachments": [{"file_name": "a.csv", "artifact_id": "ART1"}]}
+                out = Path(d) / f"dl{code}"
+                try:
+                    bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+                    err = ""
+                except bridge.RestError as e:
+                    err = str(e)
+                check(f"{code} on a download: refused with the status only, no file, nothing reached the other host",
+                      err == f"download: HTTP {code}" and not out.exists() and not other.seen, (err, other.seen))
+                api.close()
+                other.close()
+
+            # the plain urlopen a caller passes (bridge_cli does) is made the refusing one too
+            other = Recorder()
+            api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/members",))
+            creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+            try:
+                bridge.client(creds, urllib.request.urlopen)("GET", "/api/v1/conversations/C/members")
+                err = ""
+            except bridge.RestError as e:
+                err = str(e)
+            check("urllib.request.urlopen passed explicitly refuses a redirect too", err.endswith("HTTP 302") and not other.seen, (err, other.seen))
+            api.close()
+            other.close()
+
+            # a patched or wrapped urlopen is no way round it: the credentials are not among the headers urllib copies to a redirect
+            import functools
+            from unittest import mock
+            other = Recorder()
+            api = Recorder(redirect_to=f"http://localhost:{other.port}", redirect=("/members",))
+            creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+            orig = urllib.request.urlopen
+            for what, opener in (("a function that wraps urlopen", lambda r, timeout=None: orig(r, timeout=timeout)),
+                                 ("a functools.partial of it", functools.partial(orig))):
+                try:
+                    bridge.client(creds, opener)("GET", "/api/v1/conversations/C/members")
+                except bridge.RestError:
+                    pass
+                lk = [h for _, _, h in other.seen if "Authorization" in h or "Cf-Access-Client-Secret" in h or "Cf-Access-Client-Id" in h]
+                check(f"{what}: if it follows the redirect, no credential header goes along", not lk, other.seen)
+                other.seen.clear()
+            with mock.patch("urllib.request.urlopen", lambda r, timeout=None: orig(r, timeout=timeout)):
+                try:
+                    bridge.client(creds)("GET", "/api/v1/conversations/C/members")
+                except bridge.RestError:
+                    pass
+            lk = [h for _, _, h in other.seen if "Authorization" in h or "Cf-Access-Client-Secret" in h]
+            check("urllib.request.urlopen patched at module level: no credential header reaches the other host", not lk, other.seen)
+            api.close()
+            other.close()
+
+            # a download whose body is shorter than its Content-Length is refused and leaves nothing behind; a whole one is saved
+            for cut, ok in ((b"abc", False), (b"x" * 100, True)):
+                api = Recorder(cut=cut)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                out = Path(d) / ("cut" if not ok else "whole")
+                try:
+                    got = bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+                    err = ""
+                except bridge.RestError as e:
+                    got, err = None, str(e)
+                if ok:
+                    check("a body that matches its Content-Length is saved as before", got is not None and got.size == 100 and (out / "a.csv").read_bytes() == cut, (got, err))
+                else:
+                    check("a body shorter than its Content-Length is refused and no file is left", err == "download: the file was cut short" and not (out / "a.csv").exists(), (err, list(out.glob("*")) if out.exists() else None))
+                api.close()
+            # the announced length is read the way http.client reads it (1_0 and +10 are 10 to it)
+            for cl in ("1_0", "+10"):
+                api = Recorder(cut=b"abc", cl=cl)
+                creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+                out = Path(d) / f"odd{cl}"
+                try:
+                    bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+                    err = ""
+                except bridge.RestError as e:
+                    err = str(e)
+                check(f"Content-Length {cl} and a short body: refused, no file", err == "download: the file was cut short" and not (out / "a.csv").exists(), (err,))
+                api.close()
+            # a file that was there is not touched by a cut download
+            api = Recorder(cut=b"abc")
+            creds = bridge.Credentials(api.url, "DEMO-org", KEY, dict(CF))
+            out = Path(d) / "keep"
+            out.mkdir()
+            (out / "a.csv").write_bytes(b"older")
+            try:
+                bridge.download_attachment(creds, "C", msg, bridge.Attachment("a.csv", "ART1"), out)
+            except bridge.RestError:
+                pass
+            check("a cut download leaves an older file of that name as it was", (out / "a.csv").read_bytes() == b"older")
+            api.close()
+    finally:
+        bridge.READ_BACKOFF = saved
+
+
 def mention_tests(t: str) -> None:
     calls = []
     f = Fake([])
@@ -932,6 +1127,7 @@ def main() -> int:
           bridge.parse_messages("ID: 1\nSender: S\nTime: t\n<<<BEGIN\n```json\n{\"a\": [1, 2]}\n```\nEND>>>")[0].text == '```json\n{"a": [1, 2]}\n```')
     rest_tests(t)
     transport_tests(t)
+    redirect_tests()
     reaction_tests()
     mention_tests(t)
     unknown_tests(t)
