@@ -52,15 +52,15 @@ Each stage ends at a gate someone signs; the lesson column is what the source pr
 Install these before the first feature; each costs an hour now and saved days in the source project.
 
 - [ ] Meeting intake: recording, transcript in the client's data folder, the organizer prompt ([template](../templates/meeting-intake.md))
-- [ ] A review page before the first paid batch: the owner decides per item and the next session reads the decisions back ([loop](../templates/owner-review-loop.md)); paid vendor APIs pinned down cheaply first and every request preflighted against the vendor's published schema ([discovery](../templates/vendor-api-discovery.md))
+- [ ] A review page before the first paid batch: the owner decides per item and the next session reads the decisions back ([loop](../kit/docs/owner-review-loop.md)); paid vendor APIs pinned down cheaply first and every request preflighted against the vendor's published schema ([discovery](../kit/docs/vendor-api-discovery.md))
 - [ ] `docs/ROADMAP.md` in the one roadmap format from day one, held by `tests/test_roadmap.py` ([template](../templates/ROADMAP.md)), with the session start and end checklists ([handoff](../templates/session-handoff.md))
 - [ ] The test kit before the first feature: a runner that fails a missing RESULT line, a reported failure, `0 passed` or a leaked temp file; one clock; layering rules; a release-archive test ([kit](../templates/tests/)). Every rule in the agent instructions names its test ([template](../templates/AGENT_INSTRUCTIONS.md))
 - [ ] An empty registry index with its lint test; ids are never reused; owner files linted for engineering words ([template](../templates/ssot/))
 - [ ] CI from the first commit: one pipeline per change with every job in the MR pipeline, the story-id check on every MR title, the offline suite, a secret scan ([fuller template](../templates/ci/gitlab-ci.yml); its short form, [templates/gitlab-ci.yml](../templates/gitlab-ci.yml), is what the scaffolder renders into every skill pack), plus a few guarantee stories for refactors to name
 - [ ] A story-check registry and a read-only runner: pass, fail, or skip when the data is missing ([template](../templates/ssot/story_checks.tsv))
-- [ ] "Declare it or refuse": a required data root, one init command to declare scope, a doctor, no defaults ([doctor checks](../templates/doctor-checks.md))
+- [ ] "Declare it or refuse": a required data root, one init command to declare scope, a doctor, no defaults ([doctor checks](../kit/docs/doctor-checks.md))
 - [ ] Raw that only grows, fixtures copied from real API responses, tests for ingesting twice and for row counts ([`kit/raw.py`](../kit/raw.py), [docs/lessons.md](../docs/lessons.md))
-- [ ] One fixture test per data bug class before the first report: zero vs missing, sparse days, matched windows, stable picks, validated raw, units and ids ([table](../templates/bug-classes.md)); the triage line's `Class:` counts repeats
+- [ ] One fixture test per data bug class before the first report: zero vs missing, sparse days, matched windows, stable picks, validated raw, units and ids ([table](../kit/docs/bug-classes.md)); the triage line's `Class:` counts repeats
 - [ ] Human tables apart from the cache: triggers, a backup before rebuilds, refusal of lossy rebuilds, a version stamp ([`kit/db.py`](../kit/db.py))
 - [ ] The `--json` contract from the first report: `meta`, one error document, message codes on every verb, tested both ways ([template](../templates/ssot/message_codes.tsv))
 - [ ] Vendor [`kit/`](../kit/) (`scaffold/new_skill_pack.py` does it): the human gate, message codes with their contract test pointed at your own verb table, and the runner that starts a child verb in its own PEP 723 environment

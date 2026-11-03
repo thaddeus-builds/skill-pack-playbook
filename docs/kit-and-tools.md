@@ -45,21 +45,21 @@ Every module in [`kit/`](../kit/) belongs to exactly one pack, listed in [`kit/p
 | [`templates/tests/`](../templates/tests/) | 3, 9 | The test kit: a runner with a temp-leak gate, a one-clock lint, an import-graph layering engine with rules in a table, and a release-archive test; `selftest/` breaks each gate on the case it exists to catch *(untried as copied here)* |
 | [`templates/tests/golden/`](../templates/tests/golden/) | 3, 10 | A module to copy: the golden-diff engine, the cases hook your skill pack fills from its verb table, and the tests that prove it can say 1 *(untried as copied here)* |
 | [`templates/workflows/`](../templates/workflows/) | 3–10 | Workflow scripts for building with many agents (build → review → fix → verify; sweep → skeptic → plan), the ref check to run before any push, and the prompt rules with what each one prevented |
-| [`templates/bug-classes.md`](../templates/bug-classes.md) | 4, 7, 10 | Data bug classes, each with the fixture test that pins it; the ids for the triage line's `Class:` |
-| [`templates/doctor-checks.md`](../templates/doctor-checks.md) | 4–5, 9 | What the doctor checks: when each warns, the fix it names, the bug it caught |
+| [`kit/docs/bug-classes.md`](../kit/docs/bug-classes.md) | 4, 7, 10 | Data bug classes, each with the fixture test that pins it; the ids for the triage line's `Class:` |
+| [`kit/docs/doctor-checks.md`](../kit/docs/doctor-checks.md) | 4–5, 9 | What the doctor checks: when each warns, the fix it names, the bug it caught |
 | [`templates/console/ui_rules.tsv`](../templates/console/ui_rules.tsv) | 8 | UI rules as an owner file, each checked by name |
 | [`templates/gitattributes`](../templates/gitattributes) | 9 | Copied to the root as `.gitattributes`: the internal files every release leaves out |
 | [`templates/install-checklist.md`](../templates/install-checklist.md) | 9 | The install message, the host report, and what a host agent can read |
 | [`templates/owner-queue-item.md`](../templates/owner-queue-item.md) | 10 | The shape of one owner ask |
 | [`console/`](../console/) | 10 | A module, not a template: the agent's ask CLI and the owner's one-page console |
-| [`templates/triage-checklist.md`](../templates/triage-checklist.md) | 10 | Judging an agent-filed issue; the triage line |
+| [`kit/docs/triage-checklist.md`](../kit/docs/triage-checklist.md) | 10 | Judging an agent-filed issue; the triage line |
 | [`templates/intake.schema.json`](../templates/intake.schema.json) | 0 | The shape of one meeting's intake; `build/check_intake.py` reads it |
 | [`templates/prior-art-scan.md`](../templates/prior-art-scan.md) | 0, 4, 8 | When and how to scan what already exists, each claim with its link and date |
-| [`templates/vendor-api-discovery.md`](../templates/vendor-api-discovery.md) | 0, 4, 8 | Pinning down a paid vendor API cheaply, and preflighting every request against its published schema |
+| [`kit/docs/vendor-api-discovery.md`](../kit/docs/vendor-api-discovery.md) | 0, 4, 8 | Pinning down a paid vendor API cheaply, and preflighting every request against its published schema |
 | [`templates/third-party-consent.md`](../templates/third-party-consent.md) | 5, 8 | A real person in a marketing output: the record, confirmed only through the gate, bound to its content |
 | [`templates/claim-scope.md`](../templates/claim-scope.md) | 5, 7, 10 | Regulated copy names only what the approved document allows: the claims record at the gate, the lexicon, waivers, the phrase library, rejections as recall tests |
 | [`templates/design-first.md`](../templates/design-first.md) | 7, 10 | Before a feature an owner steers: research, one design page with the asks and what it stores, a synthetic demo drawn by the skill pack's own renderer, the owner's yes, then the code |
-| [`templates/owner-review-loop.md`](../templates/owner-review-loop.md) | 7, 10 | One published page the owner decides on per item, read back by the next session |
+| [`kit/docs/owner-review-loop.md`](../kit/docs/owner-review-loop.md) | 7, 10 | One published page the owner decides on per item, read back by the next session |
 | [`templates/session-handoff.md`](../templates/session-handoff.md) | all | Each session closes one turn and leaves the next one ready |
 | [`templates/support-channel/`](../templates/support-channel/) | all | Reaching a client's agents through the OpenMax bridge: config example, read-only check, send, read-back ([guide](support-channel.md)) |
 | [`templates/skill-pack.toml`](../templates/skill-pack.toml) | 3 | The skill pack declares itself once: names, languages, scopes, layers, what a release ships |

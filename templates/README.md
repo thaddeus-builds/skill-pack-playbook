@@ -4,6 +4,8 @@ The files a new skill pack starts from. The build workflow, [BUILD.md](../BUILD.
 
 ## Every template
 
+Five docs every skill pack reads as they are live in [`kit/docs/`](../kit/docs/) and arrive with the kit (`scripts/kit/docs/` in a skill pack), not as copies: [bug-classes.md](../kit/docs/bug-classes.md), [doctor-checks.md](../kit/docs/doctor-checks.md), [owner-review-loop.md](../kit/docs/owner-review-loop.md), [triage-checklist.md](../kit/docs/triage-checklist.md), [vendor-api-discovery.md](../kit/docs/vendor-api-discovery.md) (the owner's C5, R29).
+
 | Template | Step | Becomes, in the skill pack | What it is |
 | --- | --- | --- | --- |
 | [meeting-intake.md](meeting-intake.md) | B0 | (used, not copied) | The organizer prompt |
@@ -12,7 +14,6 @@ The files a new skill pack starts from. The build workflow, [BUILD.md](../BUILD.
 | [prior-art-index.md](prior-art-index.md) | B0.5 | `docs/prior-art/README.md` | The scans' index, read before any search: one row per dated scan; `tests/test_ssot.py` fails on a scan with no row and a row with no file |
 | [research-index.md](research-index.md) | B0.5 | `docs/research/README.md` | The index of questions already looked up: one row per file (question, date, answer, where used), each file dated and its claims tagged; `tests/test_ssot.py` holds it (`kit.guards.research`) |
 | (scaffold) `claude/hooks/research_first.py` | B0.5 | `.claude/hooks/research_first.py`, `.claude/settings.json` | A `PreToolUse` hook on `WebSearch` and `WebFetch`: the first web call of each agent is refused once, with the kept research rows in the reason; fails open; `scaffold/tests/test_research_hook.py` |
-| [vendor-api-discovery.md](vendor-api-discovery.md) | B0.5, B4, B7 | `docs/vendor-api-discovery.md` | Pinning down a paid vendor API cheaply: product pages and their network requests, free calls first, one smallest paid call, the published schema recorded and every body preflighted against it |
 | [owner-queue-item.md](owner-queue-item.md) | B0.6, B10 | (used, not copied) | The shape of one owner ask, and its console fields |
 | [decision-rights.md](decision-rights.md) | B0.6, B2 | `docs/decision-rights.md` | The three lanes, the risky list, the channels that count, the digest |
 | [skill-pack.toml](skill-pack.toml) | B1 | `skill-pack.toml` | The skill pack's names, languages, scopes, layers and release lists |
@@ -38,13 +39,10 @@ The files a new skill pack starts from. The build workflow, [BUILD.md](../BUILD.
 | [ssot/alert_rules.tsv](ssot/alert_rules.tsv) | B6 | `ssot/` | Alert rules as rows, read by the skill pack's own alert compute |
 | [console/ui_rules.tsv](console/ui_rules.tsv) | B5, B7 | `webconsole/ui_rules.tsv` | The client console's UI rules, an owner file; each rule checked by name |
 | [ssot/stages.agent.tsv](ssot/stages.agent.tsv) | every step | `ssot/` | Which build step the skill pack is at, and who signed each |
-| [bug-classes.md](bug-classes.md) | B4, B6, B10 | `docs/bug-classes.md` | The data bug classes, each with the fixture test that pins it; the ids of the triage line's `Class:` |
-| [doctor-checks.md](doctor-checks.md) | B1, B9 | `docs/doctor-checks.md` | What the doctor checks: when each row warns, the fix it names, the bug it caught. The kit's `doctor` implements most rows |
 | [SKILL.md](SKILL.md) | B8 | `SKILL.md` | The agent's rules and the skill's scope: read, pending writes, out of scope |
 | [third-party-consent.md](third-party-consent.md) | B3, B7 | a consent record per person + the letter | A real person in a marketing output (AI twin, voice, testimonial, creator clip): the record, confirmed only through the gate and bound to its content; revoke is free |
 | [claim-scope.md](claim-scope.md) | B3, B6, B10 | a claims record per product + `ssot/claim_terms.tsv` + a phrase library per product | Regulated copy says only what the approved document allows: the claims record confirmed at the gate, the claims lexicon, the checks at script, asset and render, what stops and what warns, waivers, the phrase library, and every rejection as a recall test beside a false-alarm test |
 | [design-first.md](design-first.md) | B6, B10 | (used, not copied) | Before a feature an owner has to understand and steer: research, one design page (what it is, how it decides, the asks with a recommended answer each, what it stores), a demo drawn by the skill pack's own renderer from a synthetic world and its guard, the owner's yes, then the code |
-| [owner-review-loop.md](owner-review-loop.md) | B6, B10 | `docs/owner-review-loop.md` | One published page the owner decides on per item; the next session reads the decisions back and logs each change against its note |
 | [ROADMAP.md](ROADMAP.md) | all | `docs/ROADMAP.md` | The one roadmap format: Now, Waiting on owner (each row names what it unblocks), Next, Done (with its reference), Parked, Decisions (the owner's words), Links; one dated row per item with an id; `tests/test_roadmap.py` holds it (`kit.guards.roadmap`) |
 | [client/CLAUDE.md](client/CLAUDE.md) | B9, every client | `<clients>/<client>/CLAUDE.md` (rendered by `scaffold/new_client.py`) | The agent's brief for one client: the wrapper pinned to its data folder, the first call, the console round, the gate verbs it may not run, the Distil rule |
 | [client-handoff.md](client-handoff.md) | every client session | `<clients>/<client>/reports/handoff-YYYY-MM-DD.md` | What the database can't hold, and the Distil list: each insight tagged skill pack MR, proposed story, method question or client-only; a rule stays proposed until a second client confirms it |
@@ -57,7 +55,6 @@ The files a new skill pack starts from. The build workflow, [BUILD.md](../BUILD.
 | [README-operator.md](README-operator.md) | B8 | `README.md` | Install, configure, daily loop, what needs a human, which command answers which question |
 | [workflows.md](workflows.md) | B8 | `references/workflows.md` | Recipes: the daily check, why a number moved, a client meeting |
 | [install-checklist.md](install-checklist.md) | B9 | `docs/install-checklist.md` | The install message, what the host agent reports after every install, scheduled tasks, and what a host agent can reach |
-| [triage-checklist.md](triage-checklist.md) | B10 | `docs/triage-checklist.md` | Judging an agent-filed issue; the triage line that routes it |
 | [tests/golden/](tests/golden/README.md) (below) | B1, B10 | `tests/golden/` | The golden-diff engine, committed before the first refactor |
 | [workflows/](workflows/README.md) (below) | B4 to B10 | `.claude/workflows/` | Workflow scripts for building with many agents, and the ref check before any push |
 | [tests/](tests/README.md) (below) | B1 | (used, not copied) | The standalone test kit: a copy-as-is option, not what the scaffolder generates |
