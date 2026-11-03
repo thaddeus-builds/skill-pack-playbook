@@ -42,12 +42,16 @@ function consoleNotes() {
           + 'A host with its own vhost (no BEGIN/END block) copies the route from that output by hand');
   } else if (h.caddyBlockMissing()) {
     if (restored) h.log(`note: the saved Caddy block was not put back: ${restored.skip}`);
-    h.log(`WARNING: ${h.USERS_FILE} has logins but ${h.CADDYFILE} has no "${h.CADDY_MARKER}" block, `
-          + `so ${C.base_path} has no route (uninstall + add removes it). `
+    h.log(`WARNING: ${h.hasLogins() ? `${h.USERS_FILE} has logins` : `the last uninstall kept the Caddy block in ${h.CADDY_SAVED}`} `
+          + `but ${h.CADDYFILE} has no "${h.CADDY_MARKER}" block, so ${C.base_path} has no route, not even the one-time /setup link `
+          + `(uninstall + add removes it). `
           + (fs.existsSync(h.CADDY_SAVED) ? `Paste the copy kept at ${h.CADDY_SAVED} (it has your edits), or print a fresh block with `
                                           : 'Print the block with ')
           + `node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} caddy and paste it (zylos/README.md "The Caddy block"), then: `
           + `${h.ZYLOS_DIR}/bin/caddy validate --config ${h.CADDYFILE} --adapter caddyfile && pm2 reload caddy`);
+  } else if (h.caddyBlockAbsent() && fs.existsSync(h.CADDYFILE)) {
+    h.log(`note: ${h.CADDYFILE} has no "${h.CADDY_MARKER}" block yet, so ${C.base_path} has no route; this hook does not add one to a host `
+          + `that never had it. Print it with node ${h.q(path.join(h.ADAPTER_DIR, 'lib.js'))} caddy and paste it (zylos/README.md "The Caddy block")`);
   }
   const stale = h.hasLogins() ? h.staleLogins() : [];
   if (stale.length) {
