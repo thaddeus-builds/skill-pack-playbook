@@ -114,6 +114,17 @@ def test_a_second_train_inside_a_week_needs_a_reason_and_is_a_patch():
     assert r.returncode == 0 and open(f"{d}/kit/VERSION").read() == "0.2.1\n", r.stderr
 
 
+def test_the_owner_may_allow_a_train_inside_the_week():
+    """Seen once, 2026-11-03: the owner said yes to 0.48.0 the day after 0.47.4 (R27). The decision row must exist and quote the owner."""
+    d = setup()
+    open(f"{d}/ROADMAP.md", "w").write('# Roadmap\n## Decisions\n- [R7] 2026-10-24 a train now: "yes" (the owner)\n- [R8] 2026-10-24 no quote here\n## Links\n')
+    refused(d, "not a decision row", "0.3.0", "--date", "2026-10-24", "--owner-approved", "R9")
+    refused(d, "not a decision row", "0.3.0", "--date", "2026-10-24", "--owner-approved", "R8")
+    refused(d, "two different reasons", "0.3.0", "--date", "2026-10-24", "--owner-approved", "R7", "--urgent", "x")
+    r = run(d, "0.3.0", "--date", "2026-10-24", "--owner-approved", "R7")
+    assert r.returncode == 0 and open(f"{d}/kit/VERSION").read() == "0.3.0\n", r.stderr
+
+
 def test_the_real_changelog_is_ready_for_a_train():
     """A dry run on this repository: a train on 2999-01-01 would be accepted, so the entries merged since the last train are all paired."""
     r = subprocess.run([sys.executable, TOOL, "999.0.0", "--date", "2999-01-01", "--dry-run"], capture_output=True, text=True, cwd=ROOT)
