@@ -4,6 +4,8 @@ The generic half of an agent skill pack, distilled from a skill pack that ran in
 
 Stdlib only, Python 3.11 or newer. Version: [VERSION](VERSION). Fingerprint: [MANIFEST.sha256](MANIFEST.sha256).
 
+[`docs/`](docs/) holds the five checklists every skill pack reads as they are (bug classes, doctor checks, the owner's review loop, triage, vendor API discovery; the install checklist names hosts, so it stays a template). They arrive with every copy of the kit, whatever packs it takes, so a skill pack keeps no copy of its own (the owner's C5, R29).
+
 ## How a skill pack uses it
 
 A skill pack never imports the kit from the playbook. It vendors a plain copy:
