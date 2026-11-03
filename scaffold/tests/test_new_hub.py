@@ -36,6 +36,7 @@
 
 import json
 import os
+import shutil
 import re
 import stat
 import subprocess
@@ -151,10 +152,24 @@ def main() -> int:
           and f"| {port} | this hub's console (`bin/console`) |" in cm, cm)
     check("CLIENT.md: a `Who answers` table with the owner's console and a client row to fill (login, log folder)",
           "## Who answers" in cm and "| owner (`bin/console`) |" in cm and "| client | <<fill:" in cm and "no shared account" in cm, cm)
-    check("intake: README, INDEX.tsv header, inbox/",
-          "inbox/<YYYY-MM-DD>-<source>/" in t["intake/README.md"]
-          and t["intake/INDEX.tsv"].startswith("id\tdate\tsource\t")
+    check("intake for people: README, brief, decisions (a mirror), open questions, meetings/ (issue #479)",
+          all(f"intake/{f}" in t for f in ("README.md", "brief.md", "decisions.md", "open-questions.md"))
+          and "<<fill:" in t["intake/brief.md"] and "record that counts" in t["intake/decisions.md"]
+          and (hub / "intake" / "meetings" / ".gitkeep").is_file())
+    check("sources: README, INDEX.tsv header, inbox/; reports: README",
+          "inbox/<YYYY-MM-DD>-<source>/" in t["sources/README.md"]
+          and t["sources/INDEX.tsv"].startswith("id\tdate\tsource\t")
+          and (hub / "sources" / "inbox" / ".gitkeep").is_file() and "reports/README.md" in t)
+    check("the old paths still resolve: intake/INDEX.tsv and intake/inbox are relative links into sources/",
+          os.readlink(hub / "intake" / "INDEX.tsv") == "../sources/INDEX.tsv"
+          and os.readlink(hub / "intake" / "inbox") == "../sources/inbox"
+          and (hub / "intake" / "INDEX.tsv").read_text() == t["sources/INDEX.tsv"]
           and (hub / "intake" / "inbox" / ".gitkeep").is_file())
+    (hub / "intake" / "inbox" / "2026-10-22-client").mkdir()
+    (hub / "intake" / "inbox" / "2026-10-22-client" / "a.txt").write_text("x")
+    check("a file a tool writes through the old path lands in sources/",
+          (hub / "sources" / "inbox" / "2026-10-22-client" / "a.txt").read_text() == "x")
+    shutil.rmtree(hub / "sources" / "inbox" / "2026-10-22-client")
     check("exchange: a README that says write once, and a .gitkeep",
           "A producer writes a file once" in t["exchange/README.md"]
           and "exchange_write" in t["exchange/README.md"]
@@ -340,12 +355,15 @@ def main() -> int:
         return subprocess.run(["git", "-C", str(hub), "check-ignore", "-q", rel],
                               capture_output=True).returncode == 0
     yes = ["client_terms.txt", "console/events.jsonl", "hub/hub.db", "demoa", "demob",
-           "demoa/workspace/x.db", "intake/inbox/2026-10-22-client/brief.pdf",
+           "demoa/workspace/x.db", "sources/inbox/2026-10-22-client/brief.pdf",
            "intake/2026-10-22.json", "intake/numbers.tsv", "intake/questions.tsv",
+           "intake/meetings/2026-10-22/recording.m4a", "sources/brief.pdf", "reports/weekly.html",
            "exchange/ads.results/1/demoa/2026-10-23.json"]
     no = ["CLIENT.md", "hub.json", "bin/hub", "bin/console", ".claude/settings.json",
-          ".claude/launch.json", "intake/README.md", "intake/INDEX.tsv",
-          "intake/inbox/.gitkeep", "exchange/README.md", "exchange/.gitkeep", ".gitignore"]
+          ".claude/launch.json", "intake/README.md", "intake/INDEX.tsv", "intake/inbox",
+          "intake/brief.md", "intake/decisions.md", "intake/open-questions.md", "intake/meetings/.gitkeep",
+          "sources/README.md", "sources/INDEX.tsv", "sources/inbox/.gitkeep", "reports/README.md",
+          "exchange/README.md", "exchange/.gitkeep", ".gitignore"]
     check("content, console log, hub data, terms and pack folders are ignored",
           all(ignored(x) for x in yes), [x for x in yes if not ignored(x)])
     check("CLIENT.md, intake and exchange README, bin/, hub.json, .claude/ are tracked",
