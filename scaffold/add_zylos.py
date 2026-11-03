@@ -108,8 +108,11 @@ def settings(skill_pack: Path) -> dict:
 FLEET = SOURCE / "fleet.tsv"      # one row per skill pack: its linked command, console port and path on a host (no two alike)
 
 
-def fleet_row(name: str) -> dict | None:
-    """The pack's row of hosts/zylos/fleet.tsv, or None when it has none."""
+def fleet_row(name: str, cli: str = "") -> dict | None:
+    """The pack's row of hosts/zylos/fleet.tsv, by its name or its CLI word, or None when it has none.
+
+    The table is keyed by repository; three packs' toml names differ from it (ecommerce-seo-skill-pack, adcut,
+    product-keyframe-video), and the CLI word is unique in the table (its bin is openmax-<cli>), so either finds the row."""
     try:
         lines = FLEET.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -117,14 +120,14 @@ def fleet_row(name: str) -> dict | None:
     head = lines[0].split("\t") if lines else []
     for line in lines[1:]:
         row = dict(zip(head, line.split("\t")))
-        if row.get("pack") == name:
+        if row.get("pack") == name or (cli and row.get("cli") == cli):
             return row
     return None
 
 
-def default_port(name: str) -> int:
+def default_port(name: str, cli: str = "") -> int:
     """The port fleet.tsv gives the pack; for a pack not in it, 8800 plus a hash of the name (add its row: a hash collides)."""
-    row = fleet_row(name)
+    row = fleet_row(name, cli)
     if row and row.get("port", "").isdigit():
         return int(row["port"])
     return 8800 + zlib.crc32(name.encode()) % 1000
@@ -418,7 +421,7 @@ def plan(skill_pack: Path, *, brand: str, port: int | None) -> tuple[list[tuple[
         if port is not None or brand != BRAND:
             notes.append("zylos/manifest.json exists, so --port and --brand are ignored")
     else:
-        m = manifest_for(s, entry, brand, port or default_port(s["name"]))
+        m = manifest_for(s, entry, brand, port or default_port(s["name"], s["cli"]))
         bad = problems(m)
         if bad:
             raise refuse("the manifest would not pass the adapter's check, nothing was written: " + "; ".join(bad))
