@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.6.2). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.7.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -26,11 +26,12 @@ A skill pack **copies** these files into `<skill-pack>/zylos/` and never edits t
 | `Caddyfile.snippet` | `zylos/Caddyfile.snippet` | The console's login route; `node zylos/lib.js caddy` fills it in |
 | `README.md`, `VERSION` | `zylos/` | This guide; the adapter version the skill pack vendored |
 
-A skill pack **writes** only three things:
+A skill pack **writes** only four things:
 
 1. `zylos/manifest.json`, starting from [manifest.example.json](manifest.example.json) (a fictional `shop-harness`).
 2. The Zylos keys of its `SKILL.md` frontmatter (below).
 3. The root `ecosystem.config.cjs`, a copy of [ecosystem.config.cjs.template](ecosystem.config.cjs.template) (three lines). Core looks for it at the skill root only.
+4. The root `.python-version`, one line, the manifest's `runtime.python` (0.7.0): `uv run` then uses the Python post-install installs instead of the newest one it finds on the host, and `check` refuses a file that is missing or names another version (the playbook's decision R18: one Python for the fleet).
 
 The owner console itself is the playbook's `console/`, vendored as usual (`python3 kit/tools/vendor.py --skill-pack <dir> --console`); `console.entry` points at its `serve.py`.
 

@@ -11,7 +11,8 @@ scripts folder):
     127.0.0.1:PORT under `/<cli>`, and no scheduled task (tasks are the skill pack's own prompts: it adds them);
   * adds the Zylos keys to the `SKILL.md` frontmatter when it has none of them (`lifecycle:`, `bin:`, `config:`, `next-steps:`); the file's other
     keys, its body and its line endings stay;
-  * writes the root `ecosystem.config.cjs` from the template when there is none;
+  * writes the root `ecosystem.config.cjs` from the template when there is none, and `.python-version` (the manifest's
+    runtime.python) when there is none: uv then runs the pack on the Python the host installs (the playbook's R18);
   * adds Node 22 and `node zylos/lib.js check` to the last job's steps in `.github/workflows/ci.yml`, when the file ends with that list and does not run
     the check yet.
 
@@ -426,6 +427,14 @@ def plan(skill_pack: Path, *, brand: str, port: int | None) -> tuple[list[tuple[
         notes.append("there is no SKILL.md: the Zylos keys go in its frontmatter once it exists")
     if not (skill_pack / "ecosystem.config.cjs").is_file():
         writes.append(("ecosystem.config.cjs", (SOURCE / "ecosystem.config.cjs.template").read_bytes(), None))
+    pin = skill_pack / ".python-version"                  # one Python (the playbook's R18): uv runs the pack on the version the host installs
+    want = str(m["runtime"]["python"])
+    if link_in(skill_pack, ".python-version"):
+        notes.append(f".python-version is a link: it is not written through; make it say {want} (manifest runtime.python) by hand")
+    elif not pin.exists():
+        writes.append((".python-version", f"{want}\n".encode(), None))
+    elif pin.is_file() and pin.read_text(encoding="utf-8", errors="replace").strip() != want:
+        notes.append(f".python-version is left as it is and differs from manifest runtime.python {want}: make them the same (the adapter's check refuses the difference)")
     ci = skill_pack / ".github" / "workflows" / "ci.yml"
     if link_in(skill_pack, ".github/workflows/ci.yml"):
         notes.append(".github/workflows/ci.yml is, or sits under, a link: it is not edited; add Node 22 and `node zylos/lib.js check` by hand")

@@ -581,8 +581,23 @@ def test_a_block_scalar_with_a_tag_an_anchor_or_a_quoted_key_is_a_block() -> Non
         check(f"{label} before the indicator: the lines under it are text, so the file has more after the steps and is left alone", new is None and note and "more after" in note, (new, note))
 
 
+def test_the_python_pin() -> None:
+    print("[pin] .python-version (the playbook's R18)")
+    d = bare("pin")
+    r = run(d)
+    want = json.loads((d / "zylos" / "manifest.json").read_text("utf-8"))["runtime"]["python"]
+    check("a pack without one gets the manifest's runtime.python, and the adapter's check passes",
+          r.returncode == 0 and (d / ".python-version").read_text("utf-8") == want + "\n", (r.stdout[-300:], r.stderr))
+    d = bare("pin-own")
+    (d / ".python-version").write_text("3.11\n", encoding="utf-8")
+    r = run(d)
+    check("one that says another version is not overwritten, and the line and the check say so",
+          (d / ".python-version").read_text("utf-8") == "3.11\n" and ".python-version is left as it is" in r.stdout + r.stderr
+          and r.returncode == 1 and "manifest runtime.python is" in r.stdout + r.stderr, (r.returncode, r.stdout[-400:], r.stderr[-400:]))
+
+
 if __name__ == "__main__":
-    for fn in (test_the_scaffold_sets_it_up_by_default, test_adding_to_an_existing_pack_and_running_twice,
+    for fn in (test_the_python_pin, test_the_scaffold_sets_it_up_by_default, test_adding_to_an_existing_pack_and_running_twice,
                test_what_the_skill_pack_owns_is_not_overwritten, test_dry_run_and_the_verdict, test_the_port, test_refusals,
                test_the_ci_step, test_a_ci_file_that_is_not_safe_to_edit_is_left_alone, test_a_skill_md_that_is_not_safe_to_edit_is_left_alone,
                test_bad_inputs_are_refused_before_anything_is_written, test_nothing_is_written_through_a_link_or_where_it_cannot_go,
