@@ -120,7 +120,7 @@ def main() -> int:
                  "`bin/hub <cli> pending --hub --json`", "`bin/ask add FILE`",
                  "Post only a row that\n   blocks something (no fallback in use)",
                  "bin/ask chat ID", "only for words and choices",
-                 "intake/inbox/<YYYY-MM-DD>-<source>/", "intake/INDEX.tsv",
+                 "sources/inbox/<YYYY-MM-DD>-<source>/", "sources/INDEX.tsv", "intake/brief.md",
                  "check_intake.py", "--transcript FILE",
                  "facts sync-hub", "Never run a gate verb yourself",
                  "`hub facts confirm, facts restore`"):
