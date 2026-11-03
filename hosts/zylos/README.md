@@ -33,6 +33,8 @@ A skill pack **writes** only four things:
 3. The root `ecosystem.config.cjs`, a copy of [ecosystem.config.cjs.template](ecosystem.config.cjs.template) (three lines). Core looks for it at the skill root only.
 4. The root `.python-version`, one line, the manifest's `runtime.python` (0.7.0): `uv run` then uses the Python post-install installs instead of the newest one it finds on the host, and `check` refuses a file that is missing or names another version (the playbook's decision R18: one Python for the fleet).
 
+**One table for the fleet.** [`fleet.tsv`](fleet.tsv) (in the playbook only, never copied) gives each skill pack its linked command (`openmax-<cli>`), its console's default port and its public path, so that two packs on one host never share one; `scaffold/add_zylos.py` takes the port from it. A new pack gets its row before its adapter. `tests/test_fleet_table.py` refuses a duplicate, a command not named `openmax-<cli>`, and a new port in the range a client hub's console takes (8770 to 8799).
+
 The owner console itself is the playbook's `console/`, vendored as usual (`python3 kit/tools/vendor.py --skill-pack <dir> --console`); `console.entry` points at its `serve.py`.
 
 Then add `node zylos/lib.js check` to the skill pack's CI. It exits 1 and names each problem when the manifest, the `SKILL.md` frontmatter, the root ecosystem file or a file they name disagree.
