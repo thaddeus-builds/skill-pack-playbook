@@ -10,6 +10,7 @@
       "field": "headline",
       "findings": [],
       "id": "cp-001",
+      "insight_id": "ins-001",
       "length": 18,
       "placement": "google_rsa",
       "status": "clean",
