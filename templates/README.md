@@ -4,7 +4,7 @@ The files a new skill pack starts from. The build workflow, [BUILD.md](../BUILD.
 
 ## Every template
 
-Six docs every skill pack reads as they are live in [`kit/docs/`](../kit/docs/) and arrive with the kit (`scripts/kit/docs/` in a skill pack), not as copies: [bug-classes.md](../kit/docs/bug-classes.md), [doctor-checks.md](../kit/docs/doctor-checks.md), [owner-review-loop.md](../kit/docs/owner-review-loop.md), [triage-checklist.md](../kit/docs/triage-checklist.md), [vendor-api-discovery.md](../kit/docs/vendor-api-discovery.md), [install-checklist.md](../kit/docs/install-checklist.md) (the owner's C5, R29).
+Five docs every skill pack reads as they are live in [`kit/docs/`](../kit/docs/) and arrive with the kit (`scripts/kit/docs/` in a skill pack), not as copies: [bug-classes.md](../kit/docs/bug-classes.md), [doctor-checks.md](../kit/docs/doctor-checks.md), [owner-review-loop.md](../kit/docs/owner-review-loop.md), [triage-checklist.md](../kit/docs/triage-checklist.md), [vendor-api-discovery.md](../kit/docs/vendor-api-discovery.md) (the owner's C5, R29).
 
 | Template | Step | Becomes, in the skill pack | What it is |
 | --- | --- | --- | --- |
@@ -54,6 +54,7 @@ Six docs every skill pack reads as they are live in [`kit/docs/`](../kit/docs/) 
 | [system-overview.md](system-overview.md) | B8, B10 | `docs/` page generated from the registries | The one page that shows what the harness can do and how: standards per question, generated and not committed, status read from the stories, common pieces before per-business-type ones |
 | [README-operator.md](README-operator.md) | B8 | `README.md` | Install, configure, daily loop, what needs a human, which command answers which question |
 | [workflows.md](workflows.md) | B8 | `references/workflows.md` | Recipes: the daily check, why a number moved, a client meeting |
+| [install-checklist.md](install-checklist.md) | B9 | `docs/install-checklist.md` | The install message, what the host agent reports after every install, scheduled tasks, and what a host agent can reach |
 | [tests/golden/](tests/golden/README.md) (below) | B1, B10 | `tests/golden/` | The golden-diff engine, committed before the first refactor |
 | [workflows/](workflows/README.md) (below) | B4 to B10 | `.claude/workflows/` | Workflow scripts for building with many agents, and the ref check before any push |
 | [tests/](tests/README.md) (below) | B1 | (used, not copied) | The standalone test kit: a copy-as-is option, not what the scaffolder generates |

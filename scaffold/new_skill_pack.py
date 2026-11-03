@@ -83,6 +83,7 @@ RENDERED = {
     "gitignore": ".gitignore",
     "CHANGELOG.md": "CHANGELOG.md",
     "decision-rights.md": "docs/decision-rights.md",
+    "install-checklist.md": "docs/install-checklist.md",
     "session-handoff.md": "docs/session-handoff.md",
     "ROADMAP.md": "docs/ROADMAP.md",
     "research-index.md": "docs/research/README.md",
@@ -156,8 +157,8 @@ DAY_ONE = {
     "Git rules": ["CLAUDE.md", "{ci}"],
     "Releases are a `git archive`": ["tests/test_release.py",
                                      ".gitattributes",
-                                     "scripts/kit/docs/install-checklist.md"],
-    "Before the first hosted client": ["scripts/kit/docs/install-checklist.md"],
+                                     "docs/install-checklist.md"],
+    "Before the first hosted client": ["docs/install-checklist.md"],
 }
 
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,40}$")

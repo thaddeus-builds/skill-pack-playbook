@@ -71,7 +71,7 @@ Install these before the first feature; each costs an hour now and saved days in
 - [ ] Writes and paid calls off: dry run, allowlist, kill switch, no retries, caps
 - [ ] Protected paths for the risky list ([template](../templates/CODEOWNERS)) and one release owner
 - [ ] Git rules: never squash; one "Fixes #N" per line; every commit names its story; the forge chosen by three questions and every token proved on day 1 ([below](#forge-and-access))
-- [ ] Releases are a `git archive` of the tag with an archive test; install messages written from the version the host runs ([install checklist](../kit/docs/install-checklist.md))
+- [ ] Releases are a `git archive` of the tag with an archive test; install messages written from the version the host runs ([install checklist](../templates/install-checklist.md))
 - [ ] Before the first hosted client: decide where the logic and the keys live
 
 ### Forge and access
