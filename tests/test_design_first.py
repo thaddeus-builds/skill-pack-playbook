@@ -8,6 +8,9 @@ Checked, each on a broken copy first, so a check cannot pass by looking at nothi
   - a new skill pack's CLAUDE.md (templates/AGENT_INSTRUCTIONS.md) names the template where a feature starts; the
     prior-art scan and BUILD.md's B0.5 point at it (the lesson in docs/lessons.md is not pinned by wording:
     tests/test_docs_build.py keeps it short, says where it was seen, and resolves its link to the template);
+  - the design page is drawn by kit.pagestyle's design_page() and design_page_problems(), in the same block, is run
+    as written: a page drawn so passes; a page drawn by hand, one with too much prose outside its pictures and one with
+    an unlabelled phone frame are reported;
   - the demo guard, the template's one Python block, is run as written: a demo page drawn with kit.pagestyle from a
     synthetic world passes it, and each way a demo breaks the rule is reported: a world not marked synthetic (any
     value but true itself); no ids, or an id that is not DEMO; no synthetic badge with its words in the page's first
@@ -40,18 +43,20 @@ TEMPLATE = "templates/design-first.md"
 SECTIONS = ("When", "The steps", "The design page", "The demo", "After the owner confirms", "Checklist")
 STEPS = ("Research first.", "One design page, in the owner's language.", "A clickable demo from a synthetic world.",
          "Wait for the owner's yes.", "Then the code, and the skill pack draws the demo.")
-PARTS = ("What it is.", "How it decides.", "The asks.", "What it stores.", "The traps.")
+PARTS = ("Pictures first.", "What it is.", "How it decides.", "The asks.", "What it stores.", "The traps.")
 GUARDS = ("A synthetic marker.", "DEMO ids.", "No client term.", "The skill pack's own renderer.",
           "Before the code exists.", "When no demo is needed.", "Never in a client's data.", "Shared privately.")
 CHECKLIST = ("The prior-art scan is dated",
              "The design page says what it is, how it decides, the asks",
+             "The design page is drawn by `design_page()` and `design_page_problems()` finds nothing",
              "Every append-only column is proven on a scratch copy of real data",
              "The demo is drawn by the skill pack's own renderer",
              "The demo guard finds nothing",
              "The demo is shared privately, and the owner confirmed before any code",
              "After the code, the skill pack redraws the demo from a synthetic fixture to the same link")
 WORDS = {"The steps": ("](prior-art-scan.md)",),
-         "The design page": ("recommended answer", "append-only", "scratch copy of real data"),
+         "The design page": ("recommended answer", "append-only", "scratch copy of real data", "`design_page()`",
+                             "`flow()`", "`phone()`", "`choices()`", "`PROSE_MAX`", "the record"),
          "The demo": ("`DEMO`", "fails closed", "kit.pagestyle", "kit/tools/leak_guard.py", "first `<header>`",
                       "page data's JSON escapes", "command patterns", "every client's data folder",
                       "stand-alone generator", "nothing new to draw", "worked example")}
@@ -77,6 +82,8 @@ def template_problems(text: str) -> list[str]:
     out += [f"{h}: {w}" for h, words in WORDS.items() for w in words if w not in section(text, h)]
     if len(PY.findall(text)) != 1 or "def demo_problems(" not in "".join(PY.findall(text)):
         out.append("one Python block with demo_problems")
+    if "def design_page_problems(" not in "".join(PY.findall(text)):
+        out.append("the Python block's design_page_problems")
     return out
 
 
@@ -105,10 +112,13 @@ def test_the_template_keeps_its_steps_its_parts_its_guards_and_its_checklist():
     assert template_problems(text.replace("scratch copy of real data (never", "copy (never")) == [
         "The design page: scratch copy of real data"]
     assert template_problems(text.replace("It fails closed", "It warns")) == ["The demo: fails closed"]
-    assert template_problems(text.replace("```python", "```text")) == ["one Python block with demo_problems"]
+    assert template_problems(text.replace("```python", "```text")) == ["one Python block with demo_problems",
+                                                                         "the Python block's design_page_problems"]
+    assert template_problems(text.replace("def design_page_problems(", "def x(")) == [
+        "the Python block's design_page_problems"]
     assert template_problems("# t\n") == [f"## {h}" for h in SECTIONS] + [*STEPS, *PARTS, *GUARDS] + [
         f"checklist: {c}" for c in CHECKLIST] + [f"{h}: {w}" for h, ws in WORDS.items() for w in ws] + [
-        "one Python block with demo_problems"]
+        "one Python block with demo_problems", "the Python block's design_page_problems"]
 
 
 def test_every_pointer_names_the_template():
@@ -126,11 +136,11 @@ def test_every_pointer_names_the_template():
 
 # ------------------------------------------------------------- the demo guard, run as the template writes it --
 
-def guard():
-    """demo_problems() as the template's one Python block defines it."""
+def guard(name: str = "demo_problems"):
+    """demo_problems() (or another function) as the template's one Python block defines it."""
     ns: dict = {"__name__": "design_first_guard"}
     exec(compile(PY.findall(doc(TEMPLATE))[0], TEMPLATE, "exec"), ns)       # noqa: S102 - the playbook's own text
-    return ns["demo_problems"]
+    return ns[name]
 
 
 WORLD = {"synthetic": True, "product": "DEMO Desk Lamp", "project": "DEMO",
@@ -274,6 +284,37 @@ def test_the_guard_reports_each_way_a_demo_breaks_the_rule():
         for lists in ((), (d / "nowhere.txt",), (d / "nowhere.txt", terms), (empty,)):     # fail closed
             got = said(terms=lists)
             assert len(got) == 1 and got[0].startswith("no usable client-term list"), (lists, got)
+
+
+
+
+# ------------------------------------------------------- the design page: drawn by design_page(), pictures first --
+
+DESIGN_BOX = {"agree": "按这一页写程序", "cost": "不花钱；读 5 分钟", "worst": "截图被转出去", "needed": "参照片文件"}
+
+
+def design(lead: str = "客户发来一条想学的视频。") -> str:
+    flow = ZH.flow(["公式", "分镜", "视频"], [
+        {"name": "L3", "cells": [{"kind": "person", "word": "客户选"}, {"kind": "person"}, {"kind": "auto", "tag": "约 15 元"}],
+         "back": {"from": 2, "to": 1, "text": "客户要改"}},
+        {"name": "L4", "cells": [{"kind": "auto"}, {"kind": "skip"}, {"kind": "auto", "stop": "花到上限就停"}]}],
+        label="DEMO 复刻")
+    return ZH.design_page("DEMO 复刻分镜页", box=DESIGN_BOX, pictures=[flow, ps.phone("<p>公式 A</p>", "DEMO 客户页")],
+                          choices=[{"kind": "decided", "title": "先定公式"}, {"kind": "proposed", "title": "改满 2 轮就停"},
+                                   {"kind": "open", "title": "投放国家"}],
+                          record="<p>研究、规则和风险。</p>", lead=lead)
+
+
+def test_a_design_page_is_drawn_by_design_page_and_is_pictures_first():
+    design_page_problems = guard("design_page_problems")
+    assert design_page_problems(design(), style=ZH, commands=[r"\bdemo\b"]) == []
+    hand = ZH.page("DEMO", ps.tiles([("1", "项", "一页")]) + ZH.decision("回复“同意”", "<p>" + "一段说明文字。" * 5 + "</p>"))
+    assert design_page_problems(hand, style=ZH, commands=[]) == [
+        "not drawn by pagestyle.design_page(): no box of four tiles"]
+    wordy = design_page_problems(design(lead="这一页先用文字把整件事讲清楚。" * 15), style=ZH, commands=[])
+    assert [p for p in wordy if "of prose outside its pictures" in p] and len(wordy) == 1, wordy
+    shown = design_page_problems(design().replace(' aria-label="DEMO 客户页"', ""), style=ZH, commands=[])
+    assert shown == ["a phone frame without its label"], shown
 
 
 if __name__ == "__main__":
