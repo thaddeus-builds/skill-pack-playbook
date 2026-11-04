@@ -18,14 +18,15 @@ A feature an owner has to understand and steer: a page they decide on, a plan th
 
 ## The design page
 
-One page in the owner's language, for someone who will never read the code:
+One page in the owner's language, for someone who will never read the code, drawn with `kit.pagestyle`'s `design_page()` ([rule 13](../docs/page-style.md#the-rules)): the owner sees pictures first and the words are folded.
 
-- **What it is.** One paragraph: what the feature does for the owner, in their words.
-- **How it decides.** The rule in plain words, with one worked example on the synthetic world.
-- **The asks.** The few decisions only the owner can make (at most five), each with its options and a recommended answer, and one line, in the owner's language, that says how to agree to all of them at once ("reply 'agree' if all are as recommended").
-- **What it stores.** Every table it adds, its columns and who writes them. An append-only table is permanent: once it holds rows its columns cannot change, so they are proven on a scratch copy of real data (never the client's live store) before the page fixes them, and the page says they were.
+- **Pictures first.** In this order: the box (below) as four tiles; the pictures: who does each step with `flow()` (a lane for each level of autonomy or kind of client, a cost as a tag, where it stops and asks), what someone else will see with `phone()`, any other with `figure()`; the asks as `choices()`; one reply that agrees to all of it; the rest folded in the record. Outside the pictures, the box, the asks and the record the page holds at most `PROSE_MAX` of prose, about two short sentences, and its `problems()` fails a page with more. *Seen once:* product-image-to-video's X24 page (2026-11-04), which the owner read in a minute as pictures after calling the paragraph version "文字太多了".
+- **What it is.** One line under the title, in the owner's words; the pictures say the rest.
+- **How it decides.** The rule as a picture where it can be one (a flow, a before and after, the client's page in a phone's frame), with one worked example on the synthetic world; the rule in words goes into the record.
+- **The asks.** The few decisions only the owner can make (at most five) as `choices()`: each with its recommended answer, the ones already decided marked so, the ones asked after the yes marked so, and one reply that agrees to all of them at once (`design_page()` draws it: "reply 'agree' if all are as recommended").
+- **What it stores.** In the record: every table it adds, its columns and who writes them. An append-only table is permanent: once it holds rows its columns cannot change, so they are proven on a scratch copy of real data (never the client's live store) before the page fixes them, and the page says they were.
 - **A box at the top, and no builder's words.** Before section one, four lines: what "agree" sets going, what it costs (money, and the owner's time), the worst that can happen, and what is still needed from the owner. A single reply of "agree" has to be enough: a name or a number the page needs afterwards is asked for after the yes, and the page says so. No internal ids, table names, test names or command names; a word the owner has never used is explained where it first appears. Numbers in the headline are the ones that matter to the owner's goods (a total that is mostly something else is split first).
-- **The traps.** Each trap the research found, and the answer the design gives to it. For example: a tree whose branches cross counts one item twice; a comparison that brings back a target a person had parked; a column that can never be changed.
+- **The traps.** In the record: each trap the research found, and the answer the design gives to it. For example: a tree whose branches cross counts one item twice; a comparison that brings back a target a person had parked; a column that can never be changed.
 
 ## The demo
 
@@ -119,9 +120,16 @@ def demo_problems(world: dict, ids: list[str], page: str, *, out: Path, client_d
         return [*found, f"no usable client-term list ({why}): nothing is written"]
     hits = {h for text in forms(page) for h in leak_guard.scan(text, lists)}
     return [*found, *(f"a client term, {h}" for h in sorted(hits))]
+
+
+def design_page_problems(page: str, *, style: pagestyle.Style, commands: list[str]) -> list[str]:
+    """Why this design page may not go to the owner; [] when it may: drawn by design_page() (its box of four tiles is
+    there) and keeping the style's rules, pictures first and at most PROSE_MAX of prose outside them among them."""
+    found = [] if '<div class="tiles box">' in page else ["not drawn by pagestyle.design_page(): no box of four tiles"]
+    return [*found, *style.problems(page, commands=commands)]
 ```
 
-The tool writes the page only when the list is empty, and prints the reasons otherwise.
+The tool writes the page only when the list is empty, and prints the reasons otherwise. The tool that writes the design page runs `design_page_problems()` the same way: a page not drawn by `design_page()`, or one that breaks the style's rules (pictures first among them), is not sent to the owner.
 
 ## After the owner confirms
 
@@ -134,6 +142,7 @@ The tool writes the page only when the list is empty, and prints the reasons oth
 
 - [ ] The prior-art scan is dated, and each trap it found is on the design page with its answer
 - [ ] The design page says what it is, how it decides, the asks (each with a recommended answer, and one reply that agrees to all) and what it stores
+- [ ] The design page is drawn by `design_page()` and `design_page_problems()` finds nothing: pictures first, at most `PROSE_MAX` of prose outside them, the rest in the record
 - [ ] A fresh agent playing the owner (a person who knows the business and no software) read the page and its demo cold; what it could not follow, what contradicted itself and what was missing went back into the page
 - [ ] Every append-only column is proven on a scratch copy of real data
 - [ ] The demo is drawn by the skill pack's own renderer from a synthetic world and passes the renderer's check (before the code exists, by a stand-alone generator; when none is needed, the page says so and gives a worked example)
