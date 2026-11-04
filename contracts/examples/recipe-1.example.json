@@ -1,0 +1,119 @@
+# recipe/1
+{
+  "coverage": {
+    "covered": 9,
+    "selected": 24,
+    "taken": 12
+  },
+  "forms": [
+    {
+      "audio_rules": [
+        "no voice-over; one music bed, cut on its beat"
+      ],
+      "beats": [
+        {
+          "end_s": 2,
+          "kind": "title",
+          "start_s": 0
+        },
+        {
+          "end_s": 9,
+          "kind": "process",
+          "start_s": 2
+        },
+        {
+          "end_s": 12,
+          "kind": "closeup",
+          "start_s": 9
+        },
+        {
+          "end_s": 14,
+          "kind": "end",
+          "start_s": 12
+        }
+      ],
+      "evidence": {
+        "accounts": 1,
+        "campaigns": 4,
+        "videos": 6
+      },
+      "id": "steps-to-reveal",
+      "name": "Steps to a reveal",
+      "posts": [
+        "https://www.example.com/p/a1/",
+        "https://www.example.com/p/a2/"
+      ],
+      "shares": [
+        {
+          "n": 5,
+          "of": 6,
+          "what": "the finished piece is shown only in the last beat"
+        }
+      ],
+      "shots": [
+        {
+          "kind": "title",
+          "note": "the material on a table, top-down"
+        },
+        {
+          "kind": "process",
+          "note": "hands only, four cuts"
+        },
+        {
+          "kind": "closeup",
+          "note": "one slow push-in"
+        }
+      ],
+      "text_rules": [
+        "one line of title text in the first beat, none after"
+      ],
+      "varies": [
+        "the material",
+        "the colour of the table"
+      ]
+    },
+    {
+      "audio_rules": [
+        "the speaker's own voice, no music"
+      ],
+      "beats": [
+        {
+          "end_s": 3,
+          "kind": "talk",
+          "start_s": 0
+        },
+        {
+          "end_s": 20,
+          "kind": "process",
+          "start_s": 3
+        }
+      ],
+      "evidence": {
+        "accounts": 2,
+        "campaigns": 3,
+        "videos": 3
+      },
+      "id": "talk-then-show",
+      "name": "Say it, then show it",
+      "posts": [
+        "https://www.example.com/p/b1/"
+      ],
+      "shares": [
+        {
+          "n": 2,
+          "of": 3,
+          "what": "the speaker faces the camera for the whole first beat"
+        }
+      ],
+      "varies": [
+        "who speaks"
+      ]
+    }
+  ],
+  "niche": "fashion-making",
+  "platforms": [
+    "instagram"
+  ],
+  "produced_at": "2026-11-04T10:00:00+08:00",
+  "producer": "vrec"
+}
