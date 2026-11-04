@@ -1,0 +1,172 @@
+{
+  "$comment": "Draft for playbook issue #527 (ROADMAP X43; the owner's answers R34 to R38). One reference short video, read for whom it speaks to and which of its layers carry the value, the fit to the client's product, and at most two remake options for a person. The method is docs/user-insight.md; the research behind its rules is docs/research/2026-11-04-single-reference-remake.md. The messaging owner writes it (product-image-to-video until the insight pack exists); makers read it. Rules a schema cannot say are in x-rules and checked on the example by kit/tests/test_contracts.py.",
+  "$id": "remake.brief-1.schema.json",
+  "title": "remake.brief/1",
+  "description": "A brief for remaking one reference short video for a client's product: the reference by its public link and numbers, whom it speaks to and the job it shows, every layer with whether it carries the value and the evidence for that, whether the product can do the reference's job, the one or two options a person picks from, and the state of the proof part. No media, no line of the source.",
+  "$defs": {
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"},
+    "count": {"type": "integer", "minimum": 0},
+    "words": {"type": "string", "minLength": 1},
+    "layer": {"type": "string", "enum": ["hook", "structure", "shots", "text", "scene", "story", "persona", "product_use", "sound", "promise", "proof", "offer", "brand"]}
+  },
+  "x-contract": "remake.brief/1",
+  "x-status": "draft",
+  "x-format": "json",
+  "x-producer": "the messaging owner (product-image-to-video until the insight pack exists)",
+  "x-consumers": "makers (product-image-to-video, adcut)",
+  "x-rules": [
+    "A brief is for one reference video, one product and one market.",
+    "The reference is named by its public link only; the brief holds no media, still or clip, and no line, transcript, caption, face, voice or music of the source: every text field is our own words.",
+    "A remake takes the reference's structure and story only (R34): never_copy lists the reference's lines, music, faces, voices and distinctive cues (a colour, a mascot, a sound logo, a catchphrase, a signature shot) that it does not take, and brand_by_s says by which second the client's brand appears.",
+    "Every layer of the list appears once. A layer's carries_value is a hypothesis until a person answers it: status guess, or confirmed or corrected with confirmed_by and confirmed_at.",
+    "carries_value yes or no rests on at least one evidence item; unknown may have none. How often a form appears across videos is never evidence of value, so evidence kinds are a closed list without a frequency kind.",
+    "A count of n out of `of` carries both counts; a rate is never written without them.",
+    "If the product cannot do the reference's job (fit.can_do no or partly), product_job names the nearest job it can do and differs from reference_job: the remake swaps the job, it does not fake it.",
+    "options has one or two items: the first is the replica (the reference's structure and story with the client's product, under R34), the second, when present, a variant that changes exactly one layer of the list, named in `changes`. Exactly one option is recommended, and each says what a no means.",
+    "chosen, when present, names an option of the brief and the person who picked it.",
+    "No AI person speaks a review or an endorsement, in any framing (R36). A proof part played by an AI stand-in (state stand_in) may be delivered and run as an ad (R37, R38); it is made again once a real customer has signed a release, and state real names the consent record that holds it.",
+    "insight_ids name rows of the product's messages/1 document; the brief does not copy their words.",
+    "An absent optional key means unknown, never null and never an empty string."
+  ],
+  "type": "object",
+  "required": ["producer", "produced_at", "product", "market", "reference", "segment", "layers", "fit", "never_copy", "brand_by_s", "options", "proof"],
+  "properties": {
+    "producer": {"description": "The pack that wrote the brief (its CLI word).", "type": "string", "minLength": 1},
+    "produced_at": {"description": "When the brief was written: ISO 8601 with its zone.", "$ref": "#/$defs/time"},
+    "product": {"description": "The client's product the remake is for: a sku of catalog/1 when there is one.", "type": "string", "minLength": 1},
+    "market": {"description": "The market and language the remake is for (the hub's market word).", "type": "string", "minLength": 1},
+    "insight_ids": {"description": "The rows of the product's messages/1 document this brief serves, by insight_id.", "type": "array", "items": {"type": "string", "minLength": 1}},
+    "reference": {
+      "description": "The video being remade, by its public link, with the public numbers read from its page.",
+      "type": "object",
+      "required": ["link", "kind", "read_on"],
+      "properties": {
+        "link": {"description": "The public post or ad-library link; never a media file.", "type": "string", "pattern": "^https://"},
+        "kind": {"description": "paid (an ad, read from an ad library) or organic (a post).", "type": "string", "enum": ["paid", "organic"]},
+        "read_on": {"description": "The day the numbers were read.", "$ref": "#/$defs/date"},
+        "views": {"description": "Views shown on the page.", "$ref": "#/$defs/count"},
+        "likes": {"description": "Likes shown on the page.", "$ref": "#/$defs/count"},
+        "comments": {"description": "Comments shown on the page.", "$ref": "#/$defs/count"},
+        "shares": {"description": "Shares shown on the page.", "$ref": "#/$defs/count"},
+        "account_median_views": {"description": "The median views of the account's recent posts, and how many posts it was taken over (median_of).", "$ref": "#/$defs/count"},
+        "median_of": {"description": "How many of the account's posts account_median_views was taken over.", "$ref": "#/$defs/count"},
+        "run_days": {"description": "A paid reference: the days the ad has run, as the ad library shows.", "$ref": "#/$defs/count"},
+        "variants": {"description": "A paid reference: how many variants of it the advertiser runs.", "$ref": "#/$defs/count"}
+      }
+    },
+    "segment": {
+      "description": "Whom the reference speaks to, in our own words.",
+      "type": "object",
+      "required": ["who_uses", "situation", "job", "moment"],
+      "properties": {
+        "who_uses": {"description": "Who uses the product in the video.", "$ref": "#/$defs/words"},
+        "who_pays": {"description": "Who pays, when it is someone else.", "$ref": "#/$defs/words"},
+        "relation": {"description": "How the buyer relates to the user, as messages/1's x-vocabulary.relation.", "type": "string", "enum": ["self", "for_parent", "for_child", "for_partner", "gift"]},
+        "situation": {"description": "The situation the video shows them in.", "$ref": "#/$defs/words"},
+        "job": {
+          "description": "The job, as \"When ..., I want ..., so that ...\".",
+          "type": "object",
+          "required": ["when", "want", "so_that"],
+          "properties": {
+            "when": {"description": "The situation that starts it.", "$ref": "#/$defs/words"},
+            "want": {"description": "What they want to do.", "$ref": "#/$defs/words"},
+            "so_that": {"description": "What they get from it.", "$ref": "#/$defs/words"}
+          }
+        },
+        "moment": {"description": "Where in the buyer's journey the video meets them, as messages/1's x-vocabulary.moment_stage.", "type": "string", "enum": ["trigger", "explore", "doubt", "act", "use"]}
+      }
+    },
+    "layers": {
+      "description": "Every layer of the reference, each once, with whether it carries the value.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["layer", "carries_value", "hypothesis", "evidence", "status"],
+        "properties": {
+          "layer": {"description": "Which layer.", "$ref": "#/$defs/layer"},
+          "carries_value": {"description": "Whether this layer is where the value sits.", "type": "string", "enum": ["yes", "no", "unknown"]},
+          "hypothesis": {
+            "description": "One hypothesis, as \"We see ..., because ..., but ...\".",
+            "type": "object",
+            "required": ["seen", "because", "but"],
+            "properties": {
+              "seen": {"description": "What we see.", "$ref": "#/$defs/words"},
+              "because": {"description": "Why we think it carries the value, or not.", "$ref": "#/$defs/words"},
+              "but": {"description": "What would prove it wrong.", "$ref": "#/$defs/words"}
+            }
+          },
+          "evidence": {
+            "description": "What the judgement rests on; empty only while carries_value is unknown.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "says"],
+              "properties": {
+                "kind": {"description": "run_days and variants (a paid reference), curve (a per-second curve a platform showed), engagement_vs_median, comments, client_words, test (our own one-layer test). No frequency.", "type": "string", "enum": ["run_days", "variants", "curve", "engagement_vs_median", "comments", "client_words", "test"]},
+                "says": {"description": "What it shows, in our own words.", "$ref": "#/$defs/words"},
+                "n": {"description": "How many (comments that say it, days, ...).", "$ref": "#/$defs/count"},
+                "of": {"description": "Out of how many.", "$ref": "#/$defs/count"}
+              }
+            }
+          },
+          "status": {"description": "guess until a person answers; confirmed (took the suggestion) or corrected (changed it).", "type": "string", "enum": ["guess", "confirmed", "corrected"]},
+          "confirmed_by": {"description": "Who answered, as the producer's gate wrote it.", "$ref": "#/$defs/words"},
+          "confirmed_at": {"description": "When they answered: ISO 8601 with its zone.", "$ref": "#/$defs/time"}
+        }
+      }
+    },
+    "fit": {
+      "description": "Whether the client's product can do the reference's job.",
+      "type": "object",
+      "required": ["can_do", "reference_job", "product_job", "fact"],
+      "properties": {
+        "can_do": {"description": "yes, partly or no.", "type": "string", "enum": ["yes", "partly", "no"]},
+        "reference_job": {"description": "The job the reference shows the product doing.", "$ref": "#/$defs/words"},
+        "product_job": {"description": "The job the remake shows: the same when can_do is yes, else the nearest job the product can do.", "$ref": "#/$defs/words"},
+        "fact": {"description": "The product fact this rests on, from the client's product facts.", "$ref": "#/$defs/words"}
+      }
+    },
+    "never_copy": {"description": "What the remake does not take from the reference, in our own words (its lines, music, faces, voices and distinctive cues); may be empty.", "type": "array", "items": {"$ref": "#/$defs/words"}},
+    "brand_by_s": {"description": "The second by which the client's brand appears in the remake.", "type": "number", "minimum": 0},
+    "options": {
+      "description": "The replica first, then at most one variant.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "plan", "recommended", "if_no"],
+        "properties": {
+          "id": {"description": "The option's id within the brief.", "type": "string", "minLength": 1},
+          "kind": {"description": "replica (the reference's structure and story) or variant (the replica with one layer changed).", "type": "string", "enum": ["replica", "variant"]},
+          "changes": {"description": "A variant: the one layer it changes.", "$ref": "#/$defs/layer"},
+          "plan": {"description": "What the remake does, in our own words.", "$ref": "#/$defs/words"},
+          "recommended": {"description": "Whether this is the producer's recommendation; exactly one option is.", "type": "boolean"},
+          "if_no": {"description": "What a no to this option means.", "$ref": "#/$defs/words"}
+        }
+      }
+    },
+    "chosen": {
+      "description": "The option a person picked.",
+      "type": "object",
+      "required": ["option", "by", "at"],
+      "properties": {
+        "option": {"description": "The id of the option picked.", "type": "string", "minLength": 1},
+        "by": {"description": "Who picked it, as the producer's gate wrote it.", "$ref": "#/$defs/words"},
+        "at": {"description": "When: ISO 8601 with its zone.", "$ref": "#/$defs/time"}
+      }
+    },
+    "proof": {
+      "description": "The proof part (\"others bought it\") of the remake.",
+      "type": "object",
+      "required": ["state", "speaks_review"],
+      "properties": {
+        "state": {"description": "real (a real customer who signed a release), stand_in (an AI stand-in until one has) or none (the remake has no proof part).", "type": "string", "enum": ["real", "stand_in", "none"]},
+        "speaks_review": {"description": "Whether the person in the proof part says a review or an endorsement; never true for a stand-in.", "type": "boolean"},
+        "release": {"description": "state real: the id of the consent record that holds the signed release (kit/consent.py, confirmed at the gate), never the person's name.", "$ref": "#/$defs/words"}
+      }
+    }
+  }
+}
