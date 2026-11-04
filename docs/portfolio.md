@@ -163,6 +163,7 @@ A contract is a versioned `--json` document. Its first line names it (`# ads.res
 | `leads/1` | `outbound` | `sdr` | company, contacts, source, evidence |
 | `inquiries/1` | any operator that receives an inquiry (`seo` for site forms, `gads` and `meta-ads` for lead ads) | `sdr` | who wrote, from which company, the words as written, the page, the consent box text |
 | `recipe/1` | `video-recipes` | makers (`adcut`), `ad-copy` | the forms a set of public short videos share: beats in seconds, shots, text and audio rules in our own words, what varies, counts and links; no product, client, claim or media |
+| `remake.brief/1` | the messaging owner (`product-image-to-video` until the insight pack exists) | makers (`product-image-to-video`, `adcut`) | one reference short video read for a remake: whom it speaks to, every layer with whether it carries the value and its evidence, the fit to the product, at most two options, the proof part's state; no media and no line of the source ([user-insight.md](user-insight.md)) |
 | `creators.roster/1` (exists as vads K5) | `creator-program` | `meta-ads` | collaborations, codes, ad ids |
 
 ## Engines in the kit
@@ -220,4 +221,4 @@ Phases run in order; the sessions inside a phase touch disjoint repositories and
 
 1. **YouTube and Display go to `google-ads`.** Recommended: yes, by rule 1 (one operator per account). `video-ads` keeps no Google surface.
 2. **`outbound` and `sdr`.** Decided 2026-10-31: one pack. The engine of `outbound` is inside `sdr` (`sdr sweep`, PRs 57 to 66); the old recommendation was two packs joined by `leads/1`.
-3. **Messaging.** Recommended: take the insight matrix and the claims scope out of adcut into a small truth pack that publishes `messages/1`, once a second consumer (`gads` or `ad-copy`) is ready. Until then adcut emits `messages/1` itself.
+3. **Messaging.** Recommended: take the insight matrix and the claims scope out of adcut into a small truth pack that publishes `messages/1`, once a second consumer (`gads` or `ad-copy`) is ready. Until then adcut emits `messages/1` itself. The second consumer came on 2026-11-04 from another side: product-image-to-video's single-reference remake needs the same judgement (issue #527, ROADMAP X43), through the method in [user-insight.md](user-insight.md) and `remake.brief/1`, whose `insight_ids` name `messages/1` rows.

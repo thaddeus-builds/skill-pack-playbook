@@ -15,6 +15,9 @@
     fail on each way of breaking them (a dropped row said, an id in `insights` that the matrix lacks, a
     pending scope with a sayable fact ...), and its claims_scope is a record kit.claimscope.confirmed()
     accepts once confirmed_on is left out and calls a draft after an edit;
+  * remake.brief/1 (one reference video read for a remake): its x-rules across fields hold on the example and
+    fail on each way of breaking them (a layer judged on no evidence, the variant first, two recommendations, a
+    stand-in that speaks a review ...), and the schema refuses a third option and frequency as evidence;
   * a pack that takes no `exchange` pack does not get the schemas (kit.tools.packs).
 """
 
@@ -203,6 +206,65 @@ def messages_continuity(older: dict, newer: dict) -> list[str]:
     return out
 
 
+def remake_problems(doc: dict) -> list[str]:
+    """The x-rules of remake.brief/1 that its schema cannot say: each layer once and answered by a person before it
+    is anything but a guess, a judgement resting on evidence, a job swapped when the product cannot do it, the
+    replica first and at most one variant changing one listed layer, one recommendation, and a stand-in that
+    speaks no review (R34 to R38)."""
+    out: list[str] = []
+    names = [r["layer"] for r in doc["layers"]]
+    for name in sorted({n for n in names if names.count(n) > 1}):
+        out.append(f"layer {name} is listed twice")
+    for r in doc["layers"]:
+        answered = "confirmed_by" in r and "confirmed_at" in r
+        if r["status"] == "guess" and ("confirmed_by" in r or "confirmed_at" in r):
+            out.append(f"layer {r['layer']}: a guess carries who answered it")
+        if r["status"] != "guess" and not answered:
+            out.append(f"layer {r['layer']}: {r['status']} without confirmed_by and confirmed_at")
+        if r["carries_value"] != "unknown" and not r["evidence"]:
+            out.append(f"layer {r['layer']}: carries_value {r['carries_value']} rests on no evidence")
+        for e in r["evidence"]:
+            if ("n" in e) != ("of" in e):
+                out.append(f"layer {r['layer']}: {e['kind']} has one of n and of without the other")
+            elif "n" in e and e["n"] > e["of"]:
+                out.append(f"layer {r['layer']}: {e['kind']} has n above of")
+    ref = doc["reference"]
+    if ref["kind"] != "paid" and ({"run_days", "variants"} & set(ref)):
+        out.append("run_days or variants on a reference that is not paid")
+    if ("account_median_views" in ref) != ("median_of" in ref):
+        out.append("account_median_views without median_of, or the other way round")
+    fit = doc["fit"]
+    if fit["can_do"] == "yes" and fit["product_job"] != fit["reference_job"]:
+        out.append("fit says the product can do the job, but product_job differs from reference_job")
+    if fit["can_do"] != "yes" and fit["product_job"] == fit["reference_job"]:
+        out.append(f"fit.can_do {fit['can_do']}: product_job must name the job the product can do, not the reference's")
+    opts = doc["options"]
+    if opts[0]["kind"] != "replica":
+        out.append("the first option is not the replica")
+    if len(opts) > 1 and opts[1]["kind"] != "variant":
+        out.append("the second option is not a variant")
+    for o in opts:
+        if o["kind"] == "replica" and "changes" in o:
+            out.append(f"option {o['id']}: a replica changes no layer")
+        if o["kind"] == "variant" and o.get("changes") not in names:
+            out.append(f"option {o['id']}: a variant changes one layer of the list, not {o.get('changes')}")
+    ids = [o["id"] for o in opts]
+    if len(set(ids)) != len(ids):
+        out.append("two options share an id")
+    if sum(1 for o in opts if o["recommended"]) != 1:
+        out.append("not exactly one option is recommended")
+    if "chosen" in doc and doc["chosen"]["option"] not in ids:
+        out.append(f"chosen names option {doc['chosen']['option']}, which the brief does not offer")
+    proof = doc["proof"]
+    if proof["state"] == "stand_in" and proof["speaks_review"]:
+        out.append("an AI stand-in speaks a review or an endorsement (R36)")
+    if proof["state"] == "real" and "release" not in proof:
+        out.append("a real customer in the proof part without where the release is kept")
+    if proof["state"] != "real" and "release" in proof:
+        out.append(f"a release on a proof part that is {proof['state']}")
+    return out
+
+
 def main() -> int:
     _shop.use()
     data = _shop.data_dir()
@@ -212,10 +274,10 @@ def main() -> int:
     here = {p.name: p.read_bytes() for p in contracts.SCHEMAS.glob("*.schema.json")}
     there = {p.name: p.read_bytes() for p in (PLAYBOOK / "contracts").glob("*.schema.json")}
     check("kit/contracts.d holds the playbook's contracts/ schemas, byte for byte",
-          here == there and len(here) == 18,
+          here == there and len(here) == 19,
           sorted(set(here) ^ set(there)) or [n for n in here if here[n] != there.get(n)])
     examples = sorted(EXAMPLES.iterdir())
-    check("an example for each of the eighteen", len(examples) == 18, examples)
+    check("an example for each of the nineteen", len(examples) == 19, examples)
     bad = []
     for f in examples:
         kind, version, text = example(f.name)
@@ -400,6 +462,73 @@ def main() -> int:
     check("... a blank insight_id is refused (absent means unknown)", contracts.problems(prop_kind, prop_version, props) != [])
     props["proposals"][0]["insight_id"] = 1
     check("... and so is one that is a number", contracts.problems(prop_kind, prop_version, props) != [])
+
+    print("\n[1c] remake.brief/1: one reference, its layers, the fit and at most two options")
+    rb_kind, rb_version, rb_text = example("remake.brief-1.example.json")
+    brief = json.loads(rb_text.split("\n", 1)[1])
+    rb_schema = contracts.schema(rb_kind, rb_version)
+    check("the example breaks none of the rules across fields", remake_problems(brief) == [], remake_problems(brief))
+    check("every key the example uses is declared by the schema", undeclared(brief, rb_schema) == [], undeclared(brief, rb_schema))
+    check("the example lists every layer of the vocabulary once",
+          sorted(r["layer"] for r in brief["layers"]) == sorted(rb_schema["$defs"]["layer"]["enum"]))
+    check("no evidence kind counts how often a form appears (frequency is never evidence of value)",
+          not {"frequency", "count", "share", "recurrence"} & set(rb_schema["properties"]["layers"]["items"]["properties"]["evidence"]["items"]["properties"]["kind"]["enum"]))
+
+    def rb_broken(mutate, label, needle):
+        d = copy.deepcopy(brief)
+        mutate(d)
+        found = remake_problems(d)
+        check(f"{label}: found", any(needle in f for f in found), found)
+
+    def rb_layer(d, name):
+        return next(r for r in d["layers"] if r["layer"] == name)
+    rb_broken(lambda d: d["layers"].append(copy.deepcopy(rb_layer(d, "hook"))), "a layer listed twice", "listed twice")
+    rb_broken(lambda d: rb_layer(d, "persona").update(status="confirmed"), "a layer confirmed without who answered", "without confirmed_by")
+    rb_broken(lambda d: rb_layer(d, "hook").update(confirmed_by="owner@console"), "a guess that names who answered it", "a guess carries")
+    rb_broken(lambda d: rb_layer(d, "hook").update(carries_value="yes"), "a value judgement with no evidence", "rests on no evidence")
+    rb_broken(lambda d: rb_layer(d, "story")["evidence"][0].pop("of"), "a count without what it is out of", "without the other")
+    rb_broken(lambda d: rb_layer(d, "story")["evidence"][0].update(n=500), "a count above what it is out of", "n above of")
+    rb_broken(lambda d: d["reference"].update(kind="organic"), "ad-library numbers on an organic post", "not paid")
+    rb_broken(lambda d: d["reference"].pop("median_of"), "an account median without how many posts", "median_of")
+    rb_broken(lambda d: d["fit"].update(product_job=d["fit"]["reference_job"]), "a job the product cannot do, kept as it was", "product_job must name")
+    rb_broken(lambda d: d["fit"].update(can_do="yes"), "a product that can do the job, with another job", "differs from reference_job")
+    rb_broken(lambda d: d["options"].reverse(), "the variant first", "first option is not the replica")
+    rb_broken(lambda d: d["options"][1].update(kind="replica", changes="hook"), "two replicas, one changing a layer", "second option is not a variant")
+    rb_broken(lambda d: d["options"][1].pop("changes"), "a variant that names no layer", "a variant changes one layer")
+    rb_broken(lambda d: d["options"][1].update(id="A"), "two options with one id", "share an id")
+    rb_broken(lambda d: d["options"][1].update(recommended=True), "two recommendations", "exactly one option")
+    rb_broken(lambda d: d["chosen"].update(option="C"), "a pick the brief does not offer", "does not offer")
+    rb_broken(lambda d: d["proof"].update(state="stand_in", speaks_review=True), "an AI stand-in that speaks a review", "R36")
+    rb_broken(lambda d: d["proof"].update(state="real"), "a real customer with no release kept", "release is kept")
+    rb_broken(lambda d: d["proof"].update(state="stand_in", release="R-0001"), "a release on a stand-in", "a release on a proof part")
+    stand_in = copy.deepcopy(brief)
+    stand_in["proof"] = {"state": "stand_in", "speaks_review": False}
+    check("a stand-in that speaks no review is a valid brief (it may be delivered and run, R37 and R38)",
+          contracts.problems(rb_kind, rb_version, stand_in) == [] and remake_problems(stand_in) == [])
+    one = copy.deepcopy(brief)
+    one["options"] = one["options"][:1]
+    one["chosen"]["option"] = "A"
+    check("a brief with the replica alone is valid", contracts.problems(rb_kind, rb_version, one) == [] and remake_problems(one) == [])
+
+    def rb_refused(mutate, label):
+        d = copy.deepcopy(brief)
+        mutate(d)
+        check(f"{label}: refused by the schema", contracts.problems(rb_kind, rb_version, d) != [])
+    rb_refused(lambda d: d["options"].append(dict(d["options"][1], id="C")), "a third option")
+    rb_refused(lambda d: d.update(options=[]), "no option at all")
+    rb_refused(lambda d: rb_layer(d, "story")["evidence"].append({"kind": "frequency", "says": "seen in 9 of 12 videos"}), "frequency as evidence")
+    rb_refused(lambda d: rb_layer(d, "story").update(layer="vibe"), "a layer outside the list")
+    rb_refused(lambda d: rb_layer(d, "story").update(carries_value="maybe"), "a value judgement outside yes, no, unknown")
+    rb_refused(lambda d: d["reference"].update(link="file:///tmp/reference.mp4"), "a reference that is a file, not a public link")
+    rb_refused(lambda d: d["proof"].update(state="ai"), "a proof state outside real, stand_in, none")
+    rb_refused(lambda d: d["proof"].pop("speaks_review"), "a proof part that does not say whether it speaks a review")
+    rb_refused(lambda d: d.pop("never_copy"), "a brief without what it does not copy")
+    rb_refused(lambda d: d["segment"]["job"].pop("so_that"), "a job without what they get from it")
+    loose = [path for path, node in walk_schema(rb_schema)
+             if path.rsplit("/", 2)[-2:-1] == ["properties"]
+             and (rb_schema["$defs"][node["$ref"].rsplit("/", 1)[1]] if "$ref" in node else node).get("type") == "string"
+             and not {"minLength", "pattern", "enum"} & set(rb_schema["$defs"][node["$ref"].rsplit("/", 1)[1]] if "$ref" in node else node)]
+    check("no string of remake.brief/1 may be empty", loose == [], loose)
 
     print("\n[2] write: the first line, the check, once")
     kind, version, text = example("catalog-1.example.json")
