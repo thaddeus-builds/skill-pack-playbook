@@ -12,6 +12,11 @@ The kit's Chinese words (`kit/pagestyle.py` `ZH`, the `label_zh` column of `kit/
 | `warnings` | 需要关注 | 留意 | |
 | `if_works`, `if_fails` | 如果有效, 如果无效 | 如果行, 如果不行 | |
 | `sep`, `money`, `dots`, `more`, `details`, `owner`, `copy`, `copied`, `selected`, `expand_all`, `collapse_all` | unchanged | | plain words, not in question |
+| `flow_person`, `flow_auto`, `flow_skip` | 人来定, 自动, 跳过 | 人工, 手动 | who does a step; a cell may name the person instead (客户选) |
+| `flow_stop`, `flow_back` | 停下来问, 退回 | 中断, 回滚 | it stops to ask a person; a step done again, not undone |
+| `choice_decided`, `choice_proposed`, `choice_open` | 已定, 推荐, 之后再问 | 待定 | 待定 reads as undecided by the owner; 之后再问 says when it is asked |
+| `box_agree`, `box_cost`, `box_worst`, `box_needed` | 同意后, 花费, 最坏的情况, 还需要你 | 风险 | the design page's box in the owner's words |
+| `design_reply`, `record` | 全部照这样，回复“同意”, 细节：研究、规则、风险 | | one reply agrees to the page; the detail stays folded |
 | a creative in doubt, parked | 待观察, 暂缓 | 存疑, 搁置 | |
 | a creative that has enough conversions | 稳定 | 成熟 | |
 | a creative that is fading | 衰退 | | stays: the industry's word, and 表现下滑 is the campaign's |

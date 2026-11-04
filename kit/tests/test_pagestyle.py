@@ -36,6 +36,12 @@ labels, made-up ids).
       below 1) and the map's hover filter keeps each state's text at 4.5:1 on its darkened fill
   [11] the phone: no grid wider than a 320px phone's column (its fixed tracks added up), the cards capped by their
       container, a 16px gutter
+  [12] the pictures: a flow drawn across and turned for a phone with the same cells, each kind its icon and word, its
+      tags, stop and way back (in the picture and in words under it), its key; the choices, the phone's frame, a
+      figure; the design page whole (box, pictures, choices, decision, record) keeping every rule in English, Chinese
+      and a skill pack's words; every bad shape refused; each line problems() reports for rules 10 to 13 tried on a
+      broken page (a layout gone, a stop or a kind unexplained, an icon or word gone, a frame unlabelled, a box line
+      gone, the pictures after the choices, the box after the pictures, no choices, too much prose)
 """
 
 import html
@@ -812,16 +818,177 @@ def test_problems() -> None:
                                              + ps.decision("d", "")), "something after the owner's fold")
     check("problems() names nothing on a page that keeps the rules, given the skill pack's command",
           ps.problems(good, commands=[re.compile(r"\bdemo\b")]) == [])
-    rules = re.findall(r"^(\d)\. \*\*", DOC.split("## The rules", 1)[1].split("\n## ", 1)[0], re.M)
+    rules = [int(n) for n in re.findall(r"^(\d+)\. \*\*", DOC.split("## The rules", 1)[1].split("\n## ", 1)[0], re.M)]
     table = DOC.split("## Checking a page", 1)[1].split("\n## ", 1)[0]
-    rows = {m.group(1): m.group(2) for m in re.finditer(r"^\| (\d)\. [^|]*\| ([^|]*) \|", table, re.M)}
-    check("docs/page-style.md: every rule has a row of the lines problems() reports for it",
-          rules and rules == sorted(rows) and all(re.search(r"`[^`]+`", c) for c in rows.values()), (rules, rows))
+    rows = {int(m.group(1)): m.group(2) for m in re.finditer(r"^\| (\d+)\. [^|]*\| ([^|]*) \|", table, re.M)}
+    check("docs/page-style.md: every rule has a row of the lines problems() reports for it, thirteen of them",
+          rules == list(range(1, 14)) and rules == sorted(rows) and all(re.search(r"`[^`]+`", c) for c in rows.values()),
+          (rules, sorted(rows)))
     said = [(n, f) for n, c in sorted(rows.items()) for f in re.findall(r"`([^`]+)`", c)]
     unseen = [f"{n}: {f}" for n, f in said if not any(f in g for g in SEEN)]
     check("... and each such line is one a broken page above made problems() report", said and not unseen, unseen)
     check("... and every line a broken page above was tried for is in the doc's table",
           not [g for g in SEEN if not any(f in g for _, f in said)], [g for g in SEEN if not any(f in g for _, f in said)])
+
+
+# ---- [12] the pictures ---------------------------------------------------------------------------
+
+STEPS = ["Formula", "Shots", "Stills", "Video", "Delivery"]
+
+
+def lanes_demo() -> list[dict]:
+    return [{"name": "L3", "cells": [{"kind": "person", "word": "client picks", "note": "yes, no or change"},
+                                      {"kind": "person"}, {"kind": "person", "tag": "about 1"},
+                                      {"kind": "auto", "tag": "about 15"}, {"kind": "auto", "note": "a message"}],
+             "back": {"from": 3, "to": 1, "text": "the client asks for a change"}},
+            {"name": "L4", "cells": [{"kind": "auto"}, {"kind": "skip"}, {"kind": "skip"},
+                                      {"kind": "auto", "tag": "cap x2", "stop": "it stops at the cap"}, {"kind": "auto"}]}]
+
+
+BOX_DEMO = {"agree": "The page is built", "cost": "Nothing; five minutes", "worst": "A still is forwarded",
+            "needed": "The reference file"}
+CHOICES_DEMO = [{"kind": "decided", "title": "Formula first, then each shot", "note": "yours"},
+                {"kind": "proposed", "title": "Stop after two rounds"}, {"kind": "open", "title": "The market"}]
+
+
+def design_demo(style: ps.Style, *, lead: str = "A client sends one video to learn from.", **over) -> str:
+    kw = {"box": BOX_DEMO, "pictures": [style.flow(STEPS, lanes_demo(), label="DEMO flow"),
+                                        ps.phone("<p>Formula A</p>", "DEMO client page")],
+          "choices": CHOICES_DEMO, "record": "<p>The research and the rules, with <code>flow_person</code>.</p>"}
+    kw.update(over)
+    return style.design_page("DEMO design", lead=lead, **kw)
+
+
+def test_pictures() -> None:
+    print("\n[12] the pictures: the flow, the choices, the phone, the design page")
+    f = ps.flow(STEPS, lanes_demo(), label="DEMO flow", caption="Who does what")
+    wide = re.search(r'<svg class="flow wide".*?</svg>', f, re.S).group(0)
+    tall = re.search(r'<svg class="flow tall".*?</svg>', f, re.S).group(0)
+    cells = lambda svg: re.findall(r'<g class="fc k-([a-z]+)"><rect[^>]*/><text class="fw"[^>]*><tspan class="fi">'
+                                   r'([^<]*)</tspan> ([^<]*)</text>', svg)
+    check("a flow is drawn twice, across and turned, with the same cells in the same order (steps x lanes)",
+          len(cells(wide)) == len(cells(tall)) == 10
+          and sorted(c[:2] for c in cells(wide)) == sorted(c[:2] for c in cells(tall)), (len(cells(wide)), len(cells(tall))))
+    check("... each cell its kind's icon, and the kind's word unless the cell names who",
+          all(icon == ps.KIND_ICON[k] for k, icon, _ in cells(wide))
+          and [w for _, _, w in cells(wide)][:2] == ["client picks", "a person"]
+          and "skipped" in [w for _, _, w in cells(wide)])
+    check("... the tags over their cells in both, the stop's octagon in both with its words as a tooltip",
+          wide.count('class="ftag"') == tall.count('class="ftag"') == 3
+          and wide.count('class="fstop"') == tall.count('class="fstop"') == 1 and "stops and asks: it stops at the cap" in wide)
+    check("... the way back drawn across (an arrow and its words), and in the words under both",
+          wide.count('class="fb"') == 1 and "the client asks for a change" in wide and 'class="fb"' not in tall
+          and '<li class="back">' in f and "Video → Shots" in f)
+    check("... the key: each kind drawn, its icon and word; the stop in words under it",
+          re.findall(r'<span class="fk k-([a-z]+)"><i aria-hidden="true">([^<]*)</i>([^<]*)</span>', f)
+          == [("person", "◆", "a person"), ("auto", "↻", "automatic"), ("skip", "∅", "skipped")]
+          and '<li class="stop">' in f and "it stops at the cap" in f and "<figcaption>Who does what</figcaption>" in f)
+    check("... what a reader that cannot see it hears: the label, then each lane's steps and who does them",
+          'aria-label="DEMO flow L3: Formula client picks, Shots a person' in wide)
+    check("... a lane with nothing to stop or go back to writes no list", "flow-notes" not in
+          ps.flow(STEPS[:2], [{"name": "L1", "cells": [{"kind": "person"}, {"kind": "auto"}]}]))
+    check("... two flows on a page keep their arrowheads apart", 'id="b-w"' in ps.flow(STEPS, lanes_demo(), ident="b")
+          and 'url(#b-w)' in ps.flow(STEPS, lanes_demo(), ident="b"))
+    evil = ps.flow([EVIL, "B"], [{"name": EVIL, "cells": [{"kind": "person", "note": EVIL, "tag": "x", "stop": EVIL},
+                                                          {"kind": "auto", "word": EVIL}]}])
+    check("... every text escaped", "</script><b>" not in evil and "&lt;/script&gt;" in evil)
+    zh = ZHS.flow(STEPS, lanes_demo())
+    check("... in Chinese, the kinds' words are the style's", "人来定" in zh and "跳过" in zh and "停下来问" in zh and "退回" in zh)
+    for lanes, steps, want in (
+            (lanes_demo(), ["Formula"], "two steps"), (lanes_demo(), ["A", "A", "B", "C", "D"], "of its own"),
+            (lanes_demo(), ["A", "", "B", "C", "D"], "of its own"), ([], STEPS, "one lane"),
+            ([{"cells": lanes_demo()[0]["cells"]}], STEPS, "no name"),
+            ([{"name": "L", "cells": lanes_demo()[0]["cells"][:4]}], STEPS, "one cell for each"),
+            ([{"name": "L", "cells": [{"kind": "maybe"}] * 5}], STEPS, "a kind of"),
+            ([{"name": "L", "cells": ["person"] * 5}], STEPS, "a cell is"),
+            ([dict(lanes_demo()[0], back={"from": 1, "to": 3, "text": "x"})], STEPS, "goes back"),
+            ([dict(lanes_demo()[0], back={"from": 3, "to": 1})], STEPS, "goes back"),
+            ([dict(lanes_demo()[0], back={"from": True, "to": 0, "text": "x"})], STEPS, "goes back"),
+            ([dict(lanes_demo()[0], back={"from": 9, "to": 1, "text": "x"})], STEPS, "goes back")):
+        m = message(ps.flow, steps, lanes)
+        check(f"flow() refuses: {want} ({m[:60]!r})", want in m, m)
+
+    c = ps.choices(CHOICES_DEMO)
+    check("choices: one card a choice, its kind's icon and word, the note after the word",
+          re.findall(r'<li class="choice c-([a-z]+)"><b class="ci" aria-hidden="true">([^<]*)</b><span><b>([^<]*)</b>'
+                     r'<small>([^<]*)</small>', c)
+          == [("decided", "✓", "Formula first, then each shot", "decided · yours"),
+              ("proposed", "★", "Stop after two rounds", "recommended"), ("open", "?", "The market", "asked after")])
+    for items, want in (([], "at least one"), ([{"kind": "maybe", "title": "x"}], "one of"),
+                        ([{"kind": "open", "title": " "}], "no title"), ("decided", "at least one"),
+                        (["decided"], "one of")):
+        check(f"choices() refuses: {want}", want in message(ps.choices, items))
+    check("a phone's frame: what someone else sees, labelled", ps.phone("<p>x</p>", "DEMO page").startswith(
+        '<figure class="phonebox"><div class="phone" role="group" aria-label="DEMO page"><p>x</p></div>'))
+    check("... a frame without a label refused", "label" in message(ps.phone, "<p>x</p>", " "))
+    check("a figure: any other picture, with its caption", ps.figure("<svg></svg>", "a chart")
+          == '<figure class="pic"><svg></svg><figcaption>a chart</figcaption></figure>'
+          and "picture" in message(ps.figure, ""))
+
+    for name, style in (("English", ps.DEFAULT), ("Chinese", ZHS), ("a skill pack's own words", OWN)):
+        page = design_demo(style)
+        got = style.problems(page)
+        check(f"a whole {name} design page keeps every rule", got == [], got)
+    page = design_demo(ps.DEFAULT)
+    check("the design page: title and lead, the box, the pictures, the choices, the decision, the record last, in order",
+          [page.index(x) for x in ('<header class="dp">', '<div class="tiles box">', '<figure class="flowbox">',
+                                   '<figure class="phonebox">', '<ul class="choices">', 'data-zone="decision"',
+                                   '<details class="owner"')]
+          == sorted(page.index(x) for x in ('<header class="dp">', '<div class="tiles box">', '<figure class="flowbox">',
+                                            '<figure class="phonebox">', '<ul class="choices">', 'data-zone="decision"',
+                                            '<details class="owner"')))
+    check("... the box: the four lines with their words", re.findall(r'data-box="([a-z]+)"><span><b>([^<]*)</b>', page)
+          == [("agree", "If you agree"), ("cost", "What it costs"), ("worst", "The worst case"),
+              ("needed", "Still needed from you")])
+    check("... the one decision is the reply, the record folded under its own title",
+          "All of it as shown: reply “agree”" in page and "<summary>The record: research, rules, risks</summary>" in page)
+    long_box = dict(BOX_DEMO, worst="A still is forwarded to another client by mistake; " * 6)
+    check("... prose in the box, the choices and the record does not count against the page",
+          ps.problems(design_demo(ps.DEFAULT, box=long_box, record="<p>" + "word " * 400 + "</p>")) == [])
+    for kw, want in (({"box": dict(BOX_DEMO, worst="")}, "four lines"), ({"box": {"agree": "x"}}, "four lines"),
+                     ({"pictures": []}, "picture"), ({"pictures": ["<p>a paragraph</p>"]}, "picture"),
+                     ({"record": ""}, "record"), ({"choices": []}, "at least one")):
+        m = message(design_demo, ps.DEFAULT, **kw)
+        check(f"design_page() refuses: {want} ({next(iter(kw))})", want in m, m)
+
+    def broken(label: str, page: str, want: str, style: ps.Style | None = None) -> None:
+        got = style.problems(page) if style is not None else ps.problems(page)
+        SEEN.extend(g for g in got if want in g)
+        check(f"seen: {label}", any(want in g for g in got), got)
+    good = design_demo(ps.DEFAULT)
+    broken("a flow without its phone layout", re.sub(r'<svg class="flow tall".*?</svg>', "", good, flags=re.S),
+           "a flow without both its layouts")
+    broken("a stop without its words under the flow", re.sub(r'<li class="stop">.*?</li>', "", good, flags=re.S),
+           "a flow stop without its words")
+    broken("a kind drawn and missing from the key", re.sub(r'<span class="fk k-skip">.*?</span>', "", good, flags=re.S),
+           "a flow whose key lacks a kind")
+    broken("a key whose word is not the style's", good.replace("</i>skipped</span>", "</i>left out</span>"),
+           "a flow key of kind", style=ps.DEFAULT)
+    broken("a cell of an unknown kind", good.replace('<g class="fc k-auto">', '<g class="fc k-maybe">', 1),
+           "a flow cell of an unknown kind")
+    broken("a cell without its icon", good.replace('<tspan class="fi">◆</tspan>', '<tspan class="fi">x</tspan>', 1),
+           "a flow cell of kind")
+    broken("a choice without its icon", good.replace('<b class="ci" aria-hidden="true">✓</b>', "", 1),
+           "a choice without its icon, title or word")
+    broken("a choice with another kind's icon", good.replace('aria-hidden="true">✓</b>', 'aria-hidden="true">★</b>', 1),
+           "a choice of kind")
+    broken("a choice without its word", good.replace("<small>decided · yours</small>", "<small>yours</small>"),
+           "a choice of kind", style=ps.DEFAULT)
+    broken("a phone frame without its label", good.replace(' aria-label="DEMO client page"', ""),
+           "a phone frame without its label")
+    broken("a box line gone", re.sub(r'(data-box="worst"><span><b>[^<]*</b><br>)[^<]*', r"\1", good),
+           "a design page whose box lacks worst")
+    pics = re.search(r'<figure class="flowbox">.*</figure>(?=<ul class="choices">)', good, re.S).group(0)
+    after = good.replace(pics, "").replace('<section class="decide"', pics + '<section class="decide"', 1)
+    broken("the pictures after the choices", after, "a design page with no picture before")
+    box = re.search(r'<div class="tiles box">.*?</div></div>(?=<figure)', good, re.S).group(0)
+    broken("the box after the pictures", good.replace(box, "").replace('<ul class="choices">', box + '<ul class="choices">', 1),
+           "a design page whose box is not before")
+    broken("no choices", re.sub(r'<ul class="choices">.*?</ul>', "", good, flags=re.S), "a design page without its choices")
+    broken("too much prose outside the pictures", design_demo(ps.DEFAULT, lead="A sentence the owner reads. " * 20),
+           "of prose outside its pictures")
+    broken("too much prose, in Chinese", design_demo(ZHS, lead="客户发来一条想学的视频，我们先把它拆开看清楚。" * 10),
+           "of prose outside its pictures", style=ZHS)
 
 
 # ---- [10] contrast ------------------------------------------------------------------------------
@@ -873,7 +1040,7 @@ def test_contrast() -> None:
             r = contrast(t[fg], t[bg])
             check(f"{sel} {s}: its text on its fill {r:.1f}:1 >= 4.5", r >= 4.5, (t[fg], t[bg]))
         for fg, bg in (("ink", "paper"), ("ink", "bg"), ("muted", "paper"), ("muted", "bg"), ("paper", "accent"),
-                       ("accent", "paper")):
+                       ("accent", "paper"), ("ink", "k-p"), ("ink", "k-a"), ("ink", "k-s"), ("paper", "ink")):
             r = contrast(t[fg], t[bg])
             check(f"{sel} {fg} on {bg}: {r:.1f}:1 >= 4.5", r >= 4.5, (t[fg], t[bg]))
     rules = re.findall(r"([^{}]+)\{([^{}]*)\}", ps.CSS)
@@ -924,6 +1091,7 @@ def main() -> int:
     test_cards()
     test_node_map()
     test_skeleton()
+    test_pictures()
     test_problems()
     test_contrast()
     test_phone()

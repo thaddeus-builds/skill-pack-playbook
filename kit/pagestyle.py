@@ -1,6 +1,6 @@
 """One look for the pages a skill pack writes to guide making and to show the reasoning behind it (a plan's map, the next
-batch, a make page, an insight page), so a person reads every such page the same way. Design and rules for any
-skill pack: docs/page-style.md.
+batch, a make page, an insight page, the design page an owner agrees to), so a person reads every such page the same
+way, and pictures in place of paragraphs. Design and rules for any skill pack: docs/page-style.md.
 
 The rules the style carries, and the part that keeps each:
 
@@ -37,6 +37,16 @@ The rules the style carries, and the part that keeps each:
                                             holds no word (copy buttons, expand all, a link opens the fold it points
                                             into, print opens every fold); filled in one pass, so a text that holds a
                                             placeholder's name stays text; no grid wider than a 320px phone's column
+    a flow by lanes: who does each step     flow(steps, lanes): steps across and one lane a row (an autonomy level),
+                                            drawn again turned for a phone; each cell a kind as colour, icon and word
+                                            (person ◆, auto ↻, skip ∅), a tag (a cost), a stop (where it stops and
+                                            asks), a way back; the key, the stops and the ways back in words under it
+    choices: decided, recommended, after    choices(items): one card a choice, its kind as colour, icon and word
+    someone else's screen says whose        phone(inner, label): a phone's frame, labelled; figure(inner): any other
+                                            picture
+    a design page is pictures first         design_page(...): templates/design-first.md's box as four tiles, the
+                                            pictures, the choices, one reply, the record folded; at most PROSE_MAX of
+                                            prose outside them (a CJK character 1, any other 0.5)
 
 Every visible word is the skill pack's: Style(words, lang) lays a skill pack's words over EN (the defaults; ZH is a ready
 Simplified Chinese set) and refuses an unknown key, an empty word, a template without its {n} or a more line that does
@@ -51,7 +61,10 @@ button, only there and with its hint, no command, flag, id or hash in the visibl
 skill pack's own patterns), at most three warnings on the page, a more line that names the owner's fold, the owner's fold
 folded and last, every card inside a row, a state's icon (and, given a Style, its word) on every chip, node and cell, a
 title and a link on every cell and none past the map's edge, every in-page link pointing at something on the page, a
-node with nothing under it saying why, no grid wider than a phone. What only the module's own code can break (the
+node with nothing under it saying why, no grid wider than a phone; a flow with both its layouts, every kind it draws
+in its key with its word, every stop in words, every cell its kind's icon; every choice its icon and word; every
+phone frame its label; a design page with its box's four lines, a picture before its choices and its decision, the
+box before the pictures, its choices, and no more prose than PROSE_MAX. What only the module's own code can break (the
 colours' contrast, the one-pass fill, the script holding no word) its test checks. zones(page) is the visible text by
 zone it reads.
 
@@ -75,6 +88,16 @@ ORDER = ("promising", "testing", "down", "closed", "untested")
 WARNINGS_MAX = 3
 PHONE, GUTTER = 320, 16                         # the narrowest phone a page is read on, and the page's side gutter
 NONE = "—"                                      # an amount that is not there
+KINDS = ("person", "auto", "skip")              # who does a step of a flow, in one lane
+# a decision's diamond (the flowchart's), a step that comes round by itself, the empty set: nothing done
+KIND_ICON = {"person": "◆", "auto": "↻", "skip": "∅"}
+CHOICES = ("decided", "proposed", "open")       # a choice on a design page: the owner's, ours to agree to, asked after
+CHOICE_ICON = {"decided": "✓", "proposed": "★", "open": "?"}
+BOX = ("agree", "cost", "worst", "needed")      # the design page's box (templates/design-first.md), in its order
+# a design page's prose outside its pictures, box, choices, decision and folds, in reading units (_prose_units: a CJK
+# character 1, any other character 0.5): about two short sentences; the rest goes into the record's fold. The owner
+# read a design page drawn as pictures in a minute and called the one before it "文字太多了" (2026-11-04)
+PROSE_MAX = 200
 
 # (key, what it is): every word a page shows that the caller does not pass in
 WORDS = (
@@ -97,6 +120,20 @@ WORDS = (
     ("selected", "the copy button when the browser refuses to copy: the command is selected"),
     ("expand_all", "the button that unfolds every row"),
     ("collapse_all", "the same button once every row is unfolded"),
+    ("flow_person", "a flow's cell where a person decides that step"),
+    ("flow_auto", "a flow's cell that runs by itself"),
+    ("flow_skip", "a flow's cell that is not done in that lane"),
+    ("flow_stop", "where a flow stops and asks a person"),
+    ("flow_back", "where a lane of a flow goes back to an earlier step"),
+    ("choice_decided", "a choice the owner has made"),
+    ("choice_proposed", "a choice we recommend, which one reply of agree accepts"),
+    ("choice_open", "a choice asked after the reply"),
+    ("box_agree", "the design page's box: what agreeing sets going"),
+    ("box_cost", "the design page's box: what it costs, money and the owner's time"),
+    ("box_worst", "the design page's box: the worst that can happen"),
+    ("box_needed", "the design page's box: what is still needed from the owner"),
+    ("design_reply", "the design page's one decision: one reply agrees to all of it"),
+    ("record", "the design page's fold: the research, rules and record behind it"),
 )
 TEMPLATES = ("money", "dots", "more")           # the words that must hold {n}
 
@@ -117,6 +154,20 @@ EN = {
     "selected": "Selected: press ⌘C or Ctrl+C",
     "expand_all": "Expand all",
     "collapse_all": "Collapse all",
+    "flow_person": "a person",
+    "flow_auto": "automatic",
+    "flow_skip": "skipped",
+    "flow_stop": "stops and asks",
+    "flow_back": "goes back",
+    "choice_decided": "decided",
+    "choice_proposed": "recommended",
+    "choice_open": "asked after",
+    "box_agree": "If you agree",
+    "box_cost": "What it costs",
+    "box_worst": "The worst case",
+    "box_needed": "Still needed from you",
+    "design_reply": "All of it as shown: reply “agree”",
+    "record": "The record: research, rules, risks",
 }
 
 ZH = {
@@ -136,6 +187,20 @@ ZH = {
     "selected": "已选中，按 ⌘C",
     "expand_all": "全部展开",
     "collapse_all": "全部收起",
+    "flow_person": "人来定",
+    "flow_auto": "自动",
+    "flow_skip": "跳过",
+    "flow_stop": "停下来问",
+    "flow_back": "退回",
+    "choice_decided": "已定",
+    "choice_proposed": "推荐",
+    "choice_open": "之后再问",
+    "box_agree": "同意后",
+    "box_cost": "花费",
+    "box_worst": "最坏的情况",
+    "box_needed": "还需要你",
+    "design_reply": "全部照这样，回复“同意”",
+    "record": "细节：研究、规则、风险",
 }
 
 _LANG = re.compile(r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*")
@@ -373,6 +438,209 @@ def node_map(tree: list[dict], heads: Sequence[str], widths: Sequence[int] | Non
             f'{"".join(parts)}</g></svg></div>')
 
 
+# ---- pictures: a flow by lanes, a phone, a figure -------------------------------------------
+
+# the flow's geometry (px): wide, steps across and lanes down; tall (a phone), steps down and lanes across
+_FW = {"name": 84, "col": 136, "gap": 14, "head": 34, "cell": 70, "row": 42}
+_FT = {"step": 96, "col": 112, "gap": 10, "head": 30, "cell": 74, "row": 20}
+
+
+def _seq(v) -> bool:
+    return isinstance(v, Sequence) and not isinstance(v, (str, bytes))
+
+
+def _flow_check(steps, lanes) -> tuple[list[str], list[Mapping]]:
+    """The steps as names and the lanes as given, or ValueError naming what is wrong."""
+    if not _seq(steps) or len(steps) < 2:
+        raise ValueError("pagestyle flow: at least two steps, in order")
+    steps = [_text(x) for x in steps]
+    if any(not x.strip() for x in steps) or len(set(steps)) != len(steps):
+        raise ValueError(f"pagestyle flow: each step a name of its own, not {steps!r}")
+    if not _seq(lanes) or not lanes:
+        raise ValueError("pagestyle flow: at least one lane")
+    for j, lane in enumerate(lanes):
+        if not isinstance(lane, Mapping) or not _text(lane.get("name")).strip():
+            raise ValueError(f"pagestyle flow: lane {j} has no name")
+        cells = lane.get("cells")
+        if not _seq(cells) or len(cells) != len(steps):
+            raise ValueError(f"pagestyle flow: lane {lane['name']!r} needs one cell for each of the {len(steps)} steps")
+        for i, c in enumerate(cells):
+            kind = c.get("kind") if isinstance(c, Mapping) else None
+            if kind not in KIND_ICON:
+                raise ValueError(f"pagestyle flow: lane {lane['name']!r}, step {steps[i]!r}: a cell is "
+                                 f"{{\"kind\": a kind of {', '.join(KINDS)}, ...}}, not {c!r}")
+        back = lane.get("back")
+        if back is not None:
+            f, t = (back.get("from"), back.get("to")) if isinstance(back, Mapping) else (None, None)
+            whole = all(isinstance(v, int) and not isinstance(v, bool) for v in (f, t))
+            if not (whole and 0 <= t < f < len(steps)) or not _text(back.get("text")).strip():
+                raise ValueError(f"pagestyle flow: lane {lane['name']!r} goes back from a step to an earlier one "
+                                 f"(from and to: step indexes, to below from) and says why (text)")
+    return steps, list(lanes)
+
+
+def _octagon(cx: float, cy: float, r: float) -> str:
+    k = r * 0.4142
+    pts = ((cx - k, cy - r), (cx + k, cy - r), (cx + r, cy - k), (cx + r, cy + k), (cx + k, cy + r), (cx - k, cy + r),
+           (cx - r, cy + k), (cx - r, cy - k))
+    return " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+
+
+def _flow_cell(x: float, y: float, wd: float, ht: float, c: Mapping, words: Mapping[str, str]) -> str:
+    """One cell: its kind as colour, icon and word (the cell's own `word` in place of the kind's, if given), its note;
+    a tag (a cost) over its top edge, a stop (an octagon, its words in its title and beside the flow) at its corner."""
+    kind = c["kind"]
+    icon, cx = KIND_ICON[kind], x + wd / 2
+    word = fit(_text(c.get("word")) or words[f"flow_{kind}"], wd - 20 - text_width(icon + " ", 13), 13)
+    out = (f'<g class="fc k-{kind}"><rect x="{x:.1f}" y="{y:.1f}" width="{wd}" height="{ht}" rx="10"/>'
+           f'<text class="fw" x="{cx:.1f}" y="{y + 30:.1f}" text-anchor="middle"><tspan class="fi">{icon}</tspan> '
+           f'{e(word)}</text>')
+    if _text(c.get("note")):
+        out += (f'<text class="fn" x="{cx:.1f}" y="{y + 50:.1f}" text-anchor="middle">'
+                f'{e(fit(_text(c["note"]), wd - 14, 11))}</text>')
+    out += "</g>"
+    if _text(c.get("tag")):
+        tag = fit(_text(c["tag"]), wd - 24, 11)
+        tw = text_width(tag, 11) + 16
+        out += (f'<g class="ftag"><rect x="{cx - tw / 2:.1f}" y="{y - 9:.1f}" width="{tw:.1f}" height="18" rx="9"/>'
+                f'<text x="{cx:.1f}" y="{y + 4:.1f}" text-anchor="middle">{e(tag)}</text></g>')
+    if _text(c.get("stop")):
+        out += (f'<polygon class="fstop" points="{_octagon(x + wd - 13, y + 13, 8)}"><title>{e(words["flow_stop"])}: '
+                f'{e(c["stop"])}</title></polygon>')
+    return out
+
+
+def _marker(mid: str) -> str:
+    return (f'<defs><marker id="{e(mid)}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
+            f'orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z"/></marker></defs>')
+
+
+def _flow_wide(steps: list[str], lanes: list[Mapping], words: Mapping[str, str], ident: str, label: str) -> str:
+    g, n = _FW, len(steps)
+
+    def x(i):
+        return g["name"] + i * (g["col"] + g["gap"])
+    mid = f"{ident}-w"
+    parts = [_marker(mid)]
+    for i, step in enumerate(steps):
+        parts.append(f'<g class="fs"><rect x="{x(i)}" y="2" width="{g["col"]}" height="30" rx="15"/><text '
+                     f'x="{x(i) + g["col"] / 2:.1f}" y="22" text-anchor="middle">{e(fit(step, g["col"] - 16, 13))}</text></g>')
+        if i:
+            parts.append(f'<line class="fa" x1="{x(i) - g["gap"] + 2}" y1="17" x2="{x(i) - 3}" y2="17" '
+                         f'marker-end="url(#{e(mid)})"/>')
+    top = g["head"] + 18
+    for lane in lanes:
+        parts.append(f'<text class="fl" x="0" y="{top + g["cell"] / 2 + 5:.1f}">{e(fit(_text(lane["name"]), g["name"] - 8, 13))}'
+                     f'</text>')
+        parts += [_flow_cell(x(i), top, g["col"], g["cell"], c, words) for i, c in enumerate(lane["cells"])]
+        back = lane.get("back")
+        if back:
+            fx, tx, b = x(back["from"]) + g["col"] / 2, x(back["to"]) + g["col"] / 2, top + g["cell"]
+            parts.append(f'<path class="fb" d="M{fx:.1f},{b + 1:.1f} L{fx:.1f},{b + 14:.1f} L{tx:.1f},{b + 14:.1f} '
+                         f'L{tx:.1f},{b + 4:.1f}" marker-end="url(#{e(mid)})"/><text class="fbt" x="{(fx + tx) / 2:.1f}" '
+                         f'y="{b + 30:.1f}" text-anchor="middle">↩ {e(fit(_text(back["text"]), fx - tx + g["col"] - 20, 12))}'
+                         f'</text>')
+        top += g["cell"] + g["row"]
+    width, height = x(n) - g["gap"], top - g["row"] + 36
+    return (f'<svg class="flow wide" viewBox="0 0 {width} {height:.0f}" role="img" aria-label="{e(label)}">'
+            f'{"".join(parts)}</svg>')
+
+
+def _flow_tall(steps: list[str], lanes: list[Mapping], words: Mapping[str, str], ident: str, label: str) -> str:
+    g = _FT
+
+    def x(j):
+        return g["step"] + 10 + j * (g["col"] + g["gap"])
+    mid = f"{ident}-t"
+    parts = [_marker(mid)]
+    parts += [f'<text class="fl" x="{x(j) + g["col"] / 2:.1f}" y="20" text-anchor="middle">'
+              f'{e(fit(_text(lane["name"]), g["col"] - 8, 13))}</text>' for j, lane in enumerate(lanes)]
+    top = g["head"] + 14
+    for i, step in enumerate(steps):
+        m = top + g["cell"] / 2
+        parts.append(f'<g class="fs"><rect x="0" y="{m - 15:.1f}" width="{g["step"]}" height="30" rx="15"/><text '
+                     f'x="{g["step"] / 2:.1f}" y="{m + 5:.1f}" text-anchor="middle">{e(fit(step, g["step"] - 14, 13))}</text></g>')
+        if i:
+            parts.append(f'<line class="fa" x1="{g["step"] / 2:.1f}" y1="{m - g["cell"] - g["row"] + 17:.1f}" '
+                         f'x2="{g["step"] / 2:.1f}" y2="{m - 18:.1f}" marker-end="url(#{e(mid)})"/>')
+        parts += [_flow_cell(x(j), top, g["col"], g["cell"], lane["cells"][i], words) for j, lane in enumerate(lanes)]
+        top += g["cell"] + g["row"]
+    width, height = x(len(lanes)) - g["gap"], top - g["row"] + 8
+    return (f'<svg class="flow tall" viewBox="0 0 {width} {height:.0f}" role="img" aria-label="{e(label)}">'
+            f'{"".join(parts)}</svg>')
+
+
+def phone(inner: str, label: str, caption: str = "") -> str:
+    """A phone's frame around `inner` (HTML, the caller escapes): what someone else will see, drawn small. `label` says
+    whose screen it is (a reader that cannot see it hears it); a frame without one is refused (ValueError)."""
+    if not _text(label).strip():
+        raise ValueError("pagestyle phone: a label that says whose screen it is")
+    return (f'<figure class="phonebox"><div class="phone" role="group" aria-label="{e(label)}">{inner}</div>'
+            + (f"<figcaption>{e(caption)}</figcaption>" if caption else "") + "</figure>")
+
+
+def figure(inner: str, caption: str = "") -> str:
+    """Any other picture (an SVG the skill pack draws, a chart): `inner` (HTML, the caller escapes) in a figure that a
+    design page counts as a picture, with its caption (text)."""
+    if not _text(inner).strip():
+        raise ValueError("pagestyle figure: a picture, not nothing")
+    return f'<figure class="pic">{inner}' + (f"<figcaption>{e(caption)}</figcaption>" if caption else "") + "</figure>"
+
+
+def _prose_units(text: str) -> float:
+    """How much there is to read: a CJK character (from U+2E80) 1, any other character but a space 0.5 (two letters
+    carry about what one CJK character does)."""
+    return sum(1 if ord(ch) > 0x2E7F else 0.5 for ch in text if not ch.isspace())
+
+
+class _Design(HTMLParser):
+    """A design page's shape: the box's lines, where the first picture, the choices and the decision open, and the
+    prose outside the pictures, the box, the choices, the decision and the folds."""
+    SKIP = {"figure", "details", "svg", "script", "style", "title"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack: list[tuple[str, bool, str | None]] = []
+        self.tags = 0
+        self.first: dict[str, int] = {}
+        self.box: dict[str, str] = {}
+        self.prose: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        self.tags += 1
+        cls = (a.get("class") or "").split()
+        if tag == "div" and "tiles" in cls and "box" in cls:
+            self.first.setdefault("box", self.tags)
+        if tag == "figure" and {"flowbox", "phonebox", "pic"} & set(cls):
+            self.first.setdefault("picture", self.tags)
+        if tag == "ul" and "choices" in cls:
+            self.first.setdefault("choices", self.tags)
+        if a.get("data-zone") == "decision":
+            self.first.setdefault("decision", self.tags)
+        if tag in _Zones.VOID:
+            return
+        out = tag in self.SKIP or bool({"tiles", "choices"} & set(cls)) or "data-zone" in a
+        self.stack.append((tag, out, a.get("data-box")))
+        if a.get("data-box"):
+            self.box.setdefault(a["data-box"], "")
+
+    def handle_endtag(self, tag):
+        if tag in _Zones.VOID:
+            return
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                del self.stack[i:]
+                break
+
+    def handle_data(self, data):
+        key = next((k for _, _, k in reversed(self.stack) if k), None)
+        if key is not None and not any(t == "b" for t, _, _ in self.stack):     # the line, not its label
+            self.box[key] = self.box.get(key, "") + data
+        if not any(out for _, out, _ in self.stack):
+            self.prose.append(data)
+
+
 # ---- the zones and the check -----------------------------------------------------------
 
 class _Zones(HTMLParser):
@@ -491,7 +759,7 @@ _LOAD_ATTR = re.compile(r"""<[A-Za-z][^>]*?\s(?:src|srcset|poster)\s*=\s*(?:"\s*
 _LOAD_HREF = re.compile(r"""<(?:image|use|feimage)\b[^>]*?\s(?:xlink:)?href\s*=\s*["']?\s*(?!#|data:)[^\s"'>]""", re.I)
 _LOAD_CSS = re.compile(r"""url\(\s*["']?\s*(?!data:|#)[^\s"')]|@import""", re.I)
 # a state's text and its fill (the pairs the contrast is worked out on): a skill pack's CSS leaves them as they are
-_STATE_TOKENS = ("ink", "u-f", "t-f", "p-f", "p-t", "d-f", "d-t", "c-f", "c-t")
+_STATE_TOKENS = ("ink", "u-f", "t-f", "p-f", "p-t", "d-f", "d-t", "c-f", "c-t", "k-p", "k-a", "k-s", "stop")
 _LENGTH = re.compile(r"(\d*\.?\d+)(px|r?em)", re.I)
 
 
@@ -664,6 +932,59 @@ def problems(page: str, *, commands: Iterable[str | re.Pattern] = (), style: "St
     mute = sum(1 for g in re.findall(r'<g class="leaf empty">(.*?)</g>', page, re.S) if not _plain(g).strip())
     if mute:
         out.append(f"map nodes with nothing under them that do not say why: {mute}")
+    for fig in re.findall(r'<figure class="flowbox">(.*?)</figure>', page, re.S):
+        if '<svg class="flow wide"' not in fig or '<svg class="flow tall"' not in fig:
+            out.append("a flow without both its layouts (wide, and turned for a phone)")
+        wide = re.search(r'<svg class="flow wide".*?</svg>', fig, re.S)
+        if (wide.group(0).count('class="fstop"') if wide else 0) != fig.count('<li class="stop">'):
+            out.append("a flow stop without its words beside the flow")
+        drawn = set(re.findall(r'<g class="fc k-([a-z]+)">', fig))
+        keyed = re.findall(r'<span class="fk k-([a-z]+)"><i aria-hidden="true">([^<]*)</i>([^<]*)</span>', fig)
+        if drawn - {k for k, _, _ in keyed}:
+            out.append(f"a flow whose key lacks a kind it draws: {', '.join(sorted(drawn - {k for k, _, _ in keyed}))}")
+        for k, icon, word in keyed:
+            if style is not None and k in KIND_ICON and html.unescape(word) != style.words[f"flow_{k}"]:
+                out.append(f"a flow key of kind {k} without its word {style.words[f'flow_{k}']!r}")
+                break
+    for kind, body in re.findall(r'<g class="fc k-([a-z]+)">(.*?)</g>', page, re.S):
+        m = re.search(r'<tspan class="fi">([^<]*)</tspan>', body)
+        if kind not in KIND_ICON:
+            out.append(f"a flow cell of an unknown kind {kind!r}")
+            break
+        if not m or m.group(1) != KIND_ICON[kind]:
+            out.append(f"a flow cell of kind {kind} without its icon {KIND_ICON[kind]}")
+            break
+    choice = re.findall(r'<li class="choice c-([a-z]+)"><b class="ci" aria-hidden="true">([^<]*)</b><span><b>.*?</b>'
+                        r'<small>(.*?)</small>', page, re.S)
+    if len(choice) != page.count('<li class="choice '):
+        out.append("a choice without its icon, title or word")
+    for kind, icon, small in choice:
+        if CHOICE_ICON.get(kind) != icon:
+            out.append(f"a choice of kind {kind!r} without its icon")
+            break
+        if style is not None and not _plain(small).startswith(style.words[f"choice_{kind}"]):
+            out.append(f"a choice of kind {kind} without its word {style.words[f'choice_{kind}']!r}")
+            break
+    if any(not re.search(r'\saria-label="[^"]*\S[^"]*"', a) for a in re.findall(r'<div class="phone"([^>]*)>', page)):
+        out.append("a phone frame without its label")
+    if '<div class="tiles box">' in page:
+        d = _Design()
+        d.feed(page)
+        d.close()
+        lacking = [k for k in BOX if not _text(d.box.get(k)).strip()]
+        if lacking:
+            out.append(f"a design page whose box lacks {', '.join(lacking)}")
+        f = d.first
+        if "picture" not in f or any(f["picture"] > f[k] for k in ("choices", "decision") if k in f):
+            out.append("a design page with no picture before its choices and its decision")
+        elif f["box"] > f["picture"]:
+            out.append("a design page whose box is not before its pictures")
+        if "choices" not in f:
+            out.append("a design page without its choices")
+        n = _prose_units("".join(d.prose))
+        if n > PROSE_MAX:
+            out.append(f"a design page with {n:g} of prose outside its pictures, at most {PROSE_MAX}: the rest goes "
+                       f"into the record")
     ids = {html.unescape(i) for i in re.findall(r'\sid="([^"]*)"', page)}
     dangling = [h for h in (html.unescape(h) for h in re.findall(r'\shref="#([^"]*)"', page)) if h and h not in ids]
     if dangling:
@@ -690,6 +1011,8 @@ class Style:
                                           staticmethod(text_width))
     tiles, details, node_map, page_data, zones = (staticmethod(tiles), staticmethod(details), staticmethod(node_map),
                                                   staticmethod(page_data), staticmethod(zones))
+    KINDS, KIND_ICON, CHOICES, CHOICE_ICON, BOX, PROSE_MAX = KINDS, KIND_ICON, CHOICES, CHOICE_ICON, BOX, PROSE_MAX
+    phone, figure = staticmethod(phone), staticmethod(figure)
     wordset, fold_name = staticmethod(wordset), staticmethod(fold_name)
 
     def __init__(self, words: Mapping[str, str] | None = None, lang: str = "en"):
@@ -818,6 +1141,78 @@ class Style:
         return (f'<button type="button" data-expand="rows" data-more="{e(w["expand_all"])}" '
                 f'data-less="{e(w["collapse_all"])}">{e(w["expand_all"])}</button>')
 
+    # ---- pictures and choices
+
+    def flow(self, steps: Sequence[str], lanes: Sequence[Mapping], *, label: str = "", caption: str = "",
+             ident: str = "flow") -> str:
+        """Who does each step, lane by lane, as a picture. `steps`: the steps in order (two or more, each its own name).
+        `lanes`: [{"name", "cells": one per step, "back": {"from", "to", "text"}}]; a cell is {"kind": one of KINDS,
+        "word" (in place of the kind's word: "the client picks"), "note", "tag" (a cost, over the cell), "stop" (where
+        it stops and asks, and why)}; a lane's `back` goes from a step to an earlier one, and says why. Drawn twice:
+        steps across and lanes down, and turned (steps down) for a phone, which the stylesheet shows below 640px; the
+        kinds' key, then every stop and every way back in words, under both. `ident` keeps two flows' arrowheads apart
+        on one page; `label` is what a reader that cannot see it hears first. ValueError for fewer than two steps, a
+        repeated or empty step, no lane, a lane without a name or without a cell for every step, an unknown kind, a
+        way back that does not go to an earlier step or does not say why."""
+        steps, lanes = _flow_check(steps, lanes)
+        w = self.words
+        said = "; ".join(f"{_text(ln['name'])}: " + ", ".join(
+            f"{st} {_text(c.get('word')) or w['flow_' + c['kind']]}" for st, c in zip(steps, ln["cells"])) for ln in lanes)
+        aria = f"{label} {said}".strip()
+        used = [k for k in KINDS if any(c["kind"] == k for ln in lanes for c in ln["cells"])]
+        key = '<div class="flow-key">' + "".join(
+            f'<span class="fk k-{k}"><i aria-hidden="true">{KIND_ICON[k]}</i>{e(w["flow_" + k])}</span>' for k in used)
+        notes = []
+        for ln in lanes:
+            notes += [f'<li class="stop"><i aria-hidden="true"></i><span><b>{e(w["flow_stop"])}</b> {e(ln["name"])} · '
+                      f'{e(st)}: {e(c["stop"])}</span></li>' for st, c in zip(steps, ln["cells"]) if _text(c.get("stop"))]
+            if ln.get("back"):
+                b = ln["back"]
+                notes.append(f'<li class="back"><i aria-hidden="true">↩</i><span><b>{e(w["flow_back"])}</b> '
+                             f'{e(ln["name"])}: {e(steps[b["from"]])} → {e(steps[b["to"]])}: {e(b["text"])}</span></li>')
+        return ('<figure class="flowbox">' + _flow_wide(steps, lanes, w, ident, aria) + _flow_tall(steps, lanes, w, ident, aria)
+                + key + "</div>" + (f'<ul class="flow-notes">{"".join(notes)}</ul>' if notes else "")
+                + (f"<figcaption>{e(caption)}</figcaption>" if caption else "") + "</figure>")
+
+    def choices(self, items: Sequence[Mapping]) -> str:
+        """The choices a design page lays out: [{"kind": one of CHOICES, "title", "note"}], each a card with its kind as
+        colour, icon and word: decided (the owner's), proposed (ours: one reply of agree accepts it), open (asked after
+        the reply). ValueError for none, an unknown kind or a choice without its title."""
+        if not _seq(items) or not items:
+            raise ValueError("pagestyle choices: at least one")
+        rows = []
+        for i, it in enumerate(items):
+            kind = it.get("kind") if isinstance(it, Mapping) else None
+            if kind not in CHOICE_ICON:
+                raise ValueError(f"pagestyle choices: choice {i} is one of {', '.join(CHOICES)}, not {kind!r}")
+            if not _text(it.get("title")).strip():
+                raise ValueError(f"pagestyle choices: choice {i} has no title")
+            small = self.words[f"choice_{kind}"] + (f" · {_text(it['note'])}" if _text(it.get("note")) else "")
+            rows.append(f'<li class="choice c-{kind}"><b class="ci" aria-hidden="true">{CHOICE_ICON[kind]}</b><span>'
+                        f'<b>{e(it["title"])}</b><small>{e(small)}</small></span></li>')
+        return f'<ul class="choices">{"".join(rows)}</ul>'
+
+    def design_page(self, title: str, *, box: Mapping[str, str], pictures: Sequence[str], choices: Sequence[Mapping],
+                    record: str, lead: str = "", data=None) -> str:
+        """The design page of templates/design-first.md, drawn: the title and one lead line; the box's four lines (BOX:
+        what agreeing sets going, what it costs, the worst case, what is still needed) as tiles; the pictures (flow(),
+        phone(), figure()); the choices; the one decision, a reply that agrees to all of it; the record (HTML: research,
+        rules, risks, the owner's words) folded last. ValueError for a box without its four lines, no picture or one
+        that is not a figure, no choice, no record. problems() then holds it to PROSE_MAX."""
+        if not isinstance(box, Mapping) or set(box) != set(BOX) or any(not _text(box[k]).strip() for k in BOX):
+            raise ValueError(f"pagestyle design_page: the box has its four lines, {', '.join(BOX)}, each said")
+        if not _seq(pictures) or not pictures or any(not _text(x).lstrip().startswith("<figure class=") for x in pictures):
+            raise ValueError("pagestyle design_page: at least one picture, each a figure (flow(), phone(), figure())")
+        if not _text(record).strip():
+            raise ValueError("pagestyle design_page: the record, the detail folded at the end")
+        w = self.words
+        tiles_ = '<div class="tiles box">' + "".join(
+            f'<div class="tile" data-box="{k}"><span><b>{e(w["box_" + k])}</b><br>{e(box[k])}</span></div>' for k in BOX)
+        body = (f'<header class="dp"><h1>{e(title)}</h1>' + (f'<p class="lead">{e(lead)}</p>' if lead else "")
+                + "</header>" + tiles_ + "</div>" + "".join(pictures) + self.choices(choices)
+                + self.decision(w["design_reply"], "") + self.owner(record, w["record"]))
+        return self.page(title, body, data)
+
     # ---- the page
 
     def page(self, title: str, body: str, data=None, *, extra_css: str = "") -> str:
@@ -861,14 +1256,17 @@ __CSS__
 CSS = """:root{--bg:#F2F4F6;--paper:#FFFFFF;--ink:#15202B;--muted:#5A6774;--rule:#D8DEE5;--soft:#E9EDF1;--accent:#0B5CAD;
 --u-f:#FFFFFF;--u-l:#9AA4AF;--t-f:#DCEBF7;--t-l:#4A9FD8;--p-f:#0072B2;--p-l:#005286;--p-t:#FFFFFF;--d-f:#F0B43C;--d-l:#B07A00;--d-t:#2B1D00;
 --c-f:#5D636B;--c-l:#3D4247;--c-t:#FFFFFF;--link:#B9C2CC;--u-bar:#E2E7EC;
+--k-p:#FCEBCB;--k-pl:#B07A00;--k-a:#DCEBF7;--k-al:#0072B2;--k-s:#EEF1F4;--k-sl:#9AA4AF;--stop:#D55E00;
 --f-body:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
 --f-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0E141A;--paper:#151D25;--ink:#E3E9EF;--muted:#94A2AF;
 --rule:#2A3541;--soft:#1B2530;--accent:#6CB4F0;--u-f:#151D25;--u-l:#5C6875;--t-f:#163049;--t-l:#56B4E9;--p-f:#2F8FD3;--p-l:#7CC0F0;
---p-t:#071420;--d-f:#E69F00;--d-l:#FFC24D;--d-t:#1E1400;--c-f:#6E747C;--c-l:#9AA0A8;--c-t:#FFFFFF;--link:#3A4653;--u-bar:#2C3743;color-scheme:dark}}
+--p-t:#071420;--d-f:#E69F00;--d-l:#FFC24D;--d-t:#1E1400;--c-f:#6E747C;--c-l:#9AA0A8;--c-t:#FFFFFF;--link:#3A4653;--u-bar:#2C3743;
+--k-p:#3A2A12;--k-pl:#E69F00;--k-a:#163049;--k-al:#56B4E9;--k-s:#1B2530;--k-sl:#5C6875;--stop:#FF7A3D;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#0E141A;--paper:#151D25;--ink:#E3E9EF;--muted:#94A2AF;--rule:#2A3541;--soft:#1B2530;--accent:#6CB4F0;
 --u-f:#151D25;--u-l:#5C6875;--t-f:#163049;--t-l:#56B4E9;--p-f:#2F8FD3;--p-l:#7CC0F0;--p-t:#071420;--d-f:#E69F00;--d-l:#FFC24D;
---d-t:#1E1400;--c-f:#6E747C;--c-l:#9AA0A8;--c-t:#FFFFFF;--link:#3A4653;--u-bar:#2C3743;color-scheme:dark}
+--d-t:#1E1400;--c-f:#6E747C;--c-l:#9AA0A8;--c-t:#FFFFFF;--link:#3A4653;--u-bar:#2C3743;
+--k-p:#3A2A12;--k-pl:#E69F00;--k-a:#163049;--k-al:#56B4E9;--k-s:#1B2530;--k-sl:#5C6875;--stop:#FF7A3D;color-scheme:dark}
 *{box-sizing:border-box} html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 var(--f-body);overflow-wrap:anywhere}
 main{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:24px 56px;display:grid;gap:20px}
@@ -959,8 +1357,34 @@ details.tech summary,details.todo summary{cursor:pointer;font-size:13px;color:va
 details.todo ul{margin:6px 0 0;padding-left:18px;columns:2 280px;font-size:13px;color:var(--muted)}
 details.owner{background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:14px 18px}
 details.owner summary{cursor:pointer;font-weight:600} .ow{display:grid;gap:8px;margin-top:10px;font-size:14px;max-width:72ch}
+.flowbox{margin:0;background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:14px;display:grid;gap:10px}
+.flowbox svg{display:block;width:100%;height:auto;font-family:var(--f-body)} .flowbox svg.tall{display:none;max-width:420px;margin:0 auto}
+svg .fs rect{fill:var(--paper);stroke:var(--rule);stroke-width:1.2} svg .fs text{font-size:13px;font-weight:600;fill:var(--ink)}
+svg .fa,svg .fb{stroke:var(--muted);stroke-width:1.5;fill:none} svg marker path{fill:var(--muted)} svg .fl{font-size:13px;font-weight:700;fill:var(--ink)}
+svg .fc rect{stroke-width:1.6} svg .fc.k-person rect{fill:var(--k-p);stroke:var(--k-pl)} svg .fc.k-auto rect{fill:var(--k-a);stroke:var(--k-al)}
+svg .fc.k-skip rect{fill:var(--k-s);stroke:var(--k-sl);stroke-dasharray:5 4} svg .fw{font-size:13px;font-weight:700;fill:var(--ink)}
+svg .k-skip .fw{text-decoration:line-through} svg .fn{font-size:11px;fill:var(--ink)} svg .fi{font-weight:400}
+svg .ftag rect{fill:var(--ink)} svg .ftag text{font-size:11px;font-weight:600;fill:var(--paper)} svg .fstop{fill:var(--stop)}
+svg .fbt{font-size:12px;fill:var(--ink)}
+.flow-key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px} .fk{display:inline-flex;gap:6px;align-items:center}
+.fk i{font-style:normal;display:inline-grid;place-items:center;width:20px;height:20px;border-radius:6px;border:1.5px solid}
+.fk.k-person i{background:var(--k-p);border-color:var(--k-pl)} .fk.k-auto i{background:var(--k-a);border-color:var(--k-al)}
+.fk.k-skip i{background:var(--k-s);border-color:var(--k-sl);border-style:dashed}
+.flow-notes{margin:0;padding:0;list-style:none;display:grid;gap:4px;font-size:13px} .flow-notes li{display:flex;gap:8px;align-items:baseline}
+.flow-notes i{font-style:normal;flex:none} .flow-notes .stop i{width:12px;height:12px;background:var(--stop);
+clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+.flowbox figcaption,.phonebox figcaption,.pic figcaption{font-size:13px;color:var(--muted)}
+.phonebox,.pic{margin:0;display:grid;gap:6px;justify-items:start}
+.phone{width:100%;max-width:300px;border:2px solid var(--rule);border-radius:24px;padding:14px;background:var(--paper);display:grid;gap:10px;font-size:13px}
+.choices{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.choice{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;align-items:start;background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:10px 12px}
+.choice .ci{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px}
+.c-decided .ci{background:var(--p-f);color:var(--p-t)} .c-proposed .ci{background:var(--k-p);color:var(--ink);border:1.5px solid var(--k-pl)}
+.c-open .ci{background:var(--paper);color:var(--ink);border:1.5px dashed var(--muted)} .choice span{display:grid} .choice small{color:var(--muted);font-size:13px}
+.dp{display:grid;gap:6px} .dp .lead{color:var(--muted)} .box{grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))}
+.box .tile b{font-size:14px;white-space:normal}
 @media (max-width:640px){details.row>summary{grid-template-columns:auto 1fr} .rn{grid-column:1/-1;justify-items:start;text-align:left}
-.var{grid-template-columns:1fr} .tile b{font-size:24px}}
+.var{grid-template-columns:1fr} .tile b{font-size:24px} .box .tile b{font-size:14px} .flowbox svg.wide{display:none} .flowbox svg.tall{display:block}}
 @media print{details{display:block} .scroll{overflow:visible} *{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 """
@@ -991,9 +1415,11 @@ word, legend_text, chip, vchip, bar, legend, dots = (DEFAULT.word, DEFAULT.legen
 decision, warnings, story, owner, card, fold_row = (DEFAULT.decision, DEFAULT.warnings, DEFAULT.story, DEFAULT.owner,
                                                     DEFAULT.card, DEFAULT.fold_row)
 expand_all, page = DEFAULT.expand_all, DEFAULT.page
+flow, choices, design_page = DEFAULT.flow, DEFAULT.choices, DEFAULT.design_page
 
 __all__ = ["STATES", "ICON", "ORDER", "WARNINGS_MAX", "PHONE", "GUTTER", "NONE", "WORDS", "TEMPLATES", "EN", "ZH",
            "CSS", "CSP", "SCRIPT", "PAGE", "CODE_PATTERNS", "Style", "DEFAULT", "wordset", "fold_name", "e", "money",
            "amount", "tenths", "text_width", "fit", "tiles", "details", "page_data", "node_map", "zones", "problems",
            "word", "legend_text", "chip", "vchip", "bar", "legend", "dots", "decision", "warnings", "story", "owner",
-           "card", "fold_row", "expand_all", "page"]
+           "card", "fold_row", "expand_all", "page", "KINDS", "KIND_ICON", "CHOICES", "CHOICE_ICON", "BOX", "PROSE_MAX",
+           "phone", "figure", "flow", "choices", "design_page"]
