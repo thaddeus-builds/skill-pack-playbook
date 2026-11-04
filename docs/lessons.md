@@ -120,3 +120,7 @@ Four new image tools passed 38 checks and a cold read still reproduced 12 defect
 ## A citation is opened before it reaches an owner (from the SDR skill pack, 2026-10-31)
 
 Two legal citations that a builder had written from search summaries were wrong when opened: a court case said to settle cold business email was about emails to existing customers, and a regulator page linked as the source for phone rules was about postal marketing. Both had already been repeated in a roadmap row and an owner page. Before a citation goes into anything an owner or another agent reads, fetch the page it names and read the sentence that carries the claim; where only a summary was read, say "read as a summary" next to it, and say what the page does not say. The check costs one fetch each. Seen once; it applies to every pack that states a law, a price or a date.
+
+## A page the owner decides on is pictures first (from the product-image-to-video skill pack, 2026-11-04)
+
+A design page in paragraphs, with tables of who decides each step at each autonomy level, came back from the owner as "文字太多了 如果能用图像表示就不用再写字了". The same content redrawn as one flow (the steps across, a lane for L3 and one for L4, each cell "a person picks", "automatic" or "skipped", costs as tags, stop signs where it asks), a phone mock-up of the client's page and ticked decision cards was read in a minute and agreed. Draw the decision; fold the reasoning. *Seen once;* `kit.pagestyle`'s `design_page()` draws it and its check caps the prose outside the pictures.
