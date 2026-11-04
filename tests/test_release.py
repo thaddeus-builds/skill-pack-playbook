@@ -3,7 +3,8 @@
 Run on a throwaway playbook (kit/VERSION, kit/MANIFEST.sha256 made by the real manifest tool, a CHANGELOG): a train sets the version, moves the
 [Unreleased] heading, regenerates the manifest and leaves the previous release note as it was; and each thing that would make the train wrong is refused
 and writes nothing (no entry, an entry without its Skill packs line, a version not above the current one or one the CHANGELOG has, a second train inside
-a week without a reason, an urgent minor, a date in the past).
+a week without a reason, an urgent minor, a date in the past). A pack that waits for a merged change gets a blocker train inside the week (the owner's
+R40): a patch or a minor, one in 7 days, a line under its heading that names the pack, and the regular train keeps its day.
 """
 
 from __future__ import annotations
@@ -120,9 +121,41 @@ def test_the_owner_may_allow_a_train_inside_the_week():
     open(f"{d}/ROADMAP.md", "w").write('# Roadmap\n## Decisions\n- [R7] 2026-10-24 a train now: "yes" (the owner)\n- [R8] 2026-10-24 no quote here\n## Links\n')
     refused(d, "not a decision row", "0.3.0", "--date", "2026-10-24", "--owner-approved", "R9")
     refused(d, "not a decision row", "0.3.0", "--date", "2026-10-24", "--owner-approved", "R8")
-    refused(d, "two different reasons", "0.3.0", "--date", "2026-10-24", "--owner-approved", "R7", "--urgent", "x")
+    refused(d, "different reasons", "0.3.0", "--date", "2026-10-24", "--owner-approved", "R7", "--urgent", "x")
     r = run(d, "0.3.0", "--date", "2026-10-24", "--owner-approved", "R7")
     assert r.returncode == 0 and open(f"{d}/kit/VERSION").read() == "0.3.0\n", r.stderr
+
+
+def next_entry(d: str) -> None:
+    """A new entry under [Unreleased], as merges add one after a train."""
+    path = f"{d}/CHANGELOG.md"
+    text = open(path).read()
+    open(path, "w").write(text.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Kit\n- next\n- Skill packs: nothing\n", 1))
+
+
+def test_a_pack_that_waits_for_a_merged_change_gets_a_blocker_train():
+    """The owner's rule R40 (2026-11-04): a pack blocked on a merged change need not wait for the train day, and the others are not made to move."""
+    d = setup()                                                              # the last regular train: 0.2.0 on 2026-10-20
+    refused(d, "name the pack and what it waits for", "0.3.0", "--date", "2026-10-24", "--blocker", "a pack")
+    refused(d, "different reasons", "0.3.0", "--date", "2026-10-24", "--blocker", "pack-a: x", "--urgent", "y")
+    refused(d, "a patch or a minor", "1.0.0", "--date", "2026-10-24", "--blocker", "pack-a: the flow part")
+    refused(d, "drop --blocker", "0.3.0", "--date", "2026-10-28", "--blocker", "pack-a: the flow part")
+    r = run(d, "0.3.0", "--date", "2026-10-24", "--blocker", "pack-a: the flow part")
+    assert r.returncode == 0 and "only pack-a takes it now" in r.stdout, (r.stdout, r.stderr)
+    log = open(f"{d}/CHANGELOG.md").read()
+    assert ("## [0.3.0] - 2026-10-24\n\nBlocker train: pack-a: the flow part. Only that pack takes it now; the others take it "
+            "with the next regular train.\n\n### Kit\n- a new module") in log, log
+    sys.path.insert(0, ROOT)
+    from kit.guards import changelog
+    assert changelog.check_changelog(d) == [], changelog.check_changelog(d)      # the heading stays X.Y.Z - DATE
+    next_entry(d)
+    refused(d, "a blocker train already ran on 2026-10-24", "0.3.1", "--date", "2026-10-26", "--blocker", "pack-b: y")
+    refused(d, "the last regular train ran on 2026-10-20", "0.4.0", "--date", "2026-10-26")
+    r = run(d, "0.4.0", "--date", "2026-10-27")                               # a week after the regular train, not the blocker one
+    assert r.returncode == 0 and open(f"{d}/kit/VERSION").read() == "0.4.0\n", r.stderr
+    next_entry(d)
+    r = run(d, "0.4.1", "--date", "2026-10-31", "--blocker", "pack-b: a fix it waits for")    # seven days after the first one
+    assert r.returncode == 0, r.stderr
 
 
 def test_the_real_changelog_is_ready_for_a_train():
