@@ -1,0 +1,244 @@
+{
+  "$comment": "Draft for playbook issue #523 and video-recipes' X8. A recipe is the product-neutral half of adcut's formula card (video-recipes docs/design.md, 'Recipe and formula'): what a set of short videos have in common, with its evidence and coverage, and no product, client or claim. video-recipes settles the fields when its recipe writer (its X13) merges; adcut's `formula align --scaffold` reads it behind a flag (its X14). The dissect folder is not a contract: one code base (video-recipes' dissect, vendored into adcut) writes and reads it, so its format and version live there (#523).",
+  "$id": "recipe-1.schema.json",
+  "title": "recipe/1",
+  "description": "The forms a set of public short videos share: for each form its beats in seconds, its shots, its text and audio rules in our own words, what varies, the counts that back it and the posts it was seen in, as links. video-recipes writes it; makers (adcut) and ad-copy read it.",
+  "$defs": {
+    "time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "share": {
+      "type": "object",
+      "required": [
+        "what",
+        "n",
+        "of"
+      ],
+      "properties": {
+        "what": {
+          "description": "What the share counts, in our own words (shows the product in hand in the first 2 seconds).",
+          "type": "string",
+          "minLength": 1
+        },
+        "n": {
+          "description": "How many of the form's videos have it.",
+          "$ref": "#/$defs/count"
+        },
+        "of": {
+          "description": "How many videos it was counted over.",
+          "$ref": "#/$defs/count"
+        }
+      }
+    }
+  },
+  "x-contract": "recipe/1",
+  "x-status": "draft",
+  "x-format": "json",
+  "x-producer": "video-recipes",
+  "x-consumers": "makers (adcut), ad-copy",
+  "x-rules": [
+    "A recipe carries structure only: never a source's lines, transcript, faces, voices, music, footage or stills, and no media file or a link to one; every text field is our own words.",
+    "Every proportion is a share with both counts, n of `of`; a document never carries a rate or a percentage without them.",
+    "A form is a way of making a video that two or more of the videos taken apart share, so evidence.videos is 2 or more.",
+    "A post is named by its public link only; a client, a product or a claim never appears (they belong to the maker's formula card).",
+    "A form's id is stable: the same form keeps its id in every later document of the same niche.",
+    "An absent optional key means unknown, never null and never an empty string."
+  ],
+  "type": "object",
+  "required": [
+    "producer",
+    "produced_at",
+    "niche",
+    "coverage",
+    "forms"
+  ],
+  "properties": {
+    "producer": {
+      "description": "The pack that wrote the document (its CLI word).",
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "description": "When the document was written: ISO 8601 with its zone.",
+      "$ref": "#/$defs/time"
+    },
+    "niche": {
+      "description": "The niche the forms were found in, an id of the producer's form lists.",
+      "type": "string",
+      "minLength": 1
+    },
+    "platforms": {
+      "description": "The platforms the videos were posted on (instagram, tiktok, douyin).",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "coverage": {
+      "description": "How much of what was looked at the forms explain.",
+      "type": "object",
+      "required": [
+        "taken",
+        "covered"
+      ],
+      "properties": {
+        "selected": {
+          "description": "Videos that passed selection (views over the account's median, old enough).",
+          "$ref": "#/$defs/count"
+        },
+        "taken": {
+          "description": "Videos taken apart.",
+          "$ref": "#/$defs/count"
+        },
+        "covered": {
+          "description": "Videos taken apart that fall in one of the forms.",
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "forms": {
+      "description": "The forms found, each with its evidence.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "beats",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "description": "The form's stable id within the niche.",
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "description": "The form's name in our own words.",
+            "type": "string",
+            "minLength": 1
+          },
+          "beats": {
+            "description": "The form's beats in order, in seconds from the start.",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "start_s",
+                "end_s"
+              ],
+              "properties": {
+                "kind": {
+                  "description": "What the beat does (title, set-up, process, close-up, to camera, ending).",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "start_s": {
+                  "description": "Where the beat starts, typical across the form's videos, in seconds.",
+                  "type": "number",
+                  "minimum": 0
+                },
+                "end_s": {
+                  "description": "Where the beat ends, in seconds.",
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "shots": {
+            "description": "The shots a crew or a maker films, in order.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "description": "The shot's kind, one of the beat kinds.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "note": {
+                  "description": "How it is framed or moved, in our own words.",
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "text_rules": {
+            "description": "The rules on-screen text follows, in our own words (never a source's text).",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "audio_rules": {
+            "description": "The rules sound follows (voice-over or none, music or none, where it changes), in our own words.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "varies": {
+            "description": "What changes from one video of the form to the next.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "evidence": {
+            "description": "The counts that back the form.",
+            "type": "object",
+            "required": [
+              "videos"
+            ],
+            "properties": {
+              "videos": {
+                "description": "Videos taken apart that share the form.",
+                "type": "integer",
+                "minimum": 2
+              },
+              "campaigns": {
+                "description": "Campaigns those videos belong to, each counted once.",
+                "$ref": "#/$defs/count"
+              },
+              "accounts": {
+                "description": "Accounts that posted them.",
+                "$ref": "#/$defs/count"
+              }
+            }
+          },
+          "shares": {
+            "description": "Proportions within the form, each with its counts.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/share"
+            }
+          },
+          "posts": {
+            "description": "Public links to posts in the form (links only, no media).",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^https://"
+            }
+          }
+        }
+      }
+    }
+  }
+}

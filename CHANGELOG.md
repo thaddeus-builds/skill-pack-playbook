@@ -17,6 +17,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (a pack that wants it re-vendors `ads-core` with the train and builds the levels from its own order table; the first is the Meta ads pack at X112)
 - `kit/docs/`: five checklists every skill pack read as copies (`bug-classes.md`, `doctor-checks.md`, `owner-review-loop.md`, `triage-checklist.md`, `vendor-api-discovery.md`) move from `templates/` into the kit and arrive with every copy of it; `scaffold/new_skill_pack.py` no longer copies them into `docs/` (eight packs held 40 identical copies; `install-checklist.md` names hosts, which the kit's rules keep out, so it stays a template; the owner's C5, R29; X38)
 - Skill packs: mechanical (after the re-vendor, delete each of the five from `docs/` when it equals the kit's `scripts/kit/docs/` copy, and point any link to it there; a pack that changed one keeps it and says why)
+- `kit/contracts.d/recipe-1.schema.json`: the draft contract `recipe/1` (#523), the forms a set of public short videos share, with beats, shots, rules, counts and links and no media, product, client or claim; video-recipes writes it, adcut and ad-copy read it
+- Skill packs: nothing (a draft no pack reads yet; video-recipes settles its fields when its writer merges)
 
 ### Other
 - `hosts/zylos` 0.7.1: a manifest may name `cli.old_bin`, the command's name before a rename, and `node zylos/lib.js check` then wants it as the second `SKILL.md` `bin` entry, so a pack renamed to `openmax-<cli>` (R19) keeps its old link for one release; 0.7.0 refused any second entry (seen once, 2026-11-03: sdr's `coco-sdr`; adcut's `adcut-skill-pack` is the other rename R19 names)
