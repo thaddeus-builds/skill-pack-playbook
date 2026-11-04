@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-11-04
+
+Blocker train: product-image-to-video: the kit's picture parts and design page (#534, #535) and remake.brief/1 (#533), for its X29. Only that pack takes it now; the others take it with the next regular train.
+
 ### Kit
 - `kit/guards/drift.py` `behind()`: the hint a skill pack's suite prints when its kit is old counts days, not versions: `behind: kit X.Y.Z, playbook A.B.C (N days older)` when the vendored version was released more than `BEHIND_DAYS` (21) before the playbook's newest release (dates read from its `CHANGELOG.md`), or a major ahead; the count of minor versions only where a date cannot be read. A kit released more often (a blocker train, R40) no longer makes a pack look behind. Test: `kit/tests/test_guards.py` [6b]
 - Skill packs: nothing (re-vendor with the train; the hint is never a failure)
