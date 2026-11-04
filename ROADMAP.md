@@ -103,6 +103,7 @@ Updated: 2026-11-04
 - [D53] 2026-11-03 X37: amazon-ppc runs one script from another through `kit.runner` and has deleted its own; the kit runs a child with this interpreter unless `KIT_RUNNER` says otherwise, so `amzads` sets `KIT_RUNNER=uv` (an env that names a runner wins) and each script still runs in its own PEP 723 env; golden diff 0, suite green (amazon-ppc PR #67)
 - [D54] 2026-11-04 X37: amazon-ppc's message layer is `kit.messages`: the 43 codes the kit also defines take the kit's words (R31), two params follow the kit's rows (`schema_too_new`, `execute_expired`), and `ssot/message_codes.kit.tsv` copies the kit's registry where the console and the host agent read it (its agent guard keeps the agent out of `scripts/`; seen once); golden diff 0, suite and Zylos smoke green (amazon-ppc PR #68)
 - [D55] 2026-11-04 X37: amazon-ppc's human gate is `kit.human` (the same retype and relayed code; a malformed relay user or time refused, a relay's words in their own bracket, three refusals coded), merged at the owner's word ("可以，你来合并"); golden diff 0, suite, `amzads test` and `zylos smoke` green (amazon-ppc PR #69)
+- [D56] 2026-11-04 `kit.level_cut` (pack `ads-core`): the level cut for the Meta ads pack's X112, built in the kit first at the owner's yes (R33): per level a rate with a Wilson interval, per step the change with Newcombe's interval, the cut = the largest rise whose interval excludes zero else "no clear cut", several windows side by side; docs/level-cut.md, `kit/tests/test_level_cut.py`; in the next train after 0.48.0. The Meta ads pack vendors it and reads its order ladder (its X112); ads-core stays `incubating` (no ref)
 ## Parked
 ## Decisions
 - [R1] 2026-10-05 which console copy stays (#24): "the playbook's" (as recorded in this roadmap's open decisions, 2026-10-05)
@@ -137,6 +138,7 @@ Updated: 2026-11-04
 - [R30] 2026-11-03 sdr's speed check (W23): "W23 同意你的建议" (the owner, in the session): the reader is made faster in sdr's session, not the test bound (X41)
 - [R31] 2026-11-04 amazon-ppc's messages take the kit's words, 市场 where it said 站点: "改用“市场”" (the owner, in the session)
 - [R32] 2026-11-04 a kind that spends or sends and cannot be taken back may run unattended under a cap (autonomy toward L4: most work by the agent, a person watching and deciding the big things): "允许，有上限即可" (the owner, in the session)
+- [R33] 2026-11-04 build the level cut in the playbook's kit now, so that other packs (a top-up tier, a count of plays) can use it, not only the Meta ads pack: "yes" (the owner, console card x112-level-cut, 2026-11-04; the Meta ads pack's R66). It sits in `ads-core` because that pack already takes it and the module imports only `base`; it moves to a pack of its own when a pack outside advertising needs it (the session's call, not asked)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`

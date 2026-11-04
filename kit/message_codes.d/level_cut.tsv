@@ -1,0 +1,7 @@
+code	params	meaning_en	meaning_zh
+level_cut_bad_input	where,problem	{where} {problem}	{where} {problem}
+level_cut_found	level,after,change	the rate rises most from level {after} to level {level} ({change})	转化率从层级 {after} 到层级 {level} 升幅最大（{change}）
+level_cut_found_all	level,windows	all {windows} windows put the cut at level {level}	{windows} 个窗口都把切分点放在层级 {level}
+level_cut_windows_differ	cuts	the windows do not agree on the cut ({cuts})	各窗口对切分点的判断不一致（{cuts}）
+level_cut_no_clear	steps	no clear cut: none of the {steps} steps with data rises with an interval above zero	没有明确的切分点：{steps} 个有数据的台阶没有一个的区间整体在零之上
+level_cut_no_data	levels	no cut can be read: no two consecutive levels both have eligible customers ({levels} levels)	无法判断切分点：没有相邻两层同时有符合条件的客户（共 {levels} 层）
