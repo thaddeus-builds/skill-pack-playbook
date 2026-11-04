@@ -106,3 +106,4 @@ tools.prune_codes	testkit	delete the message codes a skill pack registers and no
 bridge	bridge	send one message through the OpenMax bridge and read it back by id before saying it was sent
 bridge_hooks	bridge	Claude Code hooks around the plugin's comm_send: a group message without a mention is refused, a sent message is kept as awaited, a reply is handed to the session as untrusted data
 bridge_cli	bridge	the bridge over REST as a command line (members, send, wait, read, status, watch) for a session that cannot write Python: the text from a file or stdin, the hook's request cap, replies as untrusted data
+level_cut	ads-core	where on a ladder of levels the rate of reaching the next level rises most: per level a rate with its interval, per step the change with its interval, the cut = the largest rise whose interval excludes zero, else no clear cut; several windows side by side
