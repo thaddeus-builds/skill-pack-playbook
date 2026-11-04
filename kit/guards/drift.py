@@ -13,17 +13,23 @@ re-vendored, so:
     VERSION equals the kit's: they are vendored together;
   * `behind(root)`: a hint, never a failure. When skill-pack.toml names a
     playbook checkout (`[kit] playbook = "../skill-pack-playbook"`, relative to
-    the skill pack or absolute) whose kit/VERSION is more than two minor
-    versions ahead of the vendored one, it returns `behind: kit X.Y.Z,
-    playbook Z.Y.X`; check_drift() and the generated test_kit_drift.py print it.
-    Anything unreadable (no key, no checkout, a version that does not parse)
-    gives None.
+    the skill pack or absolute) whose kit/VERSION is ahead of the vendored one,
+    it returns `behind: kit X.Y.Z, playbook A.B.C (N days older)` when the
+    vendored version was released more than BEHIND_DAYS before the playbook's
+    newest (their dates in the playbook's CHANGELOG.md), or a major ahead: an
+    age, not a count, so a kit released more often does not make a pack move
+    more often (the owner's R40). Where a date cannot be read it falls back to
+    the count (more than BEHIND_MINORS minor versions). check_drift() and the
+    generated test_kit_drift.py print it. Anything unreadable (no key, no
+    checkout, a version that does not parse) gives None.
 
 Test: kit/tests/test_guards.py.
 """
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from pathlib import Path
 
 from kit.guards import skill_pack, report
@@ -67,7 +73,8 @@ def check_skill_pack(root: Path | str | None = None) -> list[str]:
     return out
 
 
-BEHIND_MINORS = 2       # more than this many minor versions behind is worth a line
+BEHIND_DAYS = 21        # a kit released this many days before the newest is worth a line (three regular trains)
+BEHIND_MINORS = 2       # where no date can be read: more than this many minor versions behind
 
 
 def _version(path: Path) -> tuple[int, int, int] | None:
@@ -78,10 +85,26 @@ def _version(path: Path) -> tuple[int, int, int] | None:
         return None
 
 
+def _released(changelog: Path) -> dict[tuple[int, int, int], date]:
+    """{version: the day it was released} from a CHANGELOG's `## [X.Y.Z] - DATE` headings; {} when unreadable."""
+    try:
+        text = changelog.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    out = {}
+    for a, b, c, d in re.findall(r"^## \[(\d+)\.(\d+)\.(\d+)\] - (\d{4}-\d\d-\d\d)\s*$", text, re.M):
+        try:
+            out[(int(a), int(b), int(c))] = date.fromisoformat(d)
+        except ValueError:
+            continue
+    return out
+
+
 def behind(root: Path | str | None = None) -> str | None:
-    """`behind: kit X.Y.Z, playbook A.B.C` when the playbook named by
-    `[kit] playbook` is more than BEHIND_MINORS minor versions ahead of the
-    vendored kit (or a major ahead); None otherwise, and never an error."""
+    """`behind: kit X.Y.Z, playbook A.B.C (N days older)` when the playbook named by `[kit] playbook` has a newer kit
+    and the vendored one was released more than BEHIND_DAYS before the playbook's newest release, or a major ahead;
+    where either date cannot be read, more than BEHIND_MINORS minor versions ahead. None otherwise, and never an
+    error."""
     try:
         cfg = skill_pack(root)
     except Exception:           # a hint must not break a guard that has its own errors
@@ -89,13 +112,19 @@ def behind(root: Path | str | None = None) -> str | None:
     named = cfg.raw.get("kit", {}).get("playbook") if isinstance(cfg.raw.get("kit"), dict) else None
     if not isinstance(named, str) or not named.strip():
         return None
+    playbook = cfg.root / Path(named).expanduser()
     mine = _version(cfg.root / cfg.scripts_dir / "kit" / "VERSION")
-    theirs = _version((cfg.root / Path(named).expanduser()) / "kit" / "VERSION")
-    if not mine or not theirs:
+    theirs = _version(playbook / "kit" / "VERSION")
+    if not mine or not theirs or theirs <= mine:
         return None
-    if theirs[0] > mine[0] or (theirs[0] == mine[0] and theirs[1] - mine[1] > BEHIND_MINORS):
-        return f"behind: kit {'.'.join(map(str, mine))}, playbook {'.'.join(map(str, theirs))}"
-    return None
+    line = f"behind: kit {'.'.join(map(str, mine))}, playbook {'.'.join(map(str, theirs))}"
+    if theirs[0] > mine[0]:
+        return line
+    days = _released(playbook / "CHANGELOG.md")
+    if mine in days and days:
+        age = (max(days.values()) - days[mine]).days
+        return f"{line} ({age} days older)" if age > BEHIND_DAYS else None
+    return line if theirs[1] - mine[1] > BEHIND_MINORS else None
 
 
 def check_drift(root: Path | str | None = None) -> bool:
