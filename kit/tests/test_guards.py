@@ -1143,37 +1143,55 @@ def test_drift(root: Path) -> None:
 
 
 def test_drift_behind(root: Path) -> None:
-    print("\n[6b] drift: a hint when the named playbook is far ahead, never a failure")
+    print("\n[6b] drift: a hint when the named playbook's kit is weeks newer, never a failure")
     from kit.testing import suites
     a, b, c = (int(x) for x in (root / "scripts/kit/VERSION").read_text().split("."))
+    mine = f"{a}.{b}.{c}"
     playbook = Path(tmp_dir("playbook-"))
 
-    def named(version: str | None, key: str = "playbook"):
+    def named(version: str | None, key: str = "playbook", log: str | None = None):
         if version is not None:
             write(playbook, "kit/VERSION", version + "\n")
+        if log is None:
+            (playbook / "CHANGELOG.md").unlink(missing_ok=True)
+        else:
+            write(playbook, "CHANGELOG.md", log)
         return planted(root, "skill-pack.toml", append=f'\n[kit]\n{key} = "{playbook}"\n')
 
+    def log(*heads: tuple[str, str]) -> str:
+        return "# Changelog\n\n## [Unreleased]\n\n" + "".join(f"## [{v}] - {d}\n\n### Kit\n- x\n\n" for v, d in heads)
+
     check("no [kit] playbook: no hint", drift.behind(root) is None)
-    with named(f"{a}.{b + 2}.9"):
-        check("two minor versions ahead: no hint", drift.behind(root) is None)
-    with named(f"{a}.{b + 3}.0"):
-        want = f"behind: kit {a}.{b}.{c}, playbook {a}.{b + 3}.0"
-        check("three minor versions ahead: the hint", drift.behind(root) == want,
-              drift.behind(root))
+    with named(f"{a}.{b + 5}.0", log=log((f"{a}.{b + 5}.0", "2026-10-21"), (mine, "2026-10-01"))):
+        check("five minor versions ahead, but released 20 days later: no hint (an age, not a count)",
+              drift.behind(root) is None, drift.behind(root))
+    want = f"behind: kit {mine}, playbook {a}.{b + 1}.0 (22 days older)"
+    with named(f"{a}.{b + 1}.0", log=log((f"{a}.{b + 1}.0", "2026-10-23"), (mine, "2026-10-01"))):
+        check("one minor version ahead, released 22 days later: the hint, with the age",
+              drift.behind(root) == want, drift.behind(root))
         rc, out, _ = capture(lambda _: 0 if drift.check_drift(root) else 1, [])
         check("check_drift prints it and still passes", rc == 0 and want in out, out)
         rc, out, _ = capture(lambda _: suites.run(suites.kit_drift(root)), [])
         check("the generated test_kit_drift prints it", want in out and "FAIL" not in out, out)
-    with named(f"{a + 1}.0.0"):
-        check("a major ahead: the hint", (drift.behind(root) or "").endswith(f"playbook {a + 1}.0.0"))
+        clean("the hint is not a drift problem", drift.check_skill_pack(root))
+    with named(mine, log=log((mine, "2026-10-01"))):
+        check("the same version: no hint", drift.behind(root) is None)
+    with named(f"{a + 1}.0.0", log=log((f"{a + 1}.0.0", "2026-10-02"), (mine, "2026-10-01"))):
+        check("a major ahead, a day later: the hint (every pack must change)",
+              (drift.behind(root) or "").endswith(f"playbook {a + 1}.0.0"), drift.behind(root))
+    with named(f"{a}.{b + 2}.9"):
+        check("no CHANGELOG to date them: two minor versions ahead, no hint", drift.behind(root) is None)
+    with named(f"{a}.{b + 3}.0"):
+        check("no CHANGELOG: three minor versions ahead, the hint by the count",
+              drift.behind(root) == f"behind: kit {mine}, playbook {a}.{b + 3}.0", drift.behind(root))
+    with named(f"{a}.{b + 3}.0", log=log((f"{a}.{b + 3}.0", "2026-10-30"))):
+        check("the vendored version not in the CHANGELOG: the count decides", drift.behind(root) is not None)
     with named(f"{a}.{b + 9}.0", key="elsewhere"):
         check("another key: no hint", drift.behind(root) is None)
     with named("not a version"):
         check("a version that does not parse: no hint", drift.behind(root) is None)
     with planted(root, "skill-pack.toml", append='\n[kit]\nplaybook = "/nowhere/at/all"\n'):
         check("a missing playbook: no hint, no error", drift.behind(root) is None)
-    with named(f"{a}.{b + 3}.0"):
-        clean("the hint is not a drift problem", drift.check_skill_pack(root))
 
 
 def main() -> int:
