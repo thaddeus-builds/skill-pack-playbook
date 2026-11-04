@@ -42,7 +42,7 @@ file_gate	workbook	one human gate per client file
 workbook_patch	workbook	cells set in a copy of the client's xlsx, everything else byte for byte
 patternstore	learning	a per-client pattern store: closed rows, two-coder floor, shrunk rates
 pathweights	learning	path weights for variants: posteriors down a partition, states, the next batch, twins; past results as a gap signal
-pagestyle	pages	one look for pages that guide making: states as colour, word and icon; one decision; the check
+pagestyle	pages	one look for pages that guide making: states as colour, word and icon; one decision; pictures (a flow by lanes, choices, a phone's frame); the design page drawn whole; the check
 daily_page	pages	the day's items as one page over pagestyle: one decision, three warnings, a row per item, the owner's fold
 autonomy	autonomy	the autonomy levels: the tier registry, the owner's switch, scoped approvals, caps from the archive, code-free undo, the digest
 contracts	exchange	a contract file: the mark, the schema check, written once, read into raw
