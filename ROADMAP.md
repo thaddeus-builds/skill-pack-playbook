@@ -46,6 +46,7 @@ Updated: 2026-11-04
 - [X37] 2026-11-03 C4: amazon-ppc onto the kit, one PR each, each with its golden diff at 0 (`uv run tests/golden.py compare BASE HEAD --strict`) and, for `human` and `db`, its clean run first (its risky list). Steps 0 and 1 are done (D51, D52), and `runner` and `messages` (D53, D54). Next (own lines, kit lines, files that import it): `paths` (37, 100, 16), which the pack's own reading of 2026-10-30 keeps as a short file for its Amazon raw layout (about 12 lines saved, not worth a step alone); then `human` (307, 502, 8) and `db` (680, 947, 25), each its own story with the owner's merge
 - [X39] 2026-11-03 C6: the CLAUDE.md lines shared word for word by five or more packs (35 lines, 277 copies) live once, in the vendored kit, and each pack's CLAUDE.md imports them and keeps its own lines; first prove that Claude Code reads the import in a cloud session and on a host
 - [X41] 2026-11-03 sdr's speed check (sdr #72), the owner's choice (R30): in sdr's own session, make the stop-cue reader faster with one prefilter pass over the text before the about 280 patterns of `inquiries._cues_in` (95% of the time today), proved to give the same cues as before on every fixture of the pack; then merge its kit 0.48.0 pull request (sdr PR #75) and move sdr's adapter to 0.7.0 as `openmax-sdr` (N4)
+- [X42] 2026-11-04 autonomy toward L4 (R32, docs/autonomy.md "Capped kinds", "Reaching L4"): in `kit.autonomy`, a `cap` row (`check_tiers`, `auto_verdict` counting its caps from the archive, the digest saying it cannot be undone); the client spend cap's key and check (X32) as the bound of every money cap; rule 11's override rate per kind and the L4 eligibility switch; one pull request each. Then each pack that writes outward (amazon-ppc, meta-ads, google-ads, SEO, sdr, adcut, geo-china) gets its action table in its own session: the agent drafts a row per kind of write, the owner decides each ceiling and cap
 ## Done
 - [D1] 2026-09-30 CI and `run_all.py`, the kit tier registry with its guard test (commit 0f01846)
 - [D2] 2026-10-05 turn 1 (#21): Zylos adapter 0.1.1 on Node 22, Node 22 the minimum (commit b5a3cef)
@@ -134,6 +135,7 @@ Updated: 2026-11-04
 - [R29] 2026-11-03 the consolidation candidates (X36): "C2 C3 C4 C5 C6 C10 都 yes，C8 no" (the owner, in the session); C1 and C9 were already decided (R26, R25), C7 waits for the last host
 - [R30] 2026-11-03 sdr's speed check (W23): "W23 同意你的建议" (the owner, in the session): the reader is made faster in sdr's session, not the test bound (X41)
 - [R31] 2026-11-04 amazon-ppc's messages take the kit's words, 市场 where it said 站点: "改用“市场”" (the owner, in the session)
+- [R32] 2026-11-04 a kind that spends or sends and cannot be taken back may run unattended under a cap (autonomy toward L4: most work by the agent, a person watching and deciding the big things): "允许，有上限即可" (the owner, in the session)
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`
