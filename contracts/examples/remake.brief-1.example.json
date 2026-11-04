@@ -1,0 +1,289 @@
+# remake.brief/1
+{
+  "brand_by_s": 3,
+  "chosen": {
+    "at": "2026-11-04T17:10:00+08:00",
+    "by": "owner@console",
+    "option": "A"
+  },
+  "fit": {
+    "can_do": "no",
+    "fact": "the model has no rear rack and is rated for the rider only",
+    "product_job": "riding the old trail again, side by side with the child on a bike of their own",
+    "reference_job": "carrying a small child on a seat on the rear rack"
+  },
+  "insight_ids": [
+    "ins-001"
+  ],
+  "layers": [
+    {
+      "carries_value": "unknown",
+      "evidence": [],
+      "hypothesis": {
+        "because": "it may set the nostalgia before the product appears",
+        "but": "nothing shows whether people stay for it",
+        "seen": "a wide shot of a forest trail with no product for two seconds"
+      },
+      "layer": "hook",
+      "status": "guess"
+    },
+    {
+      "carries_value": "no",
+      "evidence": [
+        {
+          "kind": "comments",
+          "n": 0,
+          "of": 120,
+          "says": "comments that mention the order of the scenes"
+        }
+      ],
+      "hypothesis": {
+        "because": "the same order is common in the category and carries no reason to buy",
+        "but": "a cut that changes only the order",
+        "seen": "trail, ride, a stop at a viewpoint, the ride home"
+      },
+      "layer": "structure",
+      "status": "guess"
+    },
+    {
+      "carries_value": "no",
+      "evidence": [
+        {
+          "kind": "comments",
+          "n": 2,
+          "of": 120,
+          "says": "comments that mention a shot or the drone"
+        }
+      ],
+      "hypothesis": {
+        "because": "the shots serve the story, not the reverse",
+        "but": "comments that name a shot",
+        "seen": "handheld follow shots and one drone shot"
+      },
+      "layer": "shots",
+      "status": "guess"
+    },
+    {
+      "carries_value": "no",
+      "evidence": [
+        {
+          "kind": "comments",
+          "n": 0,
+          "of": 120,
+          "says": "comments that quote a caption"
+        }
+      ],
+      "hypothesis": {
+        "because": "the captions repeat what the picture shows",
+        "but": "comments that quote a caption",
+        "seen": "two short captions, no claim"
+      },
+      "layer": "text",
+      "status": "guess"
+    },
+    {
+      "carries_value": "unknown",
+      "evidence": [],
+      "hypothesis": {
+        "because": "it may matter as the place of the parent's childhood",
+        "but": "a test with another trail",
+        "seen": "a forest trail in autumn"
+      },
+      "layer": "scene",
+      "status": "guess"
+    },
+    {
+      "carries_value": "yes",
+      "confirmed_at": "2026-11-04T17:05:00+08:00",
+      "confirmed_by": "owner@console",
+      "evidence": [
+        {
+          "kind": "comments",
+          "n": 38,
+          "of": 120,
+          "says": "comments that speak of riding with their own child"
+        },
+        {
+          "kind": "engagement_vs_median",
+          "says": "views about eleven times the account median of its last 30 posts"
+        }
+      ],
+      "hypothesis": {
+        "because": "the comments talk about doing the same with their own children",
+        "but": "the comments come from people who already ride",
+        "seen": "a parent rides the trail of their own childhood with their small child"
+      },
+      "layer": "story",
+      "status": "confirmed"
+    },
+    {
+      "carries_value": "yes",
+      "evidence": [
+        {
+          "kind": "comments",
+          "n": 21,
+          "of": 120,
+          "says": "comments that name the child"
+        },
+        {
+          "kind": "client_words",
+          "says": "the client picked this video for the parent and the child"
+        }
+      ],
+      "hypothesis": {
+        "because": "the parent-and-child pair is what the comments answer to",
+        "but": "a pair of friends could carry the same feeling",
+        "seen": "a parent and a child of about four"
+      },
+      "layer": "persona",
+      "status": "guess"
+    },
+    {
+      "carries_value": "yes",
+      "evidence": [
+        {
+          "kind": "comments",
+          "n": 14,
+          "of": 120,
+          "says": "comments asking where the rear seat comes from"
+        }
+      ],
+      "hypothesis": {
+        "because": "carrying the child is the job the story needs",
+        "but": "the job could be riding side by side",
+        "seen": "the child sits on a seat on the rear rack"
+      },
+      "layer": "product_use",
+      "status": "guess"
+    },
+    {
+      "carries_value": "no",
+      "evidence": [
+        {
+          "kind": "comments",
+          "n": 1,
+          "of": 120,
+          "says": "comments that ask for the song"
+        }
+      ],
+      "hypothesis": {
+        "because": "the track is generic for the category",
+        "but": "comments that ask for the song",
+        "seen": "an acoustic guitar track and no voice-over"
+      },
+      "layer": "sound",
+      "status": "guess"
+    },
+    {
+      "carries_value": "unknown",
+      "evidence": [],
+      "hypothesis": {
+        "because": "the promise may be the shared time, not a feature",
+        "but": "a variant that states a feature",
+        "seen": "no spoken promise; the ride itself is the promise"
+      },
+      "layer": "promise",
+      "status": "guess"
+    },
+    {
+      "carries_value": "no",
+      "evidence": [
+        {
+          "kind": "client_words",
+          "says": "the client chose the video for the ride, not for a customer's word"
+        }
+      ],
+      "hypothesis": {
+        "because": "the reference persuades by the story, not by proof",
+        "but": "a test that adds a customer",
+        "seen": "no customer speaks; no number is shown"
+      },
+      "layer": "proof",
+      "status": "guess"
+    },
+    {
+      "carries_value": "no",
+      "evidence": [
+        {
+          "kind": "comments",
+          "n": 3,
+          "of": 120,
+          "says": "comments that ask the price"
+        }
+      ],
+      "hypothesis": {
+        "because": "no offer is shown",
+        "but": "a variant with a price",
+        "seen": "a plain shop link, no price"
+      },
+      "layer": "offer",
+      "status": "guess"
+    },
+    {
+      "carries_value": "unknown",
+      "evidence": [],
+      "hypothesis": {
+        "because": "a late brand is how the viewer may credit the competitor",
+        "but": "a recall test",
+        "seen": "the logo appears only at the end"
+      },
+      "layer": "brand",
+      "status": "guess"
+    }
+  ],
+  "market": "us-en",
+  "never_copy": [
+    "the reference's captions and music",
+    "the faces and voices of its parent and child",
+    "its orange end card and closing line"
+  ],
+  "options": [
+    {
+      "id": "A",
+      "if_no": "the story is not what carries the value: the layers are read again before anything is made",
+      "kind": "replica",
+      "plan": "the same story and order with our own people, words and music: a parent rides the trail of their childhood, the child beside on a small bike; the client's brand by second 3",
+      "recommended": true
+    },
+    {
+      "changes": "hook",
+      "id": "B",
+      "if_no": "only A is made, and the hook is not tested this time",
+      "kind": "variant",
+      "plan": "as A, but the first two seconds show the parent's old photo on the same trail instead of the empty trail",
+      "recommended": false
+    }
+  ],
+  "produced_at": "2026-11-04T16:20:00+08:00",
+  "producer": "keyframe",
+  "product": "demo-ebike-city-7",
+  "proof": {
+    "speaks_review": false,
+    "state": "none"
+  },
+  "reference": {
+    "account_median_views": 38000,
+    "comments": 120,
+    "kind": "paid",
+    "likes": 9100,
+    "link": "https://ads.example.com/library/ad/0000001",
+    "median_of": 30,
+    "read_on": "2026-11-04",
+    "run_days": 47,
+    "shares": 640,
+    "variants": 5,
+    "views": 412000
+  },
+  "segment": {
+    "job": {
+      "so_that": "we have a memory together that is also mine",
+      "want": "to take them along the trail I rode when I was young",
+      "when": "I have a free weekend with my child"
+    },
+    "moment": "trigger",
+    "relation": "self",
+    "situation": "a weekend with a small child, wanting to share something from their own childhood",
+    "who_pays": "the same parent",
+    "who_uses": "a parent in their thirties who rode bikes as a child"
+  }
+}
