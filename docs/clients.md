@@ -45,6 +45,7 @@ Tools, permission rules and scheduled jobs often hold paths outside the folder (
 - a row's file is missing, or a file under `inbox/` has no row (a row for its day's folder covers it);
 - a `.env` or a `connections` folder outside `.machine/`;
 - `.machine/connections` readable by others;
-- a `links.tsv` target outside the folder or missing.
+- a `links.tsv` target outside the folder or missing;
+- no `client_terms.txt` under `.machine/`.
 
-Names, amounts and ids of a client stay in its folder, never in a code repository.
+Names, amounts and ids of a client stay in its folder, never in a code repository. Each client's `.machine/` holds a `client_terms.txt` (its names, one a line), and the playbook's pre-push hook runs the leak guard (`kit/tools/leak_guard.py`) over every list under this machine's root before the suites: a push that adds a listed name is refused. Install the hook once per clone (`git config core.hooksPath .githooks`). *Seen once:* a client's name written into this page and the tool's docstring on 2026-11-05, in a clone with no hook installed.
