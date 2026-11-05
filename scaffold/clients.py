@@ -321,7 +321,7 @@ def check(c: Path) -> list[str]:
         def walk(d: Path) -> None:
             for item in sorted(d.iterdir()):
                 rel = item.relative_to(home).as_posix()
-                if (d == home and item.name in KEPT) or item.name == ".DS_Store" or rel in listed:
+                if (d == home and item.name in KEPT) or item.name in (".DS_Store", ".gitkeep") or rel in listed:
                     continue
                 if item.is_dir() and not item.is_symlink():
                     walk(item)

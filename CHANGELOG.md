@@ -13,6 +13,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [Unreleased]
 
 ### Other
+- `scaffold/clients.py check`: a `.gitkeep` under `sources/` is a placeholder, not material, and needs no row (seen once: a hub's `inbox/.gitkeep`, once the check walked all of `sources/`)
+- Skill packs: nothing
 - `scaffold/clients.py`: `sources/` may keep material in folders of its own (by kind, a cloud drive's mirror): `check` walks all of it and a row for a folder covers what is in it; `source` lists a file or folder anywhere under `sources/` in place; over 500 MB the sha256 is left empty. Seen once: seven clients copied in from another machine, two of them with 4 and 17 GB kept by kind and as a drive mirror
 - Skill packs: nothing
 - `scaffold/clients.py new CLIENT --title T --term NAME`: a folder for a client that has material and no pack yet, laid out so that `check` passes at once, its term list made from `--term` (none is a refusal)
