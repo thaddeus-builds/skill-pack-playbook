@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Other
+- `scaffold/clients.py` and docs/clients.md: one clients root per machine (`CLIENTS_DIR`, else `~/.config/openmax/clients_dir`, which `where --set` writes; neither set is a refusal, never a guess), where each kind of material goes (a meeting under `intake/meetings/<date>/`; a chat log, a link, a video, a picture, a platform export, an agent's API pull in `sources/` with one INDEX row each), `source` (copy and list, or list in place, with the next id and sha256), `relink` (the links a machine needs, from `.machine/links.tsv`) and `check` (each rule a line). The hub's sources README names the two new sources, `chat` and `api-agent`. Seen once: the owner's request of 2026-11-05 and emvy's hand-made folder
+- Skill packs: nothing (a tool of the machine, not of a pack; a client folder is checked with `clients.py check`)
+
 ## [0.51.0] - 2026-11-05
 
 A third train this week, on the owner's word (R46, "现在就发"): it carries R44 step 0 for the packs (docs/design/ssot-and-runtime-2026-11.md); meta-ads takes it first, in its own session.
