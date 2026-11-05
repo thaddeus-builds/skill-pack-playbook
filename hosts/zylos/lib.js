@@ -963,8 +963,9 @@ function caddyBlockInFile(lines) {
 // A block from before the form login (0.5.0) still asks the browser's basic_auth pop-up and imports
 // a bcrypt list this adapter no longer writes; one from 0.5.x does not route /setup (the one-time
 // password link, 0.6.0), so the link would reach the console and be refused there; one without a
-// route of console.routes (0.7.3) has lost the skill pack's own upstream (an earlier rewrite, or a
-// block made before the route was in the manifest). Why the block is outdated, or '' when it is not.
+// route of console.routes (0.7.3), or with another upstream than the host configures now, has lost the
+// skill pack's own upstream (an earlier rewrite, a block made before the route was in the manifest, a
+// port_key changed since). Why the block is outdated, or '' when it is not.
 const usesBasicAuth = (text) => /^\s*basic_auth\b/m.test(text);
 function outdatedWhy(text) {
   const lines = text.split('\n').map((l) => l.trim());
@@ -972,8 +973,14 @@ function outdatedWhy(text) {
   if (!lines.some((l) => /^@login\b/.test(l) && /(^|\s)\/setup(\s|$)/.test(l))) {
     return 'does not route /setup (the one-time password link)';
   }
-  const lost = ROUTES.filter((r) => !lines.includes(`handle_path /${r.segment}/* {`));
-  return lost.length ? `lacks the route${lost.length > 1 ? 's' : ''} ${lost.map((r) => r.path).join(', ')} (manifest console.routes)` : '';
+  // a route counts only with its upstream as this host configures it now (a changed port_key, a moved socket)
+  const want = routeLines()['<ROUTES>'].map((l) => l.trim());
+  const lost = ROUTES.filter((r, n) => {
+    const at = lines.indexOf(want[n * 5]);
+    return at < 0 || lines[at + 1] !== want[n * 5 + 1];
+  });
+  return lost.length ? `lacks the route${lost.length > 1 ? 's' : ''} ${lost.map((r) => r.path).join(', ')} `
+    + 'as the manifest and this host configure it (console.routes)' : '';
 }
 
 // Why the block in the Caddyfile is outdated, or '' (also when there is none or no Caddyfile).

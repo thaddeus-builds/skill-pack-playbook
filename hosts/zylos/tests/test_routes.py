@@ -100,8 +100,20 @@ def test_a_current_block_without_a_route_the_release_added_is_written_again():
         cf = fake_caddy(host, "agent.test {\n    respond / 200\n" + indent(plain) + "}\n")
         r = host.hook("post-upgrade.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
         text = open(cf).read()
-        assert r.returncode == 0 and "lacks the route /shop/ops (manifest console.routes)" in r.stdout, r.stdout
+        assert r.returncode == 0 and "lacks the route /shop/ops as the manifest and this host configure it" in r.stdout, r.stdout
         assert has_route(block_of(text)), text
+
+
+def test_a_route_whose_port_changed_is_written_again():
+    with Host(with_routes(), scheduler=False) as host:
+        old = caddy(host)                            # the route on its default port 8768
+        assert has_route(block_of(old)), old
+        cf = fake_caddy(host, "agent.test {\n    respond / 200\n" + indent(old) + "}\n")
+        host.write(os.path.join(host.data, ".env"), "SHOP_OPS_PORT=8790\n")
+        r = host.hook("post-upgrade.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+        text = open(cf).read()
+        assert r.returncode == 0 and "lacks the route /shop/ops" in r.stdout, r.stdout
+        assert has_route(block_of(text), port="8790") and not has_route(block_of(text)), text
 
 
 def test_uninstall_then_post_install_keeps_the_route():
