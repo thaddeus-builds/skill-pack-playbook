@@ -177,6 +177,20 @@ def main() -> int:
     check("over the cap: today's budget is 0", over["status"] == "over_cap" and over["today_budget"] == 0.0, over)
     last_day = pacing.cap_status(sep, date(2026, 9, 30), date(2026, 9, 30), {**gold, **{date(2026, 9, d): 1285.0 for d in range(21, 31)}}, 40000.0, 0.8, 7)
     check("on the month's last day there is nothing left to budget", last_day["today_budget"] is None and last_day["days_left"] == 0, last_day)
+    same = pacing.cap_status(sep, date(2026, 9, 20), date(2026, 9, 30), gold, 30000.0, 0.8, 7, spent_extra=0.0, incomplete=False)
+    check("the two additive inputs at their defaults change nothing", same == c, same)
+    extra = pacing.cap_status(sep, date(2026, 9, 20), date(2026, 9, 30), gold, 30000.0, 0.8, 7, spent_extra=2011.0)
+    check("spend outside the day clock is spent and projected, never the run-rate",
+          extra["spent"] == 20000.0 and extra["run_rate"] == 1285.0 and extra["projected"] == 32850.0
+          and abs(extra["today_budget"] - 1000.0) < 1e-9 and extra["status"] == "projected_over", extra)
+    behind = pacing.cap_status(sep, date(2026, 9, 20), date(2026, 9, 30), gold, 30000.0, 0.8, 7, incomplete=True)
+    bth = {t["name"]: t["state"] for t in behind["thresholds"]}
+    check("a source known to be behind: a lower bound like a missing day, the clock's missing days stay empty",
+          behind["status"] == "unknown" and bth == {"warn": "unknown", "cap": "unknown"} and behind["upper_bound"]
+          and behind["missing_days"] == [], behind)
+    proved = pacing.cap_status(sep, date(2026, 9, 20), date(2026, 9, 30), gold, 15000.0, 0.8, 7, incomplete=True)
+    check("behind, yet past the cap: the crossing is proved", proved["status"] == "over_cap"
+          and {t["name"]: t["state"] for t in proved["thresholds"]} == {"warn": "reached", "cap": "reached"}, proved)
     check("reach: no rate, no crossing; a crossing after the month's end is not this month's",
           pacing.reach(0.0, 10.0, 0.0, date(2026, 9, 1), date(2026, 9, 30)) == ("not_reached", None)
           and pacing.reach(0.0, 1000.0, 1.0, date(2026, 9, 1), date(2026, 9, 30)) == ("not_reached_this_month", None), None)
