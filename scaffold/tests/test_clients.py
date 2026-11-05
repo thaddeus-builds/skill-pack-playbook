@@ -177,6 +177,15 @@ def test_relink() -> None:
           and (away / "real").is_dir() and not (away / "real").is_symlink() and "SKIP" in out and rc == 1, out)
     rc, out, _ = run("--root", str(r), "relink", "acme")
     check("again: the correct links are kept", out.count("ok ") == 2, out)
+    (c / ".machine/links.tsv").write_text("path\ttarget\tnote\nreports\t.machine/workspace\tinside the folder\n", "utf-8")
+    (c / "reports").rmdir()
+    rc, out, _ = run("--root", str(r), "relink", "acme")
+    check("a link inside the folder is written relative, so the folder survives a move",
+          os.readlink(c / "reports") == ".machine/workspace" and (c / "reports").resolve() == (c / ".machine/workspace").resolve(), out)
+    (c / "reports").unlink()
+    (c / "reports").symlink_to(c / ".machine/workspace")
+    rc, out, _ = run("--root", str(r), "relink", "acme")
+    check("a link written absolute that leads to the same place is kept", out.startswith("ok "), out)
 
 
 def test_pre_push_hook() -> None:
