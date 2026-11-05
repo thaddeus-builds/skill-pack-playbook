@@ -104,7 +104,7 @@ flowchart TB
     classDef owner fill:#e8f0fe,stroke:#1a73e8,stroke-width:2px,color:#202124
 ```
 
-1. **Stories and rules are separate owner files** ([how](../templates/ssot/README.md#stories-and-policies)). *Paid for:* an audit found four rules the code applied that nobody had approved; the owner approved them one by one.
+1. **Stories and rules are separate owner files, in a pack that keeps them** ([how](../templates/ssot/README.md#stories-and-policies)); since R44 a new pack keeps the owner's decisions as dated `R` rows of its roadmap instead, and adds an owner file only when a client's words or stories must be signed one by one ([design](design/ssot-and-runtime-2026-11.md): 6 of 10 packs never filled theirs). *Paid for:* an audit found four rules the code applied that nobody had approved; the owner approved them one by one.
 2. **Acceptance items are numbered invariants a machine can check:** children sum to the parent, missing input means "unknown", a zero row never disappears. Issues and MRs cite the item (S.. ①). Such items let a read-only agent find a headline ratio dividing 30 days of spend by 23 days of sales.
 3. **The story id is enforced in CI, not in instructions** ([template](../templates/ci/gitlab-ci.yml)). *Paid for:* 17 of the first 105 MRs named no story, 15 of them refactors; after a 15-line CI job on the title, none of the next 77. Give refactors a guarantee story to name.
 4. **One read-only check per done story; missing data skips, never passes** ([template](../templates/ssot/story_checks.tsv)). *Paid for:* a "nothing sent without approval" check first passed on a client that had never sent anything. *Built* (its own story still awaits the owner); the nightly run on the host is not yet seen.
