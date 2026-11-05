@@ -28,6 +28,9 @@ ways: the bad case refused AND the good one accepted.
      that is not a code; auto_verdict() stops on a cap nobody counted and
      on a cap reached; the gate records each cap used, the write has no
      code-free undo, and the digest says it is final.
+  8. the client's spend cap (X32): spend_cap() only lowers a pack's money
+     cap, and is None with no client figure; auto_verdict() then stops
+     (auto_no_client_cap), and a client figure of 0 stops at the first spend.
 """
 
 import sys
@@ -349,6 +352,24 @@ def test_levels() -> None:
                   for w in ("sqlite3", "datetime.now", "date.today", "time.time", "open(os.path.join(raw")))
 
 
+def test_client_spend_cap() -> None:
+    print("\n[9] the client's unattended spend cap (X32)")
+    check("the key is the one client fact every pack reads", A.SPEND_CAP_KEY == "unattended_spend_cap_per_day")
+    check("spend_cap: a client's lower figure wins", A.spend_cap(30, 12) == 12)
+    check("spend_cap: a client's higher figure never raises the pack's", A.spend_cap(30, 100) == 30)
+    check("spend_cap: no client figure, no limit to spend under", A.spend_cap(30, None) is None)
+    check("spend_cap: a negative figure reads as 0", A.spend_cap(30, -5) == 0)
+    m = A.mode(hist(("confirm", "2026-10-20:T20", "owner@relay", "2026-10-12T08:00:00+00:00")),
+               today=TODAY, max_days=28, eligible_ids=A.eligible(CAPPED))
+    base = {"mode": m, "write_ids": ["T20"], "item_approved": True, "named": ["auto_spend_per_day"]}
+    for label, client, want in (("under the client's figure", 12, None),
+                                ("over the client's figure", 10, "auto_spend_per_day"),
+                                ("a figure of 0: nothing spends", 0, "auto_spend_per_day"),
+                                ("no figure from the client", None, "auto_no_client_cap")):
+        got = A.auto_verdict(**base, caps=[("auto_spend_per_day", 9.5, 1.5, A.spend_cap(30, client))])
+        check(f"{label}: {want}", got == {"why": want, "stop": want is not None}, got)
+
+
 if __name__ == "__main__":
     test_registry()
     test_switch()
@@ -358,4 +379,5 @@ if __name__ == "__main__":
     test_record_and_undo()
     test_levels()
     test_capped_kinds()
+    test_client_spend_cap()
     raise SystemExit(finish())

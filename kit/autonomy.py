@@ -30,6 +30,12 @@ database, a file or the time of day. What it decides:
     stops it when a cap its rows name was not counted (auto_cap_unchecked)
     or is reached; its manifest's gate records each cap used against its
     limit, it has no undo, and the digest says it is final.
+  * the client's unattended spend cap (X32, R23): one client fact,
+    SPEND_CAP_KEY, a money amount per day in the client's currency that the
+    client and its agent agree; spend_cap() bounds a pack's own money cap
+    by it, and is None while the client has given none: auto_verdict()
+    then stops the write (auto_no_client_cap), so nothing spends
+    unattended on a figure nobody agreed.
   * the switch (L3): one fact whose value is `YYYY-MM-DD[:ID,ID…]`
     (switch_value / parse_switch). mode() reads its history: on only while
     the latest row is a confirm signed by a human channel (tty, relay), its
@@ -94,7 +100,8 @@ CAP = re.compile(r"[a-z][a-z0-9_]*")       # a cap is a code the skill pack regi
 NONE = ("", "-", "—")                       # an undo cell that names no verb
 SWITCH = re.compile(r"(\d{4}-\d{2}-\d{2})(?::([A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*))?")
 VERB = re.compile(r"[a-z][a-z_-]*")
-STOPS = ("auto_prev_unverified", "auto_mixed", "auto_cap_unchecked")
+STOPS = ("auto_prev_unverified", "auto_mixed", "auto_cap_unchecked", "auto_no_client_cap")
+SPEND_CAP_KEY = "unattended_spend_cap_per_day"   # the client fact (X32): money a day, the client's currency
 OFF = ("auto_off_never", "auto_off_lowered", "auto_off_unproven", "auto_off_expired", "auto_off_paths_moved")
 
 
@@ -318,9 +325,11 @@ def auto_verdict(*, mode: dict, write_ids: list[str | None], item_approved: bool
     name (`named`, caps_of()) that `caps` does not count
     (auto_cap_unchecked: a capped kind never runs on a cap nobody counted);
     then each cap (code, used, planned, cap): over it when used + planned >
-    cap. `stop` is True for a cap, an uncounted cap, an unverified last
-    write or a mixed run: issue no code, hand it to the owner. Otherwise
-    the write takes its per-change code."""
+    cap; a cap whose limit is None (spend_cap(): the client gave no figure)
+    is auto_no_client_cap. `stop` is True for a cap, an uncounted cap, a
+    missing client figure, an unverified last write or a mixed run: issue
+    no code, hand it to the owner. Otherwise the write takes its per-change
+    code."""
     caps = list(caps)
     counted = {c[0] for c in caps}
     why = (mode["why_off"] if not mode["on"] else
@@ -332,7 +341,8 @@ def auto_verdict(*, mode: dict, write_ids: list[str | None], item_approved: bool
     if why is None and any(c not in counted for c in named):
         why = "auto_cap_unchecked"
     if why is None:
-        why = next((code for code, used_, planned, cap_ in caps if used_ + planned > cap_), None)
+        why = next(("auto_no_client_cap" if cap_ is None else code for code, used_, planned, cap_ in caps
+                    if cap_ is None or used_ + planned > cap_), None)
     return {"why": why, "stop": why in STOPS or why in {c[0] for c in caps}}
 
 
@@ -361,6 +371,18 @@ def tighten(default: float, *client: float | None) -> float:
     value below it. A pending value is never passed: an agent cannot raise
     its own cap."""
     return min([default, *(c for c in client if c is not None)])
+
+
+def spend_cap(own: float, client: float | None) -> float | None:
+    """The limit of a money cap: the pack's own constant bounded by the
+    client's confirmed SPEND_CAP_KEY (only ever lower), or None while the
+    client has given no figure: pass None as the cap and auto_verdict()
+    stops with auto_no_client_cap. Pass a confirmed value only, never a
+    pending one: an agent cannot set its own spending. A negative figure
+    is read as 0. The figure bounds each pack's own day; the packs share no
+    archive, so a client who wants one total across packs gives each a
+    share of it."""
+    return None if client is None else min(own, max(0.0, float(client)))
 
 
 @contextlib.contextmanager
