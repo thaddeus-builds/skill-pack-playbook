@@ -3,12 +3,14 @@ picture here is synthetic (generated clips, a moving ellipse for a matte); nothi
 import copy
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 import _t
-from filmkit import problems, still
+from filmkit import cutout as CO
+from filmkit import problems, render, still
 from filmkit import spec as S
 from filmkit.check import all_checks, context
+from filmkit.demo import story_spec
 from filmkit.elements import ELEMENTS
 from filmkit.transitions import blend
 
@@ -139,6 +141,166 @@ def test_year_rises_into_place_holds_and_fades_out_and_the_layout_check_sees_it(
         assert len(boxes_at(spec, d, 0, 2.0)) == 1 and boxes_at(spec, d, 0, 3.5) == []
         spec["overlays"][0]["x"] = 1000
         assert any("year" in m and "safe" in m for m in (lambda r: r["layout"])(all_checks({**spec, "safe": {"profile": "tiktok"}}, d))), "type off the safe area is named"
+
+
+def px(png, q=0.25):
+    return np.asarray(Image.open(png).convert("RGB"), dtype=np.float32)
+
+
+def plain(spec):
+    """The film with nothing on it that would be graded or shaded: only the picture of the shots."""
+    spec = copy.deepcopy(spec)
+    spec.update(audio=None, grade={"look": "natural"}, scrim=False, overlays=[], safe={"profile": "full"})
+    spec.pop("fade_out", None)
+    return spec
+
+
+def test_a_panel_shot_is_a_colour_a_framed_picture_that_pushes_in_and_type_the_layout_check_sees():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = plain(_t.film_spec(d))
+        spec["shots"][2].update(fit="panel", panel={"bg": [28, 84, 200], "title": ["A TITLE", "OF TWO LINES"], "caption": "under the frame", "frame": {"width": 12, "color": [255, 255, 255]}})
+        del spec["shots"][2]["camera"]
+        assert problems(spec, d) == [], problems(spec, d)
+        a, b = px(still(spec, d, 4.2, d / "a.png", q=0.25)), px(still(spec, d, 5.9, d / "b.png", q=0.25))
+        assert np.abs(a[2, 2] - [28, 84, 200]).max() < 3 and np.abs(a[-3, -3] - [28, 84, 200]).max() < 3, "a solid colour round it"
+        g = S.__dict__["PN"].geometry(spec["shots"][2]["panel"], 1080, 1920)
+        ix0, iy0, ix1, iy1 = (v * 0.25 for v in g["inner"])
+        assert a[int((iy0 + iy1) / 2), int(ix0 - 3)].min() > 245, "the white frame is just outside the picture"
+        gold = lambda im: float((np.abs(im[int(iy0):int(iy1), int(ix0):int(ix1)] - [220, 190, 120]).max(axis=2) < 40).sum())
+        assert gold(b) > gold(a) * 1.05, (gold(a), gold(b))                                    # the picture pushes in: the disc in it grows
+        top = (slice(int(iy0) - 2, int(iy0)), slice(int(ix0) + 2, int(ix1) - 2))
+        assert a[top].min() > 245 and b[top].min() > 245, "the frame itself stays where it is"
+        over = S.all_overlays(spec)
+        assert [e["element"] for e in over] == ["title", "text"] and over[0]["lines"] == ["A TITLE", "OF TWO LINES"] and over[0]["t0"] == 4.0 and over[0]["t1"] == 6.0, over
+        spec = _t.film_spec(d)
+        spec["shots"][2].update(fit="panel", panel={"title": ["A TITLE"], "title_y": 1020, "y": 900, "height": 400, "caption": "under"})
+        assert any("panel frame" in m for m in all_checks(spec, d)["layout"]), all_checks(spec, d)["layout"]
+        assert not any("outside the safe area" in m and "panel frame" in m for m in all_checks({**_t.film_spec(d), "shots": spec["shots"]}, d)["layout"]), "the picture is not type"
+        spec["shots"][2]["panel"] = {"nope": 1, "title": []}
+        bad = problems(spec, d)
+        assert any("panel.nope" in m for m in bad) and any("panel.title" in m for m in bad), bad
+        spec["shots"][2].pop("fit")
+        assert any(".panel: only a shot with fit: panel" in m for m in problems(spec, d))
+
+
+def test_a_split_shot_stacks_two_clips_each_with_its_own_in_and_camera_and_a_seam_between():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = plain(_t.film_spec(d))
+        spec["shots"][2].update(fit="split", asset="a", split={"at": 0.5, "seam": {"color": [255, 255, 255], "width": 8}, "bottom": {"asset": "p", "camera": {"zoom": [1.0, 1.0]}}})
+        del spec["shots"][2]["camera"]
+        assert problems(spec, d) == [], problems(spec, d)
+        im = px(still(spec, d, 5.0, d / "s.png", q=0.25))
+        h = im.shape[0]
+        assert np.abs(im[h // 2 - 1:h // 2 + 1] - 255).max() < 2, "a seam across the join"
+        gold = lambda part: float((np.abs(part - [220, 190, 120]).max(axis=2) < 40).mean())
+        assert gold(im[h // 2 + 6:]) > 0.02 and gold(im[:h // 2 - 6]) == 0.0, "the photo is below, the clip above"
+        spec["shots"][2]["split"]["bottom"]["asset"] = "nope"
+        spec["shots"][2]["split"]["at"] = 0.95
+        bad = problems(spec, d)
+        assert any("split.bottom.asset" in m for m in bad) and any("split.at" in m for m in bad), bad
+        spec["shots"][2]["split"] = {"seam": {}}
+        assert any("a split shot needs" in m for m in problems(spec, d))
+        spec["shots"][2].update(fit="fill")
+        assert any("only a shot with fit: split" in m for m in problems(spec, d))
+
+
+def ellipse_matte(path, size=(720, 1280)):
+    m = Image.new("L", size, 0)
+    ImageDraw.Draw(m).ellipse((size[0] / 2 - 160, size[1] * 0.55 - 380, size[0] / 2 + 160, size[1] * 0.55 + 380), fill=255)
+    m.save(path)
+
+
+def test_the_cutout_keeps_the_subject_sharp_on_a_flat_tinted_backdrop_with_marching_dashes_on_its_edge():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        ellipse_matte(d / "still_matte.png")
+        spec = plain(_t.film_spec(d))
+        spec["assets"]["m"] = {"type": "image", "path": "still_matte.png"}
+        spec["shots"][0].update(camera={"zoom": [1.0, 1.0]}, cutout={"matte": "m", "outline": {"color": [255, 255, 255], "width": 6, "dash": [40, 40], "speed": 200, "offset": 0},
+                                                                          "bg": {"zoom": 1.8, "blur": 40, "tint": [10, 10, 10], "tint_mix": 1.0}})
+        assert problems(spec, d) == [], problems(spec, d)
+        a, b = px(still(spec, d, 0.5, d / "a.png", q=0.25)), px(still(spec, d, 0.8, d / "b.png", q=0.25))
+        assert np.abs(a[3, 3] - 10).max() < 3, a[3, 3]                                          # outside the subject: the tint, flat
+        h, w = a.shape[:2]
+        inside = a[int(h * 0.45):int(h * 0.65), int(w * 0.4):int(w * 0.6)]
+        assert inside.std() > 20 and inside.mean() > 60, (inside.std(), inside.mean())          # the subject: the clip's own picture
+        white = lambda im: (im.min(axis=2) > 235)
+        wa, wb = white(a), white(b)
+        assert wa.sum() > 80 and abs(int(wa.sum()) - int(wb.sum())) < 0.4 * wa.sum(), (wa.sum(), wb.sum())    # a dashed line of about the same length
+        assert (wa & wb).sum() < 0.7 * wa.sum(), "and the dashes have moved on in 0.3 s"
+        ys, xs = np.where(wa)
+        cy, cx_ = h * 0.55, w / 2
+        r = np.hypot((xs - cx_) / (160 * 1.5 * 0.25), (ys - cy) / (380 * 1.5 * 0.25))      # the matte is 720 wide, the canvas 1080: 1.5, at a quarter size
+        assert np.median(np.abs(r - 1)) < 0.12, "the dashes lie on the matte's edge"
+        spec["shots"][0]["cutout"]["outline"] = False
+        c = px(still(spec, d, 0.5, d / "c.png", q=0.25))
+        assert white(c).sum() < 0.3 * wa.sum(), "no outline when it is switched off"
+
+
+def test_a_matte_can_be_a_video_or_a_picture_sequence_and_they_agree_and_a_wrong_one_is_named():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = plain(story_spec())
+        spec["shots"] = spec["shots"][:1]
+        spec["duration"] = 3.0
+        spec["shots"][0]["cutout"]["outline"] = False
+        assert problems(spec, d) == [], problems(spec, d)
+        video = px(still(spec, d, 1.0, d / "v.png", q=0.25))
+        spec["shots"][0]["cutout"]["matte"] = "frames"
+        assert problems(spec, d) == [], problems(spec, d)
+        seq = px(still(spec, d, 1.0, d / "f.png", q=0.25))
+        assert np.abs(video - seq).mean() < 4, np.abs(video - seq).mean()                       # the same matte, read two ways
+        spec["assets"]["tiny"] = {"type": "image", "path": "photo.jpg"}
+        spec["shots"][0]["cutout"]["matte"] = "tiny"
+        assert any("same size" in m for m in problems(spec, d)), problems(spec, d)
+        spec["shots"][0]["cutout"] = {"matte": "nope", "outline": {"width": 0, "dash": [1]}, "bg": {"zoom": 0.5, "posterize": 1}, "extra": 1}
+        assert len(problems(spec, d)) >= 1
+        spec["shots"][0]["cutout"] = {"matte": "frames", "outline": {"width": 0, "dash": [1], "color": [1]}, "bg": {"zoom": 0.5, "posterize": 1}}
+        bad = problems(spec, d)
+        assert all(any(k in m for m in bad) for k in ("outline.width", "outline.dash", "outline.color", "bg.zoom", "bg.posterize")), bad
+        spec["shots"][0]["cutout"] = {"matte": "frames"}
+        spec["shots"][0]["fit"] = "card"
+        assert any("only a fit: fill shot" in m for m in problems(spec, d))
+        spec["shots"][0].pop("fit")
+        spec["assets"]["frames"]["path"] = "matte/none_%04d.png"
+        assert any("is not a file" in m for m in problems(spec, d)), problems(spec, d)
+        spec["assets"]["frames"]["path"] = "matte/m_0001.png"
+        assert any("numbered pattern" in m for m in problems(spec, d))
+
+
+def test_the_outline_is_walked_once_round_the_edge_and_dashes_are_laid_along_it():
+    m = np.zeros((60, 80), bool)
+    m[10:40, 20:70] = True
+    pts = CO.trace(m)
+    assert len(pts) == 2 * (30 + 50) - 4 and pts[0] == (10, 20) and len(set(pts)) == len(pts), (len(pts), pts[:3])
+    cs = CO.contours(np.pad(m, 0))
+    assert len(cs) == 1
+    tiny = m.copy()
+    tiny[50:52, 5:7] = True
+    assert len(CO.contours(tiny)) == 1, "a speck is not a subject"
+    ring = np.array([[np.cos(a) * 100, np.sin(a) * 100] for a in np.linspace(0, 2 * np.pi, 628, endpoint=False)])
+    runs = CO.dashes(ring, 30, 20, 0)
+    lit = sum(len(r) - 1 for r in runs) / 628
+    assert 0.5 < lit < 0.7 and 11 <= len(runs) <= 14, (lit, len(runs))                          # 3 in 5 on, 628 / 50 dashes
+    moved = CO.dashes(ring, 30, 20, 25)
+    assert not np.allclose(moved[1][0], runs[1][0]), "the phase slides them"
+    out = CO.outward(ring, 10)
+    assert abs(np.linalg.norm(out, axis=1).mean() - 110) < 1.0 and abs(np.linalg.norm(CO.outward(ring[::-1].copy(), 10), axis=1).mean() - 110) < 1.0, "outward is out whichever way it was walked"
+
+
+def test_the_story_demo_validates_checks_clean_and_renders_a_preview():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = story_spec()
+        assert problems(spec, d) == [], problems(spec, d)
+        checks = all_checks(spec, d)
+        assert checks["layout"] == [] and checks["glyphs"] == [] and checks["timing"] == [], checks
+        info = render(spec, d, d / "story.mp4", preview=0.25)
+        assert info["width"] == 270 and abs(info["duration"] - 11.0) < 0.1, info
+        for t in (0.3, 1.0, 3.2, 4.5, 7.0, 9.5):
+            still(spec, d, t, d / f"{t}.png", q=0.25)
 
 
 if __name__ == "__main__":

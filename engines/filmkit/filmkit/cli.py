@@ -57,6 +57,7 @@ def main(argv=None) -> int:
             doc = G.LOOKS
         elif a.verb == "demo":
             doc = {"spec": str(make_demo(Path(a.out)))}
+            doc["story"] = str(Path(doc["spec"]).with_name("story.json"))
         elif a.verb == "elements":
             doc = {k: (v.__doc__ or "").strip() for k, v in ELEMENTS.items()} | {"_see": "filmkit/elements.py: the params of each"}
         elif a.verb == "inspect":

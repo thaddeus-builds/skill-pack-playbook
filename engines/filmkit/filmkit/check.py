@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from . import panel as PN
 from . import spec as S
 from .audio import read_audio, SR
 from .elements import ELEMENTS
@@ -18,7 +19,7 @@ def context(spec: dict, base_dir: Path, q: float = 1.0) -> Ctx:
         pth = Path(a["path"])
         assets[name] = str(pth if pth.is_absolute() else base_dir / pth)
         kinds[name] = a["type"]
-    return Ctx(c["w"], c["h"], q, Fonts(spec.get("fonts"), base_dir), assets, kinds, base_dir)
+    return Ctx(c["w"], c["h"], q, Fonts(spec.get("fonts"), base_dir), assets, kinds, {n: a["fps"] for n, a in (spec.get("assets") or {}).items() if "fps" in a}, base_dir)
 
 
 def safe_box(spec: dict) -> list[float] | None:
@@ -43,8 +44,8 @@ def layout(spec: dict, base_dir: Path, step: float = 0.2) -> list[str]:
     found, seen = [], set()
     t = 0.0
     while t < spec["duration"]:
-        boxes = []
-        for i, el in enumerate(spec.get("overlays", [])):
+        boxes = list(PN.frame_boxes(spec, t))                                         # the picture of a panel shot takes room: type must keep off it
+        for i, el in enumerate(S.all_overlays(spec)):
             if el["t0"] <= t < el["t1"]:
                 for name, x0, y0, x1, y1 in ELEMENTS[el["element"]].boxes(t, el, cx, el):
                     boxes.append((i, name, x0, y0, x1, y1))
@@ -53,6 +54,8 @@ def layout(spec: dict, base_dir: Path, step: float = 0.2) -> list[str]:
                 if (x0 < -1 or y0 < -1 or x1 > c["w"] + 1 or y1 > c["h"] + 1) and (i, name, "canvas") not in seen:
                     seen.add((i, name, "canvas"))
                     found.append(f"t={t:.1f}s: {name[1:]} ({x0:.0f},{y0:.0f})-({x1:.0f},{y1:.0f}) is outside the canvas {c['w']}x{c['h']}")
+                continue
+            if name.startswith("^"):                                                  # room taken, not type: it need not sit in the safe area
                 continue
             if sb and (x0 < sb[0] - 1 or y0 < sb[1] - 1 or x1 > sb[2] + 1 or y1 > sb[3] + 1) and (i, name, "safe") not in seen:
                 seen.add((i, name, "safe"))
@@ -104,7 +107,7 @@ def glyphs(spec: dict, base_dir: Path) -> list[str]:
     """Characters of the type that the face it is set in has no glyph for: the film would show an empty box (a pill emoji, a rare character, a Latin face asked for Chinese)."""
     fonts = Fonts(spec.get("fonts"), base_dir)
     wanted: dict[str, str] = {}
-    for el in spec.get("overlays", []):
+    for el in S.all_overlays(spec):
         cls = ELEMENTS[el["element"]]
         if hasattr(cls, "texts"):
             for role, text in cls.texts(el):

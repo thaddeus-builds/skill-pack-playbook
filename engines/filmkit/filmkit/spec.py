@@ -2,9 +2,10 @@
 spec's own canvas (the design size), the order of `overlays` is their stacking order, and a shot owns the span [start, end] (a transition is centred on the cut that opens a shot).
 
     {"schema": "filmkit.film/1", "id": "...", "canvas": {"w": 1080, "h": 1920, "fps": 30}, "duration": 44.0, "bpm": 90,
-     "assets": {"clip1": {"type": "video", "path": "raw/clip1.mp4"}, "logo": {"type": "image", "path": "logo.png"}},
+     "assets": {"clip1": {"type": "video", "path": "raw/clip1.mp4"}, "logo": {"type": "image", "path": "logo.png"},
+                "matte1": {"type": "frames", "path": "matte/m_%04d.png", "fps": 30}},        # video, image, or frames (a numbered picture sequence)
      "fonts": {"black": "...otf"},                                   # optional: roles black, bold, med, reg, serif
-     "shots": [{"id": "s1", "asset": "clip1", "start": 0, "end": 4, "in": 8.0, "speed": 1.0, "fit": "fill",
+     "shots": [{"id": "s1", "asset": "clip1", "start": 0, "end": 4, "in": 8.0, "speed": 1.0, "fit": "fill",     # fit: fill, card, panel (+ "panel"), split (+ "split"); + "cutout"
                 "camera": {"zoom": [1.3, 1.0], "center": [[0.4, 0.66], [0.5, 0.5]]}, "dim": [0, 0], "blur": 0,
                 "transition": {"type": "dissolve", "dur": 0.4}}, ...],    # the transition is into this shot, so not on the first
      "grade": {"look": "teal_warm_soft", "over": {...}},
@@ -23,7 +24,9 @@ import math
 import re
 from pathlib import Path
 
+from . import cutout as CO
 from . import grade as G
+from . import panel as PN
 from .elements import ELEMENTS
 from .fonts import ROLES as FONT_ROLES
 from .transitions import GHOST_MAX, TYPES
@@ -108,6 +111,24 @@ def _is_file(base_dir: Path, v) -> bool:
         return False
 
 
+FRAMES = re.compile(r"%0?\d*d")
+
+
+def _asset_present(base_dir: Path, a: dict) -> bool:
+    """Whether the file an asset names is there; for `frames`, whether its first numbered picture is."""
+    if a.get("type") == "frames":
+        from .media import frames_first
+        p = Path(a["path"])
+        return frames_first(str(p if p.is_absolute() else base_dir / p)) is not None
+    return _is_file(base_dir, a["path"])
+
+
+def all_overlays(spec: dict) -> list[dict]:
+    """The overlays the film draws: the spec's own, then the type of each panel shot (its title and caption), which lives as long as the shot."""
+    derived = [el for s in spec.get("shots", []) if isinstance(s, dict) for el in PN.overlays(s, spec["canvas"])]
+    return derived + list(spec.get("overlays", []))
+
+
 def _overlay_problems(el: dict, w: str, assets: dict) -> list[str]:
     out: list[str] = []
     for k, (lo, hi) in NUM_PARAMS.items():
@@ -148,6 +169,120 @@ def _overlay_problems(el: dict, w: str, assets: dict) -> list[str]:
     return out
 
 
+FITS = ("fill", "card", "panel", "split")
+
+
+def _rgb(v) -> bool:
+    return isinstance(v, list) and len(v) >= 3 and all(_n(c, 0, 255) for c in v[:3])
+
+
+def _camera_problems(cam, where: str) -> list[str]:
+    if cam is None:
+        return []
+    z = cam.get("zoom") if isinstance(cam, dict) else None
+    c = cam.get("center") if isinstance(cam, dict) else None
+    if not (isinstance(cam, dict) and (z is None or (isinstance(z, list) and len(z) == 2 and all(_n(x, 0.5, 6) for x in z)))
+            and (c is None or (isinstance(c, list) and len(c) == 2 and all(isinstance(p, list) and len(p) == 2 and all(_n(x, 0, 1) for x in p) for p in c)))):
+        return [f"{where}: must be {{zoom: [from, to], center: [[x, y], [x, y]]}}, zoom from 0.5 to 6 and the centre a fraction of the picture"]
+    return []
+
+
+def _panel_problems(s: dict, w: str) -> list[str]:
+    pn = s.get("panel")
+    if s.get("fit") != "panel":
+        return [f"{w}.panel: only a shot with fit: panel has one"] if pn is not None else []
+    if not isinstance(pn, dict):
+        return [f"{w}.panel: a panel shot needs {{bg, title, frame, y, height, caption}}"]
+    out = [f"{w}.panel.{k}: not a panel key (one of {', '.join(sorted(PN.KEYS))})" for k in pn if k not in PN.KEYS]
+    for k in ("title_size", "caption_size"):
+        if k in pn and not _n(pn[k], 1, 2000):
+            out.append(f"{w}.panel.{k}: must be a number from 1 to 2000")
+    for k, lo, hi in (("title_y", -5000, 10000), ("y", 0, 10000), ("height", 20, 10000), ("margin", 0, 5000)):
+        if k in pn and not _n(pn[k], lo, hi):
+            out.append(f"{w}.panel.{k}: must be a number from {lo:g} to {hi:g}")
+    for k in ("bg", "title_fill"):
+        if k in pn and not _rgb(pn[k]):
+            out.append(f"{w}.panel.{k}: must be [r, g, b], each from 0 to 255")
+    for k in ("title_font", "caption_font"):
+        if k in pn and pn[k] not in FONT_ROLES:
+            out.append(f"{w}.panel.{k}: must be one of {', '.join(FONT_ROLES)}")
+    if "title" in pn and not (isinstance(pn["title"], list) and 1 <= len(pn["title"]) <= 3 and all(_line(x) for x in pn["title"])):
+        out.append(f"{w}.panel.title: must be one to three lines of text, each on one line")
+    if "caption" in pn and not _line(pn["caption"]):
+        out.append(f"{w}.panel.caption: must be text on one line")
+    fr = pn.get("frame")
+    if fr is not None and not (isinstance(fr, dict) and set(fr) <= {"width", "color"} and _n(fr.get("width", 10), 0, 100) and _rgb(fr.get("color", [255, 255, 255]))):
+        out.append(f"{w}.panel.frame: must be {{width (0 to 100), color [r, g, b]}}")
+    return out
+
+
+def _split_problems(s: dict, w: str, assets: dict) -> list[str]:
+    sp = s.get("split")
+    if s.get("fit") != "split":
+        return [f"{w}.split: only a shot with fit: split has one"] if sp is not None else []
+    if not isinstance(sp, dict) or not isinstance(sp.get("bottom"), dict) or set(sp) - {"bottom", "at", "seam"}:
+        return [f"{w}.split: a split shot needs {{bottom: {{asset, in, speed, camera}}, at, seam}}: the shot's own asset is the top half"]
+    out = []
+    b = sp["bottom"]
+    if not isinstance(b.get("asset"), str) or b["asset"] not in assets:
+        out.append(f"{w}.split.bottom.asset: {b.get('asset')!r} is not in assets")
+    elif assets[b["asset"]].get("type") == "frames":
+        out.append(f"{w}.split.bottom.asset: a picture sequence is for a matte, not a half")
+    for k in b:
+        if k not in ("asset", "in", "speed", "camera", "dim", "blur"):
+            out.append(f"{w}.split.bottom.{k}: not a key of a half (asset, in, speed, camera, dim, blur)")
+    if "in" in b and not _n(b["in"], 0, 36000):
+        out.append(f"{w}.split.bottom.in: must be a number of seconds from 0")
+    if "speed" in b and not _n(b["speed"], 0.05, 20):
+        out.append(f"{w}.split.bottom.speed: must be a number from 0.05 to 20")
+    out += _camera_problems(b.get("camera"), f"{w}.split.bottom.camera")
+    if "at" in sp and not _n(sp["at"], 0.2, 0.8):
+        out.append(f"{w}.split.at: must be a number from 0.2 to 0.8 (where the seam is, from the top)")
+    sm = sp.get("seam")
+    if sm is not None and not (isinstance(sm, dict) and set(sm) <= {"color", "width"} and _n(sm.get("width", 6), 1, 200) and _rgb(sm.get("color", [255, 255, 255]))):
+        out.append(f"{w}.split.seam: must be {{color [r, g, b], width}}")
+    return out
+
+
+def _cutout_problems(s: dict, w: str, assets: dict) -> list[str]:
+    c = s.get("cutout")
+    if c is None:
+        return []
+    if s.get("fit", "fill") != "fill":
+        return [f"{w}.cutout: only a fit: fill shot can carry a cutout"]
+    if not isinstance(c, dict) or set(c) - CO.KEYS:
+        return [f"{w}.cutout: must be {{matte, outline, bg}}"]
+    out = []
+    if c.get("matte") not in assets:
+        out.append(f"{w}.cutout.matte: {c.get('matte')!r} is not in assets (a matte is an asset: filmkit makes none)")
+    elif c["matte"] == s.get("asset"):
+        out.append(f"{w}.cutout.matte: the matte cannot be the shot's own clip")
+    ol = c.get("outline", {})
+    if ol is not False:
+        if not isinstance(ol, dict) or set(ol) - CO.OUTLINE_KEYS:
+            out.append(f"{w}.cutout.outline: must be false or {{{', '.join(sorted(CO.OUTLINE_KEYS))}}}")
+        else:
+            if "color" in ol and not _rgb(ol["color"]):
+                out.append(f"{w}.cutout.outline.color: must be [r, g, b], each from 0 to 255")
+            for k, lo, hi in (("width", 1, 60), ("speed", -3000, 3000), ("offset", -60, 60)):
+                if k in ol and not _n(ol[k], lo, hi):
+                    out.append(f"{w}.cutout.outline.{k}: must be a number from {lo:g} to {hi:g}")
+            if "dash" in ol and not (isinstance(ol["dash"], list) and len(ol["dash"]) == 2 and all(_n(x, 1, 1000) for x in ol["dash"])):
+                out.append(f"{w}.cutout.outline.dash: must be [on, off], pixels from 1 to 1000")
+    bg = c.get("bg", {})
+    if not isinstance(bg, dict) or set(bg) - CO.BG_KEYS:
+        out.append(f"{w}.cutout.bg: must be {{{', '.join(sorted(CO.BG_KEYS))}}}")
+    else:
+        for k, lo, hi in (("zoom", 1, 6), ("blur", 0, 200), ("tint_mix", 0, 1)):
+            if k in bg and not _n(bg[k], lo, hi):
+                out.append(f"{w}.cutout.bg.{k}: must be a number from {lo:g} to {hi:g}")
+        if bg.get("tint") is not None and not _rgb(bg["tint"]):
+            out.append(f"{w}.cutout.bg.tint: must be [r, g, b], each from 0 to 255")
+        if bg.get("posterize") is not None and not (isinstance(bg["posterize"], int) and not isinstance(bg["posterize"], bool) and 2 <= bg["posterize"] <= 64):
+            out.append(f"{w}.cutout.bg.posterize: must be a whole number of levels from 2 to 64")
+    return out
+
+
 def _shot_problems(s, i: int, shots: list, assets: dict, prev_end: float, ids: set) -> tuple[list[str], float | None]:
     w = f"shots[{i}]"
     out: list[str] = []
@@ -164,8 +299,8 @@ def _shot_problems(s, i: int, shots: list, assets: dict, prev_end: float, ids: s
         return out + [f"{w}: start and end must be numbers with start before end"], None
     if abs(s["start"] - prev_end) > 1e-3:
         out.append(f"{w}.start: {s['start']} leaves a gap or an overlap after the last shot ({prev_end}); shots must follow one another")
-    if s.get("fit", "fill") not in ("fill", "card"):
-        out.append(f"{w}.fit: must be fill or card")
+    if s.get("fit", "fill") not in FITS:
+        out.append(f"{w}.fit: must be one of {', '.join(FITS)}")
     if "speed" in s and not _n(s["speed"], 0.05, 20):
         out.append(f"{w}.speed: must be a number from 0.05 to 20")
     if "in" in s and not _n(s["in"], 0, 36000):
@@ -176,13 +311,10 @@ def _shot_problems(s, i: int, shots: list, assets: dict, prev_end: float, ids: s
         out.append(f"{w}.dim: must be [from, to], each from 0 to 1")
     if "card" in s and not (isinstance(s["card"], dict) and all(_n(v, 0.05, 1.0) for v in s["card"].values()) and set(s["card"]) <= {"width", "y"}):
         out.append(f"{w}.card: must be {{width, y}}, each from 0.05 to 1")
-    cam = s.get("camera")
-    if cam is not None:
-        z = cam.get("zoom") if isinstance(cam, dict) else None
-        c = cam.get("center") if isinstance(cam, dict) else None
-        if not (isinstance(cam, dict) and (z is None or (isinstance(z, list) and len(z) == 2 and all(_n(x, 0.5, 6) for x in z)))
-                and (c is None or (isinstance(c, list) and len(c) == 2 and all(isinstance(p, list) and len(p) == 2 and all(_n(x, 0, 1) for x in p) for p in c)))):
-            out.append(f"{w}.camera: must be {{zoom: [from, to], center: [[x, y], [x, y]]}}, zoom from 0.5 to 6 and the centre a fraction of the picture")
+    out += _camera_problems(s.get("camera"), f"{w}.camera")
+    out += _panel_problems(s, w)
+    out += _split_problems(s, w, assets)
+    out += _cutout_problems(s, w, assets)
     t = s.get("transition")
     if t is not None:
         if i == 0:
@@ -214,6 +346,8 @@ def _media_problems(spec: dict, base_dir: Path) -> list[str]:
             continue
         p = Path(a["path"])
         p = p if p.is_absolute() else base_dir / p
+        if a["type"] == "frames":
+            continue                                                         # looked at below, with the matte it serves
         if a["type"] == "image":
             try:
                 with Image.open(p) as im:
@@ -232,6 +366,54 @@ def _media_problems(spec: dict, base_dir: Path) -> list[str]:
         meta = info.get(s.get("asset"))
         if meta and meta["w"] and meta["duration"] and s.get("in", 0) >= meta["duration"] - 0.05:
             out.append(f"shots[{i}].in: {s['in']} is at or after the end of the clip ({meta['duration']:.2f} s): the shot would be black")
+        b = (s.get("split") or {}).get("bottom") if isinstance(s.get("split"), dict) else None
+        bmeta = info.get(b.get("asset")) if isinstance(b, dict) else None
+        if bmeta and bmeta["w"] and bmeta["duration"] and b.get("in", 0) >= bmeta["duration"] - 0.05:
+            out.append(f"shots[{i}].split.bottom.in: {b['in']} is at or after the end of its clip ({bmeta['duration']:.2f} s): the half would be black")
+        out += _matte_problems(spec, i, s, base_dir, info)
+    return out
+
+
+def _matte_problems(spec: dict, i: int, s: dict, base_dir: Path, info: dict) -> list[str]:
+    """A matte is as big as the clip it cuts out and as long: a different size is stretched to fit (the outline would sit off the subject), a shorter one holds its last frame."""
+    from PIL import Image
+    c = s.get("cutout")
+    if not isinstance(c, dict) or c.get("matte") not in spec["assets"]:
+        return []
+    ma, clip = spec["assets"][c["matte"]], spec["assets"].get(s.get("asset"), {})
+    w = f"shots[{i}].cutout.matte"
+    p = Path(ma["path"])
+    p = p if p.is_absolute() else base_dir / p
+    size = None
+    if ma["type"] == "frames":
+        from .media import frames_first
+        n = frames_first(str(p))
+        try:
+            with Image.open(str(p) % n) as im:
+                size = im.size
+        except Exception as e:  # noqa: BLE001
+            return [f"{w}: the first picture of {ma['path']!r} cannot be opened ({type(e).__name__})"]
+    elif ma["type"] == "image" and p.is_file():
+        try:
+            with Image.open(p) as im:
+                size = im.size
+        except Exception:  # noqa: BLE001
+            return []
+    elif c["matte"] in info:
+        size = (info[c["matte"]]["w"], info[c["matte"]]["h"])
+    out = []
+    ref = info.get(s.get("asset"))
+    if clip.get("type") == "image" and clip.get("path") and _is_file(base_dir, clip["path"]):
+        try:
+            with Image.open(Path(clip["path"]) if Path(clip["path"]).is_absolute() else base_dir / clip["path"]) as im:
+                ref = {"w": im.width, "h": im.height, "duration": 0}
+        except Exception:  # noqa: BLE001
+            ref = None
+    if size and ref and ref.get("w") and tuple(size) != (ref["w"], ref["h"]):
+        out.append(f"{w}: the matte is {size[0]}x{size[1]} and the clip {ref['w']}x{ref['h']}: they must be the same size")
+    mm = info.get(c["matte"])
+    if mm and ref and mm["duration"] and ref.get("duration") and mm["duration"] < ref["duration"] - 0.1:
+        out.append(f"{w}: the matte runs {mm['duration']:.2f} s and the clip {ref['duration']:.2f} s: they must have the same frames")
     return out
 
 
@@ -270,12 +452,16 @@ def _problems(spec, base_dir: Path | None) -> list[str]:
         if not isinstance(a, dict):
             out.append(f"assets.{name}: must be an object {{type, path}}")
             continue
-        if a.get("type") not in ("video", "image"):
-            out.append(f"assets.{name}.type: must be video or image")
+        if a.get("type") not in ("video", "image", "frames"):
+            out.append(f"assets.{name}.type: must be video, image or frames")
         if not isinstance(a.get("path"), str) or not a["path"]:
             out.append(f"assets.{name}.path: must be a file name")
-        elif base_dir is not None and not _is_file(base_dir, a["path"]):
+        elif a.get("type") == "frames" and not FRAMES.search(a["path"]):
+            out.append(f"assets.{name}.path: a frames asset is a numbered pattern such as matte/m_%04d.png")
+        elif base_dir is not None and not _asset_present(base_dir, a):
             out.append(f"assets.{name}.path: {a['path']!r} is not a file")
+        if "fps" in a and not (a.get("type") == "frames" and _n(a["fps"], 1, 240)):
+            out.append(f"assets.{name}.fps: only a frames asset has one, a number from 1 to 240")
     if base_dir is not None and isinstance(spec.get("fonts"), dict):
         for role, f in spec["fonts"].items():
             if role not in FONT_ROLES:
