@@ -127,6 +127,7 @@ exit 0
 # Writes the env it got and each argument on its own line (overwriting).
 FAKE_UV_ARGV = """#!/bin/sh
 { echo "DATA=$SHOP_DATA_DIR"; echo "CACHE=$PYTHONPYCACHEPREFIX"; for a in "$@"; do echo "ARG=$a"; done; } > "$FAKE_UV_LOG"
+echo "${SHOP_RUNTIME-unset}" > "$FAKE_UV_LOG.runtime"
 [ -n "$FAKE_UV_SIGNAL" ] && kill -"$FAKE_UV_SIGNAL" $$
 exit "${FAKE_UV_EXIT:-0}"
 """
