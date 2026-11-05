@@ -9,7 +9,8 @@
 
 For each skill pack it reads the kit (<scripts_dir>/kit/), the console
 (console/) and the Zylos adapter (zylos/), whichever it holds, and compares
-each file with the playbook's current copy (kit/, console/, hosts/zylos/):
+each file with the playbook's current copy (kit/, console/, hosts/zylos/; the
+files a pack lists as its own in zylos/manifest.json `own_files` are left out):
 
   * same: equal to the playbook's current file;
   * older: equal to an earlier version of the playbook's file, found in the
@@ -110,6 +111,18 @@ ZYLOS_NOT_COPIED = {"ecosystem.config.cjs.template", "manifest.example.json", "f
 ZYLOS_OWN = {"manifest.json"}
 
 
+def zylos_own_files(dest: Path, src: Path) -> set[str]:
+    """The skill pack's own files beside the adapter (its zylos/manifest.json `own_files`, hosts/zylos 0.7.3): left out of the comparison, so a pack
+    with its own files there can read `in sync`. A listed path the playbook's folder has is still compared (`lib.js check` refuses such a list)."""
+    try:
+        listed = json.loads((dest / "manifest.json").read_text("utf-8")).get("own_files", [])
+    except (OSError, ValueError, AttributeError):
+        return set()
+    if not isinstance(listed, list):
+        return set()
+    return {f for f in listed if isinstance(f, str) and f} - set(files(src))
+
+
 def files(root: Path, skip: set[str] = frozenset()) -> list[str]:
     """Relative paths under `root`, as vendor.py copies them."""
     if not root.is_dir():
@@ -195,7 +208,7 @@ def parts(skill_pack: Path, playbook: Path) -> list[dict]:
          "dest": skill_pack / "console", "version_file": "kit/VERSION", "skip": set()},
         {"label": "zylos", "src": playbook / "hosts" / "zylos", "src_rel": "hosts/zylos",
          "dest": skill_pack / "zylos", "version_file": "hosts/zylos/VERSION",
-         "skip": ZYLOS_NOT_COPIED | ZYLOS_OWN},
+         "skip": ZYLOS_NOT_COPIED | ZYLOS_OWN | zylos_own_files(skill_pack / "zylos", playbook / "hosts" / "zylos")},
     )]
 
 

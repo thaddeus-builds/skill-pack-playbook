@@ -55,6 +55,7 @@ const RE = {
   marker: /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$/,     // e.g. ACME-EXIT; safe unquoted in sh and prose
   cron: /^\S+(\s+\S+){4}$/,
   host: /^[A-Za-z0-9.-]+(:\d{1,5})?$/,
+  routePath: /^\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/,   // <base_path>/<one segment>
 };
 
 // Prompt placeholders: resolved at install, paths shell-quoted.
@@ -63,6 +64,17 @@ const TOKEN = /\{([a-z_]+)(?::([^{}\s]*))?\}/g;
 // Flags console.js sets itself; the manifest's console.args may not.
 const CONSOLE_OWNED = ['--dir', '--host', '--port', '--user', '--user-header', '--relay-cmd', '--title'];
 const NOT_ALIASES = ['uv', 'node', 'sh', 'python', 'python3'];
+// The files of this adapter inside <skill-pack>/zylos/ (README.md "What a skill pack copies"), the two
+// templates a pack may have copied too, and the one file the pack writes there. Anything else in zylos/
+// is the pack's own and is listed in the manifest's own_files (0.7.3).
+const ADAPTER_FILES = ['lib.js', 'Caddyfile.snippet', 'README.md', 'VERSION',
+  ...HOOK_NAMES.map((h) => `hooks/${h}.js`), ...['cli', 'detach', 'console', 'login'].map((b) => `bin/${b}.js`)];
+const ADAPTER_TEMPLATES = ['manifest.example.json', 'ecosystem.config.cjs.template'];
+// The first path segments under console.base_path that are already taken: the login service's
+// (/login, /logout, /setup) and the console's own pages and posts (console/serve.py PAGES, POSTS,
+// FILES and the page-<name> tabs). A console.routes path may not be one of them.
+const CONSOLE_PATHS = ['login', 'logout', 'setup', 'static', 'history', 'poll', 'answer', 'reopen', 'note', 'act'];
+const CONSOLE_PAGE_PREFIX = 'page-';
 // A config key whose name says it holds a secret must be `sensitive: true`.
 const SECRET_KEY = /SECRET|TOKEN|PASSWORD|ACCESS_KEY|API_KEY|PRIVATE_KEY/;
 // A gate secret (the kit's kit/env.py is_gate_secret): the skill pack never loads
@@ -129,7 +141,7 @@ function validate(m) {
   const word = (v, key) => str(v, key, text, 'a non-empty string');
 
   shape(m, '', ['name', 'min_zylos', 'cli', 'env', 'runtime', 'endpoints', 'scope', 'reply',
-                'console', 'detach', 'tasks'], ['defaults']);
+                'console', 'detach', 'tasks'], ['defaults', 'own_files']);
   str(m.name, 'name', re(RE.name), 'the component name = SKILL.md name (a-z, 0-9, -)');
   str(m.min_zylos, 'min_zylos', re(RE.semver), 'a zylos-core version X.Y.Z');
 
@@ -182,7 +194,7 @@ function validate(m) {
 
   const C = m.console;
   shape(C, 'console', ['entry', 'port', 'port_key', 'title_key', 'base_path', 'user_header', 'users_file', 'args'],
-        ['allow_host_key']);
+        ['allow_host_key', 'routes']);
   str(C.entry, 'console.entry', relPath, 'a path inside the skill dir, e.g. console/serve.py');
   int(C.port, 'console.port', 1024, 65535);
   envName(C.port_key, 'console.port_key');
@@ -196,6 +208,38 @@ function validate(m) {
     if (owned) fail(key, `${owned} is set by zylos/bin/console.js, not console.args`);
   });
   if ('allow_host_key' in C) envName(C.allow_host_key, 'console.allow_host_key');
+  if ('routes' in C) {
+    // More upstreams of the skill pack's own, each at a path one segment under base_path, written by
+    // lib.js into the same block behind the same login (0.7.3): `zylos uninstall` removes them with it.
+    const paths = new Set();
+    const ports = new Map([[C.port, 'console.port']]);
+    const keys = new Map([[C.port_key, 'console.port_key']]);
+    list(C.routes, 'console.routes', (r, key) => {
+      shape(r, key, ['path'], ['port', 'port_key', 'socket']);
+      str(r.path, `${key}.path`, (p) => RE.routePath.test(p) && p.startsWith(`${C.base_path}/`),
+          `a path one segment under console.base_path, e.g. ${C.base_path}/ops (a-z, 0-9, -)`);
+      const seg = r.path.slice(C.base_path.length + 1);
+      if (CONSOLE_PATHS.includes(seg) || seg.startsWith(CONSOLE_PAGE_PREFIX)) {
+        fail(`${key}.path`, `${r.path} is a path of the console at ${C.base_path} or of its login (taken: `
+             + `${CONSOLE_PATHS.map((x) => `/${x}`).join(', ')}, /${CONSOLE_PAGE_PREFIX}<tab>)`);
+      }
+      if (paths.has(r.path)) fail(`${key}.path`, `${r.path} is used twice`);
+      paths.add(r.path);
+      if (('port' in r) === ('socket' in r)) fail(key, 'needs exactly one upstream: port (with an optional port_key) or socket');
+      if ('port' in r) {
+        int(r.port, `${key}.port`, 1024, 65535);
+        if (ports.has(r.port)) fail(`${key}.port`, `${r.port} is also ${ports.get(r.port)}`);
+        ports.set(r.port, `${key}.port`);
+      }
+      if ('port_key' in r) {
+        if (!('port' in r)) fail(`${key}.port_key`, 'overrides port, so it needs one');
+        envName(r.port_key, `${key}.port_key`);
+        if (keys.has(r.port_key)) fail(`${key}.port_key`, `${r.port_key} is also ${keys.get(r.port_key)}`);
+        keys.set(r.port_key, `${key}.port_key`);
+      }
+      if ('socket' in r) str(r.socket, `${key}.socket`, relPath, 'a unix socket path inside the data dir, e.g. ops/ops.sock');
+    });
+  }
 
   shape(m.detach, 'detach', ['exit_marker', 'alias']);
   str(m.detach.exit_marker, 'detach.exit_marker', re(RE.marker), 'an upper-case marker such as ACME-EXIT');
@@ -217,6 +261,20 @@ function validate(m) {
       fail(`${key}.prompt`, `unknown placeholder ${bad.join(', ')} (known: ${PLACEHOLDERS.map((p) => `{${p}}`).join(', ')})`);
     }
   });
+
+  if ('own_files' in m) {
+    // The skill pack's own files beside the adapter in zylos/ (0.7.3): `check` refuses any other file
+    // there, and tools/fleet.py compares only the adapter's.
+    const own = new Set();
+    list(m.own_files, 'own_files', (v, key) => {
+      str(v, key, relPath, 'a file path inside zylos/, e.g. ops.js or bin/ops.js');
+      if ([...ADAPTER_FILES, ...ADAPTER_TEMPLATES, 'manifest.json'].includes(v)) {
+        fail(key, `${v} is a file of the adapter, copied as it is and never the skill pack's own`);
+      }
+      if (own.has(v)) fail(key, `${v} is listed twice`);
+      own.add(v);
+    });
+  }
 
   if ('defaults' in m) {
     if (!isObj(m.defaults)) fail('defaults', 'must be a JSON object {KEY: {value, when}}');
@@ -327,6 +385,9 @@ const LOGIN_JS = path.join(ADAPTER_DIR, 'bin', 'login.js');
 const CADDYFILE = path.join(ZYLOS_DIR, 'http', 'Caddyfile');
 const CADDY_MARKER = `# BEGIN zylos-component:${NAME}`;
 const CADDY_SNIPPET = path.join(ADAPTER_DIR, 'Caddyfile.snippet');
+// The skill pack's own upstreams in the console's block (manifest console.routes), with the path
+// segment under base_path that the block's handle_path strips.
+const ROUTES = (M.console.routes || []).map((r) => ({ ...r, segment: r.path.slice(M.console.base_path.length + 1) }));
 
 // --- output, budget, quoting ------------------------------------------------------
 
@@ -901,16 +962,33 @@ function caddyBlockInFile(lines) {
 
 // A block from before the form login (0.5.0) still asks the browser's basic_auth pop-up and imports
 // a bcrypt list this adapter no longer writes; one from 0.5.x does not route /setup (the one-time
-// password link, 0.6.0), so the link would reach the console and be refused there.
+// password link, 0.6.0), so the link would reach the console and be refused there; one without a
+// route of console.routes (0.7.3), or with another upstream than the host configures now, has lost the
+// skill pack's own upstream (an earlier rewrite, a block made before the route was in the manifest, a
+// port_key changed since). Why the block is outdated, or '' when it is not.
 const usesBasicAuth = (text) => /^\s*basic_auth\b/m.test(text);
-const outdatedBlock = (text) => usesBasicAuth(text)
-  || !text.split('\n').some((l) => /^\s*@login\b/.test(l) && /(^|\s)\/setup(\s|$)/.test(l));
+function outdatedWhy(text) {
+  const lines = text.split('\n').map((l) => l.trim());
+  if (usesBasicAuth(text)) return 'still uses basic_auth, which this release no longer serves';
+  if (!lines.some((l) => /^@login\b/.test(l) && /(^|\s)\/setup(\s|$)/.test(l))) {
+    return 'does not route /setup (the one-time password link)';
+  }
+  // a route counts only with its upstream as this host configures it now (a changed port_key, a moved socket)
+  const want = routeLines()['<ROUTES>'].map((l) => l.trim());
+  const lost = ROUTES.filter((r, n) => {
+    const at = lines.indexOf(want[n * 5]);
+    return at < 0 || lines[at + 1] !== want[n * 5 + 1];
+  });
+  return lost.length ? `lacks the route${lost.length > 1 ? 's' : ''} ${lost.map((r) => r.path).join(', ')} `
+    + 'as the manifest and this host configure it (console.routes)' : '';
+}
 
+// Why the block in the Caddyfile is outdated, or '' (also when there is none or no Caddyfile).
 function caddyBlockOutdated() {
   try {
     const b = caddyBlockInFile(fs.readFileSync(CADDYFILE, 'utf8').split('\n'));
-    return Boolean(b && outdatedBlock(b.text));
-  } catch { return false; }
+    return b ? outdatedWhy(b.text) : '';
+  } catch { return ''; }
 }
 
 // pre-uninstall: `zylos uninstall` removes the BEGIN/END block, and with it the
@@ -967,7 +1045,8 @@ function restoreCaddyBlock() {
   // would import logins it can no longer read. The block this adapter prints takes its
   // place (the host's own edits to the old one are in the saved copy / Caddyfile.before-<name>).
   const saved = outdated ? null : fs.readFileSync(CADDY_SAVED, 'utf8');
-  const fresh = !saved || outdatedBlock(saved);
+  const why = outdated || (saved ? outdatedWhy(saved) : '');
+  const fresh = !saved || why !== '';
   const text = fresh ? caddyBlock() : saved;
   let next;
   if (outdated) {
@@ -997,7 +1076,7 @@ function restoreCaddyBlock() {
       fs.copyFileSync(before, CADDYFILE);
       return { skip: `pm2 reload caddy failed (${tail(r, 3)}); the old Caddyfile is back` };
     }
-    return { done: before, how: outdated ? 'replaced' : fresh ? 'rebuilt' : 'restored' };
+    return { done: before, how: outdated ? 'replaced' : fresh ? 'rebuilt' : 'restored', why };
   } catch (e) {
     return { skip: `could not edit ${CADDYFILE} (${e.code || e.message})` };
   } finally {
@@ -1005,14 +1084,40 @@ function restoreCaddyBlock() {
   }
 }
 
+// A configured port (digits only), else the manifest's default.
+const portOf = (key, dflt) => {
+  const raw = key ? envValue(key) : '';
+  return /^\d+$/.test(raw) ? raw : String(dflt);
+};
+
+// The skill pack's own upstreams (manifest console.routes) as the block writes them: one redir to
+// the trailing slash each, and one handle_path each inside the console's handle_path, after
+// forward_auth: the same login guards them, the visitor's user header was dropped before it, the
+// session cookie is not passed on, and `zylos uninstall` removes them with the block.
+function routeLines() {
+  const redirs = ROUTES.map((r) => `redir ${r.path} ${r.path}/ permanent`);
+  const handles = ROUTES.flatMap((r) => [
+    `handle_path /${r.segment}/* {`,
+    `    reverse_proxy ${r.socket ? `unix/${path.join(DATA_DIR, r.socket)}` : `127.0.0.1:${portOf(r.port_key, r.port)}`} {`,
+    '        header_up -Cookie',
+    '    }',
+    '}',
+  ]);
+  return { '<ROUTE_REDIRS>': redirs, '<ROUTES>': handles };
+}
+
 // Caddyfile.snippet with this host's values filled in.
 function caddyBlock() {
-  const raw = envValue(M.console.port_key);
-  const port = /^\d+$/.test(raw) ? raw : String(M.console.port);
-  const values = { '<NAME>': NAME, '<BASE_PATH>': M.console.base_path, '<PORT>': port,
+  const values = { '<NAME>': NAME, '<BASE_PATH>': M.console.base_path, '<PORT>': portOf(M.console.port_key, M.console.port),
                    '<USERS_FILE>': USERS_FILE, '<USER_HEADER>': M.console.user_header, '<AUTH_SOCK>': AUTH_SOCK };
+  const routes = routeLines();
   return fs.readFileSync(CADDY_SNIPPET, 'utf8')
-    .split('\n').filter((l) => !l.startsWith('##')).join('\n')
+    .split('\n').filter((l) => !l.startsWith('##'))
+    .flatMap((l) => {
+      const slot = routes[l.trim()];
+      return slot ? slot.map((x) => /^\s*/.exec(l)[0] + x) : [l];
+    })
+    .join('\n')
     .replace(/<[A-Z_]+>/g, (k) => values[k] ?? k).trimStart();
 }
 
@@ -1025,19 +1130,86 @@ function frontmatterLines(text) {
   return m ? m[1].split(/\r?\n/) : null;
 }
 
-// A scalar's value: one pair of outer quotes removed, else a trailing
-// ` # comment` dropped.
+// A whole quoted scalar, with an optional ` # comment` after it (the quotes as YAML closes them).
+const QUOTED = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')(\s+#.*)?$/;
+
+// A scalar's value: one pair of outer quotes removed (a comment after them dropped), else a
+// trailing ` # comment` dropped.
 const unquote = (s) => {
   const v = s.trim();
+  const q = QUOTED.exec(v);
+  if (q) return q[1].slice(1, -1);
   if (v.length >= 2 && `'"`.includes(v[0]) && v.at(-1) === v[0]) return v.slice(1, -1);
   return v.replace(/\s+#.*$/, '');
 };
+
+// What YAML itself refuses or reads otherwise in the frontmatter, line by line (0.7.3). The checks
+// below read it line by line, as hooks cannot parse YAML (stdlib only), so a value YAML refuses
+// passes them, and zylos-core, which does parse it, then installs the component under the folder's
+// name (seen once: a skill pack kept this check in its own zylos/ code; moved here 2026-11-05). Refused: a tab in the indent; a
+// key twice in one mapping; a plain value with `: ` in it, which YAML refuses (a trailing ` # comment`
+// is fine: YAML and unquote drop it alike); a plain value's next line with `: ` or ` #` in it (YAML
+// refuses the one and ends the value at the other, where topValue would read on); a value that opens a
+// quote it does not close on its line; a plain value that starts with a character YAML reserves. A
+// block scalar's lines (`>`, `|`) are text. Each problem names its line of SKILL.md.
+const RESERVED_START = /^[,\]}#&*!%@`]|^[-?:](\s|$)/;
+function frontmatterYamlProblems(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?(\n|$)/.exec(text);
+  if (!m) return [];
+  const p = [];
+  const frames = [{ indent: -1, keys: new Set() }];   // the mappings open at this line, innermost last
+  let block = null;                                    // the key indent of a block scalar being read
+  let plain = null;                                    // the key indent of a plain value that may go on
+  m[1].split(/\r?\n/).forEach((line, i) => {
+    const at = `SKILL.md:${i + 2}`;
+    const indent = /^ */.exec(line)[0].length;
+    if (block !== null) {
+      if (!line.trim() || indent > block) return;
+      block = null;
+    }
+    if (/^ *\t/.test(line)) p.push(`${at}: a tab in the indent (YAML indents with spaces)`);
+    if (!line.trim() || line.trim().startsWith('#')) return;
+    if (plain !== null && indent > plain) {
+      if (/(:\s|:$|\s#)/.test(line.trim())) {
+        p.push(`${at}: this line goes on with the plain value above and has ": " or " #" in it, which YAML refuses or cuts short: put the value in quotes`);
+      }
+      return;
+    }
+    plain = null;
+    const kv = /^( *)(-\s+)?([A-Za-z0-9_.-]+):(?:\s+(.*?))?\s*$/.exec(line);
+    if (!kv) return;
+    const keyIndent = kv[1].length + (kv[2] ? kv[2].length : 0);
+    if (kv[2]) {                                       // `- key: …` opens a new mapping, an item of a list
+      while (frames.at(-1).indent >= keyIndent) frames.pop();
+      frames.push({ indent: keyIndent, keys: new Set() });
+    } else {
+      while (frames.at(-1).indent > keyIndent) frames.pop();
+      if (frames.at(-1).indent < keyIndent) frames.push({ indent: keyIndent, keys: new Set() });
+    }
+    const keys = frames.at(-1).keys;
+    if (keys.has(kv[3])) p.push(`${at}: ${kv[3]} is a key a second time in the same mapping (YAML refuses a duplicate key)`);
+    keys.add(kv[3]);
+    const v = kv[4] || '';
+    if (!v || v.startsWith('#')) return;              // a parent key (a comment after it is fine)
+    if (/^[>|][+-]?\d?(\s+#.*)?$/.test(v)) { block = keyIndent; return; }
+    if (QUOTED.test(v)) return;
+    if (/^["']/.test(v)) { p.push(`${at}: ${kv[3]} opens a quote it does not close at the end of the value`); return; }
+    if (/^[[{]/.test(v)) return;                      // a flow list or mapping
+    plain = keyIndent;
+    if (RESERVED_START.test(v)) {
+      p.push(`${at}: ${kv[3]} is a plain value that starts with ${JSON.stringify(v.slice(0, 2).trim())}, which YAML reserves or reads as something else: put it in quotes`);
+    } else if (/(:\s|:$)/.test(v.replace(/\s+#.*$/, ''))) {          // a trailing ` # comment` is YAML's and ours alike (unquote)
+      p.push(`${at}: ${kv[3]} is a plain value with ": " in it, which YAML refuses: put it in quotes`);
+    }
+  });
+  return p;
+}
 
 // The block under a top-level key: {key: value} of its lines, one level deep,
 // plus nested blocks as "parent.child".
 function yamlBlock(lines, top) {
   const out = {};
-  const i = lines.findIndex((l) => new RegExp(`^${top}:\\s*$`).test(l));
+  const i = lines.findIndex((l) => new RegExp(`^${top}:\\s*(#.*)?$`).test(l));   // a comment after a parent key is fine
   if (i < 0) return null;
   const stack = [];
   for (const l of lines.slice(i + 1)) {
@@ -1048,7 +1220,7 @@ function yamlBlock(lines, top) {
     const depth = m[1].length;
     while (stack.length && stack.at(-1).depth >= depth) stack.pop();
     const key = [...stack.map((s) => s.key), m[2]].join('.');
-    if (m[3].trim() === '') stack.push({ depth, key: m[2] });
+    if (m[3].trim() === '' || m[3].trim().startsWith('#')) stack.push({ depth, key: m[2] });
     else out[key] = unquote(m[3]);
   }
   return out;
@@ -1072,7 +1244,7 @@ function topValue(lines, key) {
 // config.required / config.optional items: [{name, sensitive, default}].
 // Keys in any order: an item starts at `- key: value`.
 function configItems(lines) {
-  const i = lines.findIndex((l) => /^config:\s*$/.test(l));
+  const i = lines.findIndex((l) => /^config:\s*(#.*)?$/.test(l));
   if (i < 0) return [];
   const items = [];
   for (const l of lines.slice(i + 1)) {
@@ -1088,7 +1260,7 @@ function configItems(lines) {
 function skillProblems(text) {
   const lines = frontmatterLines(text);
   if (!lines) return ['SKILL.md has no --- frontmatter block'];
-  const p = [];
+  const p = [...frontmatterYamlProblems(text)];
   const want = (cond, msg) => { if (!cond) p.push(msg); };
   want(topValue(lines, 'name') === NAME, `SKILL.md name must be ${NAME} (manifest name)`);
   want(RE.semver.test(topValue(lines, 'version') || ''), 'SKILL.md version must be plain X.Y.Z (the release tag vX.Y.Z)');
@@ -1115,7 +1287,7 @@ function skillProblems(text) {
   const names = new Set(items.map((i) => i.name));
   const C = M.console;
   const adapterKeys = [M.reply.channel, M.reply.endpoint, C.port_key, C.title_key,
-                       C.allow_host_key, ...M.tasks.flatMap((t) => t.requires),
+                       C.allow_host_key, ...ROUTES.map((r) => r.port_key), ...M.tasks.flatMap((t) => t.requires),
                        ...Object.keys(M.defaults || {}).filter((k) => k !== '_comment')].filter(Boolean);
   for (const k of new Set(adapterKeys)) want(names.has(k), `SKILL.md config must declare ${k} (read by zylos/)`);
   for (const i of items) {
@@ -1124,6 +1296,33 @@ function skillProblems(text) {
          `SKILL.md config ${i.name} looks secret: mark it sensitive: true`);
     const d = M.defaults && M.defaults[i.name];
     if (d) want(i.default === d.value, `SKILL.md config ${i.name} default must be ${d.value} (manifest defaults)`);
+  }
+  return p;
+}
+
+// Every file in zylos/ is the adapter's (a copy nobody edits) or listed in own_files (the skill
+// pack's own), and every listed one is there (0.7.3).
+function adapterDirFiles(rel = '') {
+  let out = [];
+  let entries = [];
+  try { entries = fs.readdirSync(path.join(ADAPTER_DIR, rel), { withFileTypes: true }); } catch { return out; }
+  for (const d of entries) {
+    const r = rel ? `${rel}/${d.name}` : d.name;
+    if (d.isDirectory()) out = out.concat(adapterDirFiles(r));
+    else if (d.name !== '.DS_Store') out.push(r);
+  }
+  return out;
+}
+
+function ownFileProblems() {
+  const own = M.own_files || [];
+  const known = new Set([...ADAPTER_FILES, ...ADAPTER_TEMPLATES, 'manifest.json', ...own]);
+  const p = adapterDirFiles().filter((f) => !known.has(f)).sort()
+    .map((f) => `zylos/${f} is neither a file of the adapter nor listed in manifest own_files (list it there if it is the skill pack's own)`);
+  for (const f of own) {
+    let isFile = false;
+    try { isFile = fs.statSync(path.join(ADAPTER_DIR, f)).isFile(); } catch { /* missing */ }
+    if (!isFile) p.push(`zylos/${f} is listed in manifest own_files but is not a file there`);
   }
   return p;
 }
@@ -1151,6 +1350,7 @@ function checkProblems() {
   } else if (pin !== PYTHON_VERSION) {
     p.push(`.python-version says ${JSON.stringify(pin)} but manifest runtime.python is ${PYTHON_VERSION}: make them the same version`);
   }
+  p.push(...ownFileProblems());
   let skill = null;
   try { skill = fs.readFileSync(path.join(SKILL_DIR, 'SKILL.md'), 'utf8'); } catch { p.push('SKILL.md is missing'); }
   if (skill !== null) p.push(...skillProblems(skill));
@@ -1246,7 +1446,7 @@ module.exports = {
   reconcileTask, reconcileAll, removeAllTasks,
   procStart, pidAlive, readJob, jobAlive, stopJobs,
   allowHosts, isLoopbackHost, publicHost, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockAbsent, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock, caddyBlockOutdated, staleLogins, AUTH_SOCK, SESSION_KEY, SETUP_FILE, LOGIN_JS,
-  skillProblems, checkProblems,
+  skillProblems, checkProblems, frontmatterYamlProblems, ownFileProblems, ADAPTER_FILES, ADAPTER_TEMPLATES, CONSOLE_PATHS, ROUTES,
 };
 
 if (require.main === module) {
