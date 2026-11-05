@@ -100,7 +100,8 @@ class Dispatcher:
     """`Dispatcher(verbs, *, scripts_dir, epilog, doctor_checks)` per the
     SPEC; `spec` (the skill pack's SchemaSpec: doctor checks the DB's shape),
     `platform_lock` (doctor's hook), `description` and `runner` are additions,
-    and so is `doctor_flags(parser)`, which adds the skill pack's own options to
+    and so are `doctor_replace` ({built-in check name: check}, kit.doctor,
+    "replace") and `doctor_flags(parser)`, which adds the skill pack's own options to
     `<cli> doctor` (kit.doctor, "flags"). `runner` is `"uv"` or `"auto"`
     (kit.runner.RUNNERS) and stands in for the KIT_RUNNER value of every script
     it starts; None, the default, leaves that to the environment. Any other
@@ -110,6 +111,7 @@ class Dispatcher:
     def __init__(self, verbs: Iterable[Any], *, scripts_dir: Path | str,
                  epilog: str = "", doctor_checks: Iterable[Callable] = (),
                  doctor_flags: Callable | None = None,
+                 doctor_replace: dict[str, Callable] | None = None,
                  spec: Any = None, platform_lock: Callable | None = None,
                  description: str = "", runner: str | None = None):
         if runner is not None and runner not in RUNNERS:
@@ -120,6 +122,7 @@ class Dispatcher:
         self.epilog = epilog
         self.doctor_checks = tuple(doctor_checks)
         self.doctor_flags = doctor_flags
+        self.doctor_replace = dict(doctor_replace or {})
         self.spec = spec
         self.platform_lock = platform_lock
         self.description = description
@@ -229,7 +232,7 @@ class Dispatcher:
                                spec=self.spec, verbs=self.verbs,
                                scripts_dir=self.scripts_dir,
                                platform_lock=self.platform_lock,
-                               flags=self.doctor_flags)
+                               flags=self.doctor_flags, replace=self.doctor_replace)
         if args[0] == "verbs":
             if set(args[1:]) & set(HELP):
                 print(f"usage: {self.cli} verbs [--json]")
