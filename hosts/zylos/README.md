@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.8.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.9.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
