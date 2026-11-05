@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.8.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.9.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -86,7 +86,7 @@ Then add `node zylos/lib.js check` to the skill pack's CI. It exits 1 and names 
 | `tasks[]` | `cron` | A five-field cron, in the scheduler's time zone |
 | `tasks[]` | `miss_threshold` | Seconds late a run still happens after the agent was offline |
 | `tasks[]` | `requires` | Config keys that must resolve before the task is registered (without them it could only fail) |
-| `tasks[]` | `prompt` | What the scheduler sends the agent; placeholders below |
+| `tasks[]` | `prompt` | What the scheduler sends the agent; placeholders below. It runs a skill pack verb through `{cli}` (or `{detach}` for a long job), never `tools/`, `python`/`python3` or `uv run` (0.9.0; the playbook's R44: a scheduled step is a verb, and `tools/` is a person's, export-ignored) |
 | | `defaults` | Optional. `{KEY: {value, when}}`: configure writes `value` when a key named in `when` is in use and KEY is absent (core never applies a declared `default`) |
 | | `own_files` | Optional (0.7.3). The skill pack's own files in `zylos/`, as paths inside it, e.g. `["ops.js", "bin/ops.js"]`: never a file of the adapter (above, "A skill pack's own files") |
 
@@ -261,7 +261,7 @@ On Zylos the human gate is the console inbox and nothing else. The console servi
 
 ## Running the skill pack CLI
 
-Call the link by its absolute path; post-install prints it. It runs `uv run --no-project <skill dir>/<cli.entry> …` in the caller's cwd, sets `<PREFIX>_DATA_DIR` to the data dir unless the caller set one, keeps bytecode caches under the data dir, finds `uv` in `~/.local/bin` when it isn't on PATH, and exits with the CLI's status.
+Call the link by its absolute path; post-install prints it. It runs `uv run --no-project <skill dir>/<cli.entry> …` in the caller's cwd, sets `<PREFIX>_DATA_DIR` to the data dir unless the caller set one, sets `<PREFIX>_RUNTIME=1` (0.9.0: this host is the runtime, so the kit's `doctor` fails when the code is a git checkout rather than a release; R44), keeps bytecode caches under the data dir, finds `uv` in `~/.local/bin` when it isn't on PATH, and exits with the CLI's status.
 
     "$HOME/zylos/bin/northwind-shop" doctor
 
@@ -269,7 +269,7 @@ Without the link, the same command is `node ~/zylos/.claude/skills/<name>/zylos/
 
 ## Scheduled tasks
 
-post-install and post-upgrade keep exactly the manifest's `tasks` in the Zylos scheduler, each once its `requires` keys resolve:
+The manifest's `tasks` are the skill pack's cadence, declared as data: the runtime (this host) schedules them, never a standing task on a development machine (the playbook's R44). post-install and post-upgrade keep exactly the manifest's `tasks` in the Zylos scheduler, each once its `requires` keys resolve:
 
 - **Reconcile by name.** Task names are not unique, so the hooks list the tasks (`cli.js list --json`) and act by id. They keep one task per name (the one matching this release, else the oldest), `update` it when its prompt, cron, miss threshold or configured reply differs, and remove the duplicates. They judge `add`, `update` and `remove` by their output (`Task created: <id>`, `Task updated: <id>`, `Removed task: <id>`), never by the exit code: a remove of an unknown id exits 0.
 - **A task dropped from the manifest is removed.** The names this adapter manages are recorded in `<data dir>/.zylos-tasks.json`. A name recorded there but no longer in the manifest has its tasks removed by the next post-install or post-upgrade; a removal that fails stays recorded and is retried. pre-uninstall removes the manifest's names and the recorded ones. A task with any other name is never touched.
