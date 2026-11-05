@@ -56,7 +56,7 @@ try {
   // among them passes the login's same-origin check even when the platform entry rewrites Host (#488)
   const allowHosts = c.argv.flatMap((a, i) => (a === '--allow-host' ? [c.argv[i + 1]] : a.startsWith('--allow-host=') ? [a.slice(13)] : []));
   login = require('./login.js').listen({
-  sock: h.AUTH_SOCK, usersFile: h.USERS_FILE, keyFile: h.SESSION_KEY, setupFile: h.SETUP_FILE, base: h.M.console.base_path,
+  sock: h.AUTH_SOCK, usersFile: h.USERS_FILE, keyFile: h.SESSION_KEY, linksFile: h.LINKS_FILE, base: h.M.console.base_path,
   title: c.argv[c.argv.indexOf('--title') + 1], userHeader: h.M.console.user_header, allowHosts,
   });
 } catch (e) { console.error(`${h.NAME} console: the login could not start (${e.message})`); process.exit(2); }

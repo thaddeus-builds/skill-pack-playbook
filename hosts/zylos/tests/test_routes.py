@@ -85,7 +85,7 @@ def test_post_upgrade_over_an_old_block_that_holds_the_route_keeps_it():
         cf = fake_caddy(host, "agent.test {\n    respond / 200\n" + indent(OLD_WITH_ROUTE) + "}\n")
         r = host.hook("post-upgrade.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
         text = open(cf).read()
-        assert r.returncode == 0 and "wrote the form-login Caddy block" in r.stdout and "still uses basic_auth" in r.stdout, r.stdout
+        assert r.returncode == 0 and "wrote the sign-in Caddy block" in r.stdout and "still uses basic_auth" in r.stdout, r.stdout
         assert text.count(BEGIN) == 1 and has_route(block_of(text)), text
         saved = [ln.strip() for ln in open(os.path.join(host.data, "caddy-block.saved")).read().splitlines()]
         assert saved == [ln.strip() for ln in OLD_WITH_ROUTE.splitlines()], ("the old block kept", saved)
@@ -116,6 +116,21 @@ def test_a_route_whose_port_changed_is_written_again():
         assert has_route(block_of(text), port="8790") and not has_route(block_of(text)), text
 
 
+def test_a_0_7_block_without_the_link_route_is_written_again_with_its_route():
+    """0.8.0: a 0.7.3 block (its route in place, @login without /in/*) cannot serve the one-time sign-in
+    link, so post-upgrade writes the block again, and the route of console.routes is in the new one."""
+    with Host(with_routes(), scheduler=False) as host:
+        old = caddy(host).replace("@login path /login /logout /in/* /setup", "@login path /login /logout /setup")
+        assert "/in/*" not in old and has_route(block_of(old)), old
+        cf = fake_caddy(host, "agent.test {\n    respond / 200\n" + indent(old) + "}\n")
+        r = host.hook("post-upgrade.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+        text = open(cf).read()
+        assert r.returncode == 0 and "does not route /in/ (the one-time sign-in link)" in r.stdout, r.stdout
+        block = block_of(text)
+        assert "@login path /login /logout /in/* /setup" in block.splitlines() and has_route(block), text
+        assert block == block_of(caddy(host)), "the block lib.js caddy prints"
+
+
 def test_uninstall_then_post_install_keeps_the_route():
     with Host(with_routes(), scheduler=False) as host:
         block = caddy(host)
@@ -139,7 +154,7 @@ def test_a_saved_copy_without_the_route_is_not_put_back_as_it_was():
         host.write(os.path.join(host.data, "caddy-block.saved"), plain)
         r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
         text = open(cf).read()
-        assert r.returncode == 0 and "wrote the form-login Caddy block" in r.stdout and "lacks the route" in r.stdout, r.stdout
+        assert r.returncode == 0 and "wrote the sign-in Caddy block" in r.stdout and "lacks the route" in r.stdout, r.stdout
         assert text.count(BEGIN) == 1 and has_route(block_of(text)), text
 
 

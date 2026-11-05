@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.7.3). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.8.0). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -72,11 +72,11 @@ Then add `node zylos/lib.js check` to the skill pack's CI. It exits 1 and names 
 | `console` | `title_key` | The config key for the page title (default: `name`) |
 | `console` | `base_path` | The public path, e.g. `/shop`; used by the Caddy block and the warnings |
 | `console` | `user_header` | The header Caddy sets to the logged-in user, e.g. `X-Remote-User` |
-| `console` | `users_file` | The logins file in the data dir, e.g. `console.users` (`<name> scrypt$…`, written by `lib.js passwd`) |
+| `console` | `users_file` | The people file in the data dir, e.g. `console.users`: one `<name> <stamp>` line per person, written by their first sign-in ("The login" below) |
 | `console` | `args` | More `serve.py` flags, e.g. `--relay-verbs`, `--lang`, `--default-reason`, a static `--allow-host`; console.js owns `--dir`, `--host`, `--port`, `--user`, `--user-header`, `--relay-cmd`, `--title` |
 | `console` | `allow_host_key` | Optional. The config key holding the public domain(s) the console answers to (`--allow-host`) |
 | `console` | `routes` | Optional (0.7.3). The skill pack's own upstreams, served in the console's Caddy block behind the same login: a list of `{path, port, port_key}` or `{path, socket}` (below). The hooks write them into every block they write, so a rewrite never loses one, and `zylos uninstall` removes them with the block |
-| `console.routes[]` | `path` | The public path, one segment under `base_path`, e.g. `/shop/ops`: the login's session cookie and its return address are the base path's, so a path beside it could not share the login. Not a path of the console or its login (`/login`, `/logout`, `/setup`, `/static`, `/history`, `/poll`, `/answer`, `/reopen`, `/note`, `/act`, `/page-…`), and each path once. Caddy strips it: the upstream serves at `/` with relative links |
+| `console.routes[]` | `path` | The public path, one segment under `base_path`, e.g. `/shop/ops`: the login's session cookie is the base path's, so a path beside it could not share the login. Not a path of the console or its login (`/login`, `/logout`, `/in`, `/setup`, `/static`, `/history`, `/poll`, `/answer`, `/reopen`, `/note`, `/act`, `/page-…`), and each path once. Caddy strips it: the upstream serves at `/` with relative links |
 | `console.routes[]` | `port` | Its default port on 127.0.0.1 (1024-65535), not the console's or another route's |
 | `console.routes[]` | `port_key` | Optional, with `port`. The config key that overrides it; `SKILL.md` config declares it |
 | `console.routes[]` | `socket` | In place of `port`: a unix socket, a path inside the data dir, e.g. `ops/ops.sock` (keep the whole path under about 100 characters) |
@@ -322,7 +322,7 @@ For the example manifest it prints:
     handle_path /shop/* {
         route {
             request_header -X-Remote-User
-            @login path /login /logout
+            @login path /login /logout /in/* /setup
             handle @login {
                 reverse_proxy unix//home/<u>/zylos/components/shop-harness/console/auth.sock
             }
@@ -331,7 +331,9 @@ For the example manifest it prints:
                     uri /_auth
                     copy_headers X-Remote-User
                 }
-                reverse_proxy 127.0.0.1:8767
+                reverse_proxy 127.0.0.1:8767 {
+                    header_up -Cookie
+                }
             }
         }
     }
@@ -339,9 +341,9 @@ For the example manifest it prints:
 
 - `redir` sends `/shop` to `/shop/`, so the console's relative links resolve under the prefix.
 - `handle_path` strips `/shop`: the console's links are all relative and it takes no base path.
-- **The login is a form, not `basic_auth`** (0.5.0). The browser's pop-up is not something password managers reliably save; a form with `autocomplete` hints is. `bin/login.js` runs inside the console service (`bin/console.js`) and listens on a unix socket in the data dir (mode 0600); a long data dir gets a directory of its own in `$XDG_RUNTIME_DIR` or the temp dir (`zylos-<uid>-<hash>/auth.sock`, mode 0700, owned by the user, never a symlink: checked at start, else the console exits), which `lib.js caddy` prints; a path with a space in it needs quoting in the Caddyfile, so keep spaces out of the data dir. `/login`, `/logout` and `/setup` go to it. Everything else first asks it (`forward_auth`, `GET /_auth`): a valid session answers 200 with the user in `X-Remote-User`, which Caddy copies onto the request to the console; none sends the visitor to the form and back to the page they wanted (a path under the prefix only).
+- **The login is a one-time link and a cookie, not `basic_auth`** (0.8.0; a password form from 0.5.0 to 0.7.x). `bin/login.js` runs inside the console service (`bin/console.js`) and listens on a unix socket in the data dir (mode 0600); a long data dir gets a directory of its own in `$XDG_RUNTIME_DIR` or the temp dir (`zylos-<uid>-<hash>/auth.sock`, mode 0700, owned by the user, never a symlink: checked at start, else the console exits), which `lib.js caddy` prints; a path with a space in it needs quoting in the Caddyfile, so keep spaces out of the data dir. `/login`, `/logout`, `/in/*` (the link) and `/setup` (a 0.6/0.7 link, answered "ask for a new one") go to it. Everything else first asks it (`forward_auth`, `GET /_auth`): a valid session answers 200 with the user in `X-Remote-User`, which Caddy copies onto the request to the console; none sends the visitor to `/login`, the page that says to ask the agent for a sign-in link.
 - `route` keeps the written order: `request_header -X-Remote-User` drops any copy the visitor sent before `forward_auth` sets the real one. `header_up -Cookie` keeps the session cookie from the console, its logs and the agent. The console still believes the header from a loopback peer only.
-- **The skill pack's own routes** (`console.routes`, 0.7.3) are written into the same block: a `redir` to the trailing slash beside the console's, and a `handle_path` inside the console's, after `forward_auth`, so the same form login guards them, the visitor's user header was dropped before it and the session cookie is not passed on. For the example with the route `/shop/ops` on port 8768 the block gains
+- **The skill pack's own routes** (`console.routes`, 0.7.3) are written into the same block: a `redir` to the trailing slash beside the console's, and a `handle_path` inside the console's, after `forward_auth`, so the same login guards them, the visitor's user header was dropped before it and the session cookie is not passed on. For the example with the route `/shop/ops` on port 8768 the block gains
 
         redir /shop/ops /shop/ops/ permanent
 
@@ -354,22 +356,33 @@ For the example manifest it prints:
                 }
 
     just before `reverse_proxy 127.0.0.1:8767`. A route the block lacks makes it outdated, so post-install and post-upgrade write the block again with every route (a rewrite of an old block, the copy put back after uninstall + add, a route added in a release). The adapter writes nothing outside the BEGIN/END lines. Seen once, 2026-11-05: a skill pack kept a second console in this block by hand, and the first rewrite (post-upgrade over its outdated block) dropped it on every host.
-- **The public Host is passed through unchanged.** There is no `header_up Host`: the console compares a POST's `Origin` with the `Host` it sees, so a rewritten Host gets every answer refused (403). In exchange the console must accept the public Host: set `allow_host_key` (e.g. `SHOP_CONSOLE_ALLOW_HOST=agent.example.com`) through configure, then `pm2 restart zylos-<name>`. Without it, every page through Caddy is 421. post-install warns about both. The login service (`bin/login.js`) takes the same list: a POST passes its Origin check when the Origin is the host the request names or one of these public names, so a platform entry in front of Caddy that rewrites `Host` to `localhost` (Caddy then sends `X-Forwarded-Host: localhost` too) no longer gets every login, `/setup` and approval refused (0.6.2, issue #488; `tests/live_caddy.py` checks it under a real Caddy). A foreign Origin is still 403.
+- **The public Host is passed through unchanged.** There is no `header_up Host`: the console compares a POST's `Origin` with the `Host` it sees, so a rewritten Host gets every answer refused (403). In exchange the console must accept the public Host: set `allow_host_key` (e.g. `SHOP_CONSOLE_ALLOW_HOST=agent.example.com`) through configure, then `pm2 restart zylos-<name>`. Without it, every page through Caddy is 421. post-install warns about both. The login service (`bin/login.js`) takes the same list: a POST passes its Origin check when the Origin is the host the request names or one of these public names, so a platform entry in front of Caddy that rewrites `Host` to `localhost` (Caddy then sends `X-Forwarded-Host: localhost` too) no longer gets every sign-in and approval refused (0.6.2, issue #488; `tests/live_caddy.py` checks it under a real Caddy). A foreign Origin is still 403.
 
 Validate, then reload: `~/zylos/bin/caddy validate --config ~/zylos/http/Caddyfile --adapter caddyfile && pm2 reload caddy`.
 
-Core never rewrites the block on upgrade (no routes are declared), but a reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it, and every skill pack upgrade is a reinstall. So pre-uninstall keeps the block (with the host's own edits) in `<data dir>/caddy-block.saved`, and post-install / post-upgrade **put it back** when the Caddyfile has no BEGIN marker and either `users_file` has logins or the saved copy is there (issue #215; from 0.6.1 the saved copy alone is enough, since the one-time `/setup` link is the first thing a person needs, before any login exists: issue #484; a saved block that still has `basic_auth` is not put back as it was: the block `lib.js caddy` prints takes its place): the saved block goes just before the closing `}` of the first site block, into a candidate file `Caddyfile.candidate-<name>` that must pass `caddy validate`; the old file is kept as `Caddyfile.before-<name>`; then `pm2 reload caddy`, and if that fails the old file is put back. When any step cannot be done (no saved copy, no `~/zylos/bin/caddy`, validate refuses, no site block) the Caddyfile is left as it was and the warning names the copy to paste by hand. A block that is in the Caddyfile and is outdated (it still has `basic_auth`, as 0.4.x; does not route `/setup`, as 0.5.x; lacks a route of `console.routes`, 0.7.3) is replaced in place the same way, validated first; a saved copy that is outdated is not put back either: the block `lib.js caddy` prints takes its place. A host with its own vhost (no BEGIN/END block) copies the route from `lib.js caddy` by hand.
+Core never rewrites the block on upgrade (no routes are declared), but a reinstall (uninstall without purge, then add) or `zylos init` with a domain removes it, and every skill pack upgrade is a reinstall. So pre-uninstall keeps the block (with the host's own edits) in `<data dir>/caddy-block.saved`, and post-install / post-upgrade **put it back** when the Caddyfile has no BEGIN marker and either `users_file` has logins or the saved copy is there (issue #215; from 0.6.1 the saved copy alone is enough, since the one-time link is the first thing a person needs, before any login exists: issue #484; a saved block that still has `basic_auth` is not put back as it was: the block `lib.js caddy` prints takes its place): the saved block goes just before the closing `}` of the first site block, into a candidate file `Caddyfile.candidate-<name>` that must pass `caddy validate`; the old file is kept as `Caddyfile.before-<name>`; then `pm2 reload caddy`, and if that fails the old file is put back. When any step cannot be done (no saved copy, no `~/zylos/bin/caddy`, validate refuses, no site block) the Caddyfile is left as it was and the warning names the copy to paste by hand. A block that is in the Caddyfile and is outdated (it still has `basic_auth`, as 0.4.x; does not route `/in/*`, the one-time sign-in link, as 0.5.x to 0.7.x; lacks a route of `console.routes`, 0.7.3) is replaced in place the same way, validated first; a saved copy that is outdated is not put back either: the block `lib.js caddy` prints takes its place. A host with its own vhost (no BEGIN/END block) copies the route from `lib.js caddy` by hand.
 
-**Adding a person.** The logins are `<data dir>/<users_file>` (mode 0600), one `<username> scrypt$…` line each, never in the repository. Most owners have no terminal on the host and reach the agent only through chat, so the usual way is a **one-time link** (0.6.0): the agent runs
+### The login
 
-    node ~/zylos/.claude/skills/<name>/zylos/lib.js passwd alice --link
+A person signs in by a **one-time link** the agent sends them (0.8.0, the owner's R41): there is no password and no form. Most owners reach the agent only through chat, so the agent runs
 
-and sends the printed address to alice (its host is the first allowed host that is not this machine's own, `localhost`, `127.x` or `[::1]`; with no such host the address starts with a placeholder to replace, and the line says so: 0.6.1, issue #485); it works once and for 30 minutes, and alice types the password on that page (the agent never sees it; only a hash of the link's token is kept in `<data dir>/console/setup-tokens.json`). A newer link for the same name replaces the older. The token is in the address's query string, so it can appear in Caddy's access log: leave `log` out of the console's block (the printed block has none), and treat the link like a password for its 30 minutes; whoever sees it first can use it, **including the agent that printed it**. A person with a terminal can type it there instead (`passwd` refuses without a tty):
+    node ~/zylos/.claude/skills/<name>/zylos/lib.js link alice
 
-    node ~/zylos/.claude/skills/<name>/zylos/lib.js passwd alice
-    node ~/zylos/.claude/skills/<name>/zylos/lib.js passwd --remove alice
+and sends the printed address to alice. It looks like `https://<host><base_path>/in/<token>`: its host is the first allowed host that is not this machine's own (`localhost`, `127.x`, `[::1]`); with no such host the address starts with a placeholder to replace, and the line says so (issue #485). alice opens it, sees her name and one button, 登录 / Sign in, presses it, and lands on the console. That browser stays signed in for **90 days**. The name need not exist yet: the first sign-in adds alice's line to `<data dir>/<users_file>`.
 
-A new password or a removed line ends that person's sessions at once (the cookie carries a fingerprint of the stored hash). The user name is letters, digits and `. _ : -`; the password at least 10 characters. **From 0.4.x**: the old lines are bcrypt hashes made for Caddy; the form cannot verify them, post-install names each such person, and each runs `passwd` once. Sessions last 14 days; the signing key is `<data dir>/console/session.key` (kept, so a restart keeps sessions). After five wrong passwords a user and an address wait 30 s, doubling to 15 min (in memory: a restart clears it); that also means anyone who knows a user name can keep that user waiting. Logout clears the browser's cookie only: a copied cookie works until it expires or the person's password changes.
+- **The link survives a chat app.** The token is 28 letters in the path, from `abcdefghijkmnpqrstuvwxyz23456789` (no `l`, `o`, `0`, `1` to misread, and nothing a chat app cuts a link at: no `?`, `#`, `-`, `_`): 26 random (about 130 bits) and 2 check letters from their sha256. A link cut short or changed in forwarding fails the check, and the page says so in its own words ("这个链接不完整，可能在转发时被截断了。请让发给你的人重新发一个。"), not as used or expired ("这个链接已经用过或已过期，请重新要一个。"). Capitals and a trailing `/` are forgiven.
+- **Opening the link spends nothing.** A chat app's link preview fetches the address before the person does, so a GET only shows the page; the button's POST (its `Origin` checked as every POST here) spends it. It works once, within 30 minutes; a newer link for the same name replaces the older. Only a hash of the token is kept, in `<data dir>/console/sign-in-links.json` (mode 0600).
+- **One line per person, a stamp, no secret.** `<users_file>` holds `<name> <stamp>` (mode 0600, never in the repository). The cookie carries a fingerprint of the stamp, so `lib.js signout alice` (a new stamp) signs alice out on every device at once, and `lib.js remove alice` takes her out; both also drop her unused link. A second device signing in does not sign the first one out.
+- **Every route under the base shares the one sign-in.** The cookie is `Path=<base_path>`, so the console and each route of `console.routes` are one login. The signing key is `<data dir>/console/session.key` (kept, so a restart keeps sessions). `/login` only says to ask the agent for a link.
+- **Wrong tokens are throttled.** After five whole tokens nobody made, an address waits 30 s, doubling to 15 min (in memory: a restart clears it). A cut-short link tried again is not counted: it cannot be a guess.
+
+The honest limits (the owner's bar for a pilot: easy, secure enough, not 100%):
+
+- **A link is a bearer secret for 30 minutes.** Whoever opens it first and presses the button is signed in as that person, **including the agent that printed it**. The token is in the address's path, so it can appear in Caddy's access log: leave `log` out of the console's block (the printed block has none).
+- **The device is the browser that opened the link.** A chat app's own browser keeps its own cookies; to sign in elsewhere, ask for another link.
+- **A cookie copied off a device works until it expires or `signout`.** Logout clears the browser's cookie only.
+
+**From 0.7.x.** Nobody has to do anything on upgrade. post-install and post-upgrade write the Caddy block again (an old one does not route `/in/*`; the routes of `console.routes` are kept). The `scrypt$…` lines in the users file are stamps as good as any, so a cookie a 0.7.x login set keeps working until it ends (14 days from that login); a bcrypt line from 0.4.x is a stamp too. When the cookie ends, the person asks for a link. `passwd` is gone: an install doc that says `lib.js passwd NAME --link` now says `lib.js link NAME`. A 0.6/0.7 `/setup` link someone still holds opens a page that says to ask for a new one. The old `<data dir>/console/setup-tokens.json` is no longer read.
 
 The console records each answer under the header's user; everyone the proxy lets in answers.
 
@@ -377,11 +390,11 @@ The console records each answer under the header's user; everyone the proxy lets
 
     pm2 describe zylos-<name> | grep status                                   # online
     tail -n 3 ~/zylos/components/<name>/logs/console.log                      # "Console: http://127.0.0.1:<port>/"
-    curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/<base>/          # 302 to the form
+    curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/<base>/          # 302 to /login
     curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Remote-User: x' https://<domain>/<base>/   # still 302
-    curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/<base>/login      # 200, the form
+    curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/<base>/login      # 200, "ask for a sign-in link"
 
-Then open the URL, sign in once with the form (the browser offers to save it), and check that the page names you.
+Then print a link for yourself (`lib.js link NAME`), open it, press the button, and check that the page names you.
 
 ## Known limits
 
@@ -391,7 +404,7 @@ Then open the URL, sign in once with the form (the browser offers to save it), a
 - **`{cli}` and `{detach}` need `node` on the agent's PATH** (the link's shebang, the fallback form, detach). Zylos hosts have it. The console service instead calls the absolute node that runs it.
 - **The console's secret sits in `<data dir>/console/secret`**, which the agent on a single-user host can read: the signature is then an accident guard, not a wall. To keep it out of the agent's reach, give only the pm2 app a `CONSOLE_SECRET` (16+ characters) in its environment and keep that out of the data dir.
 - **The login is not run under a real Caddy yet.** Its service is tested end to end on its socket (`tests/test_login.py`); the printed block is checked for shape and order only. `forward_auth` over a unix socket and `copy_headers` need a real Caddy before the first release that carries it is trusted: `python3 hosts/zylos/tests/live_caddy.py` starts the login service, a stand-in console and Caddy with the real block on a private port, and checks the redirects, the spoofed header, the cookie and the POST; then one browser sign-in on the host.
-- **An agent can still sign in as a person**: it can read the session key and the setup tokens in the data dir, and run `passwd` in a pseudo-terminal. The login keeps passwords out of chat and stops a visitor; it is not isolation from the host's own agent (as the console's secret).
+- **An agent can still sign in as a person**: it prints the links and can open one itself, and it can read the session key in the data dir. The login stops a visitor; it is not isolation from the host's own agent (as the console's secret).
 - **The session key sits in the data dir**, readable by the agent on a single-user host: the cookie is an accident guard there, not a wall (as the console's secret). The throttle is in memory.
 - **One client per host**, and one adapter console per component: a second copy of it for the same skill pack needs a second host. A console of the skill pack's own (its own pm2 app) goes in `console.routes`, under the same base path and login.
 - **Windows is not supported.** Detached jobs rely on POSIX sessions and `sh`.

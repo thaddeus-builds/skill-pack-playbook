@@ -75,7 +75,7 @@ def test_lib_js_knows_its_own_files_and_the_consoles_paths():
     assert {"history", "poll", "answer", "note", "static"} <= served, served     # the parse still reads the tables
     assert served <= set(paths), (sorted(served - set(paths)), paths)
     assert 'PAGE_PREFIX = "page-"' in serve, "CONSOLE_PAGE_PREFIX in lib.js is the console's tab prefix"
-    assert {"login", "logout", "setup"} <= set(paths), "the login service's own paths"
+    assert {"login", "logout", "in", "setup"} <= set(paths), "the login service's own paths"
 
 
 def test_no_skill_pack_names_in_the_generic_files():
@@ -157,13 +157,13 @@ def test_the_caddy_snippet():
     assert "redir <BASE_PATH> <BASE_PATH>/ permanent" in text
     assert "handle_path <BASE_PATH>/* {" in text and "handle <BASE_PATH>" not in text
     assert "header_up Host" not in text, "the public Host is passed through, never rewritten"
-    assert "basic_auth" not in text, "the login is a form (bin/login.js), not the browser's pop-up"
+    assert "basic_auth" not in text, "the login is a link and a cookie (bin/login.js), not the browser's pop-up"
     strip, login, ask, proxy = (text.index(s) for s in (
         "request_header -<USER_HEADER>", "reverse_proxy unix/<AUTH_SOCK>", "forward_auth unix/<AUTH_SOCK> {",
         "reverse_proxy 127.0.0.1:<PORT>"))
     assert "route {" in text and strip < login < ask < proxy, "route keeps the order: drop the visitor's header first"
     assert "header_up -Cookie" in text, "the console never sees the session cookie"
-    assert "uri /_auth" in text and "copy_headers <USER_HEADER>" in text and "@login path /login /logout /setup" in text
+    assert "uri /_auth" in text and "copy_headers <USER_HEADER>" in text and "@login path /login /logout /in/* /setup" in text
     # 0.7.3: the skill pack's own routes go in after forward_auth, before the console, inside its handle_path
     slot, redirs = body.index("            <ROUTES>"), body.index("<ROUTE_REDIRS>")
     assert body.index("            forward_auth unix/<AUTH_SOCK> {") < slot < body.index("            reverse_proxy 127.0.0.1:<PORT> {"), body
