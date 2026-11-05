@@ -265,7 +265,7 @@ def test_console_routes_are_checked():
         assert r.returncode == 1 and "SKILL.md config must declare SHOP_OPS_PORT" in r.stderr, r.stderr
         for path, words in (("/ops", "one segment under console.base_path"), ("/other/ops", "one segment under"),
                             ("/shop", "one segment under"), ("/shop/a/b", "one segment under"), ("/shop/Ops", "one segment under"),
-                            ("/shop/login", "a path of the console"), ("/shop/setup", "a path of the console"),
+                            ("/shop/login", "a path of the console"), ("/shop/in", "a path of the console"), ("/shop/setup", "a path of the console"),
                             ("/shop/static", "a path of the console"), ("/shop/page-ops", "a path of the console")):
             bad(lambda x, p=path: first(x).update(path=p), "console.routes[0].path", words)
         bad(lambda x: x["console"]["routes"][1].update(path="/shop/ops"), "console.routes[1].path", "used twice")
