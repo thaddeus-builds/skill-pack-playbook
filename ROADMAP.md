@@ -1,4 +1,4 @@
-# Agent Harness Playbook roadmap
+# Skill Pack Playbook roadmap
 Updated: 2026-11-05
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 ## Now
