@@ -117,6 +117,8 @@ def test_check() -> None:
     for label, got, want in cases:
         check(f"named: {label}", any(want in x for x in got), got)
     check("and the whole folder passes again", C.check(c) == [], C.check(c))
+    (c / "sources/inbox/.gitkeep").write_text("", "utf-8")
+    check("a .gitkeep is a tool's placeholder, not material: no row needed", C.check(c) == [], C.check(c))
 
 
 def test_source() -> None:
