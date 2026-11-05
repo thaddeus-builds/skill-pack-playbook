@@ -3,6 +3,7 @@
 
     python3 scaffold/clients.py where [--set DIR]
     python3 scaffold/clients.py list [--json]
+    python3 scaffold/clients.py new CLIENT --title T --term TERM [--term TERM ...]
     python3 scaffold/clients.py check [CLIENT...] [--json]
     python3 scaffold/clients.py relink CLIENT [--dry-run]
     python3 scaffold/clients.py source CLIENT FILE_OR_URL --from client|platform|meeting|chat|ask|digest
@@ -24,6 +25,12 @@ A client's folder (docs/clients.md; the people's layers came from issue #479, th
              reports/             what the packs made for people to read
              .machine/            what tools own: the hub or workspace, pack data, connections (0700), and
                                   links.tsv, the links this machine needs into the folder
+
+`new` lays out a folder for a client that has material and no pack yet (a pack's workspace or the hub, made later by
+`new_client.py` or `new_hub.py`, goes under `.machine/`): the card, the three intake files and `meetings/`,
+`sources/` with its README and INDEX header, `reports/`, and `.machine/` (0700) with `client_terms.txt`, which takes
+the client's names from `--term` (at least one: a client with no term list is one a repository can leak). It
+refuses a folder that exists.
 
 `check` holds each rule (one problem a line, exit 1 on any): the card and the three intake files exist; `.machine/`
 holds a `client_terms.txt` (the client's names, one a line: the playbook's pre-push hook and every pack's leak guard
@@ -209,6 +216,56 @@ def relink(c: Path, dry: bool = False) -> list[str]:
     return out
 
 
+# ---- a new client's folder -------------------------------------------------------------------
+
+CARD = """# {title}
+
+位置:`$CLIENTS_DIR/{name}`(规矩见 playbook 的 `docs/clients.md`)。
+
+| 想做什么 | 去哪里 |
+|---|---|
+| 回顾客户是谁、定了什么、还有什么没定 | `intake/`:`brief.md`、`decisions.md`、`open-questions.md`、`meetings/<日期>/` |
+| 看客户和平台给过的原始资料(聊天记录、链接、视频、图片、文件) | `sources/`(总账 `sources/INDEX.tsv`,原样不改不删) |
+| 看我们做出来的报表和页面 | `reports/` |
+| 工具、数据库、连接和密钥 | `.machine/`(平时不用打开) |
+
+客户的名字、金额只留在这个文件夹,不进代码仓库(名字写在 `.machine/client_terms.txt`)。
+"""
+INTAKE_TEXT = {"brief.md": "# {title}: brief\n\n(who, the goal, the limits, the plan in force)\n",
+               "decisions.md": "# {title}: decisions\n\n(a mirror: the record that counts is the pack's decision rows)\n",
+               "open-questions.md": "# {title}: open questions\n"}
+SOURCES_TEXT = """# sources: what the client or a platform gave us, kept as received
+
+One row an item in `INDEX.tsv` (docs/clients.md): `clients.py source {name} FILE_OR_URL --from F --title T`.
+Files land in `inbox/<YYYY-MM-DD>-<from>/` and are never renamed, edited or removed.
+"""
+
+
+def new(r: Path, name: str, title: str, terms: list[str]) -> Path:
+    if not NAME_RE.fullmatch(name):
+        raise Stop(f"{name!r} is not a client name (a-z, 0-9, _ and -)")
+    terms = [t.strip() for t in terms if t.strip()]
+    if not terms:
+        raise Stop("--term: at least one of the client's names, so the leak guard can keep it out of a repository")
+    if not title.strip() or "\n" in title:
+        raise Stop("--title is one line")
+    c = r / name
+    if c.exists():
+        raise Stop(f"{c} exists: check it with `clients.py check {name}` instead")
+    for d in ("intake/meetings", "sources/inbox", "reports"):
+        (c / d).mkdir(parents=True)
+    (c / ".machine").mkdir(mode=0o700)
+    (c / "README.md").write_text(CARD.format(title=title, name=name), "utf-8")
+    for f, text in INTAKE_TEXT.items():
+        (c / "intake" / f).write_text(text.format(title=title), "utf-8")
+    (c / "sources" / "README.md").write_text(SOURCES_TEXT.format(name=name), "utf-8")
+    (c / "sources" / "INDEX.tsv").write_text("\t".join(INDEX_HEADER) + "\n", "utf-8")
+    t = c / ".machine" / "client_terms.txt"
+    t.write_text("".join(f"{x}\n" for x in terms), "utf-8")
+    t.chmod(0o600)
+    return c
+
+
 # ---- the rules -------------------------------------------------------------------------------
 
 def check(c: Path) -> list[str]:
@@ -277,6 +334,10 @@ def main(argv: list[str] | None = None) -> int:
     w = sub.add_parser("where", help="print this machine's clients root, or --set it")
     w.add_argument("--set", metavar="DIR")
     sub.add_parser("list", help="the clients under the root").add_argument("--json", action="store_true")
+    nw = sub.add_parser("new", help="lay out a folder for a new client")
+    nw.add_argument("name")
+    nw.add_argument("--title", required=True)
+    nw.add_argument("--term", action="append", default=[], help="one of the client's names (repeat)")
     ck = sub.add_parser("check", help="each client's folder against the rules")
     ck.add_argument("names", nargs="*")
     ck.add_argument("--json", action="store_true")
@@ -310,6 +371,10 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd == "list":
             names = [p.name for p in clients(r)]
             print(json.dumps({"root": str(r), "clients": names}) if a.json else "\n".join(names) or "(none)")
+            return 0
+        if a.cmd == "new":
+            c = new(r, a.name, a.title, a.term)
+            print(f"made {c}; next: put meetings in intake/meetings/<date>/, everything else with `source`")
             return 0
         if a.cmd == "check":
             todo = [folder(r, n) for n in a.names] if a.names else clients(r)

@@ -18,6 +18,8 @@ Each machine names its clients root once. `CLIENTS_DIR` in the environment wins;
 
 `sources/` and `reports/` may be links into `.machine/` when a tool writes there.
 
+A client with material and no pack yet starts with `clients.py new CLIENT --title T --term NAME [--term NAME …]`: the card, the intake files, `sources/` with its index, `reports/`, and `.machine/` (0700) holding `client_terms.txt` with the names given. A pack's workspace or the hub (`new_client.py`, `new_hub.py`) goes under `.machine/` later.
+
 ## Where each kind of material goes
 
 | The material | Where | `--from` |
