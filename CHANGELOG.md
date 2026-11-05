@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Other
+- `tools/fleet.py update` and `rehearse`: a pack whose suite could not run (no `tests/run.py` and no `[skill_pack].test_command`) is `untested`, exit 1, with the fix in the line, never `green`; `--no-tests` is still a chosen green. Seen once, 2026-11-05: the 0.50.0 rehearsal printed amazon-ppc "green, suite not run" (its runner is `scripts/run_tests.py`)
+- Skill packs: mechanical (a pack whose runner is not `tests/run.py` names it in `[skill_pack].test_command`)
+
 ## [0.50.0] - 2026-11-05
 
 A second blocker train inside seven days, on the owner's word (R42): adcut (the console's Origin fix, #552, for its adapter 0.8.0 update) and amazon-ppc (`cap_status`'s inputs, #544, for its monthly cap). Only those two take it now; the others take it with the next regular train.
