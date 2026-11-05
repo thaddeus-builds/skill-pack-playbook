@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-05
+
+A third train this week, on the owner's word (R46, "现在就发"): it carries R44 step 0 for the packs (docs/design/ssot-and-runtime-2026-11.md); meta-ads takes it first, in its own session.
+
 ### Kit
 - `kit/doctor.py` and `kit/cli.py`: a skill pack replaces one built-in doctor check by name (`Dispatcher(doctor_replace={"markets": check})`, `doctor.BUILTIN_NAMES`), when it keeps its own store for what that check reads; the replacement runs at the built-in's place and reports under its name, a name that is no built-in is refused at once, and a replacement that reports nothing under the name is `doctor_replaced_silent`. Seen once, 2026-11-05: amazon-ppc keeps its own market facts (its `db` stays its own), so the built-in markets line was false for it
 - Skill packs: nothing (re-vendor with the train; amazon-ppc replaces `markets` when it moves doctor onto the kit)
