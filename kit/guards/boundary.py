@@ -215,7 +215,7 @@ OUTWARD = (r"\b(?:requests|httpx|session|client)\.(?:post|put|patch|delete)\(",
 HUMAN_IMPORT = re.compile(r"\bkit\.human\b|\bfrom\s+kit\s+import\s+[^\n]*\bhuman\b")
 EXPORT_IGNORE = re.compile(r"^\s*/?tools(?:/\*\*|/)?\s+(?:[^\n]*\s)?export-ignore\b", re.M)
 RUNTIME_FILES = ("SKILL.md",)
-NAMES_TOOLS = re.compile(r"(?<![\w.-])tools/")
+NAMES_TOOLS = re.compile(r"(?:(?<![\w./-])|(?<![\w./-])\./)tools/")    # the pack's own tools/, not scripts/kit/tools/
 
 
 def check_tools(root: Path | str | None = None, *, verbs: Any = None,
