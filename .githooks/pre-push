@@ -2,8 +2,24 @@
 # Run every suite before a push, so a failure shows up here and not as a CI run that spends quota.
 # Install once per clone: git config core.hooksPath .githooks      Skip in an emergency: git push --no-verify
 # CI runs the same command only when started by hand; this hook is the check on every push.
+# First, no client's name or term leaves this machine: the leak guard reads every client's term list under this
+# machine's clients root (docs/clients.md: <client>/.machine/**/client_terms.txt). No root set: no lists, said once.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 for py in python3.13 python3.12 python3.11 python3; do
     command -v "$py" >/dev/null 2>&1 && break
 done
+refs=$(cat)
+if root=$("$py" scaffold/clients.py where 2>/dev/null); then
+    set --
+    for t in $(find "$root" -maxdepth 6 -path '*/.machine/*' -name client_terms.txt 2>/dev/null | sort); do
+        set -- "$@" --terms "$t"
+    done
+    if [ $# -gt 0 ]; then
+        printf '%s\n' "$refs" | "$py" kit/tools/leak_guard.py "$@" || exit 1
+    else
+        echo "pre-push: no client term list under $root (clients.py check names each client without one)"
+    fi
+else
+    echo "pre-push: no clients root on this machine, so no client term list is read (scaffold/clients.py where --set DIR)"
+fi
 exec "$py" run_all.py

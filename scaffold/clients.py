@@ -25,11 +25,13 @@ A client's folder (docs/clients.md; the people's layers came from issue #479, th
              .machine/            what tools own: the hub or workspace, pack data, connections (0700), and
                                   links.tsv, the links this machine needs into the folder
 
-`check` holds each rule (one problem a line, exit 1 on any): the card and the three intake files exist; INDEX.tsv
+`check` holds each rule (one problem a line, exit 1 on any): the card and the three intake files exist; `.machine/`
+holds a `client_terms.txt` (the client's names, one a line: the playbook's pre-push hook and every pack's leak guard
+read it, so a name never reaches a repository; seen once, 2026-11-05: a client's name in the playbook's docs); INDEX.tsv
 has the header, unique ids and a row for every file under inbox/, and every row's file exists (a `link` row's path
 is its URL); no `.env` or connections outside `.machine/`; `.machine/connections` is 0700; every links.tsv row
 names a target inside the folder. `relink` makes the links.tsv links on this machine: a correct link stays, a wrong
-link is replaced, a real file or folder in the way is reported and never touched (seen once: one client's hand-written
+link is replaced, a real file or folder in the way is reported and never touched (seen once: a client folder's hand-written
 relink.sh, 2026-11-05). `source` copies a file into today's inbox (never moves or renames the original) or records
 a URL, and appends its INDEX row with the next id and the file's sha256; the same bytes again are refused and the
 earlier id named. A file already under inbox/ with no row (seen once: eight in one client's) gets its row in place, never
@@ -249,6 +251,8 @@ def check(c: Path) -> list[str]:
         for n in dirs + files:
             if n in SECRETISH:
                 say(f"{(here / n).relative_to(c)}: a secret's place is under .machine/")
+    if (c / ".machine").is_dir() and not any((c / ".machine").rglob("client_terms.txt")):
+        say(".machine/ has no client_terms.txt: the leak guard cannot keep this client's names out of a repository")
     conn = c / ".machine" / "connections"
     if conn.is_dir() and stat.S_IMODE(conn.stat().st_mode) & 0o077:
         say(".machine/connections is readable by others: chmod 700")
