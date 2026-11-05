@@ -13,10 +13,15 @@
   [4] an archive (issue #354): `Archive: <file>` names a file of old Done and
       Parked rows; ids stay unique across both, a reference resolves in either,
       a missing or outside file, a foreign section and a bad row are reported
+  [5] rule 10 (R44): a decision on the default branch (origin/HEAD, origin/main,
+      origin/master) keeps its id and its quoted words; a new row, or words
+      outside the quotes, may change; without git or such a ref nothing is read
 """
 
+import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -138,12 +143,60 @@ def test_archive() -> None:
           roadmap.problems(mile.replace("X1, D1", "X1, D0"), arch) == [], roadmap.problems(mile.replace("X1, D1", "X1, D0"), arch))
 
 
+def git(root: Path, *args: str) -> None:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=env)
+
+
+def test_decisions_kept() -> None:
+    print("\n[5] a decision on the default branch is never edited or deleted")
+    root = skill_pack_at(Path(tmp_dir()) / "r")
+    (root / "docs").mkdir()
+    (root / "docs" / "ROADMAP.md").write_text(roadmap.SOUND, encoding="utf-8")
+    git(root, "init", "-q")
+    check("a checkout with no default-branch ref: rule 10 reads nothing", roadmap.check_roadmap(root) == [],
+          roadmap.check_roadmap(root))
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "base")
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    check("unchanged since origin/main: clean", roadmap.check_roadmap(root) == [], roadmap.check_roadmap(root))
+    path = root / "docs" / "ROADMAP.md"
+    path.write_text(roadmap.SOUND.replace("skip the portfolio", "keep the portfolio"), encoding="utf-8")
+    got = roadmap.check_roadmap(root)
+    check("an edited quote is reported against origin/main, with its id and file",
+          len(got) == 1 and got[0].startswith("docs/ROADMAP.md: [R1]") and "origin/main" in got[0], got)
+    git(root, "commit", "-q", "-am", "edit it")
+    got = roadmap.check_roadmap(root)
+    check("committing the edit does not hide it (the base is the default branch, not HEAD)", len(got) == 1, got)
+    path.write_text(roadmap.SOUND.replace('- [R1] 2026-09-30 "skip the portfolio management" (chat)\n', ""), encoding="utf-8")
+    check("a deleted decision is reported", any("never deleted" in x for x in roadmap.check_roadmap(root)),
+          roadmap.check_roadmap(root))
+    later = roadmap.SOUND.replace("(chat)", "(chat, in the session)").replace(
+        "## Links", '- [R2] 2026-10-01 "keep the portfolio after all", replaces R1 (chat)\n## Links')
+    path.write_text(later, encoding="utf-8")
+    check("a new decision that replaces it, and words outside the quotes: clean", roadmap.check_roadmap(root) == [],
+          roadmap.check_roadmap(root))
+    git(root, "update-ref", "-d", "refs/remotes/origin/main")
+    git(root, "update-ref", "refs/remotes/origin/master", "HEAD~1")
+    check("origin/master is read when there is no origin/main",
+          roadmap.check_roadmap(root) == [] and roadmap.decisions_changed(
+              roadmap.SOUND, roadmap.SOUND.replace("skip", "keep")) != [])
+    old_env = os.environ.get("GIT_DIR")
+    os.environ["GIT_DIR"] = str(Path(tmp_dir()) / "elsewhere.git")
+    try:
+        check("a hook's GIT_DIR does not point it at another repository", roadmap.base_text(root, "docs/ROADMAP.md") is not None)
+    finally:
+        os.environ.pop("GIT_DIR") if old_env is None else os.environ.__setitem__("GIT_DIR", old_env)
+
+
 def main() -> None:
     test_rules()
     test_template()
     test_skill_pack_file()
     test_edges()
     test_archive()
+    test_decisions_kept()
 
 
 if __name__ == "__main__":

@@ -5,6 +5,12 @@ The built-in checks, in order (every line is a coded message; each warning
 names its fix in `next`):
 
   skill pack        name, version, kit version, root
+  install        where the code runs from: a release folder (no `.git` at the
+                 root: ok) or a git checkout (info, with its HEAD); a checkout
+                 while `<P>_RUNTIME=1` (set by the host adapter on the
+                 runtime, the client's agent) fails: the runtime installs a
+                 tagged release only, development is not runtime (the
+                 playbook's R44)
   env_chain      the env files read (later wins) or "process env only", and
                  every skill pack variable with its source; a secret's value is
                  never shown, only set/unset
@@ -238,6 +244,33 @@ def check_skill_pack(ctx: Context) -> None:
                           f"{kit_version}) at {cfg.root}", name=cfg.name,
                           version=ver, kit_version=kit_version,
                           root=str(cfg.root)))
+
+
+def check_install(ctx: Context) -> None:
+    cfg = ctx.cfg
+    root, var = cfg.root, cfg.env("RUNTIME")
+    ver = contract.skill_pack_version() or "unversioned"
+    runtime = os.environ.get(var) == "1"
+    if not (root / ".git").exists():
+        ctx.ok("install", msg("doctor_install_release", f"install: a release "
+                              f"folder ({ver}) at {root}, not a git checkout",
+                              version=ver, root=str(root)))
+        return
+    head = git_head(root)
+    head = head[0][:HEAD_CHARS] if head else "unknown"
+    if runtime:
+        ctx.fail("install", msg(
+            "doctor_install_checkout_on_runtime", f"{var}=1 (this is the "
+            f"runtime) but the code runs from a git checkout ({root}, "
+            f"{head}): the runtime installs a tagged release only",
+            var=var, root=str(root), head=head),
+            ["install the tagged release with the host adapter (its install "
+             "or upgrade), then run doctor again"])
+        return
+    ctx.info("install", msg(
+        "doctor_install_checkout", f"install: a development checkout at "
+        f"{root} ({head}); the runtime ({var}=1) runs a tagged release only",
+        root=str(root), head=head, var=var))
 
 
 def check_env_chain(ctx: Context) -> None:
@@ -636,7 +669,7 @@ def check_exchange(ctx: Context) -> None:
         documents=len(docs), contracts=len({d.contract for d in docs})))
 
 
-BUILTIN: tuple[Check, ...] = (check_skill_pack, check_env_chain,
+BUILTIN: tuple[Check, ...] = (check_skill_pack, check_install, check_env_chain,
                               check_token_source, check_home_secrets,
                               check_env_files, check_console_secret,
                               check_data_dir, check_db,

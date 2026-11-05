@@ -37,6 +37,9 @@ on the fake "shop" skill pack.
       refused (coded), text prints findings only; --strict fails only on
       what a check warns; Dispatcher(doctor_flags=, doctor_checks=) passes
       it all through
+  [12] the install (R44): a release folder (no .git) is ok; a git checkout
+      is info with its HEAD; a checkout while <P>_RUNTIME=1 fails with the
+      fix; a release folder on the runtime is ok
 """
 
 import os
@@ -129,7 +132,7 @@ def test_fresh() -> None:
           rc == 0 and doc is not None and not err, (rc, out[:200], err))
     ids = [c["check"] for c in doc["checks"]]
     check("the built-in checks, in order",
-          [i for i in dict.fromkeys(ids)] == ["skill_pack", "env_chain",
+          [i for i in dict.fromkeys(ids)] == ["skill_pack", "install", "env_chain",
                                              "token_source", "data_dir", "db",
                                              "markets", "writes", "verbs"],
           ids)
@@ -866,6 +869,36 @@ def test_pack_hooks() -> None:
           rc == 0 and list(doc) == KIT_KEYS)
 
 
+def test_install() -> None:
+    print("\n[12] the install: a release on the runtime, a checkout in development")
+    data = Path(tmp_dir("doc-install-"))
+    root = Path(tmp_dir("doc-install-root-")) / "shop"
+    shutil.copytree(_shop.SHOP, root, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    on = {CFG.env("RUNTIME"): "1"}
+    _, _, _, doc = run(data, "--json", root=root)
+    check("a release folder (no .git): ok, doctor_install_release",
+          codes(doc, "install") == ["doctor_install_release"] and found(doc, "install", "ok"), doc and found(doc, "install"))
+    rc, _, _, doc = run(data, "--json", root=root, **on)
+    check("a release folder on the runtime: ok", codes(doc, "install") == ["doctor_install_release"],
+          doc and found(doc, "install"))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    for args in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "x"]):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=env)
+    rc, _, _, doc = run(data, "--json", root=root)
+    got = found(doc, "install")
+    check("a git checkout in development: info with its HEAD, not a warning",
+          codes(doc, "install") == ["doctor_install_checkout"] and got[0]["level"] == "info"
+          and len(got[0]["message_code"]["params"]["head"]) == 12, got)
+    rc, out, _, doc = run(data, "--json", root=root, **on)
+    got = found(doc, "install")
+    check("a git checkout while <P>_RUNTIME=1: a failure with its fix, exit 1",
+          codes(doc, "install") == ["doctor_install_checkout_on_runtime"] and got[0]["level"] == "fail"
+          and got[0]["next"] and rc == 1 and doc["healthy"] is False, (rc, got))
+    _, _, _, doc = run(data, "--json", root=root, **{CFG.env("RUNTIME"): "yes"})
+    check("only 1 marks the runtime", codes(doc, "install") == ["doctor_install_checkout"], doc and found(doc, "install"))
+
+
 def main() -> int:
     test_fresh()
     test_writes()
@@ -878,6 +911,7 @@ def main() -> int:
     test_checkout()
     test_exchange()
     test_pack_hooks()
+    test_install()
     return finish()
 
 
