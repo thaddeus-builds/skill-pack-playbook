@@ -79,5 +79,67 @@ def test_title_letters_ease_from_wide_to_normal_while_it_fades_in_and_the_size_f
         assert any("tracking_in" in m for m in problems(spec, d))
 
 
+def ink(m, level=20):
+    ys, xs = np.where(m > level)
+    return (xs.min(), ys.min(), xs.max(), ys.max()) if len(xs) else None
+
+
+def test_the_serif_role_is_reported_like_the_others_and_its_glyphs_are_checked():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = _t.film_spec(d)
+        spec["overlays"] = [{"element": "year", "t0": 0.5, "t1": 3.0, "x": 540, "y": 700, "anchor": "m", "text": "1998 \u8d77"}]
+        checks = all_checks(spec, d)
+        assert "font role serif: no file found, the fallback face is used" in checks["fonts"], checks["fonts"]
+        assert any(m.startswith("font serif: no glyph") for m in checks["glyphs"]), checks["glyphs"]
+        spec["fonts"] = {"serif": "nowhere.otf"}
+        assert any(m.startswith("fonts.serif") for m in problems(spec, d))
+
+
+def test_kinetic_sweeps_in_from_its_edge_then_settles_into_a_subtitle_where_the_spec_says():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = _t.film_spec(d)
+        spec["overlays"] = [{"element": "kinetic", "t0": 0.5, "t1": 4.0, "text": "SINCE", "size": 260, "dir": "left", "to": {"x": 540, "y": 1000, "size": 60}, "max_width": 900}]
+        assert problems(spec, d) == [], problems(spec, d)
+        assert layer_of(spec, d, 0.4).max() == 0, "nothing before its time"
+        early, rest, end = ink(layer_of(spec, d, 0.6)), ink(layer_of(spec, d, 1.2)), ink(layer_of(spec, d, 3.0))
+        assert early is not None and early[0] < rest[0] + 5 and early[2] < rest[2], (early, rest)      # coming from the left edge
+        assert rest[3] - rest[1] > 2.5 * (end[3] - end[1]), (rest, end)                                 # big, then small
+        cx, cy = (end[0] + end[2]) / 2 / 0.25, (end[1] + end[3]) / 2 / 0.25
+        assert abs(cx - 540) < 30 and abs(cy - 1000) < 40, (cx, cy)
+        assert boxes_at(spec, d, 0, 0.7) == [] and len(boxes_at(spec, d, 0, 1.0)) == 1
+        (name, x0, y0, x1, y1), = boxes_at(spec, d, 0, 3.0)
+        assert abs((x0 + x1) / 2 - 540) < 2 and abs((y0 + y1) / 2 - 1000) < 2 and y1 - y0 < 100, (x0, y0, x1, y1)
+        assert (boxes_at(spec, d, 0, 1.0)[0][3] - boxes_at(spec, d, 0, 1.0)[0][1]) > 200
+        for dirn in ("right", "top", "bottom"):
+            spec["overlays"][0]["dir"] = dirn
+            assert layer_of(spec, d, 0.6).max() >= 0 and problems(spec, d) == []
+        bad = {**spec["overlays"][0]}
+        del bad["to"]
+        spec["overlays"] = [bad]
+        assert any("to must be" in m for m in problems(spec, d)), problems(spec, d)
+        spec["overlays"] = [{**bad, "to": {"x": 540, "y": 1000, "size": 60}, "dir": "up"}]
+        assert any("dir" in m for m in problems(spec, d))
+
+
+def test_year_rises_into_place_holds_and_fades_out_and_the_layout_check_sees_it():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = _t.film_spec(d)
+        spec["overlays"] = [{"element": "year", "t0": 0.5, "t1": 5.0, "text": "1998", "x": 540, "y": 700, "anchor": "m", "size": 240, "hold": 1.0, "out_dur": 0.5, "rise": 200}]
+        assert problems(spec, d) == []
+        a, b, c = ink(layer_of(spec, d, 0.7)), ink(layer_of(spec, d, 1.0)), ink(layer_of(spec, d, 2.0))
+        assert a is None or a[1] > c[1], (a, c)
+        assert c[1] > b[1] - 1 or b[1] >= c[1] - 120, (b, c)
+        assert b[1] > c[1], "it is still rising at 1.0 s"
+        c = ink(layer_of(spec, d, 2.0), 250)                                              # the type itself, not its shadow
+        assert abs((c[0] + c[2]) / 2 / 0.25 - 540) < 8, c
+        assert layer_of(spec, d, 3.5).max() == 0, "faded out after the hold"
+        assert len(boxes_at(spec, d, 0, 2.0)) == 1 and boxes_at(spec, d, 0, 3.5) == []
+        spec["overlays"][0]["x"] = 1000
+        assert any("year" in m and "safe" in m for m in (lambda r: r["layout"])(all_checks({**spec, "safe": {"profile": "tiktok"}}, d))), "type off the safe area is named"
+
+
 if __name__ == "__main__":
     _t.main(globals())

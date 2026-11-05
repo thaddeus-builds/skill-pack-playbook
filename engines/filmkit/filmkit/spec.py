@@ -3,7 +3,7 @@ spec's own canvas (the design size), the order of `overlays` is their stacking o
 
     {"schema": "filmkit.film/1", "id": "...", "canvas": {"w": 1080, "h": 1920, "fps": 30}, "duration": 44.0, "bpm": 90,
      "assets": {"clip1": {"type": "video", "path": "raw/clip1.mp4"}, "logo": {"type": "image", "path": "logo.png"}},
-     "fonts": {"black": "...otf"},                                   # optional: roles black, bold, med, reg
+     "fonts": {"black": "...otf"},                                   # optional: roles black, bold, med, reg, serif
      "shots": [{"id": "s1", "asset": "clip1", "start": 0, "end": 4, "in": 8.0, "speed": 1.0, "fit": "fill",
                 "camera": {"zoom": [1.3, 1.0], "center": [[0.4, 0.66], [0.5, 0.5]]}, "dim": [0, 0], "blur": 0,
                 "transition": {"type": "dissolve", "dur": 0.4}}, ...],    # the transition is into this shot, so not on the first
@@ -47,7 +47,7 @@ NUM_PARAMS = {
     "x": (-5000, 10000), "y": (-5000, 10000), "x0": (-5000, 10000), "x1": (-5000, 10000), "top": (-5000, 10000), "size": (1, 2000), "suffix_size": (1, 2000), "name_size": (1, 2000),
     "tracking": (-100, 300), "stagger": (0, 5), "dur": (0, 10), "rise": (-500, 500), "lead": (0.5, 3), "out": (0, 600), "out_dur": (0, 10), "alpha": (0, 1), "width": (1, 10000),
     "max_width": (1, 10000), "max_height": (1, 10000), "opacity": (0, 1), "fade_in": (0, 10), "fade_out": (0, 10), "target": (0, 1e9), "hold": (0, 10), "suffix_scale": (0.1, 3),
-    "period": (0.1, 30), "typewriter": (1, 200), "tracking_in": (-100, 300), "tracking_dur": (0.05, 10), "thickness": (1, 200), "arm": (1, 2000), "step": (1, 5000), "gap": (0, 30), "first": (0, 30),
+    "period": (0.1, 30), "typewriter": (1, 200), "sweep": (0.05, 3), "settle": (0.05, 3), "shadow": (0, 1), "tracking_in": (-100, 300), "tracking_dur": (0.05, 10), "thickness": (1, 200), "arm": (1, 2000), "step": (1, 5000), "gap": (0, 30), "first": (0, 30),
 }
 GRADE_KEYS = {"black": (-0.2, 0.5), "contrast": (0.2, 3), "s_curve": (-1, 1), "saturation": (0, 3), "gamma": (0.3, 3), "vignette": (0, 1), "grain": (0, 60)}
 MUSIC_LISTS = ("impacts", "whooshes", "pings")
@@ -133,6 +133,8 @@ def _overlay_problems(el: dict, w: str, assets: dict) -> list[str]:
     for k in ("color", "fill", "accent"):
         if k in el and el[k] is not None and not (isinstance(el[k], list) and len(el[k]) >= 3 and all(_n(c, 0, 255) for c in el[k][:3])):
             out.append(f"{w}.{k}: must be [r, g, b], each from 0 to 255")
+    if "dir" in el and el["dir"] not in ("left", "right", "top", "bottom"):
+        out.append(f"{w}.dir: must be left, right, top or bottom")
     if "align" in el and el["align"] not in ("l", "m"):
         out.append(f"{w}.align: must be l or m")
     if "grow" in el and el["grow"] not in ("left", "middle", None):

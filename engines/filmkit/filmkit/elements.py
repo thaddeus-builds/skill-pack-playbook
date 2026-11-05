@@ -11,12 +11,14 @@ an RGBA layer) and `boxes` (where its type sits at a time, in design pixels: the
     steps    a vertical progress line with numbered items that appear in turn (`name_size`; `max_width`: the items' titles shrink to fit it)
     rule     a line that grows from its centre (or from its left end: `grow`: "left")
     logo     the brand's mark, faded in and out (`max_height`: a square mark is made narrower; the layout check sees its box)
+    kinetic  one big word in the serif face that sweeps in from an edge (a trail, a lean) and settles, shrinking, into a subtitle line at `to`
+    year     a big serif number or phrase that rises into place with a soft shadow, optionally held and faded out
 """
 from __future__ import annotations
 
 import math
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from .util import Ctx, ease_out, prog, smooth
 
@@ -532,3 +534,171 @@ class Logo:
         w, h = cls.size(cx, p)
         x = p["x"] - (w / 2 if p["align"] == "m" else 0)
         return [(f"logo:{p['asset']}", x, p["y"], x + w, p["y"] + h)]
+
+
+# ---- serif display type: a word or number set on its own strip with a soft shadow, then moved, leaned and echoed as a picture
+CREAM = (245, 236, 214)
+
+
+def sprite(cx: Ctx, text: str, kind: str, size: float, fill, tracking: float = 0.0, shadow: float = 0.6) -> tuple[Image.Image, int, int, int]:
+    """`text` on a transparent strip with a blurred drop shadow: (the picture, the margin, the width in pixels, the face's ink rows middle). The text's origin (where `draw` puts `x`, `y`)
+    is at (margin, margin) in the picture. Cached by what it is made of."""
+    key = ("sprite", text, kind, int(round(size * cx.q)), tuple(fill), tracking, round(shadow, 3), cx.q)
+    if key in cx.cache:
+        return cx.cache[key]
+    f = cx.font(kind, size)
+    px = size * cx.q
+    m = int(px * 0.4) + 6
+    w = int(sum(ImageDraw.Draw(Image.new("L", (4, 4))).textlength(ch, font=f) + tracking * cx.q for ch in text) - tracking * cx.q) + 1
+    asc, desc = f.getmetrics()
+    _, top, _, bottom = f.getbbox(text or " ", anchor="la")
+    img = Image.new("RGBA", (w + 2 * m, asc + desc + 2 * m), (0, 0, 0, 0))
+    if shadow > 0:
+        sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        track_text(ImageDraw.Draw(sh), (m + px * 0.03, m + px * 0.06), text, f, (0, 0, 0, int(255 * shadow)), tracking, "l", cx.q, shadow=False)
+        a = sh.getchannel("A").filter(ImageFilter.GaussianBlur(max(1.0, px * 0.05)))
+        sh.putalpha(a)
+        img.alpha_composite(sh)
+    track_text(ImageDraw.Draw(img), (m, m), text, f, (*fill, 255), tracking, "l", cx.q, shadow=False)
+    cx.cache[key] = (img, m, w, m + (top + bottom) // 2)
+    return cx.cache[key]
+
+
+def faded(im: Image.Image, k: float) -> Image.Image:
+    """`im` with its opacity times `k`."""
+    out = im.copy()
+    out.putalpha(im.getchannel("A").point(lambda v: int(v * max(0.0, min(1.0, k)))))
+    return out
+
+
+def paste_rgba(layer: Image.Image, im: Image.Image, x: float, y: float) -> None:
+    """Composite `im` with its top left at (x, y), clipped to the layer (a sprite is allowed to be half off the picture)."""
+    x, y = int(round(x)), int(round(y))
+    x0, y0, x1, y1 = max(0, x), max(0, y), min(layer.width, x + im.width), min(layer.height, y + im.height)
+    if x1 > x0 and y1 > y0:
+        layer.alpha_composite(im.crop((x0 - x, y0 - y, x1 - x, y1 - y)), (x0, y0))
+
+
+@element("kinetic")
+class Kinetic:
+    """`text` enters from the `dir` edge in `sweep` seconds with an echo and a lean, rests big at `at` for `hold`, then in `settle` seconds shrinks and moves to `to` and stays. Positions are
+    the middle of the line ({x, y}; `to.anchor` l or r makes x its left or right end); `at` defaults to the middle of the canvas, a little above it."""
+    defaults = dict(font="serif", size=240, fill=list(CREAM), dir="left", sweep=0.4, hold=0.45, settle=0.45, shadow=0.6, tracking=0.0, max_width=None)
+
+    @staticmethod
+    def check(p):
+        out = []
+        if not isinstance(p.get("text"), str) or not p["text"]:
+            out.append("text is required")
+        to = p.get("to")
+        if not (isinstance(to, dict) and all(isinstance(to.get(k), (int, float)) and not isinstance(to.get(k), bool) for k in ("x", "y", "size")) and 1 <= to["size"] <= 2000
+                and to.get("anchor", "m") in ANCHORS_ALL and set(to) <= {"x", "y", "size", "anchor"}):
+            out.append("to must be {x, y, size} (and optionally anchor l, m or r): where the line settles")
+        at = p.get("at")
+        if at is not None and not (isinstance(at, dict) and set(at) <= {"x", "y"} and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in at.values())):
+            out.append("at must be {x, y}: the middle of the big word")
+        return out
+
+    @staticmethod
+    def texts(p):
+        return [(p.get("font", "serif"), p["text"])]
+
+    @classmethod
+    def sizes(cls, cx, p):
+        """(the big size, the settled size) in design pixels, each shrunk to fit `max_width`."""
+        return (fitted(cx, [p["text"]], p["font"], p["size"], p["tracking"], p["max_width"]), fitted(cx, [p["text"]], p["font"], p["to"]["size"], p["tracking"], p["max_width"]))
+
+    @classmethod
+    def state(cls, t, p, cx, el):
+        """(size, middle x, middle y, how far through the sweep 0 to 1) at `t`, in design pixels; the position before the sweep is on its edge."""
+        big, small = cls.sizes(cx, p)
+        at, to = p.get("at") or {}, p["to"]
+        ax, ay = at.get("x", cx.w0 / 2), at.get("y", cx.h0 * 0.4)
+        w_to = text_width(cx, p["text"], p["font"], small, p["tracking"])
+        tx = to["x"] + {"l": w_to / 2, "m": 0, "r": -w_to / 2}[to.get("anchor", "m")]
+        t1 = el["t0"] + p["sweep"] + p["hold"]
+        s = smooth(prog(t, t1, p["settle"]))
+        u = prog(t, el["t0"], p["sweep"])
+        w_big = text_width(cx, p["text"], p["font"], big, p["tracking"])
+        top, bottom = ink_rows(cx, p["font"], big, p["text"])
+        edge = {"left": (-w_big / 2 - 40, ay), "right": (cx.w0 + w_big / 2 + 40, ay), "top": (ax, -(bottom - top) / 2 - 40), "bottom": (ax, cx.h0 + (bottom - top) / 2 + 40)}[p["dir"]]
+        k = ease_out(u)
+        x, y = edge[0] + (ax - edge[0]) * k, edge[1] + (ay - edge[1]) * k
+        return big + (small - big) * s, x + (tx - x) * s, y + (to["y"] - y) * s, u, edge
+
+    @classmethod
+    def draw(cls, layer, t, p, cx, el):
+        p = {**cls.defaults, **p}
+        if t < el["t0"]:
+            return
+        size, x, y, u, edge = cls.state(t, p, cx, el)
+        fill = rgb(p["fill"], CREAM)
+        spr, m, w, mid = sprite(cx, p["text"], p["font"], size, fill, p["tracking"], p["shadow"])
+        q = cx.q
+        vx, vy = (x - edge[0]), (y - edge[1])                      # where it has come from: the echo trails back toward the edge
+        speed = (1 - u) ** 2 if u < 1 else 0.0                     # the ease's speed: all of the echo at the start, none on arrival
+        if speed > 0.01:
+            lean = {"left": 1, "right": -1}.get(p["dir"], 0) * 0.32 * speed
+            norm = max(1.0, math.hypot(vx, vy))
+            reach = min(norm, 0.4 * max(cx.w0, cx.h0)) * speed
+            body = spr.transform(spr.size, Image.AFFINE, (1, lean, -lean * spr.height / 2, 0, 1, 0), Image.BICUBIC) if lean else spr
+            n = 6
+            for j in range(n, -1, -1):
+                ox, oy = -vx / norm * reach * j / n, -vy / norm * reach * j / n
+                paste_rgba(layer, faded(body, min(1.0, u * 3) * (1.0 if j == 0 else 0.5 * (1 - j / (n + 1)))), (x + ox) * q - m - w / 2, (y + oy) * q - mid)
+        else:
+            paste_rgba(layer, faded(spr, min(1.0, u * 3)), x * q - m - w / 2, y * q - mid)
+
+    @classmethod
+    def boxes(cls, t, p, cx, el):
+        p = {**cls.defaults, **p}
+        if t < el["t0"] + p["sweep"] + 0.05:                       # while it is still coming in, it is not yet anywhere
+            return []
+        size, x, y, _, _ = cls.state(t, p, cx, el)
+        w = text_width(cx, p["text"], p["font"], size, p["tracking"])
+        top, bottom = ink_rows(cx, p["font"], size, p["text"])
+        h = bottom - top
+        return [("kinetic", x - w / 2, y - h / 2, x + w / 2, y + h / 2)]
+
+
+ANCHORS_ALL = ("l", "m", "r")
+
+
+@element("year")
+class Year:
+    defaults = dict(font="serif", size=220, fill=list(CREAM), anchor="l", tracking=0.0, rise=180, dur=0.8, hold=None, out_dur=0.5, shadow=0.6, max_width=None)
+
+    @staticmethod
+    def check(p):
+        return ([] if isinstance(p.get("text"), str) and p["text"] and isinstance(p.get("x"), (int, float)) and isinstance(p.get("y"), (int, float)) else ["text, x and y are required"]) + anchor_problems(p)
+
+    @staticmethod
+    def texts(p):
+        return [(p.get("font", "serif"), p["text"])]
+
+    @classmethod
+    def alpha(cls, t, p, el):
+        a = ease_out(prog(t, el["t0"], p["dur"]))
+        if p["hold"] is not None:
+            a *= 1 - smooth(prog(t, el["t0"] + p["dur"] + p["hold"], p["out_dur"]))
+        return a
+
+    @classmethod
+    def draw(cls, layer, t, p, cx, el):
+        p = {**cls.defaults, **p}
+        a = cls.alpha(t, p, el)
+        if a <= 0.001:
+            return
+        size = fitted(cx, [p["text"]], p["font"], p["size"], p["tracking"], p["max_width"])
+        spr, m, w, _ = sprite(cx, p["text"], p["font"], size, rgb(p["fill"], CREAM), p["tracking"], p["shadow"])
+        rise = p["rise"] * (1 - ease_out(prog(t, el["t0"], p["dur"])))
+        x0 = p["x"] * cx.q - {"l": 0, "m": w / 2, "r": w}[p["anchor"]]
+        paste_rgba(layer, faded(spr, a * 1.3), x0 - m, (p["y"] + rise) * cx.q - m)
+
+    @classmethod
+    def boxes(cls, t, p, cx, el):
+        p = {**cls.defaults, **p}
+        if t < el["t0"] + p["dur"] * 0.5 or (p["hold"] is not None and t >= el["t0"] + p["dur"] + p["hold"] + p["out_dur"]):
+            return []
+        size = fitted(cx, [p["text"]], p["font"], p["size"], p["tracking"], p["max_width"])
+        return [("year", *line_box(cx, p["text"], p["x"], p["y"], p["font"], size, p["anchor"], p["tracking"]))]
