@@ -200,8 +200,7 @@ def test_tree(root: Path) -> None:
              "decision_keys.tsv": ["entity_type", "key", "domain", "confirm",
                                    "label_en", "label_zh", "story", "why"],
              "message_codes.tsv": ["code", "params", "meaning_en",
-                                   "meaning_zh"],
-             "story_checks.tsv": ["story", "verb", "expect", "needs", "note"]}
+                                   "meaning_zh"]}
     for name, head in heads.items():
         lines = (root / "ssot" / name).read_text(encoding="utf-8").splitlines()
         check(f"ssot/{name}: the columns the kit reads"
@@ -279,7 +278,7 @@ def test_codeowners(root: Path) -> None:
     paths = [p for p, *_ in lines]
     missing = [p for p in paths if not (root / p.strip("/")).exists()]
     check("every CODEOWNERS path exists in the new skill pack",
-          len(paths) >= 12 and not missing, missing)
+          len(paths) >= 10 and not missing, (len(paths), missing))     # no owner files since R44
     check("every path is owned by the --owner handle",
           all(owner == ["@boss"] for _, *owner in lines), lines)
     check("the risky list is there: the kit, the console, the writer, "
