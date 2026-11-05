@@ -4,6 +4,10 @@ owner 在 2026-11-05 问了两件事：一是当初为避免误解和幻觉而�
 
 怎么量的：本机能拉到的 12 个 GitHub 仓库（`tools/adoption.tsv` 里的包，加上不在表里的 `cloud-drive`），各自的 `origin/main` 完整检出到临时目录，只读。`cloud-drive` 没有 `ssot/`，不计。行数 = 去掉表头、空行和 `#` 注释行之后的行数。"最后改动"是 `git log -1` 的日期。"代码里出现"是指一行的键（第一列）作为字符串出现在包自己的代码里，`ssot/`、`tests/`、`docs/` 和 vendor 目录（`scripts/kit/`、`kit/`、`console/`、`zylos/`）不算。"提到 S 编号的提交"统计的是 2026-10-06 以来提交说明里出现的 `S..` 编号。GitLab 上的包这次没量（同 `docs/design/consolidation-2026-11.md`）。
 
+## owner 的回答（R44，2026-11-05）
+
+已同意："五条都按推荐"。五个问题都按推荐执行，工作记在 `ROADMAP.md` 的 X46：先做 playbook 这一侧（A4 和 B3 的第 0 步），kit 发布之后各包再迁移。
+
 ## 一句话结论
 
 - **机器那一半天天在用**：`constants.tsv`、消息码、`fact_keys.tsv`、`decision_keys.tsv` 和各包自己的登记表，几乎每一行都在代码里出现。正是它们让一个值只写在一处。原样保留。
