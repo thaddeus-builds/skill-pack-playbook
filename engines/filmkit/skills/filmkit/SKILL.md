@@ -1,7 +1,7 @@
 ---
 name: filmkit
 description: Render a finished film (camera moves, cuts on the beat, a grade, animated type, own-synthesis sound, a loudness target) from one JSON film spec, and check it first - for a maker pack or an agent that has footage, a story and voice files and needs the film made.
-version: 0.1.4
+version: 0.2.0
 ---
 # Making a film from a spec (filmkit)
 
@@ -12,7 +12,7 @@ on screen and where it comes from, who may appear, and the platform's rules. Say
 by a path relative to the spec or absolute); ship a film that carries a number, a claim or a person's face or voice the caller has not sourced and cleared; answer a `check` problem by
 loosening the check instead of changing the film.
 
-1. **See what it can do, free.** `python3 -m filmkit demo --out /tmp/demo` writes synthetic assets and a spec that uses every element; `elements` and `looks` list what is there.
+1. **See what it can do, free.** `python3 -m filmkit demo --out /tmp/demo` writes synthetic assets and two specs, `film.json` (every element) and `story.json` (a presenter cutout, panel and split shots, kinetic and year type); `elements` and `looks` list what is there. A cutout needs a matte: filmkit makes none, so ask for one from whatever tool segments the footage (same size and frames as the clip).
 2. **Write the spec** (the maker pack does this from its own story; an agent without a pack writes it by hand from the docs): assets, shots on the beat, overlays, audio, encode. Cut on a beat of `bpm`, give
    every shot a camera move, keep type inside the safe area, put the logo and the ask at the end.
 3. **`validate`** the spec: each problem is `where: what`; fix the spec, not the message. A missing asset, a gap between shots and a transition longer than half a shot are the usual ones.
