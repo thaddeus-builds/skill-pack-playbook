@@ -664,7 +664,7 @@ def update(pack: Path, playbook: Path, version: str, tests: bool = True, remote:
     if tests:
         cmd = suite_command(work)
         if len(cmd) > 1 and cmd[-1] == "tests/run.py" and not (work / "tests" / "run.py").is_file():
-            suite = "not run (no tests/run.py)"
+            suite = "not run (no tests/run.py: set [skill_pack].test_command)"
         else:
             try:
                 r = run(work, *cmd, env={"PYTHONDONTWRITEBYTECODE": "1"})
@@ -680,7 +680,9 @@ def update(pack: Path, playbook: Path, version: str, tests: bool = True, remote:
     c = run(work, "git", "commit", "-q", "-m", msg)
     if c.returncode != 0:
         return done("refused", f"vendored in {work} but the commit failed: {first_line(c)}", worktree=str(work))
-    state = "red" if suite.startswith("red") else "green"
+    # a suite that should have run and did not is no green: a rehearsal that ran nothing proves nothing
+    # (seen once, 2026-11-05: amazon-ppc, whose runner is scripts/run_tests.py, printed "green, suite not run")
+    state = "red" if suite.startswith("red") else "green" if suite in ("green", "not run") else "untested"
     return done(state, f"{state}  kit {old} -> {version}, suite {suite}; branch {new} in {work}; cut from {base} at {cut}",
                 worktree=str(work), branch=new, failing=failing)
 

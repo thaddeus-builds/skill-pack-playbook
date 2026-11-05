@@ -434,6 +434,19 @@ def test_update_commits_a_red_suite_and_names_the_failing_files():
         assert "suite red" in (work / "CHANGELOG.md").read_text()
 
 
+def test_a_suite_that_could_not_run_is_untested_not_green():
+    with _t.tmpdir() as tmp:
+        pb, pack = make_pack(Path(tmp))
+        git(pack, "checkout", "-q", "trunk")
+        (pack / "tests" / "run.py").unlink()                 # its runner lives elsewhere, and no test_command says where
+        git(pack, "add", "-A")
+        git(pack, "commit", "-qm", "no runner")
+        git(pack, "push", "-q", "origin", "trunk")
+        git(pack, "checkout", "-q", "feature")
+        r = update(pb, str(pack))
+        assert r.returncode == 1 and "acme: untested  kit" in r.stdout and "set [skill_pack].test_command" in r.stdout, r.stdout
+
+
 def test_update_honours_test_command_and_no_tests():
     with _t.tmpdir() as tmp:
         py = shlex.quote(sys.executable)
