@@ -1101,6 +1101,7 @@ def test_boundary(root: Path) -> None:
         caught("...but config that passes --apply is flagged",
                boundary.check_boundaries(root, verbs=VERBS),
                "console/deploy.json: passes --apply")
+    test_tools(root)
     real = root / "console-real"
     vendor.sync(_shop.PLAYBOOK / "console", real, {})
     try:
@@ -1108,6 +1109,54 @@ def test_boundary(root: Path) -> None:
               boundary.check_consumer(root, "console-real", verbs=VERBS))
     finally:
         shutil.rmtree(real)
+
+
+def test_tools(root: Path) -> None:
+    print("\n[5b] tools/ is for a person; the runtime uses the CLI (R44)")
+    chk = lambda: boundary.check_boundaries(root, verbs=VERBS)  # noqa: E731
+    clean("no tools/ folder: nothing to check", boundary.check_tools(root, verbs=VERBS))
+    with planted(root, "SKILL.md", "Each morning run `python3 tools/run_routine.py`.\n"):
+        caught("SKILL.md naming tools/", chk(), "SKILL.md:1: names tools/")
+    with planted(root, "host/tasks.json", '{"tasks": [{"prompt": "run python3 tools/x.py"}]}\n'):
+        clean("a host file is read only when [guards.boundary] runtime_files names it", chk())
+        with planted(root, "skill-pack.toml", append='\n[guards.boundary]\nruntime_files = ["host/tasks.json"]\n'):
+            caught("a host task prompt naming tools/", chk(), "host/tasks.json:1: names tools/")
+    with planted(root, "SKILL.md", "Run `shop compute sales`; the scripts in mytools/ are internal.\n"
+                                   "Upload with `python3 scripts/kit/tools/skill_upload.py . OUT`.\n"):
+        clean("a word that only ends in tools/, and the kit's own scripts/kit/tools/, are not the pack's tools/", chk())
+    with planted(root, "SKILL.md", "Then run ./tools/run.py\n"):
+        caught("./tools/ is the pack's tools/", chk(), "SKILL.md:1: names tools/")
+    with planted(root, "tools/sync.py", 'import requests\nrequests.post(URL, json=body)\n'):
+        caught("an outward call in tools/ that is not listed, and no export-ignore", chk(),
+               "tools/sync.py: calls outward (`requests.post(`)", ".gitattributes: no `tools/ export-ignore`")
+        with planted(root, ".gitattributes", "CHANGELOG.md merge=union\ntools/ export-ignore\n"):
+            caught("export-ignore alone does not list the outward call", chk(), "tools/sync.py: calls outward")
+            for text in ('req = Request(u, data=b, method="POST")\n', "subprocess.run(['curl', '-X', 'POST', u])\n",
+                         "import smtplib\n", "from playwright.sync_api import sync_playwright\n"):
+                with planted(root, "tools/other.py", text):
+                    caught(f"outward: {text.strip()[:40]}", chk(), "tools/other.py: calls outward")
+            with planted(root, "tools/read.py", 'requests.get(URL)\nprint("read only")\n'):
+                caught("a read (GET) is not outward; only the unlisted POST is reported", chk(), "tools/sync.py")
+                check("…and the GET file is not named", "tools/read.py" not in "\n".join(chk()))
+            with planted(root, "tools/outward.tsv", "file\tgate\twhy\ntools/sync.py\tfacts confirm\tsends the confirmed row\n"):
+                caught("listed, but the file does not import kit.human", chk(), "tools/sync.py: listed as outward but does not import kit.human")
+                with planted(root, "tools/sync.py", "from kit import human\nimport requests\nrequests.post(URL)\n"):
+                    clean("listed, a gated verb, kit.human imported: clean", chk())
+                with planted(root, "tools/outward.tsv", "file\tgate\twhy\ntools/sync.py\tfacts list\tx\ntools/gone.py\tfacts confirm\tx\n"):
+                    caught("a gate that is not a gated verb, and a listed file that is not there", chk(),
+                           "gate `facts list` is not a gated verb", "tools/gone.py is not a file under tools/")
+                with planted(root, "tools/outward.tsv", "path\tverb\ntools/sync.py\tfacts confirm\n"):
+                    caught("a list with the wrong header", chk(), "tools/outward.tsv: the header is file, gate, why")
+            with planted(root, "tools/tests/test_sync.py", "requests.post(URL)\n"):
+                caught("tools/ tests are not scanned (only sync.py is reported)", chk(), "tools/sync.py")
+                check("…the test file is not named", "test_sync.py" not in "\n".join(chk()))
+    with planted(root, "tools/ci_local.py", "print('a person runs the suite')\n"), \
+            planted(root, ".gitattributes", "/tools/** export-ignore\n"):
+        clean("tools/ with no outward call and export-ignore (/tools/**): clean", chk())
+    with planted(root, "tools/rent.py", "gpu.rent(hours=2)\n"), planted(root, ".gitattributes", "tools/ export-ignore\n"):
+        clean("a call the default patterns do not know", boundary.check_tools(root, verbs=VERBS))
+        caught("…is caught by an extra pattern (`[guards.boundary] outward_patterns`)",
+               boundary.check_tools(root, verbs=VERBS, patterns=[r"\bgpu\.rent\("]), "tools/rent.py: calls outward")
 
 
 # --------------------------------------------------------------- [6] drift

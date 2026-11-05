@@ -41,3 +41,6 @@ doctor_summary_ok		OK — no warnings	正常——没有警告
 doctor_exchange_missing	hub,folder	hub {hub} has no exchange folder ({folder}): a skill pack cannot hand a document to another through it	客户中心 {hub} 没有交换文件夹（{folder}）：技能包之间无法通过它交换文件
 doctor_exchange_stray	hub,count,paths	hub {hub}: {count} path(s) in exchange/ not at <contract>/<producer>/<YYYY-MM-DD>.json: {paths}; a reader will not see them	客户中心 {hub}：exchange/ 里有 {count} 个路径不在 <contract>/<producer>/<YYYY-MM-DD>.json 的位置：{paths}；读取方看不到它们
 doctor_exchange_ok	hub,documents,contracts	hub {hub}: exchange has {documents} document(s) of {contracts} contract(s), every file where the layout puts it	客户中心 {hub}：交换文件夹有 {documents} 份文件，涉及 {contracts} 种契约，每个文件都在规定的位置
+doctor_install_release	version,root	install: a release folder ({version}) at {root}, not a git checkout	安装方式：发布版（{version}），位置 {root}，不是 git 检出
+doctor_install_checkout	root,head,var	install: a development checkout at {root} ({head}); the runtime ({var}=1) runs a tagged release only	安装方式：开发检出，位置 {root}（{head}）；运行端（{var}=1）只跑打过标签的发布版
+doctor_install_checkout_on_runtime	var,root,head	{var}=1 (this is the runtime) but the code runs from a git checkout ({root}, {head}): the runtime installs a tagged release only	{var}=1（这里是运行端），但代码跑在 git 检出上（{root}，{head}）：运行端只装打过标签的发布版
