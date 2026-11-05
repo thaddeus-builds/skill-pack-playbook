@@ -688,8 +688,11 @@ def test_behind_a_proxy_the_origin_is_compared_with_the_public_host_the_proxy_pa
             "Host": "console.example.com", "Origin": "https://console.example.com", "Sec-Fetch-Site": "same-origin"}))
         noted(srv.post("note", {"text": "proxy with no-referrer"}, token=tok, headers={     # the browser says `null`, and that it is same-origin
             "Host": "console.example.com", "Origin": "null", "Sec-Fetch-Site": "same-origin"}))
+        noted(srv.post("note", {"text": "entry rewrote Host"}, token=tok, headers={     # a platform entry that rewrote Host to loopback:
+            "Host": f"127.0.0.1:{p}", "Origin": "https://console.example.com"}))         # the public Origin is an --allow-host name
         n = len(srv.events())
-        for host, origin in ((f"127.0.0.1:{p}", "https://console.example.com"),      # a proxy that kept its own Host
+        for host, origin in ((f"127.0.0.1:{p}", "https://other.example.com"),        # a rewritten Host, an Origin not allowed
+                             (f"127.0.0.1:{p}", "https://console.example.com:8443"),  # nor another port of the allowed name
                              ("console.example.com", "https://evil.example"),
                              ("console.example.com", "https://console.example.com:8443"),
                              ("console.example.com", "https://console.example.com.evil.example")):
