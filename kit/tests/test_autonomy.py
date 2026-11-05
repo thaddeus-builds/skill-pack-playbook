@@ -23,6 +23,11 @@ ways: the bad case refused AND the good one accepted.
   6. the record and undo: gate()/suffix() per proof, approval refused
      off tier B; undo_free() whatever the mode, not after an edit, not of a
      coded write, not twice; digest() newest first with the undo command.
+  7. capped kinds (R32): a cap row is eligible with no undo; check_tiers()
+     names a cap row with no cap or with an undo, a cap on a no row, a cap
+     that is not a code; auto_verdict() stops on a cap nobody counted and
+     on a cap reached; the gate records each cap used, the write has no
+     code-free undo, and the digest says it is final.
 """
 
 import sys
@@ -37,8 +42,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from kit import autonomy as A  # noqa: E402
 from kit.testing.check import check, finish, raises, tmp_dir  # noqa: E402
 
-COLS = {"动作": "verb", "改动": "change", "级别": "tier", "撤回": "undo", "自动": "auto"}
-WORDS = {"是": "yes", "撤回": "undo", "否": "no"}
+COLS = {"动作": "verb", "改动": "change", "级别": "tier", "撤回": "undo", "自动": "auto", "上限": "cap"}
+WORDS = {"是": "yes", "撤回": "undo", "否": "no", "限额": "cap"}
 HEAD = ("id", "动作", "改动", "级别", "撤回", "自动")
 RAW = [  # SYNTHETIC, the SEO skill pack's shape
     ("T01", "draft", "-", "A", "—", "否"),
@@ -56,7 +61,7 @@ TODAY = NOW.date()
 
 
 def registry(raw=RAW) -> list[dict]:
-    return A.canon([dict(zip(HEAD, r)) for r in raw], COLS, WORDS)
+    return A.canon([dict(zip(HEAD + ("上限",), r)) for r in raw], COLS, WORDS)   # a 6-cell row has no cap column
 
 
 def swap(i: str, **kw) -> list[dict]:
@@ -68,7 +73,7 @@ def test_registry() -> None:
     rows = registry()
     check("canon reads the skill pack's columns and words",
           rows[7] == {"id": "T14", "verb": "publish", "change": "new", "tier": "A", "undo": "unpublish",
-                      "auto": "yes"}, rows[7])
+                      "auto": "yes", "cap": ""}, rows[7])
     check("the whole registry has no problem", A.check_tiers(rows) == [], A.check_tiers(rows))
     for label, broken, want in (
             ("a yes row with no undo", swap("T14", undo="—"), "T14: a tier-B or auto row names no undo"),
@@ -79,7 +84,8 @@ def test_registry() -> None:
             ("a tier-B row with no undo", swap("T04", undo="-"), "T04: a tier-B or auto row names no undo"),
             ("two rows for one pair", swap("T07", change="links"), "T07: (update, links) has two rows"),
             ("a tier that is not A or B", swap("T01", tier="C"), "T01: tier 'C' is not A or B"),
-            ("an auto word not in the set", swap("T01", auto="maybe"), "T01: auto 'maybe' is not yes, undo or no"),
+            ("an auto word not in the set", swap("T01", auto="maybe"),
+             "T01: auto 'maybe' is not yes, undo, cap or no"),
             ("an id used twice", swap("T02", id="T01"), "T01: id empty or not unique")):
         check(f"check_tiers names {label}", want in A.check_tiers(broken), A.check_tiers(broken))
     check("an undo cell's first word is its verb (text after it is a note)",
@@ -91,6 +97,63 @@ def test_registry() -> None:
     check("eligible: the yes ids", A.eligible(rows) == ["T14", "T15"], A.eligible(rows))
     check("ids_of: each change's id, None when unlisted",
           A.ids_of(rows, "redirect", ["create", "update"]) == ["T15", None])
+
+
+CAPPED = registry(RAW + [  # SYNTHETIC: an ad budget raise and a sent message, neither can be taken back
+    ("T20", "budget", "raise", "A", "—", "限额", "auto_spend_per_day"),
+    ("T21", "send", "-", "A", "", "限额", "auto_sends_per_day, auto_spend_per_day"),
+])
+
+
+def capped(i: str, **kw) -> list[dict]:
+    return [{**r, **kw} if r["id"] == i else r for r in CAPPED]
+
+
+def test_capped_kinds() -> None:
+    print("\n[8] capped kinds (R32)")
+    check("a registry with cap rows has no problem", A.check_tiers(CAPPED) == [], A.check_tiers(CAPPED))
+    check("canon reads a cap column and the cap word",
+          A.canon([dict(zip(HEAD + ("上限",), ("T20", "budget", "raise", "A", "—", "限额", "auto_spend_per_day")))], COLS, WORDS)[0]
+          ["auto"] == "cap")
+    check("a cap row is eligible; a no row is not", A.eligible(CAPPED) == ["T14", "T15", "T20", "T21"], A.eligible(CAPPED))
+    check("caps_of: each cap the write's rows name, once, in order",
+          A.caps_of(CAPPED, ["T21", "T20", None]) == ["auto_sends_per_day", "auto_spend_per_day"])
+    for label, broken, want in (
+            ("a cap row with no cap", capped("T20", cap=""), "T20: a cap row names no cap"),
+            ("a cap row with an undo", capped("T20", undo="lower"),
+             "T20: a cap row names an undo (a revertible kind is a yes row)"),
+            ("a cap on a no row", capped("T20", auto="no"), "T20: only a yes or cap row names caps"),
+            ("a cap that is not a code", capped("T20", cap="CNY 30"), "T20: cap 'CNY' is not a code"),
+            ("a tier-B cap row (no undo, so never scoped)", capped("T20", tier="B"),
+             "T20: a tier-B or auto row names no undo")):
+        check(f"check_tiers names {label}", want in A.check_tiers(broken), A.check_tiers(broken))
+    check("a yes row may name caps too (its daily caps)", A.check_tiers(swap("T14", cap="auto_day_cap")) == [])
+    m = A.mode(hist(("confirm", "2026-10-20:T20,T21", "owner@relay", "2026-10-12T08:00:00+00:00")),
+               today=TODAY, max_days=28, eligible_ids=A.eligible(CAPPED))
+    named = A.caps_of(CAPPED, ["T21"])
+    full = [("auto_sends_per_day", 3, 1, 20), ("auto_spend_per_day", 12.5, 0.4, 30)]
+    base = {"mode": m, "write_ids": ["T21"], "item_approved": True, "caps": full, "named": named}
+    check("covered: every named cap counted and under its limit", A.auto_verdict(**base) == {"why": None, "stop": False})
+    for label, kw, want in (
+            ("a named cap nobody counted", {"caps": full[:1]}, "auto_cap_unchecked"),
+            ("no cap counted at all", {"caps": []}, "auto_cap_unchecked"),
+            ("money over what is left", {"caps": [full[0], ("auto_spend_per_day", 29.8, 0.4, 30)]}, "auto_spend_per_day")):
+        got = A.auto_verdict(**{**base, **kw})
+        check(f"{label}: {want}, a stop", got == {"why": want, "stop": True}, got)
+    check("the mode off still wins over an uncounted cap",
+          A.auto_verdict(**{**base, "mode": on([]), "caps": []})["why"] == "auto_off_never")
+    g = A.gate("auto", tier="A", change=["-"], ref=m, caps=full)
+    check("the gate records each cap used with this write, against its limit",
+          g["caps"] == {"auto_sends_per_day": {"used": 4, "cap": 20}, "auto_spend_per_day": {"used": 12.9, "cap": 30}}, g)
+    check("only an auto write records caps",
+          isinstance(raises(lambda: A.gate("undo", tier="A", change=None, ref={"dir": "d"}, caps=full), ValueError),
+                     ValueError))
+    sent = man("send", dir="s1", gate={"caps": g["caps"]})
+    check("a capped write has no code-free undo", not A.undo_free(sent, undone=False, live_as_left=True))
+    ds = A.digest([sent, man(dir="p1", at="2026-10-13T09:00:00+00:00")], now=NOW, days=7, undo=lambda x: "apply undo")
+    check("digest: a capped write is final, shows its caps and no undo command; a revertible one is not final",
+          ds[0]["final"] and ds[0]["caps"] == g["caps"] and ds[0]["undo"] is None
+          and not ds[1]["final"] and ds[1]["caps"] is None and ds[1]["undo"] == "apply undo", ds)
 
 
 def hist(*rows) -> list[dict]:
@@ -294,4 +357,5 @@ if __name__ == "__main__":
     test_caps()
     test_record_and_undo()
     test_levels()
+    test_capped_kinds()
     raise SystemExit(finish())

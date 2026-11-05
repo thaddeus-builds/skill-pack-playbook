@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Kit
+- `kit/autonomy.py` (pack `autonomy`): capped kinds (R32, ROADMAP X42, docs/autonomy.md "Capped kinds"): a tier-registry row with `auto` = `cap` names its caps in a `cap` column and no undo; `check_tiers` refuses a cap row with no cap or an undo, a cap on a `no` row and a cap that is not a code; `eligible` lists cap rows; `caps_of` gives the caps a write's rows name, and `auto_verdict(named=)` stops with `auto_cap_unchecked` when the pack did not count one; `gate(caps=)` records each cap used, `undo_free` is False and `digest` marks the write `final` with its caps. `canon` adds the key `cap` (empty without the column)
+- Skill packs: nothing (re-vendor with the train; a pack that compares `canon()` rows whole sees the new `cap` key; a pack that writes outward drafts its cap rows in its X42 action table, the owner sets each limit)
+
 ### Other
 - `hosts/zylos` 0.7.2: `node zylos/lib.js check` refuses a `runtime.uv_installer_url` on a host reserved for examples (`example.com`, `.test`, `.invalid`, `localhost`), and `manifest.example.json` names Astral's real installer (same sha256). Seen once, 2026-11-05: `scaffold/add_zylos.py` copied the example's placeholder into six packs (ad-copy, asset-handoff, google-ads, meta-ads, proofcut, product-image-to-video), so the first host without uv would have failed to install
 - Skill packs: mechanical (a pack with `zylos/` copies the adapter again and sets `runtime.uv_installer_url` to `https://astral.sh/uv/<uv_version>/install.sh`; `check` names the line)
