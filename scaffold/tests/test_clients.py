@@ -226,10 +226,27 @@ def test_pre_push_hook() -> None:
           (hook.returncode, hook.stdout, hook.stderr))
 
 
+def test_new() -> None:
+    print("[6] new")
+    r = Path(tmp_dir("clients-new-"))
+    rc, out, _ = run("--root", str(r), "new", "northwind", "--title", "Northwind Tea", "--term", "Northwind")
+    c = r / "northwind"
+    check("a new folder is laid out and passes check at once", rc == 0 and C.check(c) == [], C.check(c))
+    check("its term list holds the names, private", (c / ".machine/client_terms.txt").read_text() == "Northwind\n"
+          and oct((c / ".machine").stat().st_mode & 0o777) == "0o700", None)
+    rc, _, err = run("--root", str(r), "new", "northwind", "--title", "again", "--term", "x")
+    check("a folder that exists: refused", rc == 2 and "exists" in err, err)
+    rc, _, err = run("--root", str(r), "new", "acme", "--title", "Acme")
+    check("no --term: refused (a client with no term list can leak)", rc == 2 and "--term" in err, err)
+    rc, _, err = run("--root", str(r), "new", "Bad Name", "--title", "x", "--term", "x")
+    check("a name that is no client name: refused", rc == 2 and "not a client name" in err, err)
+
+
 if __name__ == "__main__":
     test_root()
     test_check()
     test_source()
     test_relink()
     test_pre_push_hook()
+    test_new()
     raise SystemExit(finish())
