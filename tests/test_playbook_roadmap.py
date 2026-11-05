@@ -35,5 +35,10 @@ def test_the_playbook_roadmap_keeps_the_format():
     assert roadmap.check_file(PATH) == [], roadmap.check_file(PATH)
 
 
+def test_no_decision_on_the_default_branch_was_edited():
+    # R44: the R rows are the one record of the owner's decisions (rule 10 of kit.guards.roadmap)
+    assert roadmap.decisions_kept(ROOT, "ROADMAP.md") == [], roadmap.decisions_kept(ROOT, "ROADMAP.md")
+
+
 if __name__ == "__main__":
     _t.main(globals())

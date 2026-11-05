@@ -20,6 +20,9 @@
       an SQL literal, a failure document, a finding exit; main() end to end
   [7] check_registry(): the registry's own rules
   [8] the stories.tsv fragment: every code emitted, exact params, en + zh
+  [9] a skill pack with no story table (R44): `compute stories` prints the
+      empty run with story_checks_none and exits 0, check_registry() finds
+      nothing; a declared table whose file is missing is still refused
 """
 
 import os
@@ -457,7 +460,7 @@ def test_fragment() -> None:
     mine = {c: r for c, r in reg.items()
             if Path(r["file"]).name == "stories.tsv"}
     check("the fragment loads (kit origin, en + zh)",
-          len(mine) == 9 and all(r["origin"] == "kit" and r["meaning_en"]
+          len(mine) == 10 and all(r["origin"] == "kit" and r["meaning_en"]
                                  and r["meaning_zh"] for r in mine.values()),
           sorted(mine))
     probs = messages.check_registry_closed(_shop.KIT, ["stories.py"], mine,
@@ -469,6 +472,40 @@ def test_fragment() -> None:
                                            strict_kit=True)
     check("the guards emit no coded message (their problems are for the "
           "developer)", probs == [], probs)
+
+
+# ------------------------------------------------------------------ [9]
+
+def test_no_story_table() -> None:
+    print("\n[9] a skill pack with no story table (R44)")
+    root = Path(tmp_dir("stories-none-")) / "shop"
+    shutil.copytree(_shop.SHOP, root, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    toml = root / "skill-pack.toml"
+    text = toml.read_text(encoding="utf-8")
+    line = 'story_checks = "ssot/story_checks.tsv"\n'
+    check("the fake skill pack declares a story table (the plant below is real)", line in text)
+    toml.write_text(text.replace(line, ""), encoding="utf-8")
+    config.use(root)
+    try:
+        rc, out, err = capture(lambda a: stories.main(a, verbs=VERBS), ["--json"])
+        doc = one_doc(out) or {}
+        check("compute stories --json: the empty run, story_checks_none, exit 0",
+              rc == 0 and doc.get("stories") == [] and doc.get("summary") == {"pass": 0, "fail": 0, "skip": 0}
+              and doc.get("note_code", {}).get("code") == "story_checks_none", (rc, out, err))
+        check("the document keeps the --json contract (every message coded)",
+              json_contract.uncoded(doc) == [], json_contract.uncoded(doc))
+        rc, out, err = capture(lambda a: stories.main(a, verbs=VERBS), [])
+        check("text: one line that says why, exit 0", rc == 0 and "no story table" in out, (rc, out, err))
+        check("check_registry(): nothing to check", stories.check_registry(verbs=VERBS) == [])
+        toml.write_text(text, encoding="utf-8")
+        config.use(root)
+        rc, out, err = capture(lambda a: stories.main(a, verbs=VERBS), ["--json"])
+        doc = one_doc(out) or {}
+        check("a declared table whose file is missing is still refused (story_check_registry_missing)",
+              rc != 0 and "story_check_registry_missing" in out, (rc, out[-300:], err))
+        check("check_registry() reports it too", stories.check_registry(verbs=VERBS) != [])
+    finally:
+        _shop.use()
 
 
 def main() -> int:
@@ -483,6 +520,7 @@ def main() -> int:
     test_cli(data)
     test_check_registry()
     test_fragment()
+    test_no_story_table()
     return finish()
 
 

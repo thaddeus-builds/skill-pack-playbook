@@ -39,11 +39,20 @@ The file (templates/ROADMAP.md is the starting point):
      another section is a problem. Nothing else moves: Now, Waiting, Next,
      Milestones and Decisions stay in the live file.
 
+  10. a decision once on the default branch is never edited: every R row
+     the roadmap holds at `origin/HEAD` (else `origin/main`, else
+     `origin/master`) is still there with the same words in double quotes;
+     a later decision is a new row that says which one it replaces
+     (`decisions_changed(old, new)`; R44 of the playbook, 2026-11-05: the R
+     rows are the one record of the owner's decisions). Skipped without git
+     or without such a ref (a shallow CI checkout has none).
+
 `check_file(path)` checks one file (a missing one is a problem);
 `check_roadmap(root)` checks a skill pack's: skill-pack.toml `[guards.roadmap]
 file`, else whichever of `docs/ROADMAP.md` and `ROADMAP.md` exists (both is
-a problem: one home). `self_test()` plants each break and returns the rules
-that missed theirs.
+a problem: one home), and rule 10 against the default branch
+(`decisions_kept(root, rel)`). `self_test()` plants each break and returns
+the rules that missed theirs.
 
 Paid for: the video-ads skill pack has kept its roadmap in this format, held
 by its own test, since 2026-10-01, and a second skill pack adopted it; before,
@@ -56,7 +65,9 @@ Test: kit/tests/test_roadmap.py.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -254,9 +265,70 @@ def where(root: Path | str | None = None) -> tuple[Path, str, list[str]]:
     return base / rel, rel, []
 
 
+BASE_REFS = ("origin/HEAD", "origin/main", "origin/master")
+
+
+def decisions(text: str) -> dict[str, list[str]]:
+    """{R id: the words it quotes, in order} of a roadmap's Decisions rows."""
+    out: dict[str, list[str]] = {}
+    for it in sections(text.lstrip("\ufeff").replace("\r\n", "\n")).get("Decisions", []):
+        m = ROW.match(it)
+        if m and m.group(1) == "R":
+            out["R" + m.group(2)] = QUOTE.findall(m.group(4))
+    return out
+
+
+def decisions_changed(old: str, new: str, ref: str = "the default branch") -> list[str]:
+    """Rule 10: every R row of `old` is in `new` with the same quoted words."""
+    before, now = decisions(old), decisions(new)
+    out = []
+    for rid, quotes in before.items():
+        if rid not in now:
+            out.append(f"[{rid}] is on {ref} and gone: a decision is never deleted")
+        elif now[rid] != quotes:
+            out.append(f"[{rid}]: its quoted words differ from {ref}: a decision is never edited; "
+                       f"add a row that says it replaces {rid}")
+    return out
+
+
+def _git(root: Path, *args: str) -> str | None:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}   # a hook's GIT_DIR names another repo
+    try:
+        res = subprocess.run(["git", "--no-optional-locks", "-C", str(root), *args], env=env,
+                             capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return res.stdout if res.returncode == 0 else None
+
+
+def base_text(root: Path | str, rel: str) -> tuple[str, str] | None:
+    """(ref, the roadmap's text there) at the first of BASE_REFS that exists; None without git or a ref."""
+    root = Path(root)
+    for ref in BASE_REFS:
+        if _git(root, "rev-parse", "--verify", "-q", ref + "^{commit}") is None:
+            continue
+        top = _git(root, "rev-parse", "--show-prefix")
+        if top is None:
+            return None
+        text = _git(root, "show", f"{ref}:{top.strip()}{rel}")
+        return (ref, text) if text is not None else None
+    return None
+
+
+def decisions_kept(root: Path | str, rel: str) -> list[str]:
+    """Rule 10 for the roadmap at `root`/`rel` against the default branch; [] when it cannot be read."""
+    path = Path(root) / rel
+    base = base_text(root, rel)
+    if base is None or not path.is_file():
+        return []
+    ref, old = base
+    return [f"{rel}: {x}" for x in decisions_changed(old, path.read_text(encoding="utf-8", errors="replace"), ref)]
+
+
 def check_roadmap(root: Path | str | None = None) -> list[str]:
     path, rel, p = where(root)
-    return p + check_file(path, rel)
+    base = Path(root) if root is not None else skill_pack(root).root
+    return p + check_file(path, rel) + decisions_kept(base, rel)
 
 
 SOUND = """# Demo roadmap
@@ -349,6 +421,16 @@ PLANTED_ARCHIVE = {
 def self_test() -> list[str]:
     """[] when the sound roadmap passes and every planted break is caught."""
     out = [f"a sound roadmap is refused: {problems(SOUND)}"] if problems(SOUND) else []
+    later = SOUND.replace("## Links", '- [R2] 2026-10-01 "keep the portfolio after all", replaces R1 (chat)\n## Links')
+    if decisions_changed(SOUND, SOUND) or decisions_changed(SOUND, later):
+        out.append("rule 10 refuses a roadmap that keeps its decisions, or adds one")
+    if not any("never edited" in x for x in decisions_changed(SOUND, SOUND.replace("skip the portfolio", "keep the portfolio"))):
+        out.append("the roadmap rule misses: a decision's quoted words edited")
+    if not any("never deleted" in x for x in decisions_changed(SOUND, SOUND.replace(
+            '- [R1] 2026-09-30 "skip the portfolio management" (chat)\n', ""))):
+        out.append("the roadmap rule misses: a decision deleted")
+    if decisions_changed(SOUND, SOUND.replace("(chat)", "(chat, 2026-09-30)")):
+        out.append("rule 10 refuses a decision whose words outside the quotes changed")
     if problems(SOUND_MILESTONES):
         out.append(f"a sound roadmap with milestones is refused: {problems(SOUND_MILESTONES)}")
     for what, (text, needle) in PLANTED.items():

@@ -18,7 +18,20 @@
     optionally reads only the ssot registries `allowed_reads` names.
     The verb kinds come from the skill pack's verb table (kit.verbs), so a
     new write verb is covered the day it is listed.
-  * `check_boundaries(root)`: both, from `[guards.boundary]`:
+  * `check_tools(root)`: development is not runtime (the playbook's R44,
+    docs/design/ssot-and-runtime-2026-11.md, rules 3 and 4). `tools/` is for
+    a person at a terminal: a code file there that calls outward (a POST,
+    PUT, PATCH or DELETE, mail, browser automation; `[guards.boundary]
+    outward_patterns` adds regexes) is listed in `tools/outward.tsv`
+    (columns `file`, `gate`, `why`), whose `gate` is a gated verb of the
+    verb table and whose file imports kit.human, the gate it checks before
+    acting; `.gitattributes` keeps `tools/` out of a release
+    (`tools/ export-ignore`: `tools` in `[release].internal`, which
+    kit.guards.release renders); and the files the runtime agent reads
+    (`SKILL.md`, plus `[guards.boundary] runtime_files`, e.g. a host
+    adapter's task manifest) never name `tools/`: the runtime uses the
+    skill pack's CLI only.
+  * `check_boundaries(root)`: all three, from `[guards.boundary]`:
     core_dirs (default the scripts and ssot dirs), adapters (dir names the
     core must not name as a path or an import; default console/ when
     present), consumers (default console/ when present).
@@ -192,6 +205,80 @@ def adapter_pattern(name: str) -> re.Pattern:
     return re.compile(rf"(?<![\w.-]){n}/|\bfrom\s+{n}\b|\bimport\s+{n}\b")
 
 
+TOOLS = "tools"
+OUTWARD_LIST = "tools/outward.tsv"
+OUTWARD = (r"\b(?:requests|httpx|session|client)\.(?:post|put|patch|delete)\(",
+           r"method\s*[=:]\s*[\"'](?:POST|PUT|PATCH|DELETE)[\"']",
+           r"-X[\"']?\s*,?\s*[\"']?(?:POST|PUT|PATCH|DELETE)\b",
+           r"\bsmtplib\b",
+           r"\b(?:from|import)\s+(?:playwright|selenium)\b")
+HUMAN_IMPORT = re.compile(r"\bkit\.human\b|\bfrom\s+kit\s+import\s+[^\n]*\bhuman\b")
+EXPORT_IGNORE = re.compile(r"^\s*/?tools(?:/\*\*|/)?\s+(?:[^\n]*\s)?export-ignore\b", re.M)
+RUNTIME_FILES = ("SKILL.md",)
+NAMES_TOOLS = re.compile(r"(?<![\w.-])tools/")
+
+
+def check_tools(root: Path | str | None = None, *, verbs: Any = None,
+                patterns: list[str] | None = None) -> list[str]:
+    """Rules 3 and 4 of R44 on `tools/` (the module docstring)."""
+    cfg = skill_pack(root)
+    base = cfg.root
+    out: list[str] = []
+    for rel in (*RUNTIME_FILES, *strs(section(cfg, "guards", "boundary").get("runtime_files"), ())):
+        p = base / rel
+        if p.is_file():
+            for n, line in enumerate(read(p).splitlines(), 1):
+                if NAMES_TOOLS.search(line):
+                    out.append(f"{rel}:{n}: names tools/: the runtime agent uses the skill pack's CLI only "
+                               f"(make the step a verb)")
+    tools = base / TOOLS
+    if not tools.is_dir() or not any(p.is_file() for p in tools.rglob("*")):
+        return out
+    files = [p for p in text_files(tools, CODE_EXT)]
+    attrs = base / ".gitattributes"
+    if not attrs.is_file() or not EXPORT_IGNORE.search(read(attrs)):
+        out.append(".gitattributes: no `tools/ export-ignore`: a release would carry tools/, which is for a "
+                   "person at a terminal, not the runtime (add \"tools\" to [release].internal, then "
+                   "`python3 -m kit.guards.release --write`)")
+    rx = [re.compile(x) for x in (*OUTWARD, *(patterns if patterns is not None else
+                                              strs(section(cfg, "guards", "boundary").get("outward_patterns"), ())))]
+    listed: dict[str, dict[str, str]] = {}
+    lst = base / OUTWARD_LIST
+    if lst.is_file():
+        lines = [ln.split("\t") for ln in read(lst).splitlines() if ln.strip() and not ln.startswith("#")]
+        head = [c.strip() for c in lines[0]] if lines else []
+        if [c for c in ("file", "gate", "why") if c not in head]:
+            out.append(f"{OUTWARD_LIST}: the header is file, gate, why")
+        else:
+            for row in lines[1:]:
+                r = dict(zip(head, (c.strip() for c in row)))
+                listed[r.get("file", "")] = r
+    table = verb_table(cfg, verbs) if listed else []
+    gated = {" ".join(v.words) for v in table if v.kind in GATED}
+    for rel, r in sorted(listed.items()):
+        p = base / rel
+        if not rel.startswith(TOOLS + "/") or not p.is_file():
+            out.append(f"{OUTWARD_LIST}: {rel or '(empty)'} is not a file under tools/")
+            continue
+        if r.get("gate") not in gated:
+            out.append(f"{OUTWARD_LIST}: {rel}: gate `{r.get('gate')}` is not a gated verb of the verb table")
+        if not r.get("why"):
+            out.append(f"{OUTWARD_LIST}: {rel}: says no why")
+        if not HUMAN_IMPORT.search(read(p)):
+            out.append(f"{rel}: listed as outward but does not import kit.human: it checks the gate's approval "
+                       f"before it acts")
+    for p in files:
+        rel = _rel(base, p)
+        if rel in listed or "/tests/" in f"/{rel}":
+            continue
+        text = read(p)
+        hit = next((m.group(0) for x in rx for m in [x.search(text)] if m), None)
+        if hit:
+            out.append(f"{rel}: calls outward (`{hit}`) and is not in {OUTWARD_LIST}: an outward action from the "
+                       f"development machine passes the human gate (a gated verb), or the step is a verb")
+    return out
+
+
 def check_boundaries(root: Path | str | None = None, *, verbs: Any = None
                      ) -> list[str]:
     """check_not_mentioned() for every adapter and check_consumer() for
@@ -207,10 +294,12 @@ def check_boundaries(root: Path | str | None = None, *, verbs: Any = None
                 check_not_mentioned(cfg.root, core, adapter_pattern(a))]
     for c in strs(b.get("consumers"), present):
         out += check_consumer(cfg.root, c, verbs=verbs)
+    out += check_tools(cfg.root, verbs=verbs)
     return out
 
 
 def check_boundary(root: Path | str | None = None, **kw: Any) -> bool:
     """check_boundaries() as one kit.testing.check line."""
     return report("boundary: the core names no adapter; a consumer only "
-                  "reads and relays", check_boundaries(root, **kw))
+                  "reads and relays; tools/ stays out of the runtime",
+                  check_boundaries(root, **kw))
