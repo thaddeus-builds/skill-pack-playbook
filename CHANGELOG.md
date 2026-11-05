@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-11-05
+
+A second blocker train inside seven days, on the owner's word (R42): adcut (the console's Origin fix, #552, for its adapter 0.8.0 update) and amazon-ppc (`cap_status`'s inputs, #544, for its monthly cap). Only those two take it now; the others take it with the next regular train.
+
 ### Kit
 - `kit/guards/asks.py` (pack `testkit`): every page a person answers offers a no beside the yes (docs/rules.md, human-in-the-loop rule 7). `problems(html, where)` names each `<form method="post">` that marks no control `data-answer="no"` (inside it or tied by `form=`; a disabled or hidden one does not count) and gives no reason in `data-no` (a form that is not an ask). Seen once: a skill pack's own console, 2026-11-05, a confirm page whose one button was "confirm the checked"
 - Skill packs: judgement (a pack that draws its own pages for people to answer runs `asks.problems` over each page in a test, from a synthetic fixture, and marks its forms; the shared console has its own tests)
