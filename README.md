@@ -1,4 +1,4 @@
-# Agent Harness Playbook
+# Skill Pack Playbook
 
 How to build an **agent skill pack** — a small, tested tool an AI agent operates for a business owner — from the first client meeting to a system running in production, with the human in the loop at the right places and nowhere else.
 
