@@ -472,7 +472,7 @@ def test_markets() -> None:
         refused = "no built-in check named market" in str(e)
     check("a name that is no built-in is refused at once", refused)
     check("every built-in has a name a pack can replace it by",
-          list(doctor.BUILTIN_NAMES)[:2] == ["skill_pack", "env_chain"] and "markets" in doctor.BUILTIN_NAMES
+          list(doctor.BUILTIN_NAMES)[:3] == ["skill_pack", "install", "env_chain"] and "markets" in doctor.BUILTIN_NAMES
           and len(doctor.BUILTIN_NAMES) == len(doctor.BUILTIN))
 
 
