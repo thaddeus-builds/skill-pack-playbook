@@ -19,14 +19,18 @@ What it writes (BUILD.md, B1):
     classes, the doctor's checks, the owner review loop, vendor API
     discovery, the session handoff, the roadmap), ssot/README.md.
     `<<fill: …>>` stays only in the files the build fills later (FILLED);
-  * ssot/: every registry and owner file as its header row, plus the
-    constants row the kit's write path reads (approval_ttl_hours), the
-    build steps (stages.agent.tsv) and the index of what it wrote;
+  * ssot/: every registry as its header row, plus the constants row the
+    kit's write path reads (approval_ttl_hours), and the index of what it
+    wrote; no owner files, story table or build-steps file: the owner's
+    decisions are the roadmap's R rows (the playbook's R44), and a pack adds
+    an owner file only when a client's words or stories must be signed one
+    by one;
   * the skeleton (scaffold/skeleton/): scripts/<cli>.py (the kit's
     Dispatcher), scripts/verbs.py, the kit's facts, decisions, pending,
-    compute stories, queue and execute verbs, scripts/_lib/ (the schema:
+    queue and execute verbs, scripts/_lib/ (the schema:
     human tables only; the one writer: an empty allowlist), .env.example,
-    evals/, .claude/, and exactly the thirteen tests templates/README.md
+    evals/, .claude/ (two hooks: research first, and no standing task on
+    the development machine), and exactly the thirteen tests templates/README.md
     names, each a thin call into kit.testing.suites, plus tests/run.py;
   * the kit and the console vendored (kit/tools/vendor.py) into
     scripts/kit/ and console/, each with its VERSION and MANIFEST.sha256;
@@ -102,13 +106,12 @@ SKELETON_TARGETS = {"scripts/cli.py": "scripts/{cli}.py",
                     "claude/README.md": ".claude/README.md",
                     "claude/settings.json": ".claude/settings.json",
                     "claude/hooks/research_first.py": ".claude/hooks/research_first.py",
+                    "claude/hooks/dev_not_runtime.py": ".claude/hooks/dev_not_runtime.py",
                     "env.example": ".env.example"}
 # ssot files a new skill pack starts with, as their header row; alert rules
-# come with the skill pack's own alert compute (B6)
-SSOT_HEADERS = ["glossary.tsv", "glossary.agent.tsv", "user-stories.tsv",
-                "user-stories.agent.tsv", "policies.tsv", "policies.agent.tsv",
-                "fact_keys.tsv", "decision_keys.tsv", "message_codes.tsv",
-                "story_checks.tsv"]
+# come with the skill pack's own alert compute (B6). No owner files and no
+# story table (R44): the owner's decisions are the roadmap's R rows.
+SSOT_HEADERS = ["fact_keys.tsv", "decision_keys.tsv", "message_codes.tsv"]
 KEPT_CONSTANTS = ("approval_ttl_hours",)
 GENERATED_TESTS = ("test_run_tests.py", "test_ssot.py", "test_layering.py",
                    "test_clock.py", "test_boundary.py", "test_json_contract.py",
@@ -120,7 +123,7 @@ GENERATED_TESTS = ("test_run_tests.py", "test_ssot.py", "test_layering.py",
 # words), and the generated file(s) that answer it. A new checklist item
 # fails scaffold/tests/test_new_skill_pack.py until it is mapped here.
 DAY_ONE = {
-    "Meeting intake": ["ssot/stages.agent.tsv"],
+    "Meeting intake": ["docs/ROADMAP.md"],
     "A review page before the first paid batch": ["scripts/kit/docs/owner-review-loop.md",
                                                   "scripts/kit/docs/vendor-api-discovery.md"],
     "`docs/ROADMAP.md`": ["docs/ROADMAP.md", "tests/test_roadmap.py",
@@ -130,8 +133,6 @@ DAY_ONE = {
         "tests/test_layering.py", "tests/test_release.py", "CLAUDE.md"],
     "An empty registry index": ["ssot/index.tsv", "tests/test_ssot.py"],
     "CI from the first commit": ["{ci}"],
-    "A story-check registry": ["ssot/story_checks.tsv",
-                               "scripts/compute_stories.py"],
     "\"Declare it or refuse\"": ["scripts/{cli}.py", "scripts/facts.py",
                                  "tests/test_gate.py",
                                  "scripts/kit/docs/doctor-checks.md"],
@@ -262,8 +263,6 @@ def ssot_files(langs: list[str]) -> dict[str, str]:
             encoding="utf-8").split("\n", 1)[0].split("\t")
         out[f"ssot/{name}"] = "\t".join(labels(head, langs)) + "\n"
     out["ssot/constants.tsv"] = constants(langs)
-    out["ssot/stages.agent.tsv"] = (TEMPLATES / "ssot" / "stages.agent.tsv"
-                                    ).read_text(encoding="utf-8")
     index = (TEMPLATES / "ssot" / "index.tsv").read_text(
         encoding="utf-8").rstrip("\n").split("\n")
     keep = [index[0]] + [ln for ln in index[1:]

@@ -7,7 +7,21 @@
           {
             "type": "command",
             "command": "python3",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/research_first.py"]
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/research_first.py"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__scheduled-tasks__create_scheduled_task|mcp__scheduled-tasks__update_scheduled_task|CronCreate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/dev_not_runtime.py"
+            ]
           }
         ]
       }

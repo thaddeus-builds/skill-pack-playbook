@@ -25,6 +25,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: judgement (a pack with `tools/` adds `"tools"` to `[release].internal` and rewrites `.gitattributes` with `python3 -m kit.guards.release --write`; one whose tools call outward lists them behind a gated verb or makes them verbs: meta-ads, adcut, product-image-to-video, in their own PRs)
 
 ### Other
+- `scaffold/new_skill_pack.py` (R44): a new skill pack starts with the registries only: no owner files, story table, `stages.agent.tsv` or `compute stories` verb (its decisions are `docs/ROADMAP.md`'s R rows), and `.claude/hooks/dev_not_runtime.py`, which refuses a scheduled task or cron job whose prompt runs the pack, names it or a `tools/` script. Test: `scaffold/tests/test_dev_runtime_hook.py`
+- Skill packs: judgement (a pack may copy `.claude/hooks/dev_not_runtime.py` and its settings entry from the skeleton, filling the CLI word and the name)
 - `tools/fleet.py update` and `rehearse`: a pack whose suite could not run (no `tests/run.py` and no `[skill_pack].test_command`) is `untested`, exit 1, with the fix in the line, never `green`; `--no-tests` is still a chosen green. Seen once, 2026-11-05: the 0.50.0 rehearsal printed amazon-ppc "green, suite not run" (its runner is `scripts/run_tests.py`)
 - Skill packs: mechanical (a pack whose runner is not `tests/run.py` names it in `[skill_pack].test_command`)
 

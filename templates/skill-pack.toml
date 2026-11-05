@@ -25,7 +25,6 @@ message_codes = "ssot/message_codes.tsv"
 fact_keys = "ssot/fact_keys.tsv"
 decision_keys = "ssot/decision_keys.tsv"
 constants = "ssot/constants.tsv"
-story_checks = "ssot/story_checks.tsv"
 
 [release]
 # A release is `git archive` of its tag. These stay out of it (export-ignore) ...
