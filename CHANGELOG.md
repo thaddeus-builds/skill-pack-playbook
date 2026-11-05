@@ -13,6 +13,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [Unreleased]
 
 ### Other
+- `scaffold/clients.py relink`: a link is correct when it leads to its target, however it is written (an existing relative link was read as wrong), and a link inside the client folder is written relative, so the folder survives a move. Seen once: the first client folder's thirteen links, four of them relative
+- Skill packs: nothing
 - `.githooks/pre-push`: before the suites, the leak guard reads every client's `client_terms.txt` under this machine's clients root and refuses a push that adds a listed name; `clients.py check` requires each client to keep one. Seen once, 2026-11-05: a client's name reached this repository's docs from a clone with no hook
 - Skill packs: nothing (the playbook's own hook; packs have their own leak guard)
 - `scaffold/clients.py` and docs/clients.md: one clients root per machine (`CLIENTS_DIR`, else `~/.config/openmax/clients_dir`, which `where --set` writes; neither set is a refusal, never a guess), where each kind of material goes (a meeting under `intake/meetings/<date>/`; a chat log, a link, a video, a picture, a platform export, an agent's API pull in `sources/` with one INDEX row each), `source` (copy and list, or list in place, with the next id and sha256), `relink` (the links a machine needs, from `.machine/links.tsv`) and `check` (each rule a line). The hub's sources README names the two new sources, `chat` and `api-agent`. Seen once: the owner's request of 2026-11-05 and the first client folder made by hand
