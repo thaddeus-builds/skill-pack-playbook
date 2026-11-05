@@ -144,6 +144,15 @@ def main() -> int:
           contract.missing_db_error().next == ["pl doctor", "pl facts init"])
     check("skill pack version from [skill_pack].version",
           contract.skill_pack_version() == "1.2.3")
+    md = Path(tmp_dir("md-"))
+    (md / "skill-pack.toml").write_text('[skill_pack]\nname = "m"\ncli = "m"\nenv_prefix = "SHOP"\n')
+    (md / "SKILL.md").write_text('---\nname: m\nversion: "0.24.0"  # the release tag\n---\nversion: 9.9.9\n')
+    config.use(md)
+    check("no [skill_pack].version, no VERSION: SKILL.md's frontmatter version (quotes, comment dropped)",
+          contract.skill_pack_version() == "0.24.0", contract.skill_pack_version())
+    (md / "SKILL.md").write_text("# no frontmatter\nversion: 1.0.0\n")
+    check("a version line outside a frontmatter is not read", contract.skill_pack_version() is None)
+    config.use(plain)
     _shop.use()
     saved = os.environ.pop("SHOP_DATA_DIR")
     e = raises(contract.missing_db_error, SkillPackError)
