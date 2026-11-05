@@ -1121,8 +1121,11 @@ def test_tools(root: Path) -> None:
         clean("a host file is read only when [guards.boundary] runtime_files names it", chk())
         with planted(root, "skill-pack.toml", append='\n[guards.boundary]\nruntime_files = ["host/tasks.json"]\n'):
             caught("a host task prompt naming tools/", chk(), "host/tasks.json:1: names tools/")
-    with planted(root, "SKILL.md", "Run `shop compute sales`; the scripts in mytools/ are internal.\n"):
-        clean("a word that only ends in tools/ is not the folder", chk())
+    with planted(root, "SKILL.md", "Run `shop compute sales`; the scripts in mytools/ are internal.\n"
+                                   "Upload with `python3 scripts/kit/tools/skill_upload.py . OUT`.\n"):
+        clean("a word that only ends in tools/, and the kit's own scripts/kit/tools/, are not the pack's tools/", chk())
+    with planted(root, "SKILL.md", "Then run ./tools/run.py\n"):
+        caught("./tools/ is the pack's tools/", chk(), "SKILL.md:1: names tools/")
     with planted(root, "tools/sync.py", 'import requests\nrequests.post(URL, json=body)\n'):
         caught("an outward call in tools/ that is not listed, and no export-ignore", chk(),
                "tools/sync.py: calls outward (`requests.post(`)", ".gitattributes: no `tools/ export-ignore`")
