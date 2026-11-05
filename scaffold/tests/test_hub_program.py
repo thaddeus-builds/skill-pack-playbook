@@ -85,11 +85,8 @@ def main() -> int:
                               "label_en", "label_zh", "why"], id_col="key")
     check("its fact_keys.tsv: the shared keys, strict TSV (the markets "
           "enter through the market door, not a row)",
-          [x["key"] for x in rows] == ["currency", "npr_roas",
-                                       "avg_order_value",
-                                       "npr_includes_creator_fee",
-                                       "incremental_source",
-                                       "incremental_factor"], rows)
+          [x["key"] for x in rows] == [r[0] for r in new_hub.HUB_KEY_ROWS]
+          and "unattended_spend_cap_per_day" in [x["key"] for x in rows], rows)
     group = {x["key"]: x["group"] for x in rows}
     check("currency is required; npr_roas, which a pack has a registry "
           "fallback for, is optional and says its reports warn placeholder",
@@ -159,7 +156,7 @@ def main() -> int:
           and all(f["is_assumption"] == 1 for f in doc["facts"])
           and [f["key"] for f in doc["facts"]] == ["market_declared"] * 2, out)
     rc, doc, out = hub_cli(hub, "facts", "init", "--json",
-                           stdin="DE\n\n\n\n\n\n\n\n")
+                           stdin="DE\n" + "\n" * (len(new_hub.HUB_KEY_ROWS) + 1))
     check("a second facts init (piped) changes nothing: DE stays pending",
           rc == 0 and doc["declaration"] == "pending"
           and doc["written"] == [], out)

@@ -426,6 +426,10 @@ def main() -> int:
     keys = (root / "cu2" / "hub" / "defs" / "fact_keys.tsv").read_text(encoding="utf-8")
     check("without --currencies, currency is text: no client's list is built in",
           rc == 0 and "currency\trequired\ttext\t" in keys, err or keys[:200])
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from kit import autonomy
+    check("the hub defines the client's unattended spend cap under the kit's key (X32)",
+          f"\n{autonomy.SPEND_CAP_KEY}\toptional\tnumber\tcurrency\t0\t" in keys, keys[-400:])
     rc, out, err = run(HUB_PY, "new", "--hub", str(root / "cu3"), "--title", "x",
                        "--currencies", "USD,EUR")
     keys = (root / "cu3" / "hub" / "defs" / "fact_keys.tsv").read_text(encoding="utf-8")

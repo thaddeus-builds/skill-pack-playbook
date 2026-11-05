@@ -21,6 +21,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ### Other
 - `hosts/zylos` 0.7.2: `node zylos/lib.js check` refuses a `runtime.uv_installer_url` on a host reserved for examples (`example.com`, `.test`, `.invalid`, `localhost`), and `manifest.example.json` names Astral's real installer (same sha256). Seen once, 2026-11-05: `scaffold/add_zylos.py` copied the example's placeholder into six packs (ad-copy, asset-handoff, google-ads, meta-ads, proofcut, product-image-to-video), so the first host without uv would have failed to install
 - Skill packs: mechanical (a pack with `zylos/` copies the adapter again and sets `runtime.uv_installer_url` to `https://astral.sh/uv/<uv_version>/install.sh`; `check` names the line)
+- `scaffold/new_hub.py`: a new hub defines `unattended_spend_cap_per_day` (`kit.autonomy.SPEND_CAP_KEY`, X32, R23), optional, money a day in the client's currency, so the figure the client and its agent agree is confirmed once at the hub and copied to each pack by `facts sync-hub`; a test ties the row to the kit's key
+- Skill packs: nothing (a hub made before this adds the row to `hub/defs/fact_keys.tsv` by hand when its client agrees a figure)
 
 ## [0.49.0] - 2026-11-04
 
