@@ -42,7 +42,7 @@ beside them for now (no `.machine/` yet). What `new` writes, under <hub>/:
     (cli `hub`, env prefix `HUB`, the --markets, default none) and
     hub/defs/fact_keys.tsv, seeded with the keys a client's packs share
     (currency, avg_order_value, incremental_factor, incremental_source,
-    npr_includes_creator_fee, npr_roas; a market enters through the kit's
+    npr_includes_creator_fee, npr_roas, unattended_spend_cap_per_day; a market enters through the kit's
     market door, `facts init`). `new` then runs the hub's `facts init`
     piped, once per market of --markets with every answer blank, so
     hub/hub.db exists and each market's declaration waits PENDING for a
@@ -165,6 +165,12 @@ HUB_KEY_ROWS = [
     ("incremental_factor", "optional", "number", "ratio", "0", "2",
      "incremental share of attributed sales", "歸因成交中的增量比例",
      "the share of attributed sales counted as incremental"),
+    # kit.autonomy.SPEND_CAP_KEY (X32, R23): the client and its agent agree the
+    # figure; until there is one, no pack spends unattended (auto_no_client_cap)
+    ("unattended_spend_cap_per_day", "optional", "number", "currency", "0", "",
+     "unattended spend cap per day", "無人值守每日花費上限",
+     "the most a pack spends in a day with nobody approving each call; "
+     "none given: nothing spends unattended"),
 ]
 HUB_KEYS_HEADER = ("key", "group", "type", "unit", "min", "max", "label_en",
                    "label_zh", "why")
