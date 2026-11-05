@@ -81,7 +81,7 @@ def env(data: Path | str | None, **extra: str) -> dict:
 
 
 def run(data, *argv, checks=(), lock=None, verbs=VERBS, spec=SPEC,
-        root=None, load_chain=True, flags=None, **extra):
+        root=None, load_chain=True, flags=None, replace=None, **extra):
     """doctor.main in this process, after the env chain is loaded the way
     the dispatcher loads it: (rc, out, err, document-or-None)."""
     config.use(root or _shop.SHOP)
@@ -92,7 +92,7 @@ def run(data, *argv, checks=(), lock=None, verbs=VERBS, spec=SPEC,
             kenv.chain().load_into_environ()
         return doctor.main(argv, checks=checks, spec=spec, verbs=verbs,
                            scripts_dir=SCRIPTS, platform_lock=lock,
-                           flags=flags)
+                           flags=flags, replace=replace)
     try:
         rc, out, err = capture(go, list(argv), env=env(data, **extra))
     finally:
@@ -451,6 +451,26 @@ def test_markets() -> None:
     _, _, _, doc = run(Path(tmp_dir("doc-flat-data-")), "--json", root=flat)
     check("markets = []: nothing to declare, ok",
           codes(doc, "markets") == ["doctor_no_partition"])
+    # a pack that keeps its own market facts replaces the built-in (seen once: amazon-ppc)
+    def own_markets(ctx):
+        ctx.ok("markets", msg("doctor_markets_declared", "declared: US", markets=["US"]))
+    _, _, _, doc = run(data, "--json", replace={"markets": own_markets})
+    names = [c["check"] for c in doc["checks"]]
+    check("replace: the pack's check runs in the built-in's place and position, under its name",
+          codes(doc, "markets") == ["doctor_markets_declared"]
+          and names.index("markets") == names.index("db") + len(found(doc, "db")), names)
+    _, _, _, doc = run(data, "--json", replace={"markets": lambda ctx: None})
+    check("a replacement that reports nothing under the name: doctor_replaced_silent",
+          codes(doc, "markets") == ["doctor_replaced_silent"] and found(doc, "markets", "warn"), doc["checks"])
+    try:
+        doctor.collect(replace={"market": own_markets})
+        refused = False
+    except ValueError as e:
+        refused = "no built-in check named market" in str(e)
+    check("a name that is no built-in is refused at once", refused)
+    check("every built-in has a name a pack can replace it by",
+          list(doctor.BUILTIN_NAMES)[:2] == ["skill_pack", "env_chain"] and "markets" in doctor.BUILTIN_NAMES
+          and len(doctor.BUILTIN_NAMES) == len(doctor.BUILTIN))
 
 
 # ------------------------------------------------------------------ [7]

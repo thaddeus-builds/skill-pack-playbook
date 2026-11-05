@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Kit
+- `kit/doctor.py` and `kit/cli.py`: a skill pack replaces one built-in doctor check by name (`Dispatcher(doctor_replace={"markets": check})`, `doctor.BUILTIN_NAMES`), when it keeps its own store for what that check reads; the replacement runs at the built-in's place and reports under its name, a name that is no built-in is refused at once, and a replacement that reports nothing under the name is `doctor_replaced_silent`. Seen once, 2026-11-05: amazon-ppc keeps its own market facts (its `db` stays its own), so the built-in markets line was false for it
+- Skill packs: nothing (re-vendor with the train; amazon-ppc replaces `markets` when it moves doctor onto the kit)
+
 ### Other
 - `tools/fleet.py update` and `rehearse`: a pack whose suite could not run (no `tests/run.py` and no `[skill_pack].test_command`) is `untested`, exit 1, with the fix in the line, never `green`; `--no-tests` is still a chosen green. Seen once, 2026-11-05: the 0.50.0 rehearsal printed amazon-ppc "green, suite not run" (its runner is `scripts/run_tests.py`)
 - Skill packs: mechanical (a pack whose runner is not `tests/run.py` names it in `[skill_pack].test_command`)
