@@ -12,7 +12,7 @@ Each machine names its clients root once. `CLIENTS_DIR` in the environment wins;
 | --- | --- | --- |
 | `README.md` | the client's card: who, which packs, where things are, what not to touch | a person or the agent, in the owner's language |
 | `intake/` | `brief.md`, `decisions.md` (a mirror: the record that counts is the pack's decision rows), `open-questions.md`, and `meetings/<YYYY-MM-DD>/` (a meeting's recording, transcript and notes together) | a person edits it to correct the agent; the agent drafts |
-| `sources/` | everything else the client or a platform gave us, kept as received: `inbox/<YYYY-MM-DD>-<from>/` and `INDEX.tsv`, one row an item | `clients.py source`, or a pack's own pull |
+| `sources/` | everything else the client or a platform gave us, kept as received, and `INDEX.tsv`, one row an item (a row for a folder covers what is in it). New material lands in `inbox/<YYYY-MM-DD>-<from>/`; material that came in folders of its own (by kind, or a mirror of the client's cloud drive) stays in them | `clients.py source`, or a pack's own pull |
 | `reports/` | what the packs made for people to read | the packs |
 | `.machine/` | the hub or workspace (database, console, wrappers), each pack's data, `connections/` (keys and tokens, 0700), `downloads/`, and `links.tsv` | tools only; nobody opens it to recall the client |
 
@@ -32,7 +32,7 @@ A client with material and no pack yet starts with `clients.py new CLIENT --titl
 | a file an agent pulled through a platform API | `sources/` | `api-agent` |
 | an answer to the agent's ask, a digest | `sources/` | `ask`, `digest` |
 
-`clients.py source CLIENT FILE_OR_URL --from F --title T` copies the file into `inbox/<today>-<from>/` (the original is never moved or renamed), writes its row with the next id (`EV-001` up, never reused) and its sha256, and refuses the same bytes twice, naming the earlier id. A file already in the inbox with no row gets its row in place, with `duplicate_of` when the same bytes are listed already.
+`clients.py source CLIENT FILE_OR_URL --from F --title T` copies the file into `inbox/<today>-<from>/` (the original is never moved or renamed), writes its row with the next id (`EV-001` up, never reused) and its sha256, and refuses the same bytes twice, naming the earlier id. A file or folder already under `sources/` with no row gets its row in place (never a copy or a move), with `duplicate_of` when the same bytes are listed already. Over 500 MB the sha256 is left empty.
 
 ## Links a machine needs
 
@@ -44,7 +44,7 @@ Tools, permission rules and scheduled jobs often hold paths outside the folder (
 
 - the card and the three intake files are missing;
 - `INDEX.tsv` has another header, an id twice, or a source outside the list above;
-- a row's file is missing, or a file under `inbox/` has no row (a row for its day's folder covers it);
+- a row's file is missing, or a file under `sources/` has no row of its own or of a folder above it;
 - a `.env` or a `connections` folder outside `.machine/`;
 - `.machine/connections` readable by others;
 - a `links.tsv` target outside the folder or missing;
