@@ -10,13 +10,15 @@
 ## - The public Host is passed through unchanged (no `header_up Host`): the
 ##   console compares Origin with Host, and answers only a Host named by
 ##   --allow-host (console.allow_host_key).
-## - The login is a form (zylos/bin/login.js on the unix socket <AUTH_SOCK>),
-##   not basic_auth: a browser or password manager can save a form.
-##   /login, /logout and /setup (the one-time password link) go to it; everything else first asks it
-##   (forward_auth, GET /_auth) whether the visitor has a session: yes, the
-##   console is reached with <USER_HEADER> set to the user (and no Cookie: the
-##   session is the login's business, not the console's); no, the visitor gets
-##   the form. <USERS_FILE> holds the logins (`node zylos/lib.js passwd NAME`).
+## - The login is a one-time link and a session cookie (zylos/bin/login.js on
+##   the unix socket <AUTH_SOCK>), no password and no basic_auth.
+##   /login, /logout, /in/* (the link, `node zylos/lib.js link NAME`) and /setup
+##   (a 0.6/0.7 link, answered "ask for a new one") go to it; everything else
+##   first asks it (forward_auth, GET /_auth) whether the visitor has a session:
+##   yes, the console is reached with <USER_HEADER> set to the user (and no
+##   Cookie: the session is the login's business, not the console's); no, the
+##   visitor gets the page that says to ask for a link. <USERS_FILE> holds one
+##   line per person.
 ## - `route` keeps the written order: `request_header -<USER_HEADER>` drops
 ##   any copy the visitor sent before forward_auth sets the real one.
 ## - <ROUTE_REDIRS> and <ROUTES> are the skill pack's own upstreams
@@ -29,7 +31,7 @@ redir <BASE_PATH> <BASE_PATH>/ permanent
 handle_path <BASE_PATH>/* {
     route {
         request_header -<USER_HEADER>
-        @login path /login /logout /setup
+        @login path /login /logout /in/* /setup
         handle @login {
             reverse_proxy unix/<AUTH_SOCK>
         }

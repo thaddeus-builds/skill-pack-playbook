@@ -71,9 +71,9 @@ const ADAPTER_FILES = ['lib.js', 'Caddyfile.snippet', 'README.md', 'VERSION',
   ...HOOK_NAMES.map((h) => `hooks/${h}.js`), ...['cli', 'detach', 'console', 'login'].map((b) => `bin/${b}.js`)];
 const ADAPTER_TEMPLATES = ['manifest.example.json', 'ecosystem.config.cjs.template'];
 // The first path segments under console.base_path that are already taken: the login service's
-// (/login, /logout, /setup) and the console's own pages and posts (console/serve.py PAGES, POSTS,
+// (/login, /logout, /in, /setup) and the console's own pages and posts (console/serve.py PAGES, POSTS,
 // FILES and the page-<name> tabs). A console.routes path may not be one of them.
-const CONSOLE_PATHS = ['login', 'logout', 'setup', 'static', 'history', 'poll', 'answer', 'reopen', 'note', 'act'];
+const CONSOLE_PATHS = ['login', 'logout', 'in', 'setup', 'static', 'history', 'poll', 'answer', 'reopen', 'note', 'act'];
 const CONSOLE_PAGE_PREFIX = 'page-';
 // A config key whose name says it holds a secret must be `sensitive: true`.
 const SECRET_KEY = /SECRET|TOKEN|PASSWORD|ACCESS_KEY|API_KEY|PRIVATE_KEY/;
@@ -369,7 +369,7 @@ const BIN_LINK = path.join(ZYLOS_DIR, 'bin', BIN_NAME);
 // is removed by the next post-install / post-upgrade.
 const TASK_STATE = path.join(DATA_DIR, '.zylos-tasks.json');
 const USERS_FILE = path.join(DATA_DIR, M.console.users_file);
-// The form login's socket (bin/login.js). A unix socket path holds about 100 characters, so a long
+// The login's socket (bin/login.js). A unix socket path holds about 100 characters, so a long
 // data dir gets a short, still private-by-mode name in the runtime dir (or the temp dir) instead.
 const AUTH_SOCK = (() => {
   const own = path.join(DATA_DIR, 'console', 'auth.sock');
@@ -380,7 +380,8 @@ const AUTH_SOCK = (() => {
   return path.join(runtime, `zylos-${who}-${crypto.createHash('sha256').update(DATA_DIR).digest('hex').slice(0, 12)}`, 'auth.sock');
 })();
 const SESSION_KEY = path.join(DATA_DIR, 'console', 'session.key');
-const SETUP_FILE = path.join(DATA_DIR, 'console', 'setup-tokens.json');
+// The one-time sign-in links, each kept only as a hash of its token (bin/login.js, `lib.js link NAME`).
+const LINKS_FILE = path.join(DATA_DIR, 'console', 'sign-in-links.json');
 const LOGIN_JS = path.join(ADAPTER_DIR, 'bin', 'login.js');
 const CADDYFILE = path.join(ZYLOS_DIR, 'http', 'Caddyfile');
 const CADDY_MARKER = `# BEGIN zylos-component:${NAME}`;
@@ -936,8 +937,8 @@ function ecosystem() {
 // The hooks warn when the block is gone but this host needs it, as after
 // uninstall + add (restoreCaddyBlock below puts it back when it can do so
 // safely): people have logins, or the last uninstall kept a copy of the block.
-// A copy is enough: since the form login the first thing a person needs is the
-// /setup route, before any login exists (issue #484). A fresh install with
+// A copy is enough: the first thing a person needs is the route of the one-time
+// sign-in link, before any login exists (issue #484). A fresh install with
 // neither is left to the owner (`lib.js caddy`). Missing or unreadable files: no warning.
 function hasLogins() {
   try { return fs.readFileSync(USERS_FILE, 'utf8').trim() !== ''; } catch { return false; }
@@ -961,8 +962,8 @@ function caddyBlockInFile(lines) {
 }
 
 // A block from before the form login (0.5.0) still asks the browser's basic_auth pop-up and imports
-// a bcrypt list this adapter no longer writes; one from 0.5.x does not route /setup (the one-time
-// password link, 0.6.0), so the link would reach the console and be refused there; one without a
+// a bcrypt list this adapter no longer writes; one from 0.5.x to 0.7.x does not route /in/ (the
+// one-time sign-in link, 0.8.0), so the link would reach the console and be refused there; one without a
 // route of console.routes (0.7.3), or with another upstream than the host configures now, has lost the
 // skill pack's own upstream (an earlier rewrite, a block made before the route was in the manifest, a
 // port_key changed since). Why the block is outdated, or '' when it is not.
@@ -970,8 +971,8 @@ const usesBasicAuth = (text) => /^\s*basic_auth\b/m.test(text);
 function outdatedWhy(text) {
   const lines = text.split('\n').map((l) => l.trim());
   if (usesBasicAuth(text)) return 'still uses basic_auth, which this release no longer serves';
-  if (!lines.some((l) => /^@login\b/.test(l) && /(^|\s)\/setup(\s|$)/.test(l))) {
-    return 'does not route /setup (the one-time password link)';
+  if (!lines.some((l) => /^@login\b/.test(l) && /(^|\s)\/in\/\*(\s|$)/.test(l))) {
+    return 'does not route /in/ (the one-time sign-in link)';
   }
   // a route counts only with its upstream as this host configures it now (a changed port_key, a moved socket)
   const want = routeLines()['<ROUTES>'].map((l) => l.trim());
@@ -1361,72 +1362,39 @@ function checkProblems() {
   return p;
 }
 
-// --- the console's logins (bin/login.js) -----------------------------------------------
-// Names whose line cannot log in: written for Caddy's basic_auth (bcrypt), before the
-// form login. Their owners set a password again with `passwd`.
-function staleLogins() { return require(LOGIN_JS).staleUsers(USERS_FILE); }
-
-// A password read at a terminal with no echo: it never goes through chat or argv.
-function promptSecret(label) {
-  return new Promise((resolve, reject) => {
-    const stdin = process.stdin;
-    process.once('exit', () => { try { stdin.setRawMode(false); } catch { /* not a tty any more */ } });
-    stdin.setRawMode(true);              // before the prompt: what is typed right after it is never echoed
-    process.stderr.write(label);
-    stdin.resume();
-    stdin.setEncoding('utf8');
-    let buf = '';
-    const done = (fn, v) => { stdin.setRawMode(false); stdin.pause(); stdin.removeListener('data', on); process.stderr.write('\n'); fn(v); };
-    const on = (chunk) => {
-      for (const c of chunk) {
-        if (c === '\r' || c === '\n' || c === '\u0004') return done(resolve, buf);
-        if (c === '\u0003') return done(reject, new Error('cancelled'));
-        if (c === '\u007f' || c === '\b') buf = buf.slice(0, -1);
-        else buf += c;
-      }
-      return undefined;
-    };
-    stdin.on('data', on);
-  });
-}
-
-// `passwd NAME` adds or replaces a person at a terminal; `passwd --remove NAME` takes one out;
-// `passwd NAME --link` makes a one-time link (30 minutes, once) where the person sets their own
-// password on a page: that one needs no terminal, and the password never reaches the agent.
-async function passwdCommand(args) {
+// --- the console's people (bin/login.js) -------------------------------------------------
+// `link NAME` prints a one-time sign-in link (30 minutes, once; NAME need not exist yet: the first
+// sign-in adds the line). `signout NAME` gives the person a new stamp, so every device of theirs is
+// signed out; `remove NAME` takes the line out. Both drop the person's unused links. There is no
+// password, so nothing is typed at a terminal and nothing secret goes through chat but the link.
+function peopleCommand(verb, args) {
   const login = require(LOGIN_JS);
-  const remove = args[0] === '--remove';
-  const link = args.length === 2 && args[1] === '--link';
-  const name = remove ? args[1] : args[0];
-  if (!name || name.startsWith('-') || (!link && args.length > (remove ? 2 : 1)) || (link && args[0] === '--remove')) {
-    console.error('usage: passwd NAME | passwd NAME --link | passwd --remove NAME'); process.exit(2);
+  const name = args[0];
+  if (args.length !== 1 || !name || name.startsWith('-')) {
+    console.error(`usage: node zylos/lib.js ${verb} NAME`); process.exit(2);
   }
   try {
-    if (remove) {
-      login.setPassword(USERS_FILE, name, null);
-      console.log(`[${NAME}] ${name} removed from ${USERS_FILE}; their sessions end now`);
-      return;
-    }
-    if (link) {
-      const made = login.makeSetupToken(SETUP_FILE, name);
+    if (verb === 'link') {
+      const made = login.makeLink(LINKS_FILE, name);
       const host = publicHost();
-      const where = `${host ? `https://${host}` : '<the console\'s public address>'}${M.console.base_path}/setup?token=${made.token}`;
-      console.log(`[${NAME}] one-time link for ${name} (works once, ${made.minutes} minutes; anyone who sees this line can use it, so send it only to ${name}):\n${where}`);
+      const where = `${host ? `https://${host}` : '<the console\'s public address>'}${M.console.base_path}/in/${made.token}`;
+      console.log(`[${NAME}] sign-in link for ${name} (works once, within ${made.minutes} minutes; whoever opens it first is signed in `
+                  + `as ${name}, so send it only to ${name}):\n${where}`);
       if (!host) {
         console.log(`[${NAME}] the link needs the console's public name in place of <the console's public address>: `
                     + `${M.console.allow_host_key ? `${M.console.allow_host_key} names` : 'the console answers'} no host but this machine's own`);
       }
       return;
     }
-    if (!process.stdin.isTTY) {
-      console.error(`[${NAME}] passwd needs a terminal: the password is typed there, never given to an agent or put on a command line; without one use: passwd ${name} --link`);
-      process.exit(2);
+    if (verb === 'signout') {
+      login.signOutUser(USERS_FILE, name);
+      login.dropLinks(LINKS_FILE, name);
+      console.log(`[${NAME}] ${name} is signed out on every device now; a new link signs them in again`);
+      return;
     }
-    const one = await promptSecret(`password for ${name} (min ${login.MIN_PASSWORD} characters): `);
-    const two = await promptSecret('again: ');
-    if (one !== two) { console.error(`[${NAME}] the two passwords differ; nothing changed`); process.exit(1); }
-    const did = login.setPassword(USERS_FILE, name, one);
-    console.log(`[${NAME}] ${name} ${did} in ${USERS_FILE}; other sessions of ${name} end now`);
+    login.removeUser(USERS_FILE, name);
+    login.dropLinks(LINKS_FILE, name);
+    console.log(`[${NAME}] ${name} removed from ${USERS_FILE}; their sessions end now`);
   } catch (e) {
     console.error(`[${NAME}] ${e.message}`);
     process.exit(1);
@@ -1445,7 +1413,7 @@ module.exports = {
   renderPrompt, unresolved, tasksNamed, addTask, updateTask, removeTask, readTaskState, requiredKeys,
   reconcileTask, reconcileAll, removeAllTasks,
   procStart, pidAlive, readJob, jobAlive, stopJobs,
-  allowHosts, isLoopbackHost, publicHost, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockAbsent, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock, caddyBlockOutdated, staleLogins, AUTH_SOCK, SESSION_KEY, SETUP_FILE, LOGIN_JS,
+  allowHosts, isLoopbackHost, publicHost, relayCommand, consoleCommand, ecosystem, hasLogins, caddyBlockAbsent, caddyBlockMissing, restoreCaddyBlock, saveCaddyBlock, allowHostMissing, caddyBlock, caddyBlockOutdated, AUTH_SOCK, SESSION_KEY, LINKS_FILE, LOGIN_JS,
   skillProblems, checkProblems, frontmatterYamlProblems, ownFileProblems, ADAPTER_FILES, ADAPTER_TEMPLATES, CONSOLE_PATHS, ROUTES,
 };
 
@@ -1458,10 +1426,11 @@ if (require.main === module) {
     process.exit(problems.length ? 1 : 0);
   } else if (verb === 'caddy') {
     process.stdout.write(caddyBlock());
-  } else if (verb === 'passwd') {
-    passwdCommand(process.argv.slice(3));
+  } else if (verb === 'link' || verb === 'signout' || verb === 'remove') {
+    peopleCommand(verb, process.argv.slice(3));
   } else {
-    console.error('usage: node zylos/lib.js check | caddy | passwd NAME [--link] | passwd --remove NAME');
+    if (verb === 'passwd') console.error(`[${NAME}] passwd is gone since 0.8.0 (there are no passwords): a person signs in by a link, node zylos/lib.js link NAME`);
+    console.error('usage: node zylos/lib.js check | caddy | link NAME | signout NAME | remove NAME');
     process.exit(2);
   }
 }

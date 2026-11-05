@@ -1,16 +1,20 @@
-"""zylos/bin/login.js, the console's form login (it replaces Caddy's basic_auth):
-the password hash, the session cookie, forward_auth's answers, the form's
-fields (what lets a browser save it), the redirect rule, the throttle, the
-Origin check, the file modes, and `lib.js passwd`.
+"""zylos/bin/login.js, the console's sign-in by a one-time link (0.8.0, the owner's R41): the
+link's shape (28 letters a chat app leaves alone, 2 of them a check), a cut-short link told
+apart from a used or expired one, a GET that never spends it (a chat app's link preview fetches
+it), the POST that spends it once, a newer link in place of an older, the throttle, the 90-day
+cookie on the base path, a 0.7.x line still a valid stamp, `signout` and `remove` ending
+sessions at once, the /login and /setup pages that now only say what to do, forward_auth's
+answers, the Origin check, the file modes, and kit.guards.asks over every page drawn.
 
-Each test starts the real service on a unix socket in a temp dir and talks to
-it as Caddy and a browser would.
+Each test starts the real service on a unix socket in a temp dir and talks to it as Caddy and a
+browser would.
 
 Run: python3 hosts/zylos/tests/test_login.py
 """
 
 from __future__ import annotations
 
+import hashlib
 import http.client
 import json
 import os
@@ -26,16 +30,26 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _t  # noqa: E402
 from _host import ADAPTER, NODE, Host  # noqa: E402
 
+ROOT = os.path.dirname(os.path.dirname(ADAPTER))      # the playbook: the test may import the kit, the adapter never does
 LOGIN = os.path.join(ADAPTER, "bin", "login.js")
-PW = "correct horse battery"
+ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
+DAYS90 = 90 * 86400
+INCOMPLETE_ZH = "这个链接不完整，可能在转发时被截断了。请让发给你的人重新发一个。"
+DEAD_ZH = "这个链接已经用过或已过期，请重新要一个。"
 
 SERVER = """
 const l = require(process.argv[1]);
-const [sock, users, keyf, base, allow] = process.argv.slice(2);
-l.listen({ sock, usersFile: users, keyFile: keyf, setupFile: users + '.setup', base: base === undefined ? '/seo' : base, title: 'Shop', userHeader: 'X-Remote-User',
+const [sock, users, keyf, links, base, allow] = process.argv.slice(2);
+l.listen({ sock, usersFile: users, keyFile: keyf, linksFile: links, base, title: 'Shop', userHeader: 'X-Remote-User',
            allowHosts: allow ? allow.split(',') : [] })
   .on('listening', () => console.log('up'));
 """
+
+
+def node(code, *args):
+    r = subprocess.run([NODE, "-e", code, LOGIN, *args], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return r.stdout
 
 
 class Conn(http.client.HTTPConnection):
@@ -50,22 +64,21 @@ class Conn(http.client.HTTPConnection):
 
 
 class Svc:
-    """A running login service with one user, alice."""
+    """A running sign-in service; its users and links files may be a host's own."""
 
-    def __init__(self, user_line=True, base="/seo", sock_dir=None, allow=""):
+    def __init__(self, base="/seo", sock_dir=None, allow="", users=None, links=None):
         self.base = base
         self.allow = allow
         self.dir = tempfile.mkdtemp(prefix="login ")
         self.sock = os.path.join(sock_dir or self.dir, "auth.sock")
-        self.users = os.path.join(self.dir, "console.users")
+        self.users = users or os.path.join(self.dir, "console.users")
+        self.links = links or os.path.join(self.dir, "console", "sign-in-links.json")
         self.key = os.path.join(self.dir, "session.key")
-        if user_line:
-            self.set("alice", PW)
         self.proc = None
         self.start()
 
     def start(self):
-        self.proc = subprocess.Popen([NODE, "-e", SERVER, LOGIN, self.sock, self.users, self.key, self.base, self.allow],
+        self.proc = subprocess.Popen([NODE, "-e", SERVER, LOGIN, self.sock, self.users, self.key, self.links, self.base, self.allow],
                                      stdout=subprocess.PIPE, text=True)
         assert self.proc.stdout.readline().strip() == "up"
 
@@ -74,15 +87,8 @@ class Svc:
         self.proc.wait(10)
 
     def link(self, user="alice", now=None):
-        code = ("const l=require(process.argv[1]);console.log(l.makeSetupToken(process.argv[2],process.argv[3]" + (f",{now}" if now else "") + ").token)")
-        r = subprocess.run([NODE, "-e", code, LOGIN, self.users + ".setup", user], capture_output=True, text=True)
-        assert r.returncode == 0, r.stderr
-        return r.stdout.strip()
-
-    def set(self, name, pw):
-        r = subprocess.run([NODE, "-e", "require(process.argv[1]).setPassword(process.argv[2], process.argv[3], process.argv[4])",
-                            LOGIN, self.users, name, pw], capture_output=True, text=True)
-        assert r.returncode == 0, r.stderr
+        return node("const l=require(process.argv[1]);console.log(l.makeLink(process.argv[2],process.argv[3]"
+                    + (f",{now}" if now else "") + ").token)", self.links, user).strip()
 
     def req(self, method, path, body=None, headers=None):
         c = Conn(self.sock)
@@ -95,14 +101,16 @@ class Svc:
         c.close()
         return r, data
 
-    def login(self, user="alice", pw=PW, nxt="/seo/", headers=None, ip="203.0.113.7"):
-        from urllib.parse import urlencode
-        h = {"X-Forwarded-For": ip, **(headers or {})}
-        return self.req("POST", "/login", urlencode({"username": user, "password": pw, "next": nxt}), h)
+    def sign_in(self, token, headers=None):
+        return self.req("POST", f"/in/{token}", "", headers)
 
     def cookie(self, r):
         sc = r.getheader("Set-Cookie") or ""
         return sc.split(";")[0] if sc else ""
+
+    def who(self, cookie):
+        a, _ = self.req("GET", "/_auth", headers={"Cookie": cookie})
+        return a.getheader("X-Remote-User") if a.status == 200 else None
 
     def __enter__(self):
         return self
@@ -111,126 +119,298 @@ class Svc:
         self.stop()
 
 
-def test_passwords_are_scrypt_and_a_bcrypt_line_cannot_sign_in():
-    code = ("const l=require(process.argv[1]);const h=l.hashPassword('hunter2hunter2');"
-            "console.log(JSON.stringify([h, l.verifyPassword('hunter2hunter2',h), l.verifyPassword('hunter2hunter3',h),"
-            "l.verifyPassword('x','$2a$10$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz0123'), l.verifyPassword('x','')]))")
-    h, good, bad, bcrypt, empty = json.loads(subprocess.run([NODE, "-e", code, LOGIN], capture_output=True, text=True).stdout)
-    assert re.fullmatch(r"scrypt\$15\$8\$1\$[\w-]+\$[\w-]+", h) and good and not bad and not bcrypt and not empty, h
-    with Svc(user_line=False) as s:
-        with open(s.users, "w") as fh:
-            fh.write("bob $2a$10$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz0123\n")
-        r, body = s.login("bob", "anything")
-        assert r.status == 401 and "Wrong username or password" in body and not s.cookie(r)
-        stale = subprocess.run([NODE, "-e", "console.log(JSON.stringify(require(process.argv[1]).staleUsers(process.argv[2])))",
-                                LOGIN, s.users], capture_output=True, text=True).stdout
-        assert json.loads(stale) == ["bob"], stale
+def check_of(body: str) -> str:
+    d = hashlib.sha256(body.encode()).digest()
+    return ALPHABET[d[0] & 31] + ALPHABET[d[1] & 31]
 
 
-def test_the_form_is_one_a_browser_can_save():
+def test_the_link_is_28_letters_from_the_alphabet_with_a_check():
+    tokens = json.loads(node("const l=require(process.argv[1]);console.log(JSON.stringify(Array.from({length:300},()=>l.newLinkToken())))"))
+    assert len(set(tokens)) == 300
+    for t in tokens:
+        assert len(t) == 28 and set(t) <= set(ALPHABET) and t[26:] == check_of(t[:26]), t
+    assert not set("lo01-_?#") & set(ALPHABET) and len(ALPHABET) == 32, "26 letters of 5 bits: 130 bits"
+    seen = set("".join(tokens))
+    assert seen == set(ALPHABET), ("every letter is used", sorted(set(ALPHABET) - seen))
+    t = tokens[0]
+    bad_check = t[:26] + next(c + d for c in ALPHABET for d in ALPHABET if c + d != t[26:])
+    cases = {"whole": t, "cut short": t[:27], "one longer": t + "a", "a wrong check": bad_check,
+             "an l": t[:5] + "l" + t[6:], "a 0": "0" + t[1:], "empty": ""}
+    got = json.loads(node("const l=require(process.argv[1]);const c=JSON.parse(process.argv[2]);"
+                          "console.log(JSON.stringify(Object.fromEntries(Object.entries(c).map(([k,v])=>[k,l.linkShape(v)]))))",
+                          json.dumps(cases)))
+    assert got == {k: k == "whole" for k in cases}, got
+
+
+def test_a_get_shows_the_name_and_one_button_and_never_spends_the_link():
     with Svc() as s:
-        r, body = s.req("GET", "/login?next=%2Fseo%2Fmaterials")
-        assert r.status == 200 and r.getheader("Cache-Control") == "no-store"
-        assert 'method="post"' in body and 'action="/seo/login"' in body
-        assert re.search(r'<input[^>]*name="username"[^>]*autocomplete="username"', body)
-        assert re.search(r'<input[^>]*type="password"[^>]*autocomplete="current-password"', body)
-        assert 'name="next" value="/seo/materials"' in body
-        assert "Content-Security-Policy" in dict(r.getheaders()) and "form-action 'self'" in r.getheader("Content-Security-Policy")
-        rz, bz = s.req("GET", "/login", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
-        assert "用户名" in bz and 'lang="zh"' in bz
+        tok = s.link("newperson")
+        for method in ("GET", "HEAD", "GET", "GET"):           # a link preview, then the person, then a reload
+            r, body = s.req(method, f"/in/{tok}")
+            assert r.status == 200 and not r.getheader("Set-Cookie"), (method, r.status)
+        assert "newperson" in body and body.count("<form") == 1 and body.count("<button") == 1 and "<input" not in body
+        assert re.search(rf'<form method="post" action="/seo/in/{tok}" data-no="[^"]+">', body), body
+        assert "Content-Security-Policy" in dict(r.getheaders()) and r.getheader("Cache-Control") == "no-store"
+        assert not os.path.exists(s.users), "nothing is written by a GET"
+        _, zh = s.req("GET", f"/in/{tok}", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
+        assert ">登录</button>" in zh and 'lang="zh"' in zh
+        ok, _ = s.sign_in(tok)
+        assert ok.status == 303, "the link still works after every GET"
 
 
-def test_a_good_login_sets_a_private_cookie_and_forward_auth_names_the_user():
+def test_the_post_spends_the_link_once_and_sets_a_90_day_cookie_on_the_base_path():
     with Svc() as s:
-        r, _ = s.login(nxt="/seo/materials?lang=zh")
+        tok = s.link("newperson")
+        t0 = int(time.time())
+        r, _ = s.sign_in(tok)
         sc = r.getheader("Set-Cookie")
-        assert r.status == 303 and r.getheader("Location") == "/seo/materials?lang=zh", (r.status, r.getheader("Location"))
-        for part in ("HttpOnly", "SameSite=Lax", "Secure", "Path=/seo", "Max-Age=1209600"):
+        assert r.status == 303 and r.getheader("Location") == "/seo/", (r.status, r.getheader("Location"))
+        for part in ("HttpOnly", "SameSite=Lax", "Secure", "Path=/seo;", f"Max-Age={DAYS90}"):
             assert part in sc, (part, sc)
+        exp = int(s.cookie(r).split("=", 1)[1].split(".")[1])
+        assert abs(exp - (t0 + DAYS90)) < 60, "the cookie itself says 90 days too"
+        assert s.who(s.cookie(r)) == "newperson"
+        line = open(s.users).read()
+        assert re.fullmatch(r"newperson link\$[\w-]{20,}\n", line) and stat.S_IMODE(os.stat(s.users).st_mode) == 0o600, line
+        again, body = s.sign_in(tok)
+        assert again.status == 410 and not again.getheader("Set-Cookie") and "used or has expired" in body
+        assert s.req("GET", f"/in/{tok}")[0].status == 410, "once only"
+        # over plain http the cookie is not marked Secure (a test on localhost still works)
+        h, _ = s.sign_in(s.link("other"), headers={"X-Forwarded-Proto": "http"})
+        assert h.status == 303 and "Secure" not in h.getheader("Set-Cookie")
+
+
+def test_a_cut_short_link_is_incomplete_not_used_or_expired():
+    with Svc() as s:
+        tok = s.link()
+        old = s.link("amy", now=int(time.time() * 1000) - 31 * 60_000)
+        zh = {"Accept-Language": "zh-CN,zh;q=0.9"}
+        for label, path in [("cut short", f"/in/{tok[:20]}"), ("one letter lost", f"/in/{tok[:-1]}"),
+                            ("a wrong check", f"/in/{tok[:26]}{'a' if tok[26] != 'a' else 'b'}{tok[27]}"),
+                            ("no token", "/in/"), ("the 0.7 shape", "/in/" + "A" * 20 + "-_" + "b" * 21)]:
+            r, body = s.req("GET", path, headers=zh)
+            assert r.status == 400 and INCOMPLETE_ZH in body and DEAD_ZH not in body, (label, r.status, body)
+            p, _ = s.req("POST", path, "")
+            assert p.status == 400 and not p.getheader("Set-Cookie"), label
+        _, en = s.req("GET", f"/in/{tok[:20]}")
+        assert "This link is incomplete" in en and "cut off when it was forwarded" in en
+        r, body = s.req("GET", f"/in/{old}", headers=zh)
+        assert r.status == 410 and DEAD_ZH in body and INCOMPLETE_ZH not in body, "30 minutes, then expired"
+        assert s.sign_in(old)[0].status == 410
+        s.sign_in(tok)
+        r, body = s.req("GET", f"/in/{tok}", headers=zh)
+        assert r.status == 410 and DEAD_ZH in body, "used"
+        fresh = s.link("bea")
+        assert s.req("GET", f"/in/{fresh.upper()}/")[0].status == 200, "a chat app's capitals or trailing slash do not break it"
+
+
+def test_a_newer_link_replaces_the_older_and_only_a_hash_is_kept():
+    with Svc() as s:
+        first, second, bob = s.link("amy"), s.link("amy"), s.link("bob")
+        saved = open(s.links).read()
+        assert all(t not in saved for t in (first, second, bob)) and "amy" in saved, "only a hash of the token is kept"
+        assert stat.S_IMODE(os.stat(s.links).st_mode) == 0o600
+        assert s.req("GET", f"/in/{first}")[0].status == 410, "a newer link replaces the older one"
+        assert s.req("GET", f"/in/{second}")[0].status == 200 and s.req("GET", f"/in/{bob}")[0].status == 200, "another name's link stays"
+
+
+def test_wrong_tokens_are_throttled_per_address():
+    with Svc() as s:
+        good = s.link()
+        guesses = json.loads(node("const l=require(process.argv[1]);console.log(JSON.stringify(Array.from({length:6},()=>l.newLinkToken())))"))
+        for g in guesses[:5]:                                 # whole tokens nobody made: guesses
+            assert s.req("GET", f"/in/{g}", headers={"X-Forwarded-For": "198.51.100.200"})[0].status == 410
+        r, body = s.req("GET", f"/in/{good}", headers={"X-Forwarded-For": "198.51.100.200"})
+        assert r.status == 429 and "Too many tries" in body, "that address waits, even with a good link"
+        assert s.sign_in(good, headers={"X-Forwarded-For": "198.51.100.200"})[0].status == 429, "the POST too"
+        for i in range(8):                                    # a cut-short link tried again and again is no guess
+            s.req("GET", f"/in/{good[:20]}", headers={"X-Forwarded-For": "198.51.100.201"})
+        assert s.req("GET", f"/in/{good}", headers={"X-Forwarded-For": "198.51.100.201"})[0].status == 200
+        assert s.sign_in(good, headers={"X-Forwarded-For": "198.51.100.9"})[0].status == 303, "another address signs in"
+
+
+def test_a_second_device_does_not_sign_the_first_one_out():
+    with Svc() as s:
+        a = s.cookie(s.sign_in(s.link())[0])
+        b = s.cookie(s.sign_in(s.link())[0])
+        assert s.who(a) == "alice" and s.who(b) == "alice"
+
+
+def test_a_0_7_line_is_still_a_valid_stamp():
+    """A host upgrading from 0.7.x keeps its `scrypt$` lines (and any bcrypt line from before): the cookie
+    a 0.7 login set still works until it expires, and a link sign-in leaves the line as it was."""
+    with Svc() as s:
+        scrypt = "scrypt$15$8$1$QUJDRA$QUJDRA"
+        bcrypt = "$2a$10$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz0123"
+        os.makedirs(os.path.dirname(s.users), exist_ok=True)
+        with open(s.users, "w") as fh:
+            fh.write(f"# kept\nalice {scrypt}\nbob {bcrypt}\n")
+        old = node("const l=require(process.argv[1]);console.log(l.makeToken(l.loadKey(process.argv[2]),'alice',process.argv[3]))", s.key, scrypt).strip()
+        name = s.cookie(s.sign_in(s.link("carl"))[0]).split("=")[0]
+        assert s.who(f"{name}={old}") == "alice", "a 0.7.x cookie keeps working"
+        for who in ("alice", "bob"):
+            assert s.who(s.cookie(s.sign_in(s.link(who))[0])) == who, who
+        lines = open(s.users).read().splitlines()
+        assert lines[:3] == ["# kept", f"alice {scrypt}", f"bob {bcrypt}"] and lines[3].startswith("carl link$"), lines
+        assert s.who(f"{name}={old}") == "alice", "and still after alice signed in by a link"
+
+
+def test_signout_and_remove_end_every_session_at_once():
+    with Host() as host:
+        host.configure({"SHOP_CONSOLE_ALLOW_HOST": "agent.example.com"})
+        lib = os.path.join(host.adapter, "lib.js")
+        users = os.path.join(host.data, "console.users")
+        links = os.path.join(host.data, "console", "sign-in-links.json")
+
+        def link(name):
+            r = host.node(lib, "link", name)
+            assert r.returncode == 0, r.stderr
+            return r.stdout.strip().split("/shop/in/")[1].strip()
+
+        with Svc(base="/shop", users=users, links=links) as s:
+            a1, a2, b = (s.cookie(s.sign_in(link(n))[0]) for n in ("alice", "alice", "bob"))
+            assert [s.who(c) for c in (a1, a2, b)] == ["alice", "alice", "bob"]
+            pending = link("alice")
+            r = host.node(lib, "signout", "alice")
+            assert r.returncode == 0 and "signed out on every device" in r.stdout, (r.stdout, r.stderr)
+            assert s.who(a1) is None and s.who(a2) is None, "every device of alice"
+            assert s.who(b) == "bob", "another person is not affected"
+            assert s.req("GET", f"/in/{pending}")[0].status == 410, "an unused link of alice is dropped too"
+            a3 = s.cookie(s.sign_in(link("alice"))[0])
+            assert s.who(a3) == "alice", "a new link signs her in again"
+            r = host.node(lib, "remove", "bob")
+            assert r.returncode == 0 and "removed" in r.stdout, r.stderr
+            assert s.who(b) is None and "bob" not in open(users).read()
+            assert s.who(a3) == "alice"
+            assert host.node(lib, "signout", "ghost").returncode == 1 and host.node(lib, "remove", "ghost").returncode == 1
+
+
+def test_link_needs_no_terminal_and_prints_the_public_address():
+    with Host() as host:
+        host.configure({"SHOP_CONSOLE_ALLOW_HOST": "agent.example.com"})
+        lib = os.path.join(host.adapter, "lib.js")
+        r = host.node(lib, "link", "alice")
+        url = r.stdout.strip().splitlines()[-1]
+        assert r.returncode == 0 and "works once" in r.stdout and re.fullmatch(re.escape("https://agent.example.com/shop/in/") + "[a-z2-9]{28}", url), (r.stdout, r.stderr)
+        assert not os.path.exists(os.path.join(host.data, "console.users")), "nothing is created until the person signs in"
+        saved = open(os.path.join(host.data, "console", "sign-in-links.json")).read()
+        assert url.rsplit("/", 1)[1] not in saved and "alice" in saved
+        for args, code in [(["link"], 2), (["link", "-x"], 2), (["link", "a", "b"], 2), (["link", "a b"], 1),
+                           (["signout"], 2), (["remove"], 2), (["frobnicate"], 2)]:
+            assert host.node(lib, *args).returncode == code, args
+        old = host.node(lib, "passwd", "alice", "--link")
+        assert old.returncode == 2 and "link NAME" in old.stderr, "passwd is gone and says what replaced it"
+
+
+def test_link_skips_a_loopback_host_for_the_public_one():
+    """Issue #485: the first allowed host may be the machine's own (localhost); the link names the public one."""
+    for allow, want in (("localhost,seo.example.com", "https://seo.example.com/shop/in/"),
+                        ("127.0.0.1:8766 [::1]:8766 seo.example.com:8443", "https://seo.example.com:8443/shop/in/"),
+                        ("localhost", "<the console's public address>/shop/in/"),
+                        ("localhost.example.com", "https://localhost.example.com/shop/in/")):
+        with Host() as host:
+            host.configure({"SHOP_CONSOLE_ALLOW_HOST": allow})
+            r = host.node(os.path.join(host.adapter, "lib.js"), "link", "alice")
+            assert r.returncode == 0 and want in r.stdout, (allow, r.stdout, r.stderr)
+            assert ("needs the console's public name" in r.stdout) == want.startswith("<"), (allow, r.stdout)
+
+
+def test_login_and_setup_only_say_what_to_do():
+    from urllib.parse import urlencode
+    with Svc() as s:
+        r, body = s.req("GET", "/login")
+        assert r.status == 200 and "<form" not in body and "<input" not in body and "ask the agent for a sign-in link" in body
+        _, zh = s.req("GET", "/login", headers={"Accept-Language": "zh"})
+        assert "登录链接" in zh and 'lang="zh"' in zh
+        p, _ = s.req("POST", "/login", urlencode({"username": "alice", "password": "correct horse battery", "next": "/seo/"}))
+        assert p.status == 410 and not p.getheader("Set-Cookie"), "a saved 0.7 password form checks nothing"
+        for method, path, body in [("GET", "/setup?token=" + "A" * 43, None), ("POST", "/setup", "token=x&password=aaaaaaaaaaaa&password2=aaaaaaaaaaaa")]:
+            r, text = s.req(method, path, body)
+            assert r.status == 410 and "older version" in text and not r.getheader("Set-Cookie"), (method, r.status)
+        _, zh = s.req("GET", "/setup?token=x", headers={"Accept-Language": "zh"})
+        assert "旧版本" in zh
+
+
+def test_forward_auth_answers_and_a_forged_or_old_cookie_is_refused():
+    with Svc() as s:
+        r, _ = s.sign_in(s.link())
         ck = s.cookie(r)
         a, _ = s.req("GET", "/_auth", headers={"Cookie": ck})
         assert a.status == 200 and a.getheader("X-Remote-User") == "alice"
-        # no cookie: a page request goes to the form with the page to come back to; a POST gets 401
-        for sent in ("/seo/plan?x=1", "/plan?x=1"):          # Caddy may send the path with or without the prefix
-            n, _ = s.req("GET", "/_auth", headers={"X-Forwarded-Uri": sent, "X-Forwarded-Method": "GET"})
-            assert n.status == 302 and n.getheader("Location") == "/seo/login?next=%2Fseo%2Fplan%3Fx%3D1", (sent, n.getheader("Location"))
+        n, _ = s.req("GET", "/_auth", headers={"X-Forwarded-Uri": "/seo/plan?x=1", "X-Forwarded-Method": "GET"})
+        assert n.status == 302 and n.getheader("Location") == "/seo/login", n.getheader("Location")
         p, _ = s.req("GET", "/_auth", headers={"X-Forwarded-Method": "POST"})
         assert p.status == 401 and not p.getheader("X-Remote-User")
-        # over plain http the cookie is not marked Secure (a test on localhost still works)
-        h, _ = s.login(headers={"X-Forwarded-Proto": "http"})
-        assert "Secure" not in h.getheader("Set-Cookie")
-
-
-def test_a_wrong_password_or_unknown_user_is_the_same_401():
-    with Svc() as s:
-        for user, pw in [("alice", "wrong password!"), ("nobody", PW), ("", ""), ("alice", "")]:
-            r, body = s.login(user, pw)
-            assert r.status == 401 and "Wrong username or password" in body and not s.cookie(r), (user, r.status)
-
-
-def test_a_forged_tampered_or_old_cookie_is_refused():
-    with Svc() as s:
-        ck = s.cookie(s.login()[0])
         name, val = ck.split("=", 1)
         parts = val.split(".")
         for label, bad in [("mac cut", ".".join(parts[:3]) + "." + parts[3][:-2] + "AA"),
                            ("other user", "Ym9i." + ".".join(parts[1:])),
                            ("later expiry", parts[0] + ".9999999999." + ".".join(parts[2:])),
                            ("garbage", "x.y.z.w"), ("empty", "")]:
-            a, _ = s.req("GET", "/_auth", headers={"Cookie": f"{name}={bad}"})
-            assert a.status == 302, (label, a.status)
-        # an expired token: made with a clock a month back
+            assert s.req("GET", "/_auth", headers={"Cookie": f"{name}={bad}"})[0].status == 302, label
         code = ("const l=require(process.argv[1]);const k=l.loadKey(process.argv[2]);const u=l.readUsers(process.argv[3]);"
-                "const t=l.makeToken(k,'alice',u.get('alice'),Date.now()-30*86400e3);"
-                "console.log(JSON.stringify([l.checkToken(k,u,t), l.checkToken(k,u,t,Date.now()-30*86400e3)]))")
-        old, fresh = json.loads(subprocess.run([NODE, "-e", code, LOGIN, s.key, s.users], capture_output=True, text=True).stdout)
-        assert old is None and fresh == "alice"
+                "const back=Date.now()-91*86400e3;const t=l.makeToken(k,'alice',u.get('alice'),back);"
+                "console.log(JSON.stringify([l.checkToken(k,u,t), l.checkToken(k,u,t,back)]))")
+        old, fresh = json.loads(node(code, s.key, s.users))
+        assert old is None and fresh == "alice", "91 days old: expired"
 
 
-def test_a_new_password_or_a_removed_user_ends_the_sessions_at_once():
+def test_a_post_from_another_origin_is_refused_and_spends_nothing():
     with Svc() as s:
-        s.set("bob", PW)
-        ca, cb = s.cookie(s.login()[0]), s.cookie(s.login("bob")[0])
-        assert s.req("GET", "/_auth", headers={"Cookie": ca})[0].status == 200
-        s.set("alice", "a different password")
-        assert s.req("GET", "/_auth", headers={"Cookie": ca})[0].status == 302, "a new password ends the old sessions"
-        assert s.req("GET", "/_auth", headers={"Cookie": cb})[0].status == 200, "another person is not affected"
-        r = subprocess.run([NODE, "-e", "require(process.argv[1]).setPassword(process.argv[2], 'bob', null)", LOGIN, s.users])
-        assert r.returncode == 0
-        assert s.req("GET", "/_auth", headers={"Cookie": cb})[0].status == 302, "a removed person is out"
+        tok = s.link()
+        r, _ = s.sign_in(tok, headers={"Origin": "https://evil.example.com", "Host": "agent.example.com"})
+        assert r.status == 403 and not s.cookie(r)
+        ok, _ = s.sign_in(tok, headers={"Origin": "https://agent.example.com", "Host": "agent.example.com"})
+        assert ok.status == 303, "the refused POST did not spend the link"
+        out, _ = s.req("POST", "/logout", "", {"Origin": "https://evil.example.com", "Host": "agent.example.com"})
+        assert out.status == 403
 
 
-def test_next_stays_under_the_base():
+def test_behind_a_platform_entry_that_rewrites_host_the_public_origin_passes():
+    """Issue #488: Host and X-Forwarded-Host both arrive as localhost; the console's own public name is the allow list."""
+    behind = {"Host": "localhost", "X-Forwarded-Host": "localhost"}
+    with Svc(allow="seo.example.com,LOCALHOST") as s:
+        for evil in ("https://evil.example.com", "https://seo.example.com.evil.example.com", "https://seo.example.com:8443", "null"):
+            r, _ = s.sign_in(s.link(), headers={"Origin": evil, **behind})
+            assert r.status == 403 and not s.cookie(r), evil
+        r, _ = s.sign_in(s.link(), headers={"Origin": "https://SEO.example.com", **behind})
+        assert r.status == 303 and s.cookie(r), "a sign-in on the public domain works behind the entry"
     with Svc() as s:
-        for nxt in ["//evil.example.com/x", "https://evil.example.com/", "/other", "/seo/../x", "\\\\evil", "/seo/login", "/seo/logout",
-                    "/seo/x\r\nSet-Cookie: a=b", "", "javascript:alert(1)"]:
-            r, _ = s.login(nxt=nxt, ip=f"198.51.100.{abs(hash(nxt)) % 200}")
-            loc = r.getheader("Location")
-            assert r.status == 303 and loc in ("/seo/", "/seo/../x"), (nxt, loc)
-            assert "\n" not in (loc or ""), nxt
-        r, body = s.req("GET", "/login?next=//evil.example.com")
-        assert 'name="next" value="/seo/"' in body
+        assert s.sign_in(s.link(), headers={"Origin": "https://seo.example.com", **behind})[0].status == 403, \
+            "with no allow list, as before: only the host the request names"
 
 
-def test_a_site_root_console_cannot_be_used_as_an_open_redirect():
+def test_a_site_root_console_signs_in_at_the_root():
     with Svc(base="") as s:
-        for i, nxt in enumerate(["/\t/evil.example.com", "/ /evil.example.com", "/\x0b/evil.example.com", "//evil.example.com", "/\\evil.example.com",
-                                 "/%09/evil.example.com"]):
-            r, _ = s.login(nxt=nxt, ip=f"198.51.100.{i}")
-            loc = r.getheader("Location")
-            assert r.status == 303 and (loc == "/" or loc == "/%09/evil.example.com"), (nxt, loc)   # %09 stays text: browsers do not decode a Location
-        r, _ = s.login(nxt="/materials?lang=zh")
-        assert r.getheader("Location") == "/materials?lang=zh" and "Path=/;" in r.getheader("Set-Cookie")
+        tok = s.link()
+        _, body = s.req("GET", f"/in/{tok}")
+        assert f'action="/in/{tok}"' in body
+        r, _ = s.sign_in(tok)
+        assert r.status == 303 and r.getheader("Location") == "/" and "Path=/;" in r.getheader("Set-Cookie")
 
 
-def test_a_hash_scrypt_would_throw_on_is_a_refusal_not_a_crash():
+def test_logout_clears_the_cookie():
     with Svc() as s:
-        with open(s.users, "a") as fh:
-            fh.write("bob scrypt$20$16$4$QUJDRA$QUJDRA\n")      # over the memory bound
-            fh.write("carl scrypt$15$8$1$QUJDRA$QUJDRA\n")      # a valid shape, a wrong key
-        for u in ("bob", "carl"):
-            assert s.login(u, PW)[0].status == 401, u
-        assert s.login()[0].status == 303, "and the service still answers"
+        r, body = s.req("GET", "/logout")
+        assert r.status == 200 and 'method="post"' in body and 'action="/seo/logout"' in body
+        o, body = s.req("POST", "/logout", "")
+        sc = o.getheader("Set-Cookie")
+        assert o.status == 200 and "Max-Age=0" in sc and "Path=/seo" in sc and 'href="/seo/login"' in body
+
+
+def test_other_paths_and_big_bodies_are_not_served():
+    with Svc() as s:
+        assert s.req("GET", "/")[0].status == 404 and s.req("GET", "/seo/")[0].status == 404
+        assert s.req("POST", "/_auth", "")[0].status == 404 and s.req("GET", "/in")[0].status == 404
+        tok = s.link()
+        c = Conn(s.sock)
+        try:
+            c.request("POST", f"/in/{tok}", body="x" * 100000, headers={"Content-Type": "application/x-www-form-urlencoded"})
+            status = c.getresponse().status
+        except (ConnectionError, http.client.HTTPException, OSError):
+            status = 413                           # the server closed on us while we were still sending
+        assert status == 413, "an oversized body is refused, not read"
+        assert s.sign_in(tok)[0].status == 303, "and the link was not spent; the service is still up"
 
 
 def test_the_service_makes_its_directory_private_and_leaves_the_umask_alone():
@@ -245,223 +425,48 @@ def test_the_service_makes_its_directory_private_and_leaves_the_umask_alone():
     code = ("const l=require(process.argv[1]);const before=process.umask();"
             "const s=l.listen({sock:process.argv[2],usersFile:process.argv[3],keyFile:process.argv[4],base:'/x'});"
             "console.log(before.toString(8), process.umask().toString(8));s.close();")
-    r = subprocess.run([NODE, "-e", code, LOGIN, os.path.join(d, "u", "s.sock"), os.path.join(d, "users"), os.path.join(d, "key")],
-                       capture_output=True, text=True)
-    before, after = r.stdout.split()
-    assert before == after, (r.stdout, r.stderr)             # the console this process starts inherits the umask
+    before, after = node(code, os.path.join(d, "u", "s.sock"), os.path.join(d, "users"), os.path.join(d, "key")).split()
+    assert before == after                                # the console this process starts inherits the umask
     link = os.path.join(d, "link")
     os.symlink(d, link)
-    r2 = subprocess.run([NODE, "-e", "try{require(process.argv[1]).listen({sock:process.argv[2],usersFile:'x',keyFile:'y',base:''})}catch(e){console.log('refused')}",
-                         LOGIN, os.path.join(link, "s.sock")], capture_output=True, text=True)
-    assert "refused" in r2.stdout, (r2.stdout, r2.stderr)    # a symlinked directory is not ours to trust
-
-
-def test_a_one_time_link_lets_a_person_set_their_own_password():
-    from urllib.parse import urlencode
-    with Svc(user_line=False) as s:
-        tok = s.link("newperson")
-        assert len(tok) >= 40 and tok not in open(s.users + ".setup").read(), "only a hash of the token is kept"
-        r, body = s.req("GET", f"/setup?token={tok}")
-        assert r.status == 200 and 'autocomplete="new-password"' in body and "newperson" in body and 'name="token"' in body
-        assert stat.S_IMODE(os.stat(s.users + ".setup").st_mode) == 0o600
-        # a typo does not burn the link
-        bad = s.req("POST", "/setup", urlencode({"token": tok, "password": "short", "password2": "short"}))[0]
-        diff = s.req("POST", "/setup", urlencode({"token": tok, "password": PW, "password2": PW + "x"}))[0]
-        assert bad.status == 400 and diff.status == 400
-        ok = s.req("POST", "/setup", urlencode({"token": tok, "username": "x", "password": PW, "password2": PW}))[0]
-        assert ok.status == 303 and ok.getheader("Location") == "/seo/" and "HttpOnly" in ok.getheader("Set-Cookie")
-        a, _ = s.req("GET", "/_auth", headers={"Cookie": s.cookie(ok)})
-        assert a.status == 200 and a.getheader("X-Remote-User") == "newperson", "signed in as the link's user, not the form's"
-        assert s.login("newperson", PW)[0].status == 303, "and the password works at the login form"
-        # once only
-        again = s.req("POST", "/setup", urlencode({"token": tok, "password": "another password", "password2": "another password"}))[0]
-        gone = s.req("GET", f"/setup?token={tok}")[0]
-        assert again.status == 410 and gone.status == 410
-        assert s.login("newperson", "another password")[0].status == 401
-
-
-def test_a_setup_link_expires_is_replaced_by_a_newer_one_and_guessing_is_throttled():
-    with Svc(user_line=False) as s:
-        old = s.link("amy", now=int(time.time() * 1000) - 31 * 60_000)
-        assert s.req("GET", f"/setup?token={old}")[0].status == 410, "30 minutes"
-        first = s.link("amy")
-        second = s.link("amy")
-        assert s.req("GET", f"/setup?token={first}")[0].status == 410, "a newer link replaces the older one"
-        assert s.req("GET", f"/setup?token={second}")[0].status == 200
-        assert s.req("GET", "/setup")[0].status == 410 and s.req("GET", "/setup?token=%00")[0].status == 410
-        for i in range(8):                                   # short, stale-looking values (a bot's old link) are not guesses
-            s.req("GET", f"/setup?token=old{i}", headers={"X-Forwarded-For": "198.51.100.201"})
-        assert s.req("GET", f"/setup?token={second}", headers={"X-Forwarded-For": "198.51.100.201"})[0].status == 200
-        for i in range(6):                                   # token-shaped ones are
-            s.req("GET", "/setup?token=" + ("g%d" % i) * 25, headers={"X-Forwarded-For": "198.51.100.200"})
-        assert s.req("GET", f"/setup?token={second}", headers={"X-Forwarded-For": "198.51.100.200"})[0].status == 429
-        assert s.req("POST", "/setup", "token=x&password=aaaaaaaaaaaa&password2=aaaaaaaaaaaa",
-                     {"Origin": "https://evil.example.com", "Host": "agent.example.com"})[0].status == 403
-
-
-def test_passwd_link_needs_no_terminal_and_prints_the_public_address():
-    with Host() as host:
-        host.configure({"SHOP_CONSOLE_ALLOW_HOST": "agent.example.com"})
-        lib = os.path.join(host.adapter, "lib.js")
-        r = host.node(lib, "passwd", "alice", "--link")
-        assert r.returncode == 0 and "https://agent.example.com/shop/setup?token=" in r.stdout and "works once" in r.stdout, (r.stdout, r.stderr)
-        tok = r.stdout.strip().split("token=")[1].strip()
-        assert not os.path.exists(os.path.join(host.data, "console.users")), "nothing is created until the person sets a password"
-        saved = open(os.path.join(host.data, "console", "setup-tokens.json")).read()
-        assert tok not in saved and "alice" in saved
-        assert host.node(lib, "passwd", "--remove", "alice", "--link").returncode == 2
-        assert host.node(lib, "passwd", "a b", "--link").returncode == 1
-        assert host.node(lib, "passwd", "--link").returncode == 2 and host.node(lib, "passwd", "-x", "--link").returncode == 2
-
-
-def test_passwd_link_skips_a_loopback_host_for_the_public_one():
-    """Issue #485: the first allowed host may be the machine's own (localhost); the link names the public one."""
-    for allow, want in (("localhost,seo.example.com", "https://seo.example.com/shop/setup?token="),
-                        ("127.0.0.1:8766 [::1]:8766 seo.example.com:8443", "https://seo.example.com:8443/shop/setup?token="),
-                        ("localhost", "<the console's public address>/shop/setup?token="),
-                        ("localhost.example.com", "https://localhost.example.com/shop/setup?token=")):
-        with Host() as host:
-            host.configure({"SHOP_CONSOLE_ALLOW_HOST": allow})
-            r = host.node(os.path.join(host.adapter, "lib.js"), "passwd", "alice", "--link")
-            assert r.returncode == 0 and want in r.stdout, (allow, r.stdout, r.stderr)
-            assert ("needs the console's public name" in r.stdout) == want.startswith("<"), (allow, r.stdout)
-
-
-def test_five_wrong_passwords_lock_that_user_and_that_address():
-    with Svc() as s:
-        for i in range(5):
-            assert s.login(pw=f"wrong password {i}")[0].status == 401
-        r, body = s.login()                       # the right password, now refused
-        assert r.status == 429 and "Too many tries" in body and not s.cookie(r)
-        r2, _ = s.login(user="alice", ip="198.51.100.9")
-        assert r2.status == 429, "the user is locked wherever it comes from"
-        r3, _ = s.login(user="carol", pw="x", ip="203.0.113.7")
-        assert r3.status == 429, "the address is locked whoever it tries"
-        # a visitor from elsewhere with a good login, for a user nobody attacked
-        s.set("bob", PW)
-        assert s.login("bob", ip="198.51.100.77")[0].status == 303
-
-
-def test_behind_a_platform_entry_that_rewrites_host_the_public_origin_passes():
-    """Issue #488: Host and X-Forwarded-Host both arrive as localhost; the console's own public name is the allow list."""
-    behind = {"Host": "localhost", "X-Forwarded-Host": "localhost"}
-    with Svc(allow="seo.example.com,LOCALHOST") as s:
-        r, _ = s.login(headers={"Origin": "https://seo.example.com", **behind})
-        assert r.status == 303 and s.cookie(r), "a login on the public domain works behind the entry"
-        bad, _ = s.login(pw="wrong-password-1", headers={"Origin": "https://SEO.example.com", **behind})
-        assert bad.status == 401, "a bad password is a 401 there, not a 403 (the Origin passed)"
-        for evil in ("https://evil.example.com", "https://seo.example.com.evil.example.com", "https://seo.example.com:8443", "null"):
-            r, _ = s.login(headers={"Origin": evil, **behind})
-            assert r.status == 403 and not s.cookie(r), evil
-        tok = s.link()
-        ok, _ = s.req("POST", "/setup", f"token={tok}&password=a-new-password-1&password2=a-new-password-1", {"Origin": "https://seo.example.com", **behind})
-        assert ok.status == 303, ("the one-time link works behind the entry", ok.status)
-    with Svc() as s:
-        r, _ = s.login(headers={"Origin": "https://seo.example.com", **behind})
-        assert r.status == 403, "with no allow list, as before: only the host the request names"
-
-
-def test_a_post_from_another_origin_is_refused():
-    with Svc() as s:
-        r, _ = s.login(headers={"Origin": "https://evil.example.com", "Host": "agent.example.com"})
-        assert r.status == 403 and not s.cookie(r)
-        ok, _ = s.login(headers={"Origin": "https://agent.example.com", "Host": "agent.example.com"})
-        assert ok.status == 303
-        out, _ = s.req("POST", "/logout", "", {"Origin": "https://evil.example.com", "Host": "agent.example.com"})
-        assert out.status == 403
-
-
-def test_logout_clears_the_cookie():
-    with Svc() as s:
-        r, body = s.req("GET", "/logout")
-        assert r.status == 200 and 'method="post"' in body and 'action="/seo/logout"' in body
-        o, _ = s.req("POST", "/logout", "")
-        sc = o.getheader("Set-Cookie")
-        assert o.status == 200 and "Max-Age=0" in sc and "Path=/seo" in sc
-
-
-def test_other_paths_and_big_bodies_are_not_served():
-    with Svc() as s:
-        assert s.req("GET", "/")[0].status == 404 and s.req("GET", "/seo/")[0].status == 404
-        assert s.req("POST", "/_auth", "")[0].status == 404
-        c = Conn(s.sock)
-        try:
-            c.request("POST", "/login", body="username=a&password=" + "x" * 100000,
-                      headers={"Content-Type": "application/x-www-form-urlencoded"})
-            status = c.getresponse().status
-        except (ConnectionError, http.client.HTTPException, OSError):
-            status = 413                           # the server closed on us while we were still sending
-        assert status == 413, "an oversized login body is refused, not read"
-        assert s.req("GET", "/login")[0].status == 200, "and the service is still up"
+    out = node("try{require(process.argv[1]).listen({sock:process.argv[2],usersFile:'x',keyFile:'y',base:''})}catch(e){console.log('refused')}",
+               os.path.join(link, "s.sock"))
+    assert "refused" in out                               # a symlinked directory is not ours to trust
 
 
 def test_the_socket_and_the_key_are_private_and_sessions_survive_a_restart():
     with Svc() as s:
-        for f in (s.sock, s.key, s.users):
+        ck = s.cookie(s.sign_in(s.link())[0])
+        for f in (s.sock, s.key, s.users, s.links):
             assert stat.S_IMODE(os.stat(f).st_mode) == 0o600, (f, oct(os.stat(f).st_mode))
-        ck = s.cookie(s.login()[0])
         s.stop()
         s.start()
-        a, _ = s.req("GET", "/_auth", headers={"Cookie": ck})
-        assert a.status == 200 and a.getheader("X-Remote-User") == "alice", "the key is kept in a file, so a restart keeps sessions"
+        assert s.who(ck) == "alice", "the key is kept in a file, so a restart keeps sessions"
 
 
-def test_passwd_needs_a_terminal_and_validates():
-    with Host() as host:
-        host.configure({})
-        lib = os.path.join(host.adapter, "lib.js")
-        users = os.path.join(host.data, "console.users")
-        r = host.node(lib, "passwd", "alice")                   # no tty under the test
-        assert r.returncode == 2 and "needs a terminal" in r.stderr and not os.path.exists(users), r.stderr
-        assert host.node(lib, "passwd").returncode == 2
-        assert host.node(lib, "passwd", "--remove", "ghost").returncode == 1
-        bad = host.node("-e", "try{require(process.argv[1]).setPassword(process.argv[2],'a b','x'.repeat(12))}catch(e){console.log(e.message)}",
-                        os.path.join(host.adapter, "bin", "login.js"), users)
-        assert "not a user name" in bad.stdout, bad.stdout
-        short = host.node("-e", "try{require(process.argv[1]).setPassword(process.argv[2],'amy','short')}catch(e){console.log(e.message)}",
-                          os.path.join(host.adapter, "bin", "login.js"), users)
-        assert "at least 10" in short.stdout, short.stdout
-
-
-def test_passwd_at_a_real_terminal_writes_a_scrypt_line_without_echo():
-    import pty
-    import select
-    with Host() as host:
-        host.configure({})
-        lib = os.path.join(host.adapter, "lib.js")
-        users = os.path.join(host.data, "console.users")
-        pid, fd = pty.fork()
-        if pid == 0:
-            os.environ.update(host.env())
-            os.execv(NODE, [NODE, lib, "passwd", "alice"])
-        out = b""
-        sent = 0
-        deadline = time.time() + 20
-        while time.time() < deadline:                    # answer each prompt when it appears
-            ready, _, _ = select.select([fd], [], [], 0.5)
-            if not ready:
-                continue
-            try:
-                data = os.read(fd, 4096)
-            except OSError:
-                break
-            if not data:
-                break
-            out += data
-            if b"min 10 characters" in out and sent == 0:
-                os.write(fd, (PW + "\r").encode())
-                sent = 1
-            elif b"again:" in out and sent == 1:
-                os.write(fd, (PW + "\r").encode())
-                sent = 2
-            elif b"end now" in out:
-                break
-        _, status = os.waitpid(pid, 0)
-        text = out.decode(errors="replace")
-        assert os.WEXITSTATUS(status) == 0 and "alice added" in text, text
-        assert PW not in text, "the password was echoed"
-        line = open(users).read().strip()
-        assert line.startswith("alice scrypt$") and PW not in line and stat.S_IMODE(os.stat(users).st_mode) == 0o600, line
+def test_every_page_the_service_draws_passes_the_asks_guard():
+    """D67, kit.guards.asks: each POST form on these pages says why it offers no "no" (signing in and
+    signing out are not asks). Every page pages() can draw, in both languages, and the ones served."""
+    sys.path.insert(0, ROOT)
+    from kit.guards import asks
+    drawn = json.loads(node(
+        "const l=require(process.argv[1]);const out={};"
+        "for(const lang of ['en','zh']){const P=l.pages(lang,'Shop','/seo');"
+        "for(const [k,f] of Object.entries(P))out[`${lang} ${k}`]=f(l.newLinkToken(),'alice');}"
+        "console.log(JSON.stringify(out))"))
+    assert {k.split()[1] for k in drawn} >= {"login", "link", "incomplete", "dead", "old", "wait", "refused", "logout", "gone"}, drawn.keys()
+    for where, html in drawn.items():
+        assert not asks.problems(html, where), asks.problems(html, where)
+    forms = sum(html.count('<form method="post"') for html in drawn.values())
+    assert forms == 4, ("the link and the logout pages, twice: the check saw them", forms)
+    with Svc() as s:
+        tok = s.link()
+        served = [s.req("GET", p)[1] for p in ("/login", f"/in/{tok}", f"/in/{tok[:9]}", "/setup", "/logout", "/nope")]
+        served.append(s.req("POST", "/logout", "")[1])
+        for html in served:
+            assert not asks.problems(html, "served"), asks.problems(html, "served")
+        assert any("data-no=" in h for h in served)
+    assert asks.problems('<form method="post" action="/seo/in/x"><button>Sign in</button></form>'), "the guard bites without data-no"
 
 
 if __name__ == "__main__":
