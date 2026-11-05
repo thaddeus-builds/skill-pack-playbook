@@ -35,6 +35,7 @@ import json
 import shlex
 import sys
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any, Callable, Iterable
 
 import kit
@@ -160,13 +161,35 @@ def missing_days(start: date | str, end: date | str,
 
 
 def skill_pack_version() -> str | None:
-    """[skill_pack].version of skill-pack.toml, else <root>/VERSION, else None."""
+    """[skill_pack].version of skill-pack.toml, else <root>/VERSION, else the `version:` of SKILL.md's frontmatter
+    (the release tag a host installs, which its adapter reads there; seen once, a pack versioned only in SKILL.md and its
+    pyproject read as "unversioned"), else None."""
     cfg = config()
     v = cfg.raw.get("skill_pack", {}).get("version")
     if v:
         return str(v)
     f = cfg.root / "VERSION"
-    return f.read_text(encoding="utf-8").strip() if f.is_file() else None
+    if f.is_file():
+        return f.read_text(encoding="utf-8").strip()
+    return skill_md_version(cfg.root / "SKILL.md")
+
+
+def skill_md_version(path: Path) -> str | None:
+    """The `version:` line of a SKILL.md frontmatter (between the first two `---` lines), unquoted, without a
+    trailing comment; None when there is none."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return None
+        if line.startswith("version:"):
+            v = line.split(":", 1)[1].split(" #", 1)[0].strip().strip("'\"")
+            return v or None
+    return None
 
 
 def _rows(name: str, rows: list[dict] | None, keys: tuple[str, ...]
