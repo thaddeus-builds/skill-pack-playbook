@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Kit
+- `kit/contract.py` `skill_pack_version()`: after `[skill_pack].version` and `VERSION`, the `version:` of SKILL.md's frontmatter, the release tag a host installs (`skill_md_version()`); a pack versioned only there read as "unversioned" in `doctor` and `--version`. Seen once: amazon-ppc, 2026-11-05
+- Skill packs: nothing (re-vendor with the train; a pack that keeps a `VERSION` file or `[skill_pack].version` reads as before)
+
 ### Other
 - `scaffold/clients.py check`: a `.gitkeep` under `sources/` is a placeholder, not material, and needs no row (seen once: a hub's `inbox/.gitkeep`, once the check walked all of `sources/`)
 - Skill packs: nothing
