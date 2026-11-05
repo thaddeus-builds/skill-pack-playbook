@@ -4,7 +4,7 @@ Three lanes. Every change, value and action belongs to exactly one.
 
 ## 1. Always the owner
 
-- **Meaning:** glossary words, user stories, business rules (owner files).
+- **Meaning:** glossary words, user stories, business rules (the roadmap's `R` rows, dated and quoting the owner; owner files in a pack that keeps them).
 - **Numbers:** threshold values, costs, targets.
 - **Money:** approving each action that spends or moves money.
 - **Contract:** whether the skill pack may write to a client's account at all, and paid data calls (with a cap).
