@@ -10,7 +10,9 @@ the module returns the plan.
     weekday weights, and an event day is planned at the weight of its weekday times the lift the account's earlier event days showed
     (`event_lift`); with none earlier it is planned as an ordinary day and the flag `event_no_history` says so.
   * `cap_status()`: a monthly cap against what is spent so far, at the recent run-rate: `ok`, `warn`, `projected_over`,
-    `over_cap`, or `unknown` while the spend so far is only a lower bound (days missing: a crossing is proved, never its absence).
+    `over_cap`, or `unknown` while the spend so far is only a lower bound (days missing, or the caller's `incomplete`: a crossing
+    is proved, never its absence). `spent_extra` is spend outside the day clock (another channel's spend on a day `by_day`
+    lacks): counted in what is spent, never in the run-rate.
     `reach()` is the date a target is crossed at that rate.
 
 From the video-ads skill pack (`pacing`) and the paid-search skill pack (`compute_budget`); the second is the test set of `cap_status`.
@@ -161,14 +163,20 @@ def reach(spent: float, target: float, rate: float, last: date, end: date) -> tu
 
 
 def cap_status(month_first: date, last: date, end: date, by_day: dict[date, float], cap: float, warn_ratio: float,
-               run_rate_days: int) -> dict:
+               run_rate_days: int, *, spent_extra: float = 0.0, incomplete: bool = False) -> dict:
     """A monthly `cap` against the spend of `month_first`..`last` (`by_day`: money per day; a day absent is a day missing).
 
     run-rate = the mean of the last `run_rate_days` days present; projected = spent + run-rate x days left. A month with days
     missing has a lower-bound spend: a threshold it already crossed is `reached`, every other one and the status are `unknown`.
     `today_budget` = what is left of the cap over the days after `last` (None on the month's last day); `upper_bound` says
-    it overstates when the spend is a lower bound."""
-    spent = sum(by_day.values())
+    it overstates when the spend is a lower bound.
+
+    Two additive inputs for a caller whose spend has more than one source (seen once: the paid-search skill pack, whose
+    main report is the day clock and whose two other ad types' reports add to it): `spent_extra`, money spent in the month on days `by_day`
+    lacks, is in `spent` and the projection but not the run-rate (the rate stays the clock's); `incomplete`, the caller knows
+    the spend misses some (a source whose report ends before `last`), makes the spend a lower bound as a missing day does,
+    while `missing_days` stays the clock's own."""
+    spent = sum(by_day.values()) + spent_extra
     window = sorted(by_day)[-run_rate_days:]
     rate = sum(by_day[d] for d in window) / len(window) if window else 0.0
     days_left = (end - last).days
@@ -176,16 +184,17 @@ def cap_status(month_first: date, last: date, end: date, by_day: dict[date, floa
     warn_at = warn_ratio * cap
     span = [month_first + timedelta(n) for n in range((last - month_first).days + 1)]
     missing = [d for d in span if d not in by_day]
+    lower = bool(missing) or incomplete
     thresholds = []
     for name, target in (("warn", warn_at), ("cap", cap)):
         state, hit = reach(spent, target, rate, last, end)
-        if missing and state != "reached":
+        if lower and state != "reached":
             state, hit = "unknown", None
         thresholds.append({"name": name, "target": target, "state": state, "date": hit})
-    status = ("over_cap" if spent >= cap else "warn" if spent >= warn_at else "unknown" if missing
+    status = ("over_cap" if spent >= cap else "warn" if spent >= warn_at else "unknown" if lower
               else "projected_over" if projected > cap else "warn" if projected >= warn_at else "ok")
     return {"spent": spent, "run_rate": rate, "run_rate_days_used": len(window), "projected": projected,
             "ratio_of_cap": spent / cap if cap else None, "thresholds": thresholds, "missing_days": missing, "status": status,
             "warn_reason": None if status != "warn" else ("spent" if spent >= warn_at else "projected"),
             "today_budget": max(0.0, cap - spent) / days_left if days_left else None, "days_left": days_left,
-            "upper_bound": bool(missing)}
+            "upper_bound": lower}
