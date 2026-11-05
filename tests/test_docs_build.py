@@ -481,9 +481,9 @@ def test_the_ci_template_gates_on_result_and_its_title_rule_works():
     assert "uv run scripts/{{cli}}.py test" in text and "'^RESULT: [0-9]+ passed$'" in text
     title = re.compile(ci_pattern(text, "grep -Eq"))
     for good in ("S01 add the budget report", "Fix expiry (P12)", "release 0.2.0", "S012 the hundredth story",
-                 "Re-vendor the kit: 0.41.0 to 0.44.0"):                          # a re-vendor is maintenance: no story to name
+                 "Re-vendor the kit: 0.41.0 to 0.44.0", "X46 the kit half of R44", "Close M3"):                          # a re-vendor is maintenance: no story to name
         assert title.search(good), good
-    for bad in ("fix a typo", "S1 short", "AS01 prefix", "P7 one digit", "Release notes",
+    for bad in ("fix a typo", "S1 short", "AX12 prefix", "X short", "AS01 prefix", "P7 one digit", "Release notes",
                 "Please Re-vendor the kit", "re-vendor the kit", "Re-vendor the code", "Update the kit"):
         assert not title.search(bad), bad
     job = doc("templates/ci/gitlab-ci.yml")                                      # the fuller CI holds the same rule
