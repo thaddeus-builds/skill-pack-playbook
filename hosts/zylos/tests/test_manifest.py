@@ -236,5 +236,122 @@ def test_check_ties_skill_md_to_the_manifest():
         assert r.returncode == 0, r.stdout + r.stderr
 
 
+ROUTE = {"path": "/shop/ops", "port": 8768, "port_key": "SHOP_OPS_PORT"}
+
+
+def test_console_routes_are_checked():
+    """0.7.3: a route is one segment under base_path (the login's cookie and return address are the
+    base path's), not a path the console or its login has, with exactly one upstream: a port of its
+    own (and an optional port_key, declared in SKILL.md) or a socket in the data dir."""
+    m = example()
+    m["console"]["routes"] = [ROUTE, {"path": "/shop/files", "socket": "files/files.sock"}]
+
+    def bad(change, key, words):
+        mm = copy.deepcopy(m)
+        change(mm)
+        host.write_manifest(mm)
+        host.write(os.path.join(host.skill, "SKILL.md"), skill_md(m))
+        r = check(host)
+        assert r.returncode == 1 and f"zylos/manifest.json: {key}:" in r.stderr and words in r.stderr, (key, r.stderr)
+
+    first = lambda x: x["console"]["routes"][0]   # noqa: E731
+    with Host() as host:
+        host.write_manifest(m)
+        host.write(os.path.join(host.skill, "SKILL.md"), skill_md(m))
+        r = check(host)
+        assert r.returncode == 0, r.stdout + r.stderr
+        host.write(os.path.join(host.skill, "SKILL.md"), skill_md(example()))
+        r = check(host)
+        assert r.returncode == 1 and "SKILL.md config must declare SHOP_OPS_PORT" in r.stderr, r.stderr
+        for path, words in (("/ops", "one segment under console.base_path"), ("/other/ops", "one segment under"),
+                            ("/shop", "one segment under"), ("/shop/a/b", "one segment under"), ("/shop/Ops", "one segment under"),
+                            ("/shop/login", "a path of the console"), ("/shop/setup", "a path of the console"),
+                            ("/shop/static", "a path of the console"), ("/shop/page-ops", "a path of the console")):
+            bad(lambda x, p=path: first(x).update(path=p), "console.routes[0].path", words)
+        bad(lambda x: x["console"]["routes"][1].update(path="/shop/ops"), "console.routes[1].path", "used twice")
+        bad(lambda x: first(x).update(socket="a.sock"), "console.routes[0]", "exactly one upstream")
+        bad(lambda x: x["console"]["routes"][1].pop("socket"), "console.routes[1]", "exactly one upstream")
+        bad(lambda x: first(x).update(port=x["console"]["port"]), "console.routes[0].port", "is also console.port")
+        bad(lambda x: first(x).update(port=80), "console.routes[0].port", "1024 to 65535")
+        bad(lambda x: x["console"]["routes"][1].update(port_key="SHOP_FILES_PORT"), "console.routes[1].port_key", "needs one")
+        bad(lambda x: first(x).update(port_key=x["console"]["port_key"]), "console.routes[0].port_key", "is also console.port_key")
+        bad(lambda x: first(x).update(port_key="CONSOLE_SECRET"), "console.routes[0].port_key", "a gate secret")
+        bad(lambda x: x["console"]["routes"][1].update(socket="../x.sock"), "console.routes[1].socket", "inside the data dir")
+        bad(lambda x: first(x).update(upstream="x"), "console.routes[0].upstream", "unknown key")
+        bad(lambda x: x["console"].update(routes={}), "console.routes", "JSON list")
+
+
+def test_a_skill_packs_own_files_in_zylos_are_listed():
+    """0.7.3: a file in zylos/ is the adapter's or listed in own_files; a listed one is there and is
+    never a file of the adapter."""
+    m = example()
+    with Host() as host:
+        host.write(os.path.join(host.adapter, "ops.js"), "// the pack's own\n")
+        host.write(os.path.join(host.adapter, "bin", "ops.js"), "// the pack's own\n")
+        r = check(host)
+        assert r.returncode == 1 and "zylos/ops.js is neither a file of the adapter nor listed in manifest own_files" in r.stderr \
+            and "zylos/bin/ops.js is neither" in r.stderr, r.stderr
+        mm = dict(m, own_files=["ops.js", "bin/ops.js"])
+        host.write_manifest(mm)
+        r = check(host)
+        assert r.returncode == 0, r.stdout + r.stderr
+        host.write(os.path.join(host.adapter, "manifest.example.json"), "{}\n")      # an adapter template copied too: the adapter's
+        assert check(host).returncode == 0
+        os.remove(os.path.join(host.adapter, "bin", "ops.js"))
+        r = check(host)
+        assert r.returncode == 1 and "zylos/bin/ops.js is listed in manifest own_files but is not a file there" in r.stderr, r.stderr
+        for listed, key, words in ((["lib.js"], "own_files[0]", "a file of the adapter"),
+                                   (["ops.js", "bin/login.js"], "own_files[1]", "a file of the adapter"),
+                                   (["manifest.json"], "own_files[0]", "a file of the adapter"),
+                                   (["ops.js", "ops.js"], "own_files[1]", "listed twice"),
+                                   (["../ops.js"], "own_files[0]", "inside zylos/")):
+            host.write_manifest(dict(m, own_files=listed))
+            r = check(host)
+            assert r.returncode == 1 and f"zylos/manifest.json: {key}:" in r.stderr and words in r.stderr, (listed, r.stderr)
+
+
+def test_the_frontmatter_is_held_to_what_yaml_reads():
+    """0.7.3: the frontmatter checks read it line by line, so a value YAML refuses passed them, and
+    zylos-core, which parses it, then installed the component under the folder's name. Each case is
+    refused with its line named; the good frontmatter, block scalars and quoted values pass."""
+    good = skill_md(example())
+    lines = good.split("\n")
+    desc = next(i for i, ln in enumerate(lines) if ln.startswith("description:")) + 1     # its SKILL.md line number
+    cases = [
+        ("': ' in a plain value", good.replace("Use whenever testing.", "Use: whenever testing."),
+         f"SKILL.md:{desc}: description is a plain value with \": \" in it, which YAML refuses"),
+        ("': ' before a comment", good.replace("Do NOT use otherwise.", "Do NOT use: otherwise.  # a comment"), f"SKILL.md:{desc}: description is a plain value"),
+        ("a value ending in ':'", good.replace("Do NOT use otherwise.", "Do NOT use otherwise:"), f"SKILL.md:{desc}: description is a plain value"),
+        ("a quote not closed", good.replace("description: A fictional", "description: \"A fictional"), f"SKILL.md:{desc}: description opens a quote"),
+        ("a reserved first character", good.replace("description: A fictional", "description: @A fictional"), "which YAML reserves"),
+        ("an alias by accident", good.replace("description: A fictional", "description: *A fictional"), "which YAML reserves"),
+        ("a tab in the indent", good.replace("  npm: false", "\tnpm: false"), "a tab in the indent"),
+        ("a key twice", good.replace("type: capability\n", "type: capability\ntype: capability\n"), "type is a key a second time"),
+        ("a key twice in a list item", good.replace("      description: read by zylos/ only\n", "      description: read by zylos/ only\n      description: x\n", 1),
+         "description is a key a second time"),
+        ("': ' on the next line of a plain value", good.replace("Do NOT use otherwise.", "Do NOT use\n  otherwise: never."), "goes on with the plain value above"),
+    ]
+    with Host() as host:
+        for label, text, says in cases:
+            host.write(os.path.join(host.skill, "SKILL.md"), text)
+            r = check(host)
+            assert r.returncode == 1 and says in r.stderr, (label, r.stderr)
+        fine = [
+            good,
+            good.replace("description: A fictional skill pack for the adapter's tests. Use whenever testing. Do NOT use otherwise.",
+                         "description: >\n  A fictional skill pack: for the adapter's tests. Use #whenever testing.\n  Note: never otherwise."),
+            good.replace("description: A fictional skill pack", "description: \"A fictional: skill pack #1\"  # a comment"),
+            good.replace("version: 0.1.0", "# version: plain X.Y.Z\nversion: '0.1.0'"),
+            good.replace("version: 0.1.0", "version: 0.1.0                      # plain X.Y.Z = the release tag vX.Y.Z"),   # the README's
+            good.replace("name: shop-harness\n", "name: shop-harness # the component\n", 1),
+            good.replace("bin:\n", "bin:  # the linked command\n"),
+            good.replace("name: shop-harness\n", "name: \"shop-harness\"  # the component\n", 1),
+        ]
+        for text in fine:
+            host.write(os.path.join(host.skill, "SKILL.md"), text)
+            r = check(host)
+            assert r.returncode == 0, (text.split("---")[1][:400], r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     _t.main(globals())

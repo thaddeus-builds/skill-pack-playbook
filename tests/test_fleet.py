@@ -151,6 +151,42 @@ def test_a_copy_equal_to_the_playbook_is_in_sync():
             assert copy["verdict"] == "in sync" and copy["files"] == [], copy
 
 
+def test_a_skill_packs_own_files_in_zylos_are_left_alone():
+    """hosts/zylos 0.7.3: a pack lists its own files beside the adapter in zylos/manifest.json `own_files`; status
+    compares only the adapter's, so the pack reads `in sync`. Unlisted, the same files are local; a listed path the
+    playbook's folder has is still compared."""
+    with _t.tmpdir() as tmp:
+        pb, h = setup(Path(tmp))
+        write(pb, {"hosts/zylos/VERSION": "0.7.3\n", "hosts/zylos/lib.js": "L = 1\n", "hosts/zylos/bin/cli.js": "C = 1\n",
+                   "hosts/zylos/manifest.example.json": "{}\n", "hosts/zylos/tests/test_x.py": "t\n"})
+        sh(pb, "git", "add", "-A")
+        sh(pb, "git", "commit", "-qm", "zylos 0.7.3")
+        own = {"zylos/ops.js": "O = 1\n", "zylos/bin/ops.js": "B = 1\n"}
+        write(h, {"zylos/VERSION": "0.7.3\n", "zylos/lib.js": "L = 1\n", "zylos/bin/cli.js": "C = 1\n", **own,
+                  "zylos/manifest.json": json.dumps({"name": "acme", "own_files": ["ops.js", "bin/ops.js"]})})
+
+        def zylos() -> dict:
+            r = fleet(pb, "status", str(h), "--json")
+            assert r.returncode == 0, r.stderr
+            return next(c for c in json.loads(r.stdout)["skill_packs"][0]["copies"] if c["part"] == "zylos")
+
+        z = zylos()
+        assert z["verdict"] == "in sync" and z["files"] == [] and z["version"] == "0.7.3", z
+        assert "zylos    0.7.3 (playbook 0.7.3): in sync" in fleet(pb, "status", str(h)).stdout
+        d = fleet(pb, "diff", str(h)).stdout
+        assert "kit/a.py" in d and "zylos/" not in d, ("diff leaves the listed files out too", d)
+        assert all((h / rel).read_text() == text for rel, text in own.items()), "status reads only"
+        write(h, {"zylos/manifest.json": json.dumps({"name": "acme"})})
+        z = zylos()
+        assert z["verdict"].startswith("local changes in 2") and {f["file"] for f in z["files"]} == {"ops.js", "bin/ops.js"}, z
+        write(h, {"zylos/manifest.json": json.dumps({"name": "acme", "own_files": ["ops.js", "bin/ops.js", "lib.js"]}),
+                  "zylos/lib.js": "L = 'forked'\n"})
+        z = zylos()
+        assert [(f["file"], f["state"]) for f in z["files"]] == [("lib.js", "local")], ("an adapter file is compared even when listed", z)
+        write(h, {"zylos/manifest.json": "{not json"})
+        assert zylos()["verdict"].startswith("local changes in 3"), "a manifest it cannot read lists nothing"
+
+
 def test_a_file_that_only_a_merge_commit_ever_had_is_older_not_local():
     """Seen 2026-10-30: nine packs on kit 0.44.0 were all called `local` in README.md, VERSION and packs.tsv, because
     the playbook had resolved a conflict in a merge commit and `git log --raw` shows no diff for a merge."""

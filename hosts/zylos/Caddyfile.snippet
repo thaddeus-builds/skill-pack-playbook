@@ -19,8 +19,13 @@
 ##   the form. <USERS_FILE> holds the logins (`node zylos/lib.js passwd NAME`).
 ## - `route` keeps the written order: `request_header -<USER_HEADER>` drops
 ##   any copy the visitor sent before forward_auth sets the real one.
+## - <ROUTE_REDIRS> and <ROUTES> are the skill pack's own upstreams
+##   (manifest console.routes): a redir to the trailing slash each, and a
+##   handle_path each after forward_auth, so the same login guards them; a line
+##   with no route to write is left out.
 # BEGIN zylos-component:<NAME>
 redir <BASE_PATH> <BASE_PATH>/ permanent
+<ROUTE_REDIRS>
 handle_path <BASE_PATH>/* {
     route {
         request_header -<USER_HEADER>
@@ -33,6 +38,7 @@ handle_path <BASE_PATH>/* {
                 uri /_auth
                 copy_headers <USER_HEADER>
             }
+            <ROUTES>
             reverse_proxy 127.0.0.1:<PORT> {
                 header_up -Cookie
             }

@@ -29,7 +29,7 @@ from urllib.parse import urlencode
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADAPTER = os.path.dirname(HERE)
 LOGIN = os.path.join(ADAPTER, "bin", "login.js")
-SITE_PORT, APP_PORT = 18080, 18081
+SITE_PORT, APP_PORT, ROUTE_PORT = 18080, 18081, 18082
 PW = "correct horse battery"
 
 
@@ -76,11 +76,18 @@ def main() -> None:
         assert srv.stdout.readline().strip() == "up", "login service did not start"
         app = http.server.ThreadingHTTPServer(("127.0.0.1", APP_PORT), Echo)
         threading.Thread(target=app.serve_forever, daemon=True).start()
+        route_app = http.server.ThreadingHTTPServer(("127.0.0.1", ROUTE_PORT), Echo)   # a route of console.routes (0.7.3)
+        threading.Thread(target=route_app.serve_forever, daemon=True).start()
         snippet = open(os.path.join(ADAPTER, "Caddyfile.snippet")).read()
         block = "\n".join(ln for ln in snippet.splitlines() if not ln.startswith("##"))
         for k, v in {"<NAME>": "live", "<BASE_PATH>": "/seo", "<PORT>": str(APP_PORT), "<AUTH_SOCK>": sock,
                      "<USERS_FILE>": users, "<USER_HEADER>": "X-Remote-User"}.items():
             block = block.replace(k, v)
+        # the slots as lib.js caddy fills them for console.routes = [{path: /seo/ops, port: ROUTE_PORT}]
+        slots = {"<ROUTE_REDIRS>": ["redir /seo/ops /seo/ops/ permanent"],
+                 "<ROUTES>": ["handle_path /ops/* {", f"    reverse_proxy 127.0.0.1:{ROUTE_PORT} {{", "        header_up -Cookie", "    }", "}"]}
+        block = "\n".join(ln[:len(ln) - len(ln.lstrip())] + x if ln.strip() in slots else x
+                          for ln in block.splitlines() for x in (slots.get(ln.strip()) or [ln]))
         assert not re.search(r"<[A-Z_]+>", block), block
         cf = os.path.join(tmp, "Caddyfile")
         open(cf, "w").write("{\n    admin off\n    auto_https off\n}\n"
@@ -142,6 +149,16 @@ def main() -> None:
         ok(r.status == 200 and seen["path"] == "/materials" and seen["headers"].get("x-remote-user") == "alice",
            f"the console sees the real user, not the spoofed one: {seen['headers'].get('x-remote-user')}")
         ok("cookie" not in seen["headers"], "the console does not get the session cookie")
+        r, _ = req("GET", "/seo/ops/page?x=1", headers=spoof)
+        loc = r.getheader("Location") or ""
+        ok(r.status == 302 and loc.startswith("/seo/login?next=") and "%2Fseo%2Fops%2Fpage" in loc,
+           f"a route of console.routes asks the same login: {r.status} to {loc}")
+        r, _ = req("GET", "/seo/ops")
+        ok(r.status == 301 and r.getheader("Location") == "/seo/ops/", f"the route's path goes to its trailing slash ({r.status})")
+        r, body = req("GET", "/seo/ops/page", headers={"Cookie": cookie, **spoof})
+        seen = json.loads(body)
+        ok(r.status == 200 and seen["path"] == "/page" and seen["headers"].get("x-remote-user") == "alice" and "cookie" not in seen["headers"],
+           f"with the session the route's upstream gets its own path, the real user and no cookie: {seen['path']}, {seen['headers'].get('x-remote-user')}")
         r, body = req("POST", "/seo/plan", "a=1", headers={"Cookie": cookie, "Content-Length": "3"})
         ok(r.status == 200 and json.loads(body)["method"] == "POST", "a POST with a session reaches the console as a POST")
         r, _ = req("GET", "/seo/materials", headers={"Cookie": cookie[:-3] + "AAA"})
