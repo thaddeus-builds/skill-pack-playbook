@@ -25,7 +25,7 @@ def test_the_check_refuses_this_roadmap_broken():
     wait = re.search(r"unblocks: [A-Z]\d+", TEXT).group(0)        # whichever row the first wait unblocks today
     for old, new in (("## Next\n", "## Soon\n"),                 # a section renamed
                      (wait, "unblocks: X99"),                     # a wait that unblocks no row
-                     (" (commit 8e13e16)", ""),                   # a Done row with no reference
+                     (" (no ref)", ""),                   # a Done row with no reference
                      ('"yes, after turn 2"', "yes, after turn 2")):   # a decision not quoted
         broken = TEXT.replace(old, new, 1)
         assert broken != TEXT and roadmap.problems(broken), old
