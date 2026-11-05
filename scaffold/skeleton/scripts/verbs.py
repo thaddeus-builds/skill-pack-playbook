@@ -45,8 +45,6 @@ VERBS = [
          answers="A person puts a decision in force"),
     Verb(("pending",), "pending.py", "read",
          answers="What waits on a person, as ready console asks"),
-    Verb(("compute", "stories"), "compute_stories.py", "read",
-         answers="Is each story still true on this client's data?"),
     Verb(("queue", "list"), "queue_actions.py", "read",
          answers="Proposed, approved and executed actions"),
     Verb(("queue", "add"), "queue_actions.py", "human",

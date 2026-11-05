@@ -172,6 +172,16 @@ def main() -> int:
     undo()
 
     print("\n[3] ssot")
+    # A new pack has no owner files since R44; a pack that keeps them adds them with their index rows, as here.
+    keep = ("glossary.tsv", "glossary.agent.tsv", "user-stories.tsv", "user-stories.agent.tsv", "stages.agent.tsv")
+    tpl = _shop.PLAYBOOK / "templates" / "ssot"
+    for name in keep:
+        text = (tpl / name).read_text(encoding="utf-8")
+        planted(root, f"ssot/{name}", text if name == "stages.agent.tsv" else text.split("\n", 1)[0] + "\n")
+    rows = [ln + "\n" for ln in (tpl / "index.tsv").read_text(encoding="utf-8").splitlines()
+            if ln.split("\t")[0] in {f"ssot/{n}" for n in keep}]
+    planted(root, "ssot/index.tsv", append="".join(rows))
+    check("a pack that keeps owner files is green", not failing(suites.ssot(root)), failing(suites.ssot(root)))
     undo = planted(root, "ssot/glossary.tsv",
                    append="stock\tUnits on hand that can be sold today\n")
     caught("an owner row with no agent sibling", suites.ssot(root),
