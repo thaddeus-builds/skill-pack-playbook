@@ -615,6 +615,14 @@ def test_a_proxy_must_pass_the_host_through_as_the_docs_say():
     assert "every POST refused (403)" in text
     assert serve.same_origin({"Origin": "null", "Sec-Fetch-Site": "same-origin", "Host": "console.example.com"})
     assert not serve.same_origin({"Origin": "null", "Host": "console.example.com"})      # `null` alone says nothing about where
+    allow = [serve.split_host("console.example.com")]
+    rewritten = {"Origin": "https://console.example.com", "Host": "127.0.0.1:8770"}
+    assert serve.same_origin(rewritten, allow), "a public name among --allow-host passes behind a Host-rewriting entry"
+    assert not serve.same_origin({**rewritten, "Origin": "https://evil.example.com"}, allow)
+    assert not serve.same_origin({**rewritten, "Origin": "http://localhost:8770"}, [serve.split_host("localhost")]), \
+        "a loopback Origin never passes by the allow list"
+    assert not serve.same_origin({**rewritten, "Origin": "https://console.example.com:9999"},
+                                 [serve.split_host("console.example.com:443")]), "a port the entry names must match"
     assert "counts only with `Sec-Fetch-Site: same-origin`" in text and "the owner opens the proxy's" in text
     assert "so it stays under the prefix" in text and "`Path`" in text
 
