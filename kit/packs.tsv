@@ -76,6 +76,7 @@ export_demand	creative	the ads.demand/1 file: the demand document's request for 
 export_results	creative	the ads.results/1 rows: the report's current rows with each creative's stage and, once it has a verdict, its fission score; the pack writes them through kit.contracts
 snapshot	ops	a client workspace packed into one package that restores it: the database by backup, no secret in it, a manifest with every sha256, older packages pruned
 guards.__init__	testkit	
+guards.asks	testkit	every form on a page a person answers offers a no beside the yes, or says why it has none
 guards.boundary	testkit	
 guards.changelog	testkit	
 guards.clock	testkit	
