@@ -41,8 +41,10 @@ names a target inside the folder. `relink` makes the links.tsv links on this mac
 link is replaced, a real file or folder in the way is reported and never touched (seen once: a client folder's hand-written
 relink.sh, 2026-11-05). `source` copies a file into today's inbox (never moves or renames the original) or records
 a URL, and appends its INDEX row with the next id and the file's sha256; the same bytes again are refused and the
-earlier id named. A file already under inbox/ with no row (seen once: eight in one client's) gets its row in place, never
-a copy, and bytes listed before are named in `duplicate_of`.
+earlier id named. A file or folder already under sources/ with no row (seen once: eight in one client's inbox; a
+client's material kept in category folders, another's as a mirror of its cloud drive) gets its row in place, never a
+copy or a move, and bytes listed before are named in `duplicate_of`. Over 500 MB the sha256 is left empty. sources/
+may keep material in any folders: a row for a folder covers everything in it.
 
 Stdlib only. Test: scaffold/tests/test_clients.py.
 """
@@ -112,8 +114,23 @@ def read_index(p: Path) -> tuple[list[str], list[dict]]:
     return head, [dict(zip(head, ln.split("\t"))) for ln in lines[1:] if ln.strip()]
 
 
+HASH_MAX = 500 * 1024 * 1024          # above it the sha256 is left empty (new_hub.py's SOURCES_README says the same)
+KEPT = ("README.md", "INDEX.tsv", "MANIFEST.sha256", ".DS_Store")   # sources/'s own files, not material
+
+
+def size_of(p: Path) -> tuple[int, int]:
+    if p.is_file():
+        return p.stat().st_size, 1
+    fs = [x for x in p.rglob("*") if x.is_file() and x.name != ".DS_Store"]
+    return sum(x.stat().st_size for x in fs), len(fs)
+
+
 def digest(p: Path) -> tuple[str, int, int]:
-    """sha256, bytes, files; a folder's hash is the hash of its files' hashes in path order."""
+    """sha256, bytes, files; a folder's hash is the hash of its files' hashes in path order; over HASH_MAX the
+    hash is empty (a 17 GB drive mirror is listed, not read twice)."""
+    size, n = size_of(p)
+    if size > HASH_MAX:
+        return "", size, n
     if p.is_file():
         h = hashlib.sha256()
         with p.open("rb") as f:
@@ -154,12 +171,13 @@ def add_source(c: Path, item: str, *, source: str, title: str, day: str, kind: s
         if not src.exists():
             raise Stop(f"{src} does not exist")
         sha, size, n = digest(src)
-        same = [r["id"] for r in rows if r.get("sha256") == sha]
-        inbox = (c / "sources" / "inbox").resolve()
-        if inbox in src.resolve().parents:
-            # already kept but never listed: the row only, in place; the same bytes listed before are named
+        same = [r["id"] for r in rows if sha and r.get("sha256") == sha]
+        home = (c / "sources").resolve()
+        if home in src.resolve().parents:
+            # already kept but never listed (an inbox day, a category folder, a drive mirror): the row only, in
+            # place; the same bytes listed before are named
             dest = src.resolve()
-            if any(r.get("path") == dest.relative_to(inbox.parent).as_posix() for r in rows):
+            if any(r.get("path") == dest.relative_to(home).as_posix() for r in rows):
                 raise Stop(f"{src.name} is already listed")
         else:
             if same:
@@ -172,7 +190,7 @@ def add_source(c: Path, item: str, *, source: str, title: str, day: str, kind: s
             (shutil.copytree if src.is_dir() else shutil.copy2)(src, dest)
             dest, same = dest.resolve(), []
         row = {"id": rid, "date": day, "source": source, "kind": kind or ("folder" if src.is_dir() else "file"),
-               "title": title, "path": dest.relative_to(inbox.parent).as_posix(), "bytes": str(size),
+               "title": title, "path": dest.relative_to(home).as_posix(), "bytes": str(size),
                "files": str(n), "sha256": sha, "read_by": read_by, "duplicate_of": same[0] if same else "",
                "note": note}
     with idx.open("a", encoding="utf-8") as f:
@@ -296,14 +314,21 @@ def check(c: Path) -> list[str]:
             listed.add(p)
             if not (c / "sources" / p).exists():
                 say(f"sources/INDEX.tsv {r.get('id')}: {p} does not exist")
-        inbox = c / "sources" / "inbox"
-        if inbox.is_dir():
-            for day in sorted(x for x in inbox.iterdir() if x.is_dir()):
-                for item in sorted(day.iterdir()):
-                    rel = item.relative_to(c / "sources").as_posix()
-                    covered = rel in listed or day.relative_to(c / "sources").as_posix() in listed
-                    if item.name != ".DS_Store" and not covered:
-                        say(f"sources/{rel} has no INDEX row (clients.py source, or add the row)")
+        # every item under sources/ is covered by its own row or a row of a folder above it; an inbox day folder
+        # or a category folder is only a place, so the walk goes into it until something is listed
+        home = c / "sources"
+
+        def walk(d: Path) -> None:
+            for item in sorted(d.iterdir()):
+                rel = item.relative_to(home).as_posix()
+                if (d == home and item.name in KEPT) or item.name == ".DS_Store" or rel in listed:
+                    continue
+                if item.is_dir() and not item.is_symlink():
+                    walk(item)
+                else:
+                    say(f"sources/{rel} has no INDEX row (clients.py source, or a row for a folder above it)")
+        if home.is_dir():
+            walk(home)
     for top, dirs, files in os.walk(c):                      # links are not followed: they lead into .machine/
         here = Path(top)
         if here == c:
