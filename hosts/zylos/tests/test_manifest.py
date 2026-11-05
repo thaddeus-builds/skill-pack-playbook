@@ -129,6 +129,15 @@ def test_bad_values_are_named():
         bad(lambda x: x["reply"].update(endpoint="CONSOLE_SECRET"), "reply.endpoint", "a gate secret")
         bad(lambda x: x["tasks"][2].update(prompt="run {cli_path} now"), "tasks[2].prompt", "{cli_path}")
         bad(lambda x: x["tasks"][2].update(prompt="tail {log}"), "tasks[2].prompt", "unknown placeholder {log}")
+        # R44: a scheduled step is a verb run through {cli} (or {detach}); never tools/ or a script by its interpreter
+        bad(lambda x: x["tasks"][0].update(prompt="Every morning run python3 tools/run_routine.py and report"),
+            "tasks[0].prompt", "runs no skill pack verb")
+        bad(lambda x: x["tasks"][0].update(prompt="Run {cli} doctor, then python3 tools/run_routine.py"),
+            "tasks[0].prompt", "runs tools/")
+        bad(lambda x: x["tasks"][0].update(prompt="Run {cli} doctor, then python3 scripts/x.py"),
+            "tasks[0].prompt", "runs python3")
+        bad(lambda x: x["tasks"][0].update(prompt="Run {cli} doctor, then uv run scripts/x.py"),
+            "tasks[0].prompt", "runs uv run")
         bad(lambda x: x.update(defaults={"REGION": {"value": "us"}}), "defaults.REGION.when", "missing")
         bad(lambda x: x.update(tasks={}), "tasks", "JSON list")
 

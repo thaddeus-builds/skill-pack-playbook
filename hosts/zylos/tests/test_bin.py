@@ -41,6 +41,8 @@ def test_cli_runs_the_entry_with_the_data_dir():
             "ARG=run", "ARG=--no-project", "ARG=" + os.path.join(host.skill, "scripts", "shop.py"),
             "ARG=compute", "ARG=report", "ARG=--json", "ARG=a b", "ARG=it's"], r.stderr + repr(seen)
         assert seen[:2] == [f"DATA={host.data}", f"CACHE={os.path.join(host.data, '.pycache')}"], seen
+        runtime = open(host.env()["FAKE_UV_LOG"] + ".runtime").read().strip()
+        assert runtime == "1", f"every skill pack run on the host is the runtime: SHOP_RUNTIME={runtime} (R44)"
         r, seen = cli("doctor", SHOP_DATA_DIR="/elsewhere")
         assert seen[0] == "DATA=/elsewhere", "a data dir the caller set is kept"
         r, _ = cli("doctor", FAKE_UV_EXIT="7")
