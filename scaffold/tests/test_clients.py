@@ -50,6 +50,7 @@ def make(root: Path, name: str = "acme") -> Path:
     for f in C.INTAKE:
         (c / "intake" / f).write_text("x\n", "utf-8")
     (c / "sources" / "INDEX.tsv").write_text("\t".join(C.INDEX_HEADER) + "\n", "utf-8")
+    (c / ".machine" / "client_terms.txt").write_text(f"{name}\n", "utf-8")
     return c
 
 
@@ -108,6 +109,8 @@ def test_check() -> None:
            lambda: (c / "reports/.env").unlink(), "reports/.env: a secret's place is under .machine/")
     broken("open connections", lambda: (c / ".machine/connections").chmod(0o755),
            lambda: (c / ".machine/connections").chmod(0o700), "chmod 700")
+    terms = c / ".machine/client_terms.txt"
+    broken("no client term list", lambda: terms.unlink(), lambda: terms.write_text("acme\n"), "no client_terms.txt")
     links = c / ".machine/links.tsv"
     broken("a link target outside the folder", lambda: links.write_text("path\ttarget\tnote\n~/x\t../other\tn\n"),
            lambda: links.unlink(), "must be a path inside the client folder")
@@ -176,9 +179,48 @@ def test_relink() -> None:
     check("again: the correct links are kept", out.count("ok ") == 2, out)
 
 
+def test_pre_push_hook() -> None:
+    print("[5] the playbook's pre-push hook keeps a client's term out")
+    import subprocess
+    r = Path(tmp_dir("clients-hook-root-"))
+    make(r, "acme")
+    repo = Path(tmp_dir("clients-hook-repo-"))
+    g = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True,  # noqa: E731
+                                  env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")})
+    g("init", "-q")
+    for d in ("scaffold", "kit/tools", ".githooks"):
+        (repo / d).mkdir(parents=True, exist_ok=True)
+    import shutil
+    for f in ("scaffold/clients.py", "kit/tools/leak_guard.py", ".githooks/pre-push"):
+        shutil.copy2(PLAYBOOK / f, repo / f)
+    (repo / "run_all.py").write_text("print('RESULT: 1 passed')\n", "utf-8")
+    g("add", "-A")
+    g("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base")
+    base = g("rev-parse", "HEAD").stdout.strip()
+    (repo / "notes.md").write_text("the Acme folder\n", "utf-8")
+    g("add", "-A")
+    g("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "names a client")
+    head = g("rev-parse", "HEAD").stdout.strip()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")} | {"CLIENTS_DIR": str(r)}
+    hook = subprocess.run(["sh", ".githooks/pre-push", "origin", "x"], cwd=repo, capture_output=True, text=True,
+                          input=f"refs/heads/main {head} refs/heads/main {base}\n", env=env)
+    check("a commit with a client's term: the push is refused before the suites run",
+          hook.returncode == 1 and "RESULT" not in hook.stdout, (hook.returncode, hook.stdout, hook.stderr))
+    (repo / "notes.md").write_text("a client folder\n", "utf-8")
+    g("add", "-A")
+    g("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "reworded")
+    g("rebase", "-q", "--onto", base, head)
+    clean = g("rev-parse", "HEAD").stdout.strip()
+    hook = subprocess.run(["sh", ".githooks/pre-push", "origin", "x"], cwd=repo, capture_output=True, text=True,
+                          input=f"refs/heads/main {clean} refs/heads/main {base}\n", env=env)
+    check("reworded: the guard passes and the suites run", hook.returncode == 0 and "RESULT: 1 passed" in hook.stdout,
+          (hook.returncode, hook.stdout, hook.stderr))
+
+
 if __name__ == "__main__":
     test_root()
     test_check()
     test_source()
     test_relink()
+    test_pre_push_hook()
     raise SystemExit(finish())
