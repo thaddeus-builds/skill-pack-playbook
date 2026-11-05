@@ -50,6 +50,34 @@ def test_the_adapter_files_are_all_there():
     assert want == have, (sorted(want - have), sorted(have - want))
 
 
+def test_lib_js_knows_its_own_files_and_the_consoles_paths():
+    """0.7.3: `check` tells the adapter's files in zylos/ from a skill pack's own (manifest own_files) by
+    lib.js ADAPTER_FILES, so it must be exactly what a pack copies; and a console.routes path may not
+    take a path of the console, so CONSOLE_PATHS must hold every first segment console/serve.py serves."""
+    vendored = set()
+    for rel in ("lib.js", "hooks", "bin", "Caddyfile.snippet", "VERSION", "README.md"):     # _host.VENDORED
+        full = os.path.join(ADAPTER, rel)
+        if os.path.isdir(full):
+            vendored |= {f"{rel}/{f}" for f in os.listdir(full) if f != ".DS_Store"}
+        else:
+            vendored.add(rel)
+    with Host() as host:
+        got = host.lib("console.log(JSON.stringify([h.ADAPTER_FILES, h.ADAPTER_TEMPLATES, h.CONSOLE_PATHS]))")
+    files, templates, paths = got
+    assert set(files) == vendored, (sorted(set(files) - vendored), sorted(vendored - set(files)))
+    assert set(templates) == {"manifest.example.json", "ecosystem.config.cjs.template"}, templates
+    with open(os.path.join(ADAPTER, "..", "..", "console", "serve.py"), encoding="utf-8") as fh:
+        serve = fh.read()
+    tables = [re.search(rf"^{name} = (.*)$", serve, re.M).group(1) for name in ("PAGES", "POSTS", "AFTER")]
+    served = {p for t in tables for p in re.findall(r'"/([a-z_]+)"', t)}
+    served |= set(re.findall(r'^FILES = \{f"/([a-z]+)/', serve, re.M))
+    served = {s.split("_")[0] for s in served}                       # /answer_all: a route path has no "_", /answer stands for both
+    assert {"history", "poll", "answer", "note", "static"} <= served, served     # the parse still reads the tables
+    assert served <= set(paths), (sorted(served - set(paths)), paths)
+    assert 'PAGE_PREFIX = "page-"' in serve, "CONSOLE_PAGE_PREFIX in lib.js is the console's tab prefix"
+    assert {"login", "logout", "setup"} <= set(paths), "the login service's own paths"
+
+
 def test_no_skill_pack_names_in_the_generic_files():
     for rel in GENERIC + ["README.md", "manifest.example.json"]:
         low = read(rel).lower()
@@ -136,6 +164,10 @@ def test_the_caddy_snippet():
     assert "route {" in text and strip < login < ask < proxy, "route keeps the order: drop the visitor's header first"
     assert "header_up -Cookie" in text, "the console never sees the session cookie"
     assert "uri /_auth" in text and "copy_headers <USER_HEADER>" in text and "@login path /login /logout /setup" in text
+    # 0.7.3: the skill pack's own routes go in after forward_auth, before the console, inside its handle_path
+    slot, redirs = body.index("            <ROUTES>"), body.index("<ROUTE_REDIRS>")
+    assert body.index("            forward_auth unix/<AUTH_SOCK> {") < slot < body.index("            reverse_proxy 127.0.0.1:<PORT> {"), body
+    assert body.index("redir <BASE_PATH> <BASE_PATH>/ permanent") < redirs < body.index("handle_path <BASE_PATH>/* {"), body
     with Host() as host:
         host.configure({"SHOP_CONSOLE_PORT": "9123"})
         r = host.node(os.path.join(host.adapter, "lib.js"), "caddy")
@@ -162,7 +194,8 @@ def test_the_readme_documents_the_contract():
                 leaves(v[0], out)
         return out
 
-    keys = leaves(example(), set()) | {"defaults", "allow_host_key", "value", "when"}
+    keys = leaves(example(), set()) | {"defaults", "allow_host_key", "value", "when",
+                                         "routes", "path", "port", "port_key", "socket", "own_files"}   # the optional keys
     missing = sorted(k for k in keys if f"`{k}`" not in text)
     assert not missing, f"README.md does not document manifest keys {missing}"
     for p in ("{cli}", "{node}", "{detach}", "{data_dir}", "{skill_dir}", "{logs}", "{exit}", "{log:NAME}"):
