@@ -12,7 +12,7 @@ The adapter targets **zylos-core ≥ 0.7.1** and uses only core's documented sur
 
 The skill pack itself never refers to `zylos/`. Delete the folder, the Zylos keys of the frontmatter and the root `ecosystem.config.cjs`, and the skill pack still runs anywhere.
 
-Version: `VERSION` (0.7.1). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
+Version: `VERSION` (0.7.2). Tests: `python3 hosts/zylos/tests/run.py` (Python stdlib, needs `node`). Needs Node 22 or newer; CI runs the adapter's tests on Node 22.
 
 ## What a skill pack copies, and what it writes
 
@@ -56,7 +56,7 @@ Then add `node zylos/lib.js check` to the skill pack's CI. It exits 1 and names 
 | `env` | `files` | The env files between the process env and `<data dir>/.env` (`~/` or absolute), as the skill pack's own chain reads them |
 | `runtime` | `python` | The Python version installed with `uv python install` when `uv python find` fails |
 | `runtime` | `uv_version` | The uv version Astral's installer is pinned to |
-| `runtime` | `uv_installer_url` | The address of Astral's standalone uv installer script for exactly `uv_version` (Astral's site, path `/uv/<uv_version>/install.sh`; uv's installation docs give it); it must name `uv_version` |
+| `runtime` | `uv_installer_url` | The address of Astral's standalone uv installer script for exactly `uv_version` (Astral's site, path `/uv/<uv_version>/install.sh`; uv's installation docs give it); it must name `uv_version`, and `check` refuses a host reserved for examples (`example.com`, `.test`, `.invalid`, `localhost`; 0.7.2) |
 | `runtime` | `uv_installer_sha256` | The sha256 of that script; bump the version, the URL and the sha256 together |
 | | `endpoints` | `https://` URLs post-install checks for reachability (a soft note) |
 | `scope` | `list` | CLI arguments that print the declared scope as JSON, e.g. `["facts", "list", "--json"]` |

@@ -15,7 +15,7 @@
   "runtime": {
     "python": "3.12",
     "uv_version": "0.12.16",
-    "uv_installer_url": "https://uv-installer.example.com/uv/0.12.16/install.sh",
+    "uv_installer_url": "https://astral.sh/uv/0.12.16/install.sh",
     "uv_installer_sha256": "889a5745afddc78b389841caede74711003b782e2ec8c2f29b3c03cbd7b580a9"
   },
   "endpoints": ["https://api.shop.example.com"],

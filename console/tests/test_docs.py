@@ -800,7 +800,7 @@ PRIVATE = (("a machine path", re.compile(r"/Us" r"ers/|/home/[a-z]|/private/" r"
                                          r"|Bearer [A-Za-z0-9._-]{20,}|-----BEGIN [A-Z ]*KEY")))
 ADDRESS = re.compile(r"[A-Za-z0-9._%+-]+@(?!example\.|evil\.example)[A-Za-z0-9.-]+\.[a-z]{2,}")
 LINKED = re.compile(r"https?://([A-Za-z0-9][A-Za-z0-9.-]*)")
-PUBLIC_DOCS = ("www.anthropic.com",)          # whole hosts of public documentation a page may cite (issue #23); never a suffix or a substring
+PUBLIC_DOCS = ("www.anthropic.com", "astral.sh")  # whole public hosts a file may name: documentation a page cites (issue #23), uv's installer a manifest pins (hosts/zylos 0.7.2); never a suffix or a substring
 LITTER = re.compile(r"(^|/)(__pycache__/|\.DS_Store$)|\.py[co]$")           # build leftovers: never published, whatever they hold
 
 
