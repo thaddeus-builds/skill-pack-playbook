@@ -36,8 +36,9 @@ def rgb(v, default):
     return tuple(int(c) for c in v[:3]) if isinstance(v, (list, tuple)) and len(v) >= 3 else default
 
 
-def track_text(d, xy, text, f, fill, tracking=0.0, anchor="l", q=1.0, shadow=True):
-    """`text` one character at a time with `tracking` pixels between, from `xy` (anchor l, m or r). Returns its width. A shadow sits under type that has an alpha."""
+def track_text(d, xy, text, f, fill, tracking=0.0, anchor="l", q=1.0, shadow=True, limit=None):
+    """`text` one character at a time with `tracking` pixels between, from `xy` (anchor l, m or r). Returns its width. A shadow sits under type that has an alpha. `limit`: draw only the
+    first characters (a typewriter) while the line is placed as the whole text is, so a centred line does not slide as it fills."""
     x, y = xy
     widths = [d.textlength(ch, font=f) + tracking * q for ch in text]
     total = sum(widths) - tracking * q
@@ -45,7 +46,7 @@ def track_text(d, xy, text, f, fill, tracking=0.0, anchor="l", q=1.0, shadow=Tru
         x -= total / 2
     elif anchor == "r":
         x -= total
-    for ch, w in zip(text, widths):
+    for ch, w in list(zip(text, widths))[:limit]:
         if shadow and len(fill) == 4:
             d.text((x + 1.5 * q, y + 3.5 * q), ch, font=f, fill=(0, 0, 0, int(fill[3] * 0.55)))
         d.text((x, y), ch, font=f, fill=fill)
@@ -78,7 +79,7 @@ def fitted(cx: Ctx, texts: list[str], kind: str, size: float, tracking: float, m
 
 def title_size(cx: Ctx, p: dict) -> float:
     """A title's size: its own, shrunk until the widest line fits `max_width` and the lines fit `max_height` (design pixels; never below 60 percent)."""
-    size = fitted(cx, p["lines"], p["font"], p["size"], p["tracking"], p.get("max_width"))
+    size = fitted(cx, p["lines"], p["font"], p["size"], max(p["tracking"], p.get("tracking_in") or p["tracking"]), p.get("max_width"))       # sized for the widest the letters get
     mh = p.get("max_height")
     if mh and len(p["lines"]) * size * p["lead"] > mh:
         size = max(p["size"] * 0.6, mh / (len(p["lines"]) * p["lead"]) * 0.98)
@@ -128,7 +129,27 @@ def anchor_problems(p) -> list[str]:
 
 @element("title")
 class Title:
-    defaults = dict(font="black", size=96, fill=[255, 255, 255], anchor="l", tracking=0.0, stagger=0.14, dur=0.55, rise=46, lead=1.12, out=None, out_dur=0.35)
+    defaults = dict(font="black", size=96, fill=[255, 255, 255], anchor="l", tracking=0.0, stagger=0.14, dur=0.55, rise=46, lead=1.12, out=None, out_dur=0.35,
+                    typewriter=None, tracking_in=None, tracking_dur=0.9)
+
+    @staticmethod
+    def starts(p) -> list[float]:
+        """When each line begins, in seconds after `t0`: one `stagger` after the last, or, with `typewriter` (characters a second), when the line before it has been typed."""
+        cps = p.get("typewriter")
+        if not cps:
+            return [i * p["stagger"] for i in range(len(p["lines"]))]
+        out, t = [], 0.0
+        for line in p["lines"]:
+            out.append(t)
+            t += len(line) / cps + 0.12
+        return out
+
+    @staticmethod
+    def spacing(p, t, ts) -> float:
+        """The letter spacing at `t` for a line that begins at `ts`: `tracking_in` easing to `tracking` over `tracking_dur` when the title has one."""
+        if p.get("tracking_in") is None:
+            return p["tracking"]
+        return p["tracking"] + (p["tracking_in"] - p["tracking"]) * (1 - ease_out(prog(t, ts, p["tracking_dur"])))
 
     @staticmethod
     def check(p):
@@ -145,8 +166,10 @@ class Title:
         p = {**cls.defaults, **p}
         t0 = el["t0"]
         fill = rgb(p["fill"], WHITE)
+        starts, cps = cls.starts(p), p.get("typewriter")
         for i, line in enumerate(p["lines"]):
-            a = ease_out(prog(t, t0 + i * p["stagger"], p["dur"]))
+            ts = t0 + starts[i]
+            a = (1.0 if t >= ts else 0.0) if cps else ease_out(prog(t, ts, p["dur"]))
             if p["out"] is not None:
                 a *= 1 - smooth(prog(t, t0 + p["out"] + i * 0.05, p["out_dur"]))
             if a <= 0.001:
@@ -155,8 +178,9 @@ class Title:
             ly = p["y"] + i * size * lead
             tmp = scratch(cx, p["font"], size)
             d = ImageDraw.Draw(tmp)
-            yy = (1 - a) * p["rise"] * cx.q + 6
-            track_text(d, (p["x"] * cx.q, yy), line, cx.font(p["font"], size), (*fill, int(255 * min(1.0, a * 1.4))), p["tracking"], p["anchor"], cx.q)
+            yy = (0 if cps else (1 - a) * p["rise"] * cx.q) + 6
+            track_text(d, (p["x"] * cx.q, yy), line, cx.font(p["font"], size), (*fill, int(255 * min(1.0, a * 1.4))), cls.spacing(p, t, ts), p["anchor"], cx.q,
+                       limit=int((t - ts) * cps) + 1 if cps else None)
             paste_clipped(layer, tmp, int((ly - 6) * cx.q))
 
     @classmethod
@@ -166,10 +190,11 @@ class Title:
             return []
         out = []
         size = title_size(cx, p)
+        starts = cls.starts(p)
         for i, line in enumerate(p["lines"]):
             gone = p["out"] is not None and t >= el["t0"] + p["out"] + i * 0.05 + p["out_dur"]          # a line that has faded out is no longer on the screen
-            if t >= el["t0"] + i * p["stagger"] + 0.2 and not gone:
-                out.append((f"title:{line[:18]}", *line_box(cx, line, p["x"], p["y"] + i * size * p["lead"], p["font"], size, p["anchor"], p["tracking"])))
+            if t >= el["t0"] + starts[i] + 0.2 and not gone:                                              # the box of a typed line is the whole line's, from the moment it begins
+                out.append((f"title:{line[:18]}", *line_box(cx, line, p["x"], p["y"] + i * size * p["lead"], p["font"], size, p["anchor"], cls.spacing(p, t, el["t0"] + starts[i]))))
         return out
 
     @staticmethod
@@ -179,7 +204,7 @@ class Title:
 
 @element("text")
 class Text:
-    defaults = dict(font="med", size=36, fill=[255, 255, 255], anchor="l", tracking=0.0, dur=0.6, alpha=0.92)
+    defaults = dict(font="med", size=36, fill=[255, 255, 255], anchor="l", tracking=0.0, dur=0.6, alpha=0.92, typewriter=None)
 
     @staticmethod
     def check(p):
@@ -192,12 +217,14 @@ class Text:
     @classmethod
     def draw(cls, layer, t, p, cx, el):
         p = {**cls.defaults, **p}
-        a = ease_out(prog(t, el["t0"], p["dur"]))
+        cps = p.get("typewriter")
+        a = (1.0 if t >= el["t0"] else 0.0) if cps else ease_out(prog(t, el["t0"], p["dur"]))
         if a <= 0:
             return
         d = ImageDraw.Draw(layer)
         size = fitted(cx, [p["text"]], p["font"], p["size"], p["tracking"], p.get("max_width"))
-        track_text(d, (p["x"] * cx.q, p["y"] * cx.q), p["text"], cx.font(p["font"], size), (*rgb(p["fill"], WHITE), int(255 * p["alpha"] * a)), p["tracking"], p["anchor"], cx.q)
+        track_text(d, (p["x"] * cx.q, p["y"] * cx.q), p["text"], cx.font(p["font"], size), (*rgb(p["fill"], WHITE), int(255 * p["alpha"] * a)), p["tracking"], p["anchor"], cx.q,
+                   limit=int((t - el["t0"]) * cps) + 1 if cps else None)
 
     @classmethod
     def boxes(cls, t, p, cx, el):

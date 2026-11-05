@@ -26,7 +26,7 @@ from pathlib import Path
 from . import grade as G
 from .elements import ELEMENTS
 from .fonts import ROLES as FONT_ROLES
-from .transitions import TYPES
+from .transitions import GHOST_MAX, TYPES
 from .util import FilmkitError
 
 SCHEMA = "filmkit.film/1"
@@ -47,7 +47,7 @@ NUM_PARAMS = {
     "x": (-5000, 10000), "y": (-5000, 10000), "x0": (-5000, 10000), "x1": (-5000, 10000), "top": (-5000, 10000), "size": (1, 2000), "suffix_size": (1, 2000), "name_size": (1, 2000),
     "tracking": (-100, 300), "stagger": (0, 5), "dur": (0, 10), "rise": (-500, 500), "lead": (0.5, 3), "out": (0, 600), "out_dur": (0, 10), "alpha": (0, 1), "width": (1, 10000),
     "max_width": (1, 10000), "max_height": (1, 10000), "opacity": (0, 1), "fade_in": (0, 10), "fade_out": (0, 10), "target": (0, 1e9), "hold": (0, 10), "suffix_scale": (0.1, 3),
-    "period": (0.1, 30), "thickness": (1, 200), "arm": (1, 2000), "step": (1, 5000), "gap": (0, 30), "first": (0, 30),
+    "period": (0.1, 30), "typewriter": (1, 200), "tracking_in": (-100, 300), "tracking_dur": (0.05, 10), "thickness": (1, 200), "arm": (1, 2000), "step": (1, 5000), "gap": (0, 30), "first": (0, 30),
 }
 GRADE_KEYS = {"black": (-0.2, 0.5), "contrast": (0.2, 3), "s_curve": (-1, 1), "saturation": (0, 3), "gamma": (0.3, 3), "vignette": (0, 1), "grain": (0, 60)}
 MUSIC_LISTS = ("impacts", "whooshes", "pings")
@@ -195,6 +195,8 @@ def _shot_problems(s, i: int, shots: list, assets: dict, prev_end: float, ids: s
                 out.append(f"{w}.transition.dur: must be a number of seconds from 0.02 to 3 (a cut has none)")
             elif prev is not None and t["dur"] > min(s["end"] - s["start"], prev["end"] - prev["start"]) / 2 + 1e-6:
                 out.append(f"{w}.transition.dur: longer than half of a shot it joins")
+            elif t["type"] == "ghost" and t["dur"] > GHOST_MAX:
+                out.append(f"{w}.transition.dur: a ghost is a quick whip, {GHOST_MAX:g} s at most (0.15 to 0.3 reads best)")
     return out, s["end"]
 
 
