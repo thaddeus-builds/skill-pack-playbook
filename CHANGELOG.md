@@ -13,6 +13,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [Unreleased]
 
 ### Other
+- `scaffold/clients.py new CLIENT --title T --term NAME`: a folder for a client that has material and no pack yet, laid out so that `check` passes at once, its term list made from `--term` (none is a refusal)
+- Skill packs: nothing
 - `scaffold/clients.py relink`: a link is correct when it leads to its target, however it is written (an existing relative link was read as wrong), and a link inside the client folder is written relative, so the folder survives a move. Seen once: the first client folder's thirteen links, four of them relative
 - Skill packs: nothing
 - `.githooks/pre-push`: before the suites, the leak guard reads every client's `client_terms.txt` under this machine's clients root and refuses a push that adds a listed name; `clients.py check` requires each client to keep one. Seen once, 2026-11-05: a client's name reached this repository's docs from a clone with no hook
