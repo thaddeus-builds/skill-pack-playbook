@@ -150,6 +150,27 @@ def test_source() -> None:
           rc == 0 and rows[-1]["path"] == "inbox/2026-11-05-client/copy.md" and rows[-1]["duplicate_of"] == "EV-001"
           and len(list(loose.parent.iterdir())) == 1, rows[-1])
     check("and the folder passes check", C.check(c) == [], C.check(c))
+    cat = c / "sources/client-scripts/2026"
+    cat.mkdir(parents=True)
+    (cat / "s1.txt").write_text("script one", "utf-8")
+    check("a category folder outside the inbox: its file has no row", any("client-scripts/2026/s1.txt" in x
+                                                                          for x in C.check(c)), C.check(c))
+    rc, out, _ = run("--root", str(r), "source", "acme", str(c / "sources/client-scripts"), "--from", "client",
+                     "--title", "the client's scripts", "--date", "2026-11-04")
+    _, rows = C.read_index(c / "sources/INDEX.tsv")
+    check("a folder row in place covers everything in it; check passes", rc == 0 and rows[-1]["path"] ==
+          "client-scripts" and rows[-1]["kind"] == "folder" and rows[-1]["files"] == "1" and C.check(c) == [], out)
+    import clients as C2
+    old = C2.HASH_MAX
+    C2.HASH_MAX = 3
+    big = c / "sources/drive"
+    big.mkdir()
+    (big / "v.mp4").write_text("0123456789", "utf-8")
+    rc, out, _ = run("--root", str(r), "source", "acme", str(big), "--from", "client", "--title", "drive mirror")
+    C2.HASH_MAX = old
+    _, rows = C.read_index(c / "sources/INDEX.tsv")
+    check("over the size bound: listed with no sha256, the size and count kept", rows[-1]["sha256"] == ""
+          and rows[-1]["bytes"] == "10" and rows[-1]["files"] == "1", rows[-1])
     import new_hub
     check("the hub's sources README names every source this tool takes",
           all(f"`{x}`" in new_hub.SOURCES_README for x in C.SOURCES), new_hub.SOURCES_README[:400])
