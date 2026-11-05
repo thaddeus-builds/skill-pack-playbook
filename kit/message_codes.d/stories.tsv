@@ -8,3 +8,4 @@ story_check_no_data	story,verb,table,market	{story}: no {table} rows for market 
 story_check_verb_no_data	story,verb,market,error	{story}: `{verb}` found no data for market {market} yet ({error}), so it was not checked	{story}：市场 {market} 还没有检查命令 {verb} 要用的数据（{error}），这个故事先不判
 story_check_verb_failed	story,verb,error	{story}: `{verb}` failed: {error}	{story}：检查命令 {verb} 运行失败：{error}
 story_check_expect_failed	story,verb,expect	{story}: `{verb}` ran, but {expect} does not hold	{story}：检查命令 {verb} 跑通了，但输出里 {expect} 不成立
+story_checks_none		this skill pack keeps no story table ([ssot].story_checks): its decisions are its roadmap's R rows, so there is no story to check	这个技能包没有验收故事表（[ssot].story_checks）：它的决定记在路线图的 R 行里，所以没有要检查的故事

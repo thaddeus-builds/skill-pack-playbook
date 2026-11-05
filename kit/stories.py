@@ -50,6 +50,13 @@ a `market` column: the reference's 30-day window over its own tables is
 domain, so both are hooks; a refused run exits 2 (kit.contract.fail);
 story_check_registry_missing / _bad are new codes.
 
+A skill pack that keeps no story table (skill-pack.toml declares no
+`[ssot].story_checks`: its owner's decisions are its roadmap's R rows, the
+playbook's R44) is not an error: `compute stories` prints the empty run
+(no stories, a zero summary, `note` story_checks_none) and exits 0, and
+check_registry() finds nothing to check. A declared table whose file is
+missing is still story_check_registry_missing.
+
 A skill pack runs it as its `compute stories` verb:
 `raise SystemExit(kit.stories.main(sys.argv[1:]))`; every step is a hook
 (verbs, has_rows, resolve_market, run_verb, meta) it may replace.
@@ -412,6 +419,19 @@ def main(argv: list[str] | None = None, *, verbs: Any = None,
         head = argv[:argv.index("--")] if "--" in argv else argv
         return contract.fail(e, cmd=cmd, as_json="--json" in head)
     assume = [x for a in args.assume for x in ("--assume", a)]
+    if registry is None and cfg.ssot_path("story_checks") is None:
+        note = msg("story_checks_none", "this skill pack keeps no story "
+                   "table ([ssot].story_checks): its decisions are its "
+                   "roadmap's R rows, so there is no story to check")
+        doc = {"meta": contract.meta(window=None, sources=[], stale=[]),
+               "market": args.market, "stories": [],
+               "summary": {"pass": 0, "fail": 0, "skip": 0},
+               **coded("note", note)}
+        if args.json:
+            contract.emit(doc)
+        else:
+            print(str(note))
+        return 0
     try:
         table = verb_table(verbs)
         checks = load(registry, verbs=table)
@@ -455,11 +475,13 @@ def check_registry(path: Path | str | None = None, *, verbs: Any = None,
     without a verb has no expect and no needs, one with a verb at least
     one expect term; every `needs` is a known table (when given); every
     `required` story has a row; the note column, when present, is set."""
+    cfg = config()
+    if path is None and cfg.ssot_path("story_checks") is None:
+        return []                       # no story table declared: nothing to check
     try:
         checks = load(path, verbs=verbs)
     except SkillPackError as e:
         return [str(e)]
-    cfg = config()
     raw = rows(Path(path) if path else cfg.ssot_path("story_checks"))
     out = []
     ids = [c.story for c in checks]
