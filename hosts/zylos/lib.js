@@ -77,6 +77,14 @@ function relPath(v) {
     && v.split('/').every((s) => s !== '' && s !== '.' && s !== '..');
 }
 
+// A name reserved for examples and tests (RFC 2606, RFC 6761), never a real download: a manifest copied from
+// manifest.example.json and not filled in would fail on the first host without uv (seen once, 2026-11-05: six packs).
+function placeholderHost(h) {
+  const host = h.toLowerCase().replace(/\.$/, '');
+  return ['example.com', 'example.net', 'example.org'].some((d) => host === d || host.endsWith(`.${d}`))
+    || ['test', 'example', 'invalid', 'localhost'].includes(host.split('.').pop());
+}
+
 function placeholderProblems(tpl) {
   const bad = [];
   for (const [all, name, arg] of tpl.matchAll(TOKEN)) {
@@ -151,6 +159,11 @@ function validate(m) {
   if (!m.runtime.uv_installer_url.includes(m.runtime.uv_version)) {
     fail('runtime.uv_installer_url', `must name uv_version ${m.runtime.uv_version} (bump the version, `
          + 'the installer URL and its sha256 together)');
+  }
+  const uvHost = new URL(m.runtime.uv_installer_url).hostname;
+  if (placeholderHost(uvHost)) {
+    fail('runtime.uv_installer_url', `names the placeholder host ${uvHost}: a host without uv would fail to install; `
+         + `use Astral's installer address for uv ${m.runtime.uv_version} (uv's installation docs give it)`);
   }
   str(m.runtime.uv_installer_sha256, 'runtime.uv_installer_sha256', re(RE.sha256),
       'the sha256 (64 hex) of the script at runtime.uv_installer_url');

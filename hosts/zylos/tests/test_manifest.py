@@ -111,6 +111,9 @@ def test_bad_values_are_named():
         bad(lambda x: x["runtime"].update(uv_installer_url="https://uv.example.com/latest/install.sh"),
             "runtime.uv_installer_url", "must name uv_version")
         bad(lambda x: x["runtime"].update(uv_installer_url="install.sh"), "runtime.uv_installer_url", "https://")
+        for name in ("uv-installer.example.com", "example.org", "uv.test", "Mirror.Example.", "localhost"):
+            bad(lambda x, h=name: x["runtime"].update(uv_installer_url=f"https://{h}/uv/0.12.16/install.sh"),
+                "runtime.uv_installer_url", "placeholder host")
         bad(lambda x: x["scope"].update(list=[]), "scope.list", "must not be empty")
         bad(lambda x: x["console"].update(port=80), "console.port", "1024 to 65535")
         bad(lambda x: x["console"].update(args=["--port", "9"]), "console.args[0]", "set by zylos/bin/console.js")
