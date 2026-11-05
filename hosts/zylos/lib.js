@@ -260,6 +260,16 @@ function validate(m) {
     if (bad.length) {
       fail(`${key}.prompt`, `unknown placeholder ${bad.join(', ')} (known: ${PLACEHOLDERS.map((p) => `{${p}}`).join(', ')})`);
     }
+    // Development is not runtime (the playbook's R44): a scheduled step is a verb of the skill pack, run through
+    // its CLI; the runtime never runs tools/ (a person's scripts, export-ignored) or a script by its interpreter.
+    if (!/\{(cli|detach)\}/.test(t.prompt)) {
+      fail(`${key}.prompt`, 'runs no skill pack verb: name {cli} (or {detach} for a long job); a scheduled step is a verb');
+    }
+    const off = [/(?:^|[^\w./-])(tools\/)/, /(?:^|[^\w./-])(python3?)\s/, /(?:^|[^\w./-])(uv\s+run)\s/]
+      .map((r) => t.prompt.match(r)).find(Boolean);
+    if (off) {
+      fail(`${key}.prompt`, `runs ${off[1]}: the runtime runs the skill pack's verbs through {cli} only, never tools/ or a script by its interpreter`);
+    }
   });
 
   if ('own_files' in m) {
@@ -337,6 +347,7 @@ const UV_VERSION = M.runtime.uv_version;
 // Test-only overrides (<PREFIX>_ZYLOS_HOOK_*), read only when
 // <PREFIX>_ZYLOS_HOOK_TEST=1; never set on a host.
 const TEST_PREFIX = `${PREFIX}_ZYLOS_HOOK`;
+const RUNTIME_VAR = `${PREFIX}_RUNTIME`;
 const TEST_MODE = process.env[`${TEST_PREFIX}_TEST`] === '1';
 const testKnob = (name) => (TEST_MODE ? process.env[`${TEST_PREFIX}_${name}`] : undefined);
 
@@ -458,12 +469,13 @@ function envValue(key) {
 }
 
 // The env every skill pack run gets: the data dir (unless the caller set one),
-// and bytecode caches under it, so nothing is written into the skill dir
+// <PREFIX>_RUNTIME=1 (this host is the runtime: the kit's doctor fails a git
+// checkout here, the playbook's R44), and bytecode caches under it, so nothing is written into the skill dir
 // (which `zylos upgrade` backs up and merges). console.js adds the
 // confirm-code secret (CONFIRM_SECRET_VAR) for its relay's skill pack runs.
 function cliEnv(base = process.env) {
   const dataDir = base[DATA_VAR] || DATA_DIR;
-  return { ...base, [DATA_VAR]: dataDir,
+  return { ...base, [DATA_VAR]: dataDir, [RUNTIME_VAR]: '1',
            PYTHONPYCACHEPREFIX: base.PYTHONPYCACHEPREFIX || path.join(dataDir, '.pycache') };
 }
 
