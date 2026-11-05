@@ -16,6 +16,7 @@ This repository is the **parent of every growth-marketing skill pack** (KOL, Ama
 - **One pull request, one concern.** A kit change, a build-tool change and a scaffold change are three pull requests, each with its own test.
 - **A changed byte the vendor tool copies needs a `kit/VERSION` bump and a regenerated `kit/MANIFEST.sha256`** ([kit/README.md](kit/README.md), "Upgrades and drift"). A move or rename breaks every skill pack that imports it: ask first. Every such bump, and every change a skill pack would notice, adds its line to `CHANGELOG.md` (the newest heading must equal `kit/VERSION`; `tests/test_changelog.py`).
 - **Never edit a skill pack's vendored copy;** the fix goes here first.
+- **A ROADMAP row stays within 400 characters and a new CHANGELOG entry within 600;** the detail is in the pull request and the issue the row links (`tests/test_doc_caps.py`; the long rows of before may only shrink).
 - **Docs have one home.** The README is the overview and stays short; detail goes in `docs/`; a lesson goes in `docs/lessons.md` once. No new top-level file without a reason in the pull request.
 
 ## Before you push
