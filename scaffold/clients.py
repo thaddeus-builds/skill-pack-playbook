@@ -191,7 +191,7 @@ def relink(c: Path, dry: bool = False) -> list[str]:
             where = c / where
         target = (c / r["target"]).resolve() if not Path(r["target"]).is_absolute() else Path(r["target"])
         if where.is_symlink():
-            if Path(os.readlink(where)) == target:
+            if where.resolve() == target:                   # where it leads, however it is written
                 out.append(f"ok      {where}")
                 continue
             if not dry:
@@ -199,10 +199,13 @@ def relink(c: Path, dry: bool = False) -> list[str]:
         elif where.exists():
             out.append(f"SKIP    {where} is a real file or folder: move it into {c} by hand first")
             continue
+        # a link inside the client folder is written relative, so the folder still works after a move
+        inside = c.resolve() in where.parent.resolve().parents or where.parent.resolve() == c.resolve()
+        to = os.path.relpath(target, where.parent.resolve()) if inside else str(target)
         if not dry:
             where.parent.mkdir(parents=True, exist_ok=True)
-            where.symlink_to(target)
-        out.append(f"linked  {where} -> {target}")
+            where.symlink_to(to)
+        out.append(f"linked  {where} -> {to}")
     return out
 
 

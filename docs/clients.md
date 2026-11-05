@@ -34,7 +34,7 @@ Each machine names its clients root once. `CLIENTS_DIR` in the environment wins;
 
 ## Links a machine needs
 
-Tools, permission rules and scheduled jobs often hold paths outside the folder (`~/openmax/workspaces/<client>`, a bridge's config). Those paths become links into the folder, listed once in `.machine/links.tsv` (`path`, `target`, `note`; the target is a path inside the folder). `clients.py relink CLIENT` makes them on this machine: a correct link stays, a wrong link is replaced, and a real file or folder in the way is reported and never touched. After copying a client to another machine, set the root and run `relink`. Copy a folder with keys in it only machine to machine or on an encrypted disk, never through a cloud drive or a chat.
+Tools, permission rules and scheduled jobs often hold paths outside the folder (`~/openmax/workspaces/<client>`, a bridge's config). Those paths become links into the folder, listed once in `.machine/links.tsv` (`path`, `target`, `note`; the target is a path inside the folder). `clients.py relink CLIENT` makes them on this machine: a link that leads to its target stays (however it is written), a wrong link is replaced, a real file or folder in the way is reported and never touched, and a link inside the client folder is written relative, so the folder still works after it moves. After copying a client to another machine, set the root and run `relink`. Copy a folder with keys in it only machine to machine or on an encrypted disk, never through a cloud drive or a chat.
 
 ## The check
 
