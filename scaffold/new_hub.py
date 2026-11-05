@@ -535,7 +535,8 @@ folder is a source of numbers (the packs' databases are). Content is never in gi
 SOURCES_README = """# sources: everything the client or a platform gave us, kept as it came
 
 One place per client, shared by every pack. `INDEX.tsv` lists each item once: id (never reused), date, source
-(`client`, `platform`, `meeting`, `ask`, `digest`), kind, title, path, size, file count, sha256 (a directory's digest
+(`client`, `platform`, `meeting`, `chat`, `api-agent`, `ask`, `digest`; docs/clients.md), kind (a URL is a `link`
+row, its path the URL), title, path, size, file count, sha256 (a directory's digest
 is the hash of its files' hashes; left empty above 500 MB), which packs read it, `duplicate_of`, a note.
 
 Rules:
