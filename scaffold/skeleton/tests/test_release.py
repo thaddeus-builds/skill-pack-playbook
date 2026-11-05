@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """`git archive` leaves out the internal files, ships the kit and the
 console, and no shipped file holds a build fill marker once the docs are
-signed (the B8 row of ssot/stages.agent.tsv) or on a release tag.
+signed (the B8 row of ssot/stages.agent.tsv, in a pack that keeps one) or
+on a release tag.
 
 A thin call into the vendored kit (kit.testing.suites.release); the rules live
 there, so every skill pack holds the same ones.

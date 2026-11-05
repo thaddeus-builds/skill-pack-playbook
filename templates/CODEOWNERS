@@ -24,11 +24,13 @@
 # human-data table schema and its protections
 /scripts/_lib/schema.py           {{owner}}
 
-# owner files and threshold values
+# threshold values
+/ssot/constants.tsv               {{owner}}
+
+# owner files, in a pack that keeps them (R44: the owner's decisions are the roadmap's R rows)
 /ssot/glossary.tsv                {{owner}}
 /ssot/user-stories.tsv            {{owner}}
 /ssot/policies.tsv                {{owner}}
-/ssot/constants.tsv               {{owner}}
 
 # the client console's UI rules, an owner file (the owner console's are in /console/)
 /webconsole/ui_rules.tsv          {{owner}}
