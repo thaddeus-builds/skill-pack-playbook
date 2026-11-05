@@ -13,6 +13,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [Unreleased]
 
 ### Kit
+- `kit/autonomy.py` (pack `autonomy`): the client's unattended spend cap (X32, R23; docs/autonomy.md "Capped kinds"): `SPEND_CAP_KEY` = `unattended_spend_cap_per_day`, one client fact (money a day, the client's currency); `spend_cap(own, client)` is the lower of the pack's constant and the client's confirmed figure, None when there is none; `auto_verdict` stops with `auto_no_client_cap` on a cap whose limit is None, so nothing spends unattended on a figure nobody agreed
+- Skill packs: nothing (re-vendor with the train; a pack whose money cap rows run unattended defines the key in its `fact_keys.tsv` as the hub does and registers the code `auto_no_client_cap`)
 - `kit/autonomy.py` (pack `autonomy`): capped kinds (R32, ROADMAP X42, docs/autonomy.md "Capped kinds"): a tier-registry row with `auto` = `cap` names its caps in a `cap` column and no undo; `check_tiers` refuses a cap row with no cap or an undo, a cap on a `no` row and a cap that is not a code; `eligible` lists cap rows; `caps_of` gives the caps a write's rows name, and `auto_verdict(named=)` stops with `auto_cap_unchecked` when the pack did not count one; `gate(caps=)` records each cap used, `undo_free` is False and `digest` marks the write `final` with its caps. `canon` adds the key `cap` (empty without the column)
 - Skill packs: nothing (re-vendor with the train; a pack that compares `canon()` rows whole sees the new `cap` key; a pack that writes outward drafts its cap rows in its X42 action table, the owner sets each limit)
 
