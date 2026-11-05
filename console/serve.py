@@ -29,7 +29,8 @@ A request is turned away, before anything is read or written, unless:
   host_ok       its Host is a loopback name (our own port or none) or an --allow-host
                 (421); an attacker's page that resolves to us is not ours
   same_origin   a POST that carries Origin or Sec-Fetch-Site says same-origin (403); Origin
-                is compared with Host, so a proxy must pass the public Host through; an
+                is compared with Host, or with an --allow-host name (a proxy that rewrites
+                Host to loopback still works when the public name is allowed); an
                 `Origin: null` (what a browser sends when a proxy's Referrer-Policy is
                 no-referrer) counts only with Sec-Fetch-Site: same-origin, which a page
                 cannot forge
@@ -156,10 +157,15 @@ def host_ok(header, port: int, allow: list) -> bool:
     return any(h[0] == a[0] and a[1] in (None, h[1]) for a in allow)
 
 
-def same_origin(headers) -> bool:
+def same_origin(headers, allow: list = ()) -> bool:
     """A POST that says where it came from must say: this very site. One that
     says nothing is not a browser page, and still needs the token. `Origin:
-    null` says nothing about where, so only fetch metadata can vouch for it."""
+    null` says nothing about where, so only fetch metadata can vouch for it.
+    This very site is the Host the console sees, or one of its own --allow-host
+    names (`allow`, as host_ok reads them): behind a platform entry that rewrites
+    Host to a loopback address, the public Origin is still ours (seen once: a
+    Zylos host, Host 127.0.0.1 and X-Forwarded-Host localhost; the adapter's
+    login took the same rule in 0.6.2)."""
     site, origin = headers.get("Sec-Fetch-Site"), headers.get("Origin")
     if site is not None and site != "same-origin":
         return False
@@ -171,7 +177,12 @@ def same_origin(headers) -> bool:
         u = urlsplit(origin)
     except ValueError:
         return False
-    return u.scheme in ("http", "https") and u.netloc.lower() == (headers.get("Host") or "").strip().lower()
+    if u.scheme not in ("http", "https"):
+        return False
+    if u.netloc.lower() == (headers.get("Host") or "").strip().lower():
+        return True
+    o = split_host(u.netloc)
+    return o is not None and o[0] not in LOOPBACK_NAMES and any(o[0] == a[0] and a[1] == o[1] for a in allow)   # an entry with no port: an Origin with none
 
 
 def token_ok(given, token: str) -> bool:
@@ -550,7 +561,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.rfile.read(min(n, DRAIN))
             raise Reject("too_large")
         raw = self.rfile.read(n)
-        if not same_origin(h):
+        if not same_origin(h, self.server.app.allow):
             raise Reject("forbidden")
         if h.get("Content-Type", "").split(";")[0].strip().lower() != FORM:
             raise Reject("bad_request", 415)
