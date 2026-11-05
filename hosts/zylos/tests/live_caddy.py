@@ -1,4 +1,4 @@
-"""The form login under a REAL Caddy (the other tests cannot: they have none).
+"""The link sign-in under a REAL Caddy (the other tests cannot: they have none).
 Not run by tests/run.py (no `test_` prefix, it needs the caddy binary); a host that
 has Caddy runs it once before it trusts a release:
 
@@ -24,13 +24,11 @@ import sys
 import tempfile
 import threading
 import time
-from urllib.parse import urlencode
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADAPTER = os.path.dirname(HERE)
 LOGIN = os.path.join(ADAPTER, "bin", "login.js")
 SITE_PORT, APP_PORT, ROUTE_PORT = 18080, 18081, 18082
-PW = "correct horse battery"
 
 
 def find_caddy() -> str:
@@ -66,12 +64,16 @@ def main() -> None:
     sock = os.path.join(tmp, "a", "auth.sock")
     users = os.path.join(tmp, "console.users")
     key = os.path.join(tmp, "session.key")
-    subprocess.run(["node", "-e", "require(process.argv[1]).setPassword(process.argv[2],'alice',process.argv[3])", LOGIN, users, PW], check=True)
+    links = os.path.join(tmp, "console", "sign-in-links.json")
+
+    def link(user="alice"):
+        return subprocess.run(["node", "-e", "console.log(require(process.argv[1]).makeLink(process.argv[2],process.argv[3]).token)", LOGIN, links, user],
+                              check=True, capture_output=True, text=True).stdout.strip()
     procs = []
     try:
-        srv = subprocess.Popen(["node", "-e", "const l=require(process.argv[1]);l.listen({sock:process.argv[2],usersFile:process.argv[3],keyFile:process.argv[4],setupFile:process.argv[4]+'.setup',"
+        srv = subprocess.Popen(["node", "-e", "const l=require(process.argv[1]);l.listen({sock:process.argv[2],usersFile:process.argv[3],keyFile:process.argv[4],linksFile:process.argv[5],"
                                 "base:'/seo',title:'Live',userHeader:'X-Remote-User',allowHosts:['seo.example.com']}).on('listening',()=>console.log('up'))",
-                                LOGIN, sock, users, key], stdout=subprocess.PIPE, text=True)
+                                LOGIN, sock, users, key, links], stdout=subprocess.PIPE, text=True)
         procs.append(srv)
         assert srv.stdout.readline().strip() == "up", "login service did not start"
         app = http.server.ThreadingHTTPServer(("127.0.0.1", APP_PORT), Echo)
@@ -128,22 +130,27 @@ def main() -> None:
         spoof = {"X-Remote-User": "root"}
         r, _ = req("GET", "/seo/materials?lang=zh", headers=spoof)
         loc = r.getheader("Location") or ""
-        ok(r.status == 302 and loc.startswith("/seo/login?next="), f"no session: {r.status} to {loc} (a spoofed X-Remote-User does not get in)")
-        ok("%2Fseo%2Fmaterials%3Flang%3Dzh" in loc, "the page the visitor wanted is kept under the prefix in next=" + loc)
+        ok(r.status == 302 and loc == "/seo/login", f"no session: {r.status} to {loc} (a spoofed X-Remote-User does not get in)")
         r, body = req("GET", "/seo/login")
-        ok(r.status == 200 and 'type="password"' in body and 'autocomplete="current-password"' in body, "the form is served through Caddy")
-        r, body = req("GET", "/seo/setup?token=nope")
+        ok(r.status == 200 and "sign-in link" in body and "<form" not in body, "/seo/login says to ask for a link, through Caddy")
+        r, _ = req("GET", "/seo/setup?token=nope")
         ok(r.status == 410, f"/seo/setup reaches the login service, not the console ({r.status})")
+        tok = link()
+        r, body = req("GET", f"/seo/in/{tok}")
+        ok(r.status == 200 and f'action="/seo/in/{tok}"' in body and not r.getheader("Set-Cookie"), f"/seo/in/ reaches the login service and spends nothing ({r.status})")
+        r, body = req("GET", f"/seo/in/{tok[:20]}")
+        ok(r.status == 400 and "incomplete" in body, f"a cut-short link says so ({r.status})")
         r, _ = req("POST", "/seo/materials", "x=1", headers=spoof)
         ok(r.status == 401, f"a POST with no session is 401, got {r.status}")
         r, _ = req("GET", "/seo/LOGIN")
         ok(r.status in (404, 302), f"/seo/LOGIN never reaches the console ({r.status})")
-        r, _ = req("POST", "/seo/login", urlencode({"username": "alice", "password": "wrong password!", "next": "/seo/"}))
-        ok(r.status == 401 and not r.getheader("Set-Cookie"), "a wrong password is 401, no cookie")
-        r, _ = req("POST", "/seo/login", urlencode({"username": "alice", "password": PW, "next": "/seo/materials"}))
+        r, _ = req("POST", f"/seo/in/{tok}", "")
         sc = r.getheader("Set-Cookie") or ""
-        ok(r.status == 303 and r.getheader("Location") == "/seo/materials" and "HttpOnly" in sc and "Path=/seo" in sc, f"login: {r.status}, {sc.split(';')[0][:20]}...")
+        ok(r.status == 303 and r.getheader("Location") == "/seo/" and "HttpOnly" in sc and "Path=/seo" in sc and f"Max-Age={90 * 86400}" in sc,
+           f"sign-in: {r.status}, {sc.split(';')[0][:20]}...")
         cookie = sc.split(";")[0]
+        r, _ = req("POST", f"/seo/in/{tok}", "")
+        ok(r.status == 410 and not r.getheader("Set-Cookie"), f"the link works once ({r.status})")
         r, body = req("GET", "/seo/materials", headers={"Cookie": cookie, **spoof})
         seen = json.loads(body)
         ok(r.status == 200 and seen["path"] == "/materials" and seen["headers"].get("x-remote-user") == "alice",
@@ -151,8 +158,7 @@ def main() -> None:
         ok("cookie" not in seen["headers"], "the console does not get the session cookie")
         r, _ = req("GET", "/seo/ops/page?x=1", headers=spoof)
         loc = r.getheader("Location") or ""
-        ok(r.status == 302 and loc.startswith("/seo/login?next=") and "%2Fseo%2Fops%2Fpage" in loc,
-           f"a route of console.routes asks the same login: {r.status} to {loc}")
+        ok(r.status == 302 and loc == "/seo/login", f"a route of console.routes asks the same login: {r.status} to {loc}")
         r, _ = req("GET", "/seo/ops")
         ok(r.status == 301 and r.getheader("Location") == "/seo/ops/", f"the route's path goes to its trailing slash ({r.status})")
         r, body = req("GET", "/seo/ops/page", headers={"Cookie": cookie, **spoof})
@@ -162,16 +168,14 @@ def main() -> None:
         r, body = req("POST", "/seo/plan", "a=1", headers={"Cookie": cookie, "Content-Length": "3"})
         ok(r.status == 200 and json.loads(body)["method"] == "POST", "a POST with a session reaches the console as a POST")
         r, _ = req("GET", "/seo/materials", headers={"Cookie": cookie[:-3] + "AAA"})
-        ok(r.status == 302, "a tampered cookie is sent to the form")
+        ok(r.status == 302, "a tampered cookie is sent to /login")
         # issue #488: a platform entry in front of Caddy rewrites Host to localhost, and Caddy then sends X-Forwarded-Host: localhost
         entry = {"Host": f"localhost:{SITE_PORT}", "Origin": "https://seo.example.com"}
-        r, _ = req("POST", "/seo/login", urlencode({"username": "alice", "password": "wrong password!", "next": "/seo/"}), headers=entry)
-        ok(r.status == 401, f"behind a Host-rewriting entry, a POST from the console's public name reaches the password check (got {r.status}; 403 is the bug of issue #488)")
-        r, _ = req("POST", "/seo/login", urlencode({"username": "alice", "password": PW, "next": "/seo/"}), headers=entry)
-        ok(r.status == 303 and "Path=/seo" in (r.getheader("Set-Cookie") or ""), f"and the right password signs in there ({r.status})")
-        r, _ = req("POST", "/seo/login", urlencode({"username": "alice", "password": PW, "next": "/seo/"}),
-                   headers={**entry, "Origin": "https://evil.example.com"})
-        ok(r.status == 403 and not r.getheader("Set-Cookie"), f"a foreign Origin is still refused there ({r.status})")
+        r, _ = req("POST", f"/seo/in/{link('bob')}", "", headers={**entry, "Origin": "https://evil.example.com"})
+        ok(r.status == 403 and not r.getheader("Set-Cookie"), f"behind a Host-rewriting entry a foreign Origin is refused ({r.status})")
+        r, _ = req("POST", f"/seo/in/{link('bob')}", "", headers=entry)
+        ok(r.status == 303 and "Path=/seo" in (r.getheader("Set-Cookie") or ""),
+           f"and a POST from the console's public name signs in there ({r.status}; 403 is the bug of issue #488)")
         print(f"RESULT: {n} passed")
     finally:
         for p in procs:

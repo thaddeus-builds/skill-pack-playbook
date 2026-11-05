@@ -150,7 +150,7 @@ def test_console_warnings_caddy_block_and_public_host():
 
 
 BLOCK = ("# BEGIN zylos-component:shop-harness\nredir /shop /shop/ permanent\nhandle_path /shop/* {\n"
-         "    @login path /login /logout /setup\n    reverse_proxy 127.0.0.1:1 {\n        header_up Host edited\n    }\n}\n"
+         "    @login path /login /logout /in/* /setup\n    reverse_proxy 127.0.0.1:1 {\n        header_up Host edited\n    }\n}\n"
          "# END zylos-component:shop-harness\n")
 SITES = "{\n    email a@example.test\n}\nagent.test {\n    respond / 200\n}\nother.test {\n}\n"
 
@@ -189,7 +189,7 @@ def test_a_missing_caddy_block_is_restored_validated_and_reloaded():
 
 
 def test_the_saved_block_comes_back_before_anyone_has_a_login():
-    """Issue #484: a host that set no password yet (the form login's /setup link is its first step) did uninstall + add;
+    """Issue #484: a host where nobody has signed in yet (the one-time link is its first step) did uninstall + add;
     the copy pre-uninstall kept is put back, and with no copy the hook says the route is gone."""
     with Host(scheduler=False) as host:
         cf = _caddy_host(host, logins=False)
@@ -235,35 +235,41 @@ def test_a_basic_auth_block_is_replaced_by_the_form_login_block():
             text = open(cf).read()
             assert r.returncode == 0 and "basic_auth" not in text and "forward_auth unix/" in text, (label, r.stdout, text)
             assert text.count("# BEGIN zylos-component:shop-harness") == 1 and "reverse_proxy 127.0.0.1:" in text, label
-            assert "form-login" in r.stdout and "WARNING: the" not in r.stdout, (label, r.stdout)
+            assert "sign-in Caddy block" in r.stdout and "WARNING: the" not in r.stdout, (label, r.stdout)
             assert open(cf + ".before-shop-harness").read() != text, label
             again = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
-            assert open(cf).read() == text and "form-login" not in again.stdout, (label, "idempotent")
+            assert open(cf).read() == text and "sign-in Caddy block" not in again.stdout, (label, "idempotent")
 
 
-def test_a_form_login_block_without_the_setup_route_is_replaced_too():
-    """0.5.x blocks route /login and /logout only: the one-time link (0.6.0) needs /setup, so post-install writes the new block."""
-    old = ("# BEGIN zylos-component:shop-harness\nredir /shop /shop/ permanent\nhandle_path /shop/* {\n    route {\n"
-           "        @login path /login /logout\n        handle @login {\n            reverse_proxy unix//x/auth.sock\n        }\n"
-           "        handle {\n            forward_auth unix//x/auth.sock {\n                uri /_auth\n            }\n"
-           "            reverse_proxy 127.0.0.1:1\n        }\n    }\n}\n# END zylos-component:shop-harness\n")
-    with Host(scheduler=False) as host:
-        cf = _caddy_host(host, sites="agent.test {\n    respond / 200\n    " + old.replace("\n", "\n    ").rstrip() + "\n}\n")
-        r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
-        text = open(cf).read()
-        assert r.returncode == 0 and "@login path /login /logout /setup" in text and text.count("# BEGIN zylos-component:shop-harness") == 1, (r.stdout, text)
-        again = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
-        assert open(cf).read() == text and "wrote the form-login" not in again.stdout, "idempotent"
+def test_a_block_without_the_link_route_is_replaced_too():
+    """0.5.x routes /login and /logout only, 0.6.x and 0.7.x add /setup: the one-time sign-in link (0.8.0) needs
+    /in/*, so post-install writes the new block; the 0.7.x lines in the users file stay as they are."""
+    for label, matcher in [("0.5.x", "/login /logout"), ("0.7.x", "/login /logout /setup")]:
+        old = ("# BEGIN zylos-component:shop-harness\nredir /shop /shop/ permanent\nhandle_path /shop/* {\n    route {\n"
+               f"        @login path {matcher}\n        handle @login {{\n            reverse_proxy unix//x/auth.sock\n        }}\n"
+               "        handle {\n            forward_auth unix//x/auth.sock {\n                uri /_auth\n            }\n"
+               "            reverse_proxy 127.0.0.1:1\n        }\n    }\n}\n# END zylos-component:shop-harness\n")
+        with Host(scheduler=False) as host:
+            cf = _caddy_host(host, sites="agent.test {\n    respond / 200\n    " + old.replace("\n", "\n    ").rstrip() + "\n}\n")
+            users = os.path.join(host.data, "console.users")
+            host.write(users, "alice scrypt$15$8$1$QUJDRA$QUJDRA\n")
+            r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+            text = open(cf).read()
+            assert r.returncode == 0 and "does not route /in/ (the one-time sign-in link)" in r.stdout, (label, r.stdout)
+            assert "@login path /login /logout /in/* /setup" in text and text.count("# BEGIN zylos-component:shop-harness") == 1, (label, text)
+            assert open(users).read() == "alice scrypt$15$8$1$QUJDRA$QUJDRA\n" and "passwd" not in r.stdout, (label, r.stdout)
+            again = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
+            assert open(cf).read() == text and "wrote the sign-in" not in again.stdout, (label, "idempotent")
 
 
-def test_an_outdated_block_that_cannot_be_replaced_is_a_warning_and_logins_that_cannot_sign_in_are_named():
+def test_an_outdated_block_that_cannot_be_replaced_is_a_warning():
     with Host(scheduler=False) as host:
         cf = _caddy_host(host, validate_ok=False, sites="agent.test {\n    " + OLD_BLOCK.replace("\n", "\n    ").rstrip() + "\n}\n")
         before = open(cf).read()
         r = host.hook("post-install.js", SHOP_ZYLOS_HOOK_SKIP_UV="1")
         assert r.returncode == 0 and open(cf).read() == before, r.stdout
         assert "still uses basic_auth" in r.stdout and "not replaced" in r.stdout, r.stdout
-        assert "login(s)" in r.stdout and "(alice)" in r.stdout and "passwd NAME" in r.stdout, "the bcrypt line is named: " + r.stdout
+        assert "passwd" not in r.stdout, "no password to set again: a bcrypt line is a stamp, its person signs in by a link"
 
 
 def test_a_missing_console_entry_is_a_note():
