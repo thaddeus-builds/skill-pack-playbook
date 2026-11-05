@@ -18,11 +18,18 @@ any skill pack can use it whatever its tables and store; nothing here reads a
 database, a file or the time of day. What it decides:
 
   * the tier registry: canon() reads a skill pack's own column names into
-    {id, verb, change, tier, undo, auto}; check_tiers() is the registry's
-    test (tier A | B, auto yes | undo | no, a B or yes row names an undo, a
-    yes row's undo is itself a registered code-free undo, no orphan undo
-    row); tier_of() is A unless every change is B (an unknown pair is A);
-    eligible() the yes ids.
+    {id, verb, change, tier, undo, auto, cap}; check_tiers() is the
+    registry's test (tier A | B, auto yes | undo | cap | no, a B or yes row
+    names an undo, a yes row's undo is itself a registered code-free undo,
+    no orphan undo row, a cap row names a cap and no undo, only yes and cap
+    rows name caps); tier_of() is A unless every change is B (an unknown
+    pair is A); eligible() the yes and cap ids; caps_of() the caps a
+    write's rows name.
+  * capped kinds (R32): a write that cannot be taken back (money spent, a
+    message sent) may run in a mode when its row is `cap`: auto_verdict()
+    stops it when a cap its rows name was not counted (auto_cap_unchecked)
+    or is reached; its manifest's gate records each cap used against its
+    limit, it has no undo, and the digest says it is final.
   * the switch (L3): one fact whose value is `YYYY-MM-DD[:ID,ID…]`
     (switch_value / parse_switch). mode() reads its history: on only while
     the latest row is a confirm signed by a human channel (tty, relay), its
@@ -81,12 +88,13 @@ LEVELS = (("L0", "hand-carried"), ("L1", "per-change consent"), ("L2", "scoped a
 BUILT = ("L0", "L1", "L2", "L3")
 PROOFS = {"tty": "L1", "relay": "L1", "approval": "L2", "auto": "L3", "undo": None}
 HUMAN = ("tty", "relay")                    # the channels a person signs with (kit.human.confirm)
-COLUMNS = ("id", "verb", "change", "tier", "undo", "auto")
-AUTO = ("yes", "undo", "no")
+COLUMNS = ("id", "verb", "change", "tier", "undo", "auto", "cap")
+AUTO = ("yes", "undo", "cap", "no")
+CAP = re.compile(r"[a-z][a-z0-9_]*")       # a cap is a code the skill pack registers and words
 NONE = ("", "-", "—")                       # an undo cell that names no verb
 SWITCH = re.compile(r"(\d{4}-\d{2}-\d{2})(?::([A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*))?")
 VERB = re.compile(r"[a-z][a-z_-]*")
-STOPS = ("auto_prev_unverified", "auto_mixed")
+STOPS = ("auto_prev_unverified", "auto_mixed", "auto_cap_unchecked")
 OFF = ("auto_off_never", "auto_off_lowered", "auto_off_unproven", "auto_off_expired", "auto_off_paths_moved")
 
 
@@ -94,9 +102,10 @@ OFF = ("auto_off_never", "auto_off_lowered", "auto_off_unproven", "auto_off_expi
 
 def canon(rows: Iterable[dict], columns: dict[str, str] | None = None,
           words: dict[str, str] | None = None) -> list[dict]:
-    """The registry rows as {id, verb, change, tier, undo, auto}: `columns`
-    maps the skill pack's own column names to these, `words` its own auto
-    values to yes | undo | no (the SEO skill pack: 是 / 撤回 / 否)."""
+    """The registry rows as {id, verb, change, tier, undo, auto, cap}:
+    `columns` maps the skill pack's own column names to these, `words` its
+    own auto values to yes | undo | cap | no (the SEO skill pack: 是 / 撤回
+    / 否). `cap` is empty for a registry with no such column."""
     columns, words = columns or {}, words or {}
     out = []
     for r in rows:
@@ -113,12 +122,20 @@ def undo_verb(cell: str) -> str | None:
     return None if cell.strip() in NONE or not m else m.group(0)
 
 
+def cap_codes(cell: str) -> list[str]:
+    """The caps a cap cell names: codes split on commas or spaces."""
+    return [c for c in re.split(r"[,\s]+", (cell or "").strip()) if c and c not in NONE]
+
+
 def check_tiers(rows: list[dict]) -> list[str]:
     """The registry's problems, [] when whole: each id once; one row per
-    (verb, change); tier A or B; auto yes, undo or no; a tier-B row and a
-    yes row name an undo verb (only a revertible write may skip a code); a
-    yes row's undo verb is an `undo` row's verb (its undo is code-free); an
-    `undo` row's verb is the undo of some yes row."""
+    (verb, change); tier A or B; auto yes, undo, cap or no; a tier-B row
+    and a yes row name an undo verb (only a revertible write may skip a
+    code); a yes row's undo verb is an `undo` row's verb (its undo is
+    code-free); an `undo` row's verb is the undo of some yes row; a cap row
+    names at least one cap and no undo (it cannot be taken back: that is
+    why it is capped), so it is tier A; each cap is a code; only yes and
+    cap rows name caps."""
     out, ids, pairs = [], set(), set()
     undo_rows = {r["verb"] for r in rows if r["auto"] == "undo"}
     yes_undos = {undo_verb(r["undo"]) for r in rows if r["auto"] == "yes"}
@@ -133,13 +150,21 @@ def check_tiers(rows: list[dict]) -> list[str]:
         if r["tier"] not in ("A", "B"):
             out.append(f"{i}: tier {r['tier']!r} is not A or B")
         if r["auto"] not in AUTO:
-            out.append(f"{i}: auto {r['auto']!r} is not yes, undo or no")
+            out.append(f"{i}: auto {r['auto']!r} is not yes, undo, cap or no")
         if (r["tier"] == "B" or r["auto"] == "yes") and not undo_verb(r["undo"]):
             out.append(f"{i}: a tier-B or auto row names no undo")
         if r["auto"] == "yes" and undo_verb(r["undo"]) and undo_verb(r["undo"]) not in undo_rows:
             out.append(f"{i}: its undo {undo_verb(r['undo'])!r} is no code-free undo row")
         if r["auto"] == "undo" and r["verb"] not in yes_undos:
             out.append(f"{i}: an undo row no auto row is undone by")
+        named = cap_codes(r.get("cap", ""))
+        if r["auto"] == "cap" and not named:
+            out.append(f"{i}: a cap row names no cap")
+        if r["auto"] == "cap" and undo_verb(r["undo"]):
+            out.append(f"{i}: a cap row names an undo (a revertible kind is a yes row)")
+        if named and r["auto"] not in ("yes", "cap"):
+            out.append(f"{i}: only a yes or cap row names caps")
+        out += [f"{i}: cap {c!r} is not a code" for c in named if not CAP.fullmatch(c)]
     return out
 
 
@@ -152,8 +177,17 @@ def tier_of(rows: list[dict], verb: str, changes: list[str] | None) -> str:
 
 
 def eligible(rows: list[dict]) -> list[str]:
-    """The ids a mode can cover now: the auto=yes rows."""
-    return [r["id"] for r in rows if r["auto"] == "yes"]
+    """The ids a mode can cover now: the auto=yes and auto=cap rows."""
+    return [r["id"] for r in rows if r["auto"] in ("yes", "cap")]
+
+
+def caps_of(rows: list[dict], write_ids: Iterable[str | None]) -> list[str]:
+    """The caps the write's registry rows name, each once, in order: what
+    auto_verdict() must be given counted (`named`)."""
+    by, out = {r["id"]: cap_codes(r.get("cap", "")) for r in rows}, []
+    for i in write_ids:
+        out += [c for c in by.get(i, []) if c not in out]
+    return out
 
 
 def ids_of(rows: list[dict], verb: str, changes: list[str] | None) -> list[str | None]:
@@ -273,24 +307,30 @@ def approval_why(*, tier: str, change: list[str] | None, allow: list[str], appro
 
 def auto_verdict(*, mode: dict, write_ids: list[str | None], item_approved: bool,
                  last_verified: bool | None = None, mixed: bool = False, check: str | None = None,
-                 caps: Iterable[tuple[str, int, int, int]] = ()) -> dict:
+                 caps: Iterable[tuple[str, float, float, float]] = (), named: Iterable[str] = ()) -> dict:
     """{why, stop}: why the mode does not cover this write (None when it
     does), checked in order: the mode off (its why_off); rows of two proofs
     in one write (auto_mixed: run them apart); a (verb, change) not among
     the mode's ids (auto_not_eligible); the item not approved by a person
     or left approval (auto_item_unproven: a mode covers approved work
     only); its latest write did not read back (auto_prev_unverified); the
-    verb's own check (`check`, a skill pack code); then each cap (code, used,
-    planned, cap): over it when used + planned > cap. `stop` is True for a
-    cap, an unverified last write or a mixed run: issue no code, hand it
-    to the owner. Otherwise the write takes its per-change code."""
+    verb's own check (`check`, a skill pack code); a cap the write's rows
+    name (`named`, caps_of()) that `caps` does not count
+    (auto_cap_unchecked: a capped kind never runs on a cap nobody counted);
+    then each cap (code, used, planned, cap): over it when used + planned >
+    cap. `stop` is True for a cap, an uncounted cap, an unverified last
+    write or a mixed run: issue no code, hand it to the owner. Otherwise
+    the write takes its per-change code."""
     caps = list(caps)
+    counted = {c[0] for c in caps}
     why = (mode["why_off"] if not mode["on"] else
            "auto_mixed" if mixed else
            "auto_not_eligible" if not write_ids or any(i not in mode["ids"] for i in write_ids) else
            "auto_item_unproven" if not item_approved else
            "auto_prev_unverified" if last_verified is False else
            check)
+    if why is None and any(c not in counted for c in named):
+        why = "auto_cap_unchecked"
     if why is None:
         why = next((code for code, used_, planned, cap_ in caps if used_ + planned > cap_), None)
     return {"why": why, "stop": why in STOPS or why in {c[0] for c in caps}}
@@ -335,15 +375,21 @@ def lock(data_dir: str, name: str = ".apply.lock") -> Iterator[None]:
 
 # ---- the record ------------------------------------------------------------
 
-def gate(proof: str, *, tier: str, change: list[str] | None, ref: dict | None = None) -> dict:
+def gate(proof: str, *, tier: str, change: list[str] | None, ref: dict | None = None,
+         caps: Iterable[tuple[str, float, float, float]] | None = None) -> dict:
     """The manifest's `gate` for a write proved by approval, auto or undo:
     `ref` is the approve row (approval), the mode (auto: history_id,
     confirmed_by, confirmed_at, until, ids) or the undone write's dir
-    (undo: {"dir": …})."""
+    (undo: {"dir": …}). `caps`, for a write of a cap row (auto only): the
+    tuples auto_verdict() passed, recorded as {code: {used, cap}} with
+    used counting this write, so the digest shows each cap against its
+    limit and the write as final."""
     if proof not in ("approval", "auto", "undo"):
         raise ValueError(f"gate() records approval, auto or undo, not {proof!r} (tty and relay: kit.human)")
     if proof == "approval" and tier != "B":
         raise ValueError("an approval covers tier-B writes only")
+    if caps is not None and proof != "auto":
+        raise ValueError("only an auto write records caps")
     ref = ref or {}
     out = {"proof": proof, "tier": tier, "change": change}
     if proof == "approval":
@@ -352,6 +398,8 @@ def gate(proof: str, *, tier: str, change: list[str] | None, ref: dict | None = 
         out["mode"] = {k: ref.get(k) for k in ("history_id", "confirmed_by", "confirmed_at", "until", "ids")}
     else:
         out["undoes"] = ref.get("dir")
+    if caps is not None:
+        out["caps"] = {code: {"used": used_ + planned, "cap": cap_} for code, used_, planned, cap_ in caps}
     return out
 
 
@@ -385,23 +433,28 @@ def undo_free(done: dict, *, undone: bool, live_as_left: bool) -> bool:
     """True when undoing `done` needs no code: it was an auto write, no
     undo has undone it, and the live object is as it left it (an edit made
     since takes the code). The mode, its caps and the item's status do not
-    matter: an undo only lowers exposure, and a cap never blocks it."""
-    return (done.get("gate") or {}).get("proof") == "auto" and not undone and live_as_left
+    matter: an undo only lowers exposure, and a cap never blocks it. A
+    capped write (its gate records caps) has no undo: False."""
+    g = done.get("gate") or {}
+    return g.get("proof") == "auto" and "caps" not in g and not undone and live_as_left
 
 
 def digest(manifests: list[dict], *, now: datetime, days: int, proofs: Iterable[str] = ("approval", "auto"),
            undo: Callable[[dict], str | None] | None = None) -> list[dict]:
     """The covered writes of the last `days`, newest first: {at, item,
-    action, proof, level, verified, undone_by, undo}. `undo` words the
-    command that undoes one (the skill pack's own verb); None once undone."""
+    action, proof, level, verified, undone_by, undo, final, caps}. `undo`
+    words the command that undoes one (the skill pack's own verb); None
+    once undone, and None for a capped write, which is `final` (it cannot
+    be undone: say so) with `caps` {code: {used, cap}} as recorded."""
     by, ps, since = undone_by(manifests), set(proofs), now - timedelta(days=days)
     out = []
     for m in manifests:
         t, g = when(m.get("applied_at")), m.get("gate") or {}
         if g.get("proof") not in ps or (t is not None and t <= since):
             continue
-        gone = by.get(m.get("dir"))
+        gone, final = by.get(m.get("dir")), "caps" in g
         out.append({"at": m.get("applied_at"), "item": m.get("item"), "action": m.get("action"),
                     "proof": g["proof"], "level": proof_level(m), "verified": m.get("verified"),
-                    "undone_by": gone, "undo": None if gone or not undo else undo(m)})
+                    "undone_by": gone, "undo": None if gone or final or not undo else undo(m),
+                    "final": final, "caps": g.get("caps")})
     return sorted(out, key=lambda r: str(r["at"] or ""), reverse=True)
