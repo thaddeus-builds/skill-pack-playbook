@@ -88,6 +88,18 @@ flag that came before the kit's):
 Neither changes a verdict, a finding or a key the kit has: with no flags and
 no extras the output is the kit's alone.
 
+A skill pack that keeps its own store for what a built-in check reads (its own
+database and market facts, as the paid-search skill pack does; seen once,
+2026-11-05) replaces that one check, never skips it:
+
+  replace      {name: check} (`Dispatcher(doctor_replace=...)`): the skill
+               pack's check runs in the built-in's place, at its position, and
+               reports under that name. A name that is no built-in (BUILTIN_NAMES:
+               the check's name above, e.g. "markets", "db") is refused at once
+               (ValueError). A replacement that reports no line under the name
+               is a warning, doctor_replaced_silent: a replaced check still says
+               what it found.
+
 Exit: 1 when any check failed (a `--live` probe that was rejected); with
 `--strict` any warning is fatal too (so `<cli> doctor --strict && <cli>
 ingest …` is a safe gate); else 0. Under --json: one document
@@ -630,6 +642,29 @@ BUILTIN: tuple[Check, ...] = (check_skill_pack, check_env_chain,
                               check_data_dir, check_db,
                               check_markets, check_hub, check_exchange,
                               check_writes)
+# the name a skill pack's `replace` uses for each, the line's own name: "markets", "db", ...
+BUILTIN_NAMES: dict[str, Check] = {fn.__name__.removeprefix("check_"): fn for fn in BUILTIN}
+
+
+def _replaced(name: str, fn: Check) -> Check:
+    """The skill pack's check in a built-in's place; silent is a warning."""
+    def run_it(ctx: Context) -> None:
+        before = len(ctx.findings)
+        fn(ctx)
+        if not any(f.check == name for f in ctx.findings[before:]):
+            ctx.warn(name, msg("doctor_replaced_silent", f"the skill pack's check in place of "
+                               f"{name} reported nothing under {name}", check=name))
+    run_it.__name__ = getattr(fn, "__name__", name)
+    return run_it
+
+
+def _steps(replace: dict[str, Check] | None) -> list[Check]:
+    unknown = sorted(set(replace or {}) - set(BUILTIN_NAMES))
+    if unknown:
+        raise ValueError(f"doctor replace: no built-in check named {', '.join(unknown)} "
+                         f"(the built-ins: {', '.join(BUILTIN_NAMES)})")
+    return [_replaced(n, (replace or {})[n]) if n in (replace or {}) else fn
+            for n, fn in BUILTIN_NAMES.items()]
 
 
 # ---- run --------------------------------------------------------------------
@@ -645,14 +680,17 @@ def collect(ctx_checks: Iterable[Check] = (), *, live: bool = False,
             strict: bool = False, spec: Any = None, verbs: Iterable = (),
             scripts_dir: Path | str | None = None,
             platform_lock: PlatformLock | None = None,
-            args: argparse.Namespace | None = None) -> Context:
-    """Run every built-in check, then the skill pack's; the Context holds the
-    findings, and `args` (what main() parsed) for the skill pack's checks."""
+            args: argparse.Namespace | None = None,
+            replace: dict[str, Check] | None = None) -> Context:
+    """Run every built-in check (or the skill pack's in its place, `replace`),
+    then the skill pack's; the Context holds the findings, and `args` (what
+    main() parsed) for the skill pack's checks."""
+    builtin = _steps(replace)
     ctx = Context(live=live, strict=strict, spec=spec, verbs=list(verbs),
                   scripts_dir=Path(scripts_dir) if scripts_dir else None,
                   args=argparse.Namespace() if args is None else args)
     steps: list[Callable[[Context], None]] = [
-        *BUILTIN, lambda c: check_platform_lock(c, platform_lock),
+        *builtin, lambda c: check_platform_lock(c, platform_lock),
         check_verbs, check_kit_tty, check_checkout, *ctx_checks]
     try:
         for fn in steps:
@@ -723,12 +761,13 @@ def run(ctx_checks: Iterable[Check] = (), *, live: bool = False,
         strict: bool = False, spec: Any = None, verbs: Iterable = (),
         scripts_dir: Path | str | None = None,
         platform_lock: PlatformLock | None = None,
-        as_json: bool = False, args: argparse.Namespace | None = None) -> int:
+        as_json: bool = False, args: argparse.Namespace | None = None,
+        replace: dict[str, Check] | None = None) -> int:
     """Every check; prints the report (text, or one JSON document); returns
     the exit code (see the module docstring)."""
     ctx = collect(ctx_checks, live=live, strict=strict, spec=spec,
                   verbs=verbs, scripts_dir=scripts_dir,
-                  platform_lock=platform_lock, args=args)
+                  platform_lock=platform_lock, args=args, replace=replace)
     if as_json:
         contract.emit(document(ctx))
     else:
@@ -758,12 +797,14 @@ def main(argv: list[str] | None = None, *, checks: Iterable[Check] = (),
          spec: Any = None, verbs: Iterable = (),
          scripts_dir: Path | str | None = None,
          platform_lock: PlatformLock | None = None,
-         flags: Flags | None = None) -> int:
+         flags: Flags | None = None,
+         replace: dict[str, Check] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    _steps(replace)                                   # a wrong name is the skill pack's bug: refused before any run
 
     def go(argv: list[str]) -> int:
         a = parser(_cli(), flags).parse_args(argv)
         return run(checks, live=a.live, strict=a.strict, spec=spec,
                    verbs=verbs, scripts_dir=scripts_dir,
-                   platform_lock=platform_lock, as_json=a.json, args=a)
+                   platform_lock=platform_lock, as_json=a.json, args=a, replace=replace)
     return contract.run_main(go, argv, cmd=[_cli(), "doctor", *argv])
