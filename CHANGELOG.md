@@ -12,6 +12,10 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 
 ## [Unreleased]
 
+### Other
+- `hosts/zylos` 0.7.2: `node zylos/lib.js check` refuses a `runtime.uv_installer_url` on a host reserved for examples (`example.com`, `.test`, `.invalid`, `localhost`), and `manifest.example.json` names Astral's real installer (same sha256). Seen once, 2026-11-05: `scaffold/add_zylos.py` copied the example's placeholder into six packs (ad-copy, asset-handoff, google-ads, meta-ads, proofcut, product-image-to-video), so the first host without uv would have failed to install
+- Skill packs: mechanical (a pack with `zylos/` copies the adapter again and sets `runtime.uv_installer_url` to `https://astral.sh/uv/<uv_version>/install.sh`; `check` names the line)
+
 ## [0.49.0] - 2026-11-04
 
 Blocker train: product-image-to-video: the kit's picture parts and design page (#534, #535) and remake.brief/1 (#533), for its X29. Only that pack takes it now; the others take it with the next regular train.

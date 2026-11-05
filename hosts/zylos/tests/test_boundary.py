@@ -60,9 +60,10 @@ def test_no_skill_pack_names_in_the_generic_files():
 
 
 def test_no_public_host_or_machine_path_anywhere_in_the_folder():
-    """The playbook publishes this folder: it links no host but loopback and
-    example.com (console/tests/test_docs.py holds the repo-wide rule), and
-    names no machine path. Sources are described in words."""
+    """The playbook publishes this folder: it links no host but loopback,
+    example.com and uv's installer host, which manifest.example.json pins (0.7.2;
+    console/tests/test_docs.py holds the repo-wide rule), and names no machine
+    path. Sources are described in words."""
     linked = re.compile(r"https?://([A-Za-z0-9][A-Za-z0-9.-]*)")
     machine = re.compile(r"/Us" r"ers/|/home/[a-z]|/private/" r"tmp|/tmp/" r"claude|/var/" r"folders/")
     for top, dirs, files in os.walk(ADAPTER):
@@ -73,7 +74,7 @@ def test_no_public_host_or_machine_path_anywhere_in_the_folder():
             rel = os.path.relpath(os.path.join(top, f), ADAPTER)
             text = read(rel)
             hosts = [h for h in linked.findall(text)
-                     if h not in ("localhost", "127.0.0.1") and h != "example.com" and not h.endswith(".example.com")]
+                     if h not in ("localhost", "127.0.0.1", "astral.sh") and h != "example.com" and not h.endswith(".example.com")]
             assert not hosts, (rel, hosts)
             assert not machine.search(text), (rel, machine.search(text).group(0))
 
