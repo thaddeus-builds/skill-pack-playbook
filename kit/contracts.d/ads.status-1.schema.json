@@ -17,7 +17,7 @@
   "x-status": "draft",
   "x-format": "json",
   "x-producer": "an operator",
-  "x-consumers": "the daily page (kit.daily_page), the owner's console",
+  "x-consumers": "the owner's console",
   "x-rules": [
     "Freshness comes first and is always present; a section never passes silently: it is ready or says why not.",
     "A number carries its amount_kind; an index is never shown as money.",
