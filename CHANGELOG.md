@@ -13,6 +13,8 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 ## [Unreleased]
 
 ### Kit
+- `kit/autonomy.py` `spend_cap(own, client)`: `own` may be None, a pack that ships no figure (R48) takes the client's alone; with a figure of its own the result is unchanged
+- Skill packs: nothing (a pack that passes its own figure gets the same result; None is new)
 - `kit/contract.py` `skill_pack_version()`: after `[skill_pack].version` and `VERSION`, the `version:` of SKILL.md's frontmatter, the release tag a host installs (`skill_md_version()`); a pack versioned only there read as "unversioned" in `doctor` and `--version`. Seen once: amazon-ppc, 2026-11-05
 - Skill packs: nothing (re-vendor with the train; a pack that keeps a `VERSION` file or `[skill_pack].version` reads as before)
 

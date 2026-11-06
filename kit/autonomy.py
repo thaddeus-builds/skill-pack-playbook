@@ -373,16 +373,20 @@ def tighten(default: float, *client: float | None) -> float:
     return min([default, *(c for c in client if c is not None)])
 
 
-def spend_cap(own: float, client: float | None) -> float | None:
-    """The limit of a money cap: the pack's own constant bounded by the
-    client's confirmed SPEND_CAP_KEY (only ever lower), or None while the
+def spend_cap(own: float | None, client: float | None) -> float | None:
+    """The limit of a money cap: the client's confirmed SPEND_CAP_KEY, bounded
+    by the pack's own constant if it has one (only ever lower; R48: a pack
+    ships no figure, so own is normally None), or None while the
     client has given no figure: pass None as the cap and auto_verdict()
     stops with auto_no_client_cap. Pass a confirmed value only, never a
     pending one: an agent cannot set its own spending. A negative figure
     is read as 0. The figure bounds each pack's own day; the packs share no
     archive, so a client who wants one total across packs gives each a
     share of it."""
-    return None if client is None else min(own, max(0.0, float(client)))
+    if client is None:
+        return None
+    got = max(0.0, float(client))
+    return got if own is None else min(own, got)
 
 
 @contextlib.contextmanager
