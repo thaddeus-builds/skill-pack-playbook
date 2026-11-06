@@ -1,5 +1,5 @@
 # Skill Pack Playbook roadmap
-Updated: 2026-11-05
+Updated: 2026-11-06
 <!-- The playbook's own roadmap, in the one format of templates/ROADMAP.md (kit.guards.roadmap; tests/test_playbook_roadmap.py). Detail lives in the GitHub issues (#19 to #27). The loop: skill packs adopt the kit, learn what is shared and what is not, and the lesson comes back here as a small change with a test. Each session closes one turn of it. -->
 Archive: ROADMAP-ARCHIVE.md
 ## Now
@@ -38,7 +38,7 @@ Archive: ROADMAP-ARCHIVE.md
 - [X35] 2026-11-03 archive outbound (R26): it is on GitLab, which this session cannot reach; by docs/maintaining.md "Retiring a pack" (a last release saying where each piece went, then archive); creator-program, koc-script, measurement, product-feed and search-intel are archived on 2026-12-31 (ad-copy stays, R28) unless a client is named for one; GitLab is retired (R45): the owner removes the GitLab copies, and outbound and the five packs not on GitHub then leave the table
 - [X36] 2026-11-03 consolidation (docs/design/consolidation-2026-11.md, C1 to C10), answered by the owner (R29): C2 is X34 then X25; C3 is the rest of N4 (sdr and adcut to 0.7.0, then amazon-ppc's own adapter last); C4 is X37, C5 is X38, C6 is X39, C10 is X40; C1 is X35 and C9 is X31, already decided; C7 waits until the last host has left GitLab; C8 is no
 - [X39] 2026-11-03 C6: the CLAUDE.md lines shared word for word by five or more packs (35 lines, 277 copies) live once, in the vendored kit, and each pack's CLAUDE.md imports them and keeps its own lines; first prove that Claude Code reads the import in a cloud session and on a host
-- [X42] 2026-11-04 autonomy toward L4 (R32): the cap row and the client spend cap are built (D65). Next: each writing pack drafts its action table in its own session, the owner sets each cap (adcut's draft is in flight); then rule 11's override rate per kind and the L4 switch (#357)
+- [X42] 2026-11-04 autonomy toward L4 (R32, R48): the cap row and the client spend cap are built (D65). Next: each writing pack drafts its action table in its own session, one cap row per kind that spends or sends and no number (the client's agent sets it, R48); adcut #333's eight numbers become an empty template; then rule 11's override rate per kind and the L4 switch (#357)
 - [X43] 2026-11-04 the single-reference remake as user insight's second consumer (issue #527; R34 to R38); the playbook half is done (D59, D60, D61), and product-image-to-video's M8 is done (its PRs #30, #32, #33: the brief written and checked, the owner's pick, the storyboard page drawn by the kit, kit 0.49.0). Left: the first real brief and remake, run on the machine that holds the material, a competitor's pictures standing in for the client's own (the owner, 2026-11-04), its existing takes reused; then #527's last test, the brief's layers against what the remake kept
 - [X45] 2026-11-05 `kit.guards.asks` in every pack that draws its own pages for people to answer (D67): the SEO pack's `webconsole/` first (a reject beside each confirm), each in its own session
 ## Done
@@ -105,6 +105,7 @@ Archive: ROADMAP-ARCHIVE.md
 - [R44] 2026-11-05 the SSOT and runtime proposal (docs/design/ssot-and-runtime-2026-11.md, five asks): "五条都按推荐" (the owner, in chat): the R rows are the one record of decisions, empty owner files go, development is not runtime (four rules), the runtime installs tagged releases, outward actions pass the human gate
 - [R46] 2026-11-05 a third kit train this week (W35): 0.51.0 now, carrying R44 step 0 for the packs: "现在就发" (the owner, in chat)
 - [R47] 2026-11-05 Stage 5's nine proposals (W34): "全部按建议" (the owner, in the session); each is carried out on its own date or condition, in its own pull request
+- [R48] 2026-11-06 a pack carries the rule, the client carries the number: each kind that spends or sends has a cap row, a pack ships no default figure, and with no client figure nothing runs unattended (D65): "接着做即可" (the owner, in the session, to the agent's proposal; R23 said who sets it). X42's "the owner sets each cap" step is dropped
 ## Links
 - playbook: this repository, default branch `main`; CI runs `python3 run_all.py` on every push and pull request
 - kit: `kit/`, version in `kit/VERSION`; packs in `kit/packs.tsv`, enforced by `kit/tests/test_packs.py`
