@@ -50,7 +50,7 @@ NUM_PARAMS = {
     "x": (-5000, 10000), "y": (-5000, 10000), "x0": (-5000, 10000), "x1": (-5000, 10000), "top": (-5000, 10000), "size": (1, 2000), "suffix_size": (1, 2000), "name_size": (1, 2000),
     "tracking": (-100, 300), "stagger": (0, 5), "dur": (0, 10), "rise": (-500, 500), "lead": (0.5, 3), "out": (0, 600), "out_dur": (0, 10), "alpha": (0, 1), "width": (1, 10000),
     "max_width": (1, 10000), "max_height": (1, 10000), "opacity": (0, 1), "fade_in": (0, 10), "fade_out": (0, 10), "target": (0, 1e9), "hold": (0, 10), "suffix_scale": (0.1, 3),
-    "period": (0.1, 30), "typewriter": (1, 200), "sweep": (0.05, 3), "settle": (0.05, 3), "shadow": (0, 1), "tracking_in": (-100, 300), "tracking_dur": (0.05, 10), "thickness": (1, 200), "arm": (1, 2000), "step": (1, 5000), "gap": (0, 30), "first": (0, 30),
+    "period": (0.1, 30), "typewriter": (1, 200), "sweep": (0.05, 3), "settle": (0.05, 3), "shadow": (0, 1), "tracking_in": (-100, 300), "tracking_dur": (0.05, 10), "thickness": (1, 200), "arm": (1, 2000), "len": (10, 3000), "draw": (0.05, 5), "label_size": (1, 2000), "value_size": (1, 2000), "unit_size": (1, 2000), "pad": (0, 500), "elbow": (0, 1000), "step": (1, 5000), "gap": (0, 30), "first": (0, 30),
 }
 GRADE_KEYS = {"black": (-0.2, 0.5), "contrast": (0.2, 3), "s_curve": (-1, 1), "saturation": (0, 3), "gamma": (0.3, 3), "vignette": (0, 1), "grain": (0, 60)}
 MUSIC_LISTS = ("impacts", "whooshes", "pings")
@@ -140,7 +140,7 @@ def _overlay_problems(el: dict, w: str, assets: dict) -> list[str]:
         out.append(f"{w}.suffix_font: must be one of {', '.join(FONT_ROLES)}")
     if "anchor" in el and el["anchor"] not in ANCHORS:
         out.append(f"{w}.anchor: must be one of {', '.join(ANCHORS)}")
-    for k in ("text", "suffix"):
+    for k in ("text", "suffix", "label", "unit"):
         if k in el and not _line(el[k]):
             out.append(f"{w}.{k}: must be text on one line")
     if "lines" in el and not (isinstance(el["lines"], list) and el["lines"] and all(_line(x) for x in el["lines"])):
@@ -165,6 +165,8 @@ def _overlay_problems(el: dict, w: str, assets: dict) -> list[str]:
         out.append(f"{w}.align: must be l or m")
     if "grow" in el and el["grow"] not in ("left", "middle", None):
         out.append(f"{w}.grow: must be left or middle")
+    if "side" in el and el["side"] not in ("left", "right"):
+        out.append(f"{w}.side: must be left or right")
     if "dot" in el and not isinstance(el["dot"], bool):
         out.append(f"{w}.dot: must be true or false")
     if el.get("element") == "logo" and el.get("asset") not in assets:

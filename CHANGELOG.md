@@ -17,7 +17,7 @@ what a skill pack's own session does with it (`tests/test_changelog.py`).
 - Skill packs: nothing (re-vendor with the train; a pack that keeps a `VERSION` file or `[skill_pack].version` reads as before)
 
 ### Other
-- `engines/filmkit/` 0.2.0, the story-film features (all additive in `filmkit.film/1`): a shot's `cutout` (a presenter cut out by a matte, placed aside and smaller over an offset, enlarged, blurred copy of the frame, with ghosts and a marching dashed outline), `fit: "panel"` and `fit: "split"`, the `kinetic` and `year` elements and a `serif` font role, `typewriter` on `text` and `title`, an outline (`stroke`) on `text`, a gradient background for a panel (`bg2`), title `tracking_in`, a `ghost` transition, a `frames` asset type; filmkit makes no matte (`docs/filmkit.md` says where the seam is)
+- `engines/filmkit/` 0.2.0, the story-film features (all additive in `filmkit.film/1`): a shot's `cutout` (a presenter cut out by a matte, placed aside over an offset, blurred, enlarged copy of the frame, with ghosts and a dashed outline), `fit: "panel"` and `fit: "split"`, the `kinetic`, `year` and `callout` elements and a `serif` font role, `typewriter` on `text` and `title`, an outline (`stroke`) on `text`, a gradient background for a panel (`bg2`), title `tracking_in`, a `ghost` transition, a `frames` asset type; filmkit makes no matte (`docs/filmkit.md` says where the seam is)
 - Skill packs: mechanical (a pack that composes video takes the filmkit copy again; an old spec renders as before, but `fonts_fallback` now lists `serif` too)
 - `scaffold/clients.py check`: a `.gitkeep` under `sources/` is a placeholder, not material, and needs no row (seen once: a hub's `inbox/.gitkeep`, once the check walked all of `sources/`)
 - Skill packs: nothing

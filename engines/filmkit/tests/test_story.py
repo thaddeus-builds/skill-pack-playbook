@@ -143,6 +143,45 @@ def test_year_rises_into_place_holds_and_fades_out_and_the_layout_check_sees_it(
         assert any("year" in m and "safe" in m for m in (lambda r: r["layout"])(all_checks({**spec, "safe": {"profile": "tiktok"}}, d))), "type off the safe area is named"
 
 
+def test_a_callout_draws_a_dot_then_a_line_to_a_box_that_the_layout_check_sees_and_names_when_it_leaves_the_canvas():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = _t.film_spec(d)
+        spec["overlays"] = [{"element": "callout", "t0": 0.5, "t1": 4.0, "x": 300, "y": 900, "label": "FLOOR AREA", "value": "43,246", "unit": "m2", "side": "right", "len": 360, "draw": 0.6}]
+        assert problems(spec, d) == [], problems(spec, d)
+        dot, line, full = layer_of(spec, d, 0.6), layer_of(spec, d, 0.95), layer_of(spec, d, 2.0)
+        assert 0 < (dot > 0).sum() < (line > 0).sum() < (full > 0).sum(), ((dot > 0).sum(), (line > 0).sum(), (full > 0).sum())
+        cols = np.where((full > 0).any(axis=0))[0]
+        assert cols.min() / 0.25 < 300 and cols.max() / 0.25 > 660, "the line reaches out to the box on the right of the point"
+        assert [n for n, *_ in boxes_at(spec, d, 0, 0.8)] == ["~callout"], "while the line is drawing there is no type yet"
+        names = [n for n, *_ in boxes_at(spec, d, 0, 2.0)]
+        assert names == ["callout", "~callout-line"], names
+        x0, y0, x1, y1 = boxes_at(spec, d, 0, 2.0)[0][1:]
+        assert x0 >= 660 - 1 and y0 < 900 and x1 > x0 and y1 > y0
+        assert layer_of(spec, d, 4.2).max() == 0 or layer_of(spec, d, 4.5).max() == 0, "gone after t1"
+        left = copy.deepcopy(spec)
+        left["overlays"][0].update(x=800, side="left")
+        a, b = boxes_at(left, d, 0, 2.0)[0][1:], boxes_at(spec, d, 0, 2.0)[0][1:]
+        assert a[2] <= 800 - 360 + 1 and a[0] < b[0], (a, b)
+        wide = copy.deepcopy(spec)
+        wide["overlays"][0].update(value="1234567890123", label="A LABEL THAT RUNS ON AND ON")
+        assert problems(wide, d) == [] and boxes_at(wide, d, 0, 2.0)[0][3] <= 1081, "the text shrinks to the room the canvas leaves"
+        off = copy.deepcopy(spec)
+        off["overlays"][0].update(x=1000, side="right")
+        assert any("callout" in m for m in all_checks({**off, "safe": {"profile": "tiktok"}}, d)["layout"]), "a box off the safe area is named"
+        bad = copy.deepcopy(spec)
+        bad["overlays"][0].update(side="up", len=5, draw=0)
+        del bad["overlays"][0]["value"]
+        msgs = problems(bad, d)
+        assert any("side" in m for m in msgs) and any("len" in m for m in msgs) and any("draw" in m for m in msgs), msgs
+        bad["overlays"][0].update(side="left", len=300, draw=0.5)
+        assert any("value is required" in m for m in problems(bad, d)), problems(bad, d)
+        assert ("med", "FLOOR AREA") in ELEMENTS["callout"].texts(spec["overlays"][0]) and ("black", "43,246") in ELEMENTS["callout"].texts(spec["overlays"][0])
+        glyph = copy.deepcopy(spec)
+        glyph["overlays"][0]["label"] = "\U0001F48A"
+        assert all_checks(glyph, d)["glyphs"], "a glyph the face lacks is named like any other type"
+
+
 def px(png, q=0.25):
     return np.asarray(Image.open(png).convert("RGB"), dtype=np.float32)
 

@@ -7,6 +7,7 @@ an RGBA layer) and `boxes` (where its type sits at a time, in design pixels: the
     chip     a rounded label with a pulsing dot (a section tag); `max_width` shrinks the text so the whole chip fits
     brackets four corner brackets that grow out from the centre of a box
     scan     a sweeping line with a trail and a measuring rule on the edge of a box
+    callout  a data label on a point: a dot with a ring, a leader line that draws on to a thin-bordered box with a small label over a big value and its unit
     counter  a number that counts up to a target, then a suffix (its own size: `suffix_size`) that pops; `max_width` scales both down to fit
     steps    a vertical progress line with numbered items that appear in turn (`name_size`; `max_width`: the items' titles shrink to fit it)
     rule     a line that grows from its centre (or from its left end: `grow`: "left")
@@ -342,6 +343,109 @@ class Scan:
     def boxes(cls, t, p, cx, el):
         x0, y0, x1, y1 = p["box"]
         return [("~scan", x0 - 8 - 26, y0, x1, y1)] if el["t0"] + 0.2 <= t <= el["t1"] else []
+
+
+@element("callout")
+class Callout:
+    """A data label on a point of the picture (a HUD call-out): a dot with a ring at (x, y), a leader line that draws on (a short diagonal, then level) to a thin-bordered box holding a small
+    `label` over a big `value` and its `unit`. `side` is the side of the point the box sits on, `len` the horizontal reach from the point to the box's near edge. The box is type for the layout check;
+    the dot and the line are a decoration."""
+    defaults = dict(unit="", side="right", len=300, draw=0.5, label_size=28, value_size=64, unit_size=30, pad=22, elbow=70, hold=None, accent=list(BLUE))
+
+    @staticmethod
+    def check(p):
+        bad = [] if all(isinstance(p.get(k), (int, float)) for k in ("x", "y")) else ["x and y (the point) are required"]
+        if not isinstance(p.get("label"), str) or not p["label"]:
+            bad.append("label is required")
+        if not (isinstance(p.get("value"), (str, int, float)) and not isinstance(p.get("value"), bool) and str(p["value"]).isprintable() and str(p["value"])):
+            bad.append("value is required (a number or one line of text)")
+        return bad
+
+    @staticmethod
+    def texts(p):
+        return [("med", p["label"]), ("black", str(p["value"]))] + ([("med", p["unit"])] if p.get("unit") else [])
+
+    @staticmethod
+    def sizes(cx, p):
+        """(label size, value size, unit size): as given, scaled down together until the box's text fits the room between the box's near edge and the canvas edge (never below 60 percent)."""
+        ls, vs, us = p["label_size"], p["value_size"], p["unit_size"]
+        room = (cx.w0 - (p["x"] + p["len"]) if p["side"] == "right" else p["x"] - p["len"]) - 2 * p["pad"] - 6
+        w = max(text_width(cx, p["label"], "med", ls, 3), text_width(cx, str(p["value"]), "black", vs) + (text_width(cx, p["unit"], "med", us) + 10 if p["unit"] else 0))
+        if room > 0 and w > room:
+            k = max(0.6, room / w * 0.98)
+            ls, vs, us = ls * k, vs * k, us * k
+        return ls, vs, us
+
+    @classmethod
+    def geometry(cls, cx, p):
+        """The polyline from the point to the box's near edge, and the box (x0, y0, x1, y1), in design pixels."""
+        ls, vs, us = cls.sizes(cx, p)
+        dr = 1 if p["side"] == "right" else -1
+        w = max(text_width(cx, p["label"], "med", ls, 3), text_width(cx, str(p["value"]), "black", vs) + (text_width(cx, p["unit"], "med", us) + 10 if p["unit"] else 0)) + 2 * p["pad"]
+        h = 2 * p["pad"] + ls * 1.3 + 6 + vs * 1.15
+        el = min(p["elbow"], p["len"] * 0.5)
+        pts = [(p["x"], p["y"]), (p["x"] + dr * el, p["y"] - el), (p["x"] + dr * p["len"], p["y"] - el)]
+        ey = p["y"] - el
+        edge = pts[-1][0]
+        box = (edge, ey - h / 2, edge + w, ey + h / 2) if dr == 1 else (edge - w, ey - h / 2, edge, ey + h / 2)
+        return pts, box, (ls, vs, us)
+
+    @classmethod
+    def draw(cls, layer, t, p, cx, el):
+        p = {**cls.defaults, **p}
+        out = 1.0 if el["t1"] is None else 1 - smooth(prog(t, el["t1"] - 0.3, 0.3))
+        dot = ease_out(prog(t, el["t0"], 0.25))
+        if dot <= 0 or out <= 0:
+            return
+        pts, (bx0, by0, bx1, by1), (ls, vs, us) = cls.geometry(cx, p)
+        q = cx.q
+        col = rgb(p["accent"], BLUE)
+        line = ease_out(prog(t, el["t0"] + 0.15, p["draw"]))
+        box_a = smooth(prog(t, el["t0"] + 0.15 + p["draw"], 0.35)) * out
+        tmp = Image.new("RGBA", layer.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(tmp)
+        x, y = pts[0]
+        ring = 10 + 26 * ((t - el["t0"]) % 1.4) / 1.4                       # a ring that spreads and fades, a radar ping
+        ra = int(150 * (1 - ((t - el["t0"]) % 1.4) / 1.4) * dot * out)
+        d.ellipse(((x - ring) * q, (y - ring) * q, (x + ring) * q, (y + ring) * q), outline=(*col, ra), width=max(1, int(2 * q)))
+        r = 8 * q
+        d.ellipse((x * q - r, y * q - r, x * q + r, y * q + r), fill=(*col, int(255 * dot * out)))
+        lens = [math.dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
+        left = line * sum(lens)
+        a = (x * q, y * q)
+        for (p0, p1), ln in zip(zip(pts, pts[1:]), lens):
+            if left <= 0:
+                break
+            k = min(1.0, left / ln)
+            b = ((p0[0] + (p1[0] - p0[0]) * k) * q, (p0[1] + (p1[1] - p0[1]) * k) * q)
+            d.line((p0[0] * q, p0[1] * q, *b), fill=(255, 255, 255, int(235 * out)), width=max(1, int(2.5 * q)))
+            left -= ln
+        layer.alpha_composite(tmp)
+        if box_a <= 0:
+            return
+        rrect(cx, layer, (bx0, by0, bx1, by1), 4, fill=(8, 18, 34), outline=(255, 255, 255), width=2, alpha=0.62 * box_a)
+        tmp = Image.new("RGBA", layer.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(tmp)
+        arm, w = 16 * q, max(2, int(4 * q))
+        for (px, py, sx, sy) in ((bx0, by0, 1, 1), (bx1, by0, -1, 1), (bx0, by1, 1, -1), (bx1, by1, -1, -1)):
+            d.line((px * q, py * q, px * q + sx * arm, py * q), fill=(*col, int(255 * box_a)), width=w)
+            d.line((px * q, py * q, px * q, py * q + sy * arm), fill=(*col, int(255 * box_a)), width=w)
+        al = int(255 * box_a)
+        tx = (bx0 + p["pad"]) * q
+        track_text(d, (tx, (by0 + p["pad"]) * q), p["label"], cx.font("med", ls), (210, 228, 250, al), 3, "l", q, shadow=False)
+        vy = (by0 + p["pad"] + ls * 1.3 + 6) * q
+        wv = track_text(d, (tx, vy), str(p["value"]), cx.font("black", vs), (255, 255, 255, al), 0, "l", q, shadow=False)
+        if p["unit"]:
+            track_text(d, (tx + wv + 10 * q, vy + (vs - us) * 0.8 * q), p["unit"], cx.font("med", us), (*col, al), 0, "l", q, shadow=False)
+        layer.alpha_composite(tmp)
+
+    @classmethod
+    def boxes(cls, t, p, cx, el):
+        p = {**cls.defaults, **p}
+        pts, box, _ = cls.geometry(cx, p)
+        if t < el["t0"] + 0.15 + p["draw"] + 0.17:
+            return [("~callout", min(x for x, _ in pts) - 10, min(y for _, y in pts) - 10, max(x for x, _ in pts) + 10, max(y for _, y in pts) + 10)] if t >= el["t0"] + 0.1 else []
+        return [("callout", *box), ("~callout-line", min(x for x, _ in pts) - 10, min(y for _, y in pts) - 10, max(x for x, _ in pts) + 10, max(y for _, y in pts) + 10)]
 
 
 @element("counter")
