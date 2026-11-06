@@ -14,8 +14,10 @@ from PIL import Image, ImageDraw, ImageFilter
 from scipy import ndimage
 
 OUTLINE = dict(color=[255, 255, 255], width=6, dash=[38, 24], speed=140.0, offset=4.0)
-BG = dict(zoom=1.8, blur=40.0, tint=None, tint_mix=0.45, posterize=None)
-KEYS = {"matte", "outline", "bg"}
+BG = dict(zoom=1.8, blur=40.0, tint=None, tint_mix=0.45, posterize=None, dx=0.0, dy=0.0)
+KEYS = {"matte", "outline", "bg", "fg", "echo"}
+FG_KEYS = {"scale", "dx", "dy"}
+ECHO_KEYS = {"n", "dx", "alpha", "dur"}
 OUTLINE_KEYS = set(OUTLINE)
 BG_KEYS = set(BG)
 MIN_AREA = 0.002                          # a blob smaller than this share of the picture is noise, not a subject
@@ -39,6 +41,45 @@ def backdrop(small: Image.Image, bg: dict, q: float, size: tuple[int, int]) -> n
         n = bg["posterize"] - 1
         a = np.round(a / 255.0 * n) / n * 255.0
     return a
+
+
+def place(fg: np.ndarray, matte: np.ndarray, p: dict, W: int, H: int) -> tuple[np.ndarray, np.ndarray]:
+    """The subject layer (its picture and its matte) scaled by `scale` about the middle of the bottom edge, then moved `dx` of the width and `dy` of the height: the subject smaller and off
+    to one side of where the clip had it, so the enlarged backdrop behind it is a second, bigger figure. Outside the moved picture the matte is black."""
+    sc = float(p.get("scale", 1.0))
+    w, h = max(2, int(round(W * sc))), max(2, int(round(H * sc)))
+    x0, y0 = int(round(W / 2 - w / 2 + p.get("dx", 0.0) * W)), int(round(H - h + p.get("dy", 0.0) * H))
+    out_fg, out_m = np.zeros((H, W, 3), np.float32), np.zeros((H, W), np.uint8)
+    f = np.asarray(Image.fromarray(np.clip(fg, 0, 255).astype(np.uint8)).resize((w, h), Image.BICUBIC), dtype=np.float32)
+    m = np.asarray(Image.fromarray(matte).resize((w, h), Image.BILINEAR), dtype=np.uint8)
+    sx0, sy0 = max(0, -x0), max(0, -y0)
+    dx0, dy0 = max(0, x0), max(0, y0)
+    cw, ch = min(w - sx0, W - dx0), min(h - sy0, H - dy0)
+    if cw > 0 and ch > 0:
+        out_fg[dy0:dy0 + ch, dx0:dx0 + cw] = f[sy0:sy0 + ch, sx0:sx0 + cw]
+        out_m[dy0:dy0 + ch, dx0:dx0 + cw] = m[sy0:sy0 + ch, sx0:sx0 + cw]
+    return out_fg, out_m
+
+
+def echo(back: np.ndarray, fg: np.ndarray, matte: np.ndarray, e: dict, t: float, q: float) -> np.ndarray:
+    """Ghosts of the subject trailing behind it for `dur` seconds from the start of the shot (a whip in): `n` copies, each `dx` pixels further along x, fainter the further they are, all
+    fading out as the time runs. Drawn on the backdrop, under the subject."""
+    dur = float(e.get("dur", 0.35))
+    if t >= dur:
+        return back
+    u = t / dur
+    out = back.copy()
+    n, dx, al = int(e.get("n", 3)), float(e.get("dx", -70.0)) * q, float(e.get("alpha", 0.5))
+    for k in range(n, 0, -1):
+        sh = int(round(dx * k * (1 - u)))
+        f, m = np.roll(fg, sh, axis=1), np.roll(matte, sh, axis=1)
+        if sh > 0:
+            f[:, :sh], m[:, :sh] = 0, 0
+        elif sh < 0:
+            f[:, sh:], m[:, sh:] = 0, 0
+        a = (m.astype(np.float32) / 255.0 * al * (1 - k / (n + 1)) * (1 - u))[..., None]
+        out = out * (1 - a) + f * a
+    return out
 
 
 def trace(mask: np.ndarray) -> list[tuple[int, int]]:

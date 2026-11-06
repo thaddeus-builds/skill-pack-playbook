@@ -236,6 +236,31 @@ def test_what_the_review_found_a_bad_panel_stroke_or_half_is_named_before_render
         assert any("the sequence has 5 pictures" in m for m in bad), bad
 
 
+def test_the_subject_can_be_placed_apart_from_a_shifted_backdrop_and_trail_ghosts_that_fade():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        ellipse_matte(d / "still_matte.png")
+        spec = plain(_t.film_spec(d))
+        spec["assets"]["matte"] = {"type": "image", "path": "still_matte.png"}
+        spec["shots"][0].update(cutout={"matte": "matte", "outline": False, "fg": {"scale": 0.5, "dx": -0.25, "dy": 0.0}, "echo": {"n": 3, "dx": -80, "alpha": 0.6, "dur": 0.5},
+                                        "bg": {"zoom": 2.0, "blur": 20, "dx": 0.1, "dy": 0.0}})
+        assert problems(spec, d) == [], problems(spec, d)
+        t0 = spec["shots"][0]["start"]
+        near = px(still(spec, d, t0 + 0.05, d / "e0.png", q=0.25))
+        late = px(still(spec, d, t0 + 0.9, d / "e1.png", q=0.25))
+        assert np.abs(near - late).mean() > 0.2, "the picture changes"
+        co = S.__dict__["CO"]
+        fg, m = co.place(np.full((40, 20, 3), 200, np.float32), np.full((40, 20), 255, np.uint8), {"scale": 0.5, "dx": 0.25, "dy": 0.0}, 20, 40)
+        assert m[:, :5].max() == 0 and m[25:, 10:18].min() == 255 and m[:15].max() == 0, "half size, bottom centre, moved right: empty above and to the left"
+        back = np.zeros((40, 20, 3), np.float32)
+        ghosted = co.echo(back, np.full((40, 20, 3), 255, np.float32), np.full((40, 20), 255, np.uint8), {"n": 2, "dx": -4, "alpha": 0.5, "dur": 1.0}, 0.0, 1.0)
+        assert ghosted.max() > 0 and co.echo(back, back, np.zeros((40, 20), np.uint8), {"n": 2, "dx": -4, "dur": 1.0}, 1.5, 1.0) is back, "ghosts at the start, none after `dur`"
+        spec["shots"][0]["cutout"]["fg"] = {"scale": 9}
+        spec["shots"][0]["cutout"]["echo"] = {"n": 0}
+        bad = problems(spec, d)
+        assert any("cutout.fg.scale" in m for m in bad) and any("cutout.echo.n" in m for m in bad), bad
+
+
 def test_a_split_shot_stacks_two_clips_each_with_its_own_in_and_camera_and_a_seam_between():
     with _t.tmpdir() as d:
         _t.make_assets(d)

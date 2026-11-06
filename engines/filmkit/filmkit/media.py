@@ -255,9 +255,14 @@ class Shot:
             matte = matte.resize(im.size, Image.BILINEAR)
         k = 0.25 if bg["blur"] * cx.q >= 8 else 1.0
         w, h = max(2, int(cx.W * k)), max(2, int(cx.H * k))
-        back = CO.backdrop(crop_resize(im, aspect, w, h, z * bg["zoom"], cxn, cyn), bg, cx.q, (cx.W, cx.H))
+        back = CO.backdrop(crop_resize(im, aspect, w, h, z * bg["zoom"], cxn + bg["dx"], cyn + bg["dy"]), bg, cx.q, (cx.W, cx.H))
         m = np.asarray(crop_resize(matte, aspect, cx.W, cx.H, z, cxn, cyn), dtype=np.uint8)
-        return Image.fromarray(np.clip(CO.compose(np.asarray(fg, dtype=np.float32), back, m, c, t - self.start, cx.q), 0, 255).astype(np.uint8))
+        fga = np.asarray(fg, dtype=np.float32)
+        if c.get("fg"):
+            fga, m = CO.place(fga, m, c["fg"], cx.W, cx.H)
+        if c.get("echo"):
+            back = CO.echo(back, fga, m, c["echo"], t - self.start, cx.q)
+        return Image.fromarray(np.clip(CO.compose(fga, back, m, c, t - self.start, cx.q), 0, 255).astype(np.uint8))
 
     def panel(self, im: Image.Image, z: float, cxn: float, cyn: float) -> np.ndarray:
         """A solid colour, the picture in a frame at `panel.y`, pushed in by the camera's zoom (the frame itself stays)."""

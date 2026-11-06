@@ -278,11 +278,19 @@ def _cutout_problems(s: dict, w: str, assets: dict) -> list[str]:
                     out.append(f"{w}.cutout.outline.{k}: must be a number from {lo:g} to {hi:g}")
             if "dash" in ol and not (isinstance(ol["dash"], list) and len(ol["dash"]) == 2 and all(_n(x, 1, 1000) for x in ol["dash"])):
                 out.append(f"{w}.cutout.outline.dash: must be [on, off], pixels from 1 to 1000")
+    for key, keys, rng in (("fg", CO.FG_KEYS, (("scale", 0.1, 1.5), ("dx", -1, 1), ("dy", -1, 1))), ("echo", CO.ECHO_KEYS, (("n", 1, 8), ("dx", -600, 600), ("alpha", 0, 1), ("dur", 0.05, 2)))):
+        v = c.get(key)
+        if v is None:
+            continue
+        if not isinstance(v, dict) or set(v) - keys:
+            out.append(f"{w}.cutout.{key}: must be {{{', '.join(sorted(keys))}}}")
+        else:
+            out += [f"{w}.cutout.{key}.{k}: must be a number from {lo:g} to {hi:g}" for k, lo, hi in rng if k in v and not _n(v[k], lo, hi)]
     bg = c.get("bg", {})
     if not isinstance(bg, dict) or set(bg) - CO.BG_KEYS:
         out.append(f"{w}.cutout.bg: must be {{{', '.join(sorted(CO.BG_KEYS))}}}")
     else:
-        for k, lo, hi in (("zoom", 1, 6), ("blur", 0, 200), ("tint_mix", 0, 1)):
+        for k, lo, hi in (("zoom", 1, 6), ("blur", 0, 200), ("tint_mix", 0, 1), ("dx", -1, 1), ("dy", -1, 1)):
             if k in bg and not _n(bg[k], lo, hi):
                 out.append(f"{w}.cutout.bg.{k}: must be a number from {lo:g} to {hi:g}")
         if bg.get("tint") is not None and not _rgb(bg["tint"]):
