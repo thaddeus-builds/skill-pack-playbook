@@ -2,14 +2,14 @@
 the colour are the shot's footage (graded with it); the title and the caption are type, so they are made here as ordinary `title` and `text` overlays that live as long as the shot, and
 the layout check sees them and the frame as it does everything else.
 
-    "panel": {"bg": [28, 84, 200], "title": ["TWO LINES", "AT THE TOP"], "title_size": 92, "title_y": 280, "frame": {"width": 10, "color": [255, 255, 255]},
+    "panel": {"bg": [28, 84, 200], "bg2": [90, 170, 235], "title": ["TWO LINES", "AT THE TOP"], "title_size": 92, "title_y": 280, "frame": {"width": 10, "color": [255, 255, 255]},
               "margin": 120, "y": 540, "height": 580, "caption": "under the frame", "caption_size": 38}
 
-`y` and `height` are the picture's top and height inside the frame (design pixels), `margin` the room each side of the frame. The push-in is the shot's `camera` zoom (1.0 to 1.08 when
+`bg2` (optional) is the colour at the bottom: the background runs from `bg` at the top to `bg2` at the bottom. `y` and `height` are the picture's top and height inside the frame (design pixels), `margin` the room each side of the frame. The push-in is the shot's `camera` zoom (1.0 to 1.08 when
 it has none)."""
 from __future__ import annotations
 
-KEYS = {"bg", "title", "title_size", "title_y", "title_fill", "title_font", "frame", "margin", "y", "height", "caption", "caption_size", "caption_font"}
+KEYS = {"bg", "bg2", "title", "title_size", "title_y", "title_fill", "title_font", "frame", "margin", "y", "height", "caption", "caption_size", "caption_font"}
 BG = (28, 84, 200)
 WHITE = (255, 255, 255)
 

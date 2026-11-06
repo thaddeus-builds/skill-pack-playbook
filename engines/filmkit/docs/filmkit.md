@@ -61,7 +61,7 @@ crop's centre as a fraction of the picture). `dim` and `blur` darken or soften a
 
 **Story-film shot features** (all additive in `/1`; a synthetic example of each is `story.json` of `filmkit demo`):
 
-- `fit: "panel"` with `panel: {bg, title, frame, y, height, caption, ...}`: a solid colour (`bg`, default blue), a `title` (one to three lines) on the upper part, the picture in the middle inside a
+- `fit: "panel"` with `panel: {bg, title, frame, y, height, caption, ...}`: a solid colour (`bg`, default blue; `bg2` makes it a vertical gradient down to that colour), a `title` (one to three lines) on the upper part, the picture in the middle inside a
   `frame` ({`width`, `color`}, default 10 px white) at `y` (its top) and `height`, pushing in slowly (the shot's `camera` zoom, 1.0 to 1.08 when it has none; the frame stays), and a `caption`
   under the frame. Also `margin` (room each side), `title_size`, `title_y`, `title_fill`, `title_font`, `caption_size`, `caption_font`. The title and the caption are type: they are drawn as
   `title` and `text` overlays that last as long as the shot (so they are in `check`'s layout and glyph checks), the title shrinks to stay above the frame, and `check` names type that
@@ -99,7 +99,7 @@ even after the AAC encode; the report says what it landed on (`mix_lufs`) and wh
 | element | what | main params |
 |---|---|---|
 | `title` | lines of type that rise and fade in one after another, optionally out again | `lines`, `x`, `y`, `size`, `font` (black/bold/med/reg), `fill`, `anchor` (l/m/r), `tracking`, `stagger`, `out`, `max_width`, `max_height` (the size shrinks until the widest line fits the width and the lines fit the height, never below 60 percent; the layout check sees the size used); `typewriter` (characters a second: each line types in after the one before, the layout check uses the whole line), `tracking_in` (letter spacing eases from this wide value to `tracking` over `tracking_dur` while the line fades in; the size is fitted for the widest) |
-| `text` | one tracked line that fades in (a tagline, a label) | `text`, `x`, `y`, `size`, `tracking`, `anchor`, `alpha`, `max_width` (shrinks to fit), `typewriter` (characters a second; the box the layout check sees is the whole text's) |
+| `text` | one tracked line that fades in (a tagline, a label) | `text`, `x`, `y`, `size`, `tracking`, `anchor`, `alpha`, `max_width` (shrinks to fit), `typewriter` (characters a second; the box the layout check sees is the whole text's), `stroke` (`{width, color, alpha}`: an outline round the letters, for words over a bright picture) |
 | `chip` | a rounded label with a pulsing dot | `text`, `x`, `y`, `dot`, `accent`, `max_width` (the whole chip: the text shrinks to fit) |
 | `brackets` | four corner brackets growing out from the centre of a box | `box` `[x0, y0, x1, y1]`, `out`, `arm`, `width`, `color` |
 | `scan` | a sweeping line with a trail and a measuring rule on the edge of a box | `box`, `period`, `color` |

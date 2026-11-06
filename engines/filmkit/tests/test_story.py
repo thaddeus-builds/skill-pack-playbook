@@ -184,6 +184,29 @@ def test_a_panel_shot_is_a_colour_a_framed_picture_that_pushes_in_and_type_the_l
         assert any(".panel: only a shot with fit: panel" in m for m in problems(spec, d))
 
 
+def test_a_panel_background_can_run_from_one_colour_to_another_and_a_text_can_have_an_outline():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = plain(_t.film_spec(d))
+        spec["shots"][2].update(fit="panel", panel={"bg": [10, 20, 100], "bg2": [200, 220, 250], "title": ["A TITLE"], "caption": "under the frame"})
+        del spec["shots"][2]["camera"]
+        assert problems(spec, d) == [], problems(spec, d)
+        a = px(still(spec, d, 4.2, d / "g.png", q=0.25))
+        assert np.abs(a[1, 1] - [10, 20, 100]).max() < 6 and np.abs(a[-2, 1] - [200, 220, 250]).max() < 6, (a[1, 1], a[-2, 1])
+        assert 40 < a[a.shape[0] // 2, 1].sum() / 3 < 190, "somewhere between at the middle"
+        spec["shots"][2]["panel"]["bg2"] = [300, 0, 0]
+        assert any("panel.bg2" in m for m in problems(spec, d)), problems(spec, d)
+        # an outline puts dark pixels round white type on a white picture, and none without it
+        base = plain(_t.film_spec(d))
+        base["overlays"] = [{"element": "text", "t0": 0.0, "t1": 3.0, "text": "WWWW", "x": 540, "y": 900, "anchor": "m", "size": 160, "font": "bold", "alpha": 1.0, "dur": 0.01}]
+        for sh in base["shots"][:1]:
+            sh["dim"] = [0, 0]
+        plainimg = px(still(base, d, 1.0, d / "p.png", q=0.5))
+        base["overlays"][0]["stroke"] = {"width": 6, "color": [0, 0, 0]}
+        outlined = px(still(base, d, 1.0, d / "o.png", q=0.5))
+        assert (outlined.sum(axis=2) < plainimg.sum(axis=2) - 60).sum() > 200, "the outline darkens the pixels round the letters"
+
+
 def test_a_split_shot_stacks_two_clips_each_with_its_own_in_and_camera_and_a_seam_between():
     with _t.tmpdir() as d:
         _t.make_assets(d)

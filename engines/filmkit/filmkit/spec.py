@@ -200,7 +200,7 @@ def _panel_problems(s: dict, w: str) -> list[str]:
     for k, lo, hi in (("title_y", -5000, 10000), ("y", 0, 10000), ("height", 20, 10000), ("margin", 0, 5000)):
         if k in pn and not _n(pn[k], lo, hi):
             out.append(f"{w}.panel.{k}: must be a number from {lo:g} to {hi:g}")
-    for k in ("bg", "title_fill"):
+    for k in ("bg", "bg2", "title_fill"):
         if k in pn and not _rgb(pn[k]):
             out.append(f"{w}.panel.{k}: must be [r, g, b], each from 0 to 255")
     for k in ("title_font", "caption_font"):

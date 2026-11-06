@@ -38,7 +38,7 @@ def rgb(v, default):
     return tuple(int(c) for c in v[:3]) if isinstance(v, (list, tuple)) and len(v) >= 3 else default
 
 
-def track_text(d, xy, text, f, fill, tracking=0.0, anchor="l", q=1.0, shadow=True, limit=None):
+def track_text(d, xy, text, f, fill, tracking=0.0, anchor="l", q=1.0, shadow=True, limit=None, stroke=None):
     """`text` one character at a time with `tracking` pixels between, from `xy` (anchor l, m or r). Returns its width. A shadow sits under type that has an alpha. `limit`: draw only the
     first characters (a typewriter) while the line is placed as the whole text is, so a centred line does not slide as it fills."""
     x, y = xy
@@ -51,7 +51,10 @@ def track_text(d, xy, text, f, fill, tracking=0.0, anchor="l", q=1.0, shadow=Tru
     for ch, w in list(zip(text, widths))[:limit]:
         if shadow and len(fill) == 4:
             d.text((x + 1.5 * q, y + 3.5 * q), ch, font=f, fill=(0, 0, 0, int(fill[3] * 0.55)))
-        d.text((x, y), ch, font=f, fill=fill)
+        if stroke:
+            d.text((x, y), ch, font=f, fill=fill, stroke_width=max(1, int(round(stroke["width"] * q))), stroke_fill=(*rgb(stroke.get("color"), (0, 0, 0)), int(fill[3] * stroke.get("alpha", 0.85)) if len(fill) == 4 else 255))
+        else:
+            d.text((x, y), ch, font=f, fill=fill)
         x += w
     return total
 
@@ -226,7 +229,7 @@ class Text:
         d = ImageDraw.Draw(layer)
         size = fitted(cx, [p["text"]], p["font"], p["size"], p["tracking"], p.get("max_width"))
         track_text(d, (p["x"] * cx.q, p["y"] * cx.q), p["text"], cx.font(p["font"], size), (*rgb(p["fill"], WHITE), int(255 * p["alpha"] * a)), p["tracking"], p["anchor"], cx.q,
-                   limit=int((t - el["t0"]) * cps) + 1 if cps else None)
+                   limit=int((t - el["t0"]) * cps) + 1 if cps else None, stroke=p.get("stroke"))
 
     @classmethod
     def boxes(cls, t, p, cx, el):

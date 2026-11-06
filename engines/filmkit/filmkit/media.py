@@ -264,7 +264,13 @@ class Shot:
         cx, pn = self.cx, self.spec["panel"]
         g = PN.geometry(pn, cx.w0, cx.h0)
         q = cx.q
-        out = Image.new("RGB", (cx.W, cx.H), tuple(int(v) for v in pn.get("bg", PN.BG)[:3]))
+        top = np.array(pn.get("bg", PN.BG)[:3], np.float32)
+        if pn.get("bg2"):
+            k = np.linspace(0.0, 1.0, cx.H, dtype=np.float32)[:, None, None]
+            grad = top[None, None, :] * (1 - k) + np.array(pn["bg2"][:3], np.float32)[None, None, :] * k
+            out = Image.fromarray(np.repeat(grad, cx.W, axis=1).astype(np.uint8), "RGB")
+        else:
+            out = Image.new("RGB", (cx.W, cx.H), tuple(int(v) for v in top))
         ox0, oy0, ox1, oy1 = (int(round(v * q)) for v in g["outer"])
         ix0, iy0, ix1, iy1 = (int(round(v * q)) for v in g["inner"])
         ImageDraw.Draw(out).rectangle((ox0, oy0, ox1 - 1, oy1 - 1), fill=tuple(int(v) for v in g["frame_color"][:3]))
