@@ -359,6 +359,9 @@ def test_client_spend_cap() -> None:
     check("spend_cap: a client's higher figure never raises the pack's", A.spend_cap(30, 100) == 30)
     check("spend_cap: no client figure, no limit to spend under", A.spend_cap(30, None) is None)
     check("spend_cap: a negative figure reads as 0", A.spend_cap(30, -5) == 0)
+    check("spend_cap: a pack with no figure of its own takes the client's (R48)", A.spend_cap(None, 12) == 12)
+    check("spend_cap: no figure of either: no limit to spend under", A.spend_cap(None, None) is None)
+    check("spend_cap: a negative figure with no own reads as 0", A.spend_cap(None, -5) == 0)
     m = A.mode(hist(("confirm", "2026-10-20:T20", "owner@relay", "2026-10-12T08:00:00+00:00")),
                today=TODAY, max_days=28, eligible_ids=A.eligible(CAPPED))
     base = {"mode": m, "write_ids": ["T20"], "item_approved": True, "named": ["auto_spend_per_day"]}
