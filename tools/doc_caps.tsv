@@ -1,0 +1,29 @@
+# ROADMAP rows longer than 400 characters when the cap came (tests/test_doc_caps.py): id, the length they had.
+# A row listed here may only get shorter; delete its line once it fits. Never add a line.
+X25	1047
+X14	959
+X13	919
+W18	858
+X31	823
+X6	793
+X43	576
+R12	512
+R5	498
+N4	494
+R21	492
+R14	490
+R40	488
+R25	487
+X15	484
+X35	477
+R18	462
+R10	458
+X29	452
+X5	451
+R33	440
+X19	434
+X12	420
+R15	411
+W4	407
+R37	407
+X26	405
