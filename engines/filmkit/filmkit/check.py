@@ -55,7 +55,10 @@ def layout(spec: dict, base_dir: Path, step: float = 0.2) -> list[str]:
                     seen.add((i, name, "canvas"))
                     found.append(f"t={t:.1f}s: {name[1:]} ({x0:.0f},{y0:.0f})-({x1:.0f},{y1:.0f}) is outside the canvas {c['w']}x{c['h']}")
                 continue
-            if name.startswith("^"):                                                  # room taken, not type: it need not sit in the safe area
+            if name.startswith("^"):                                                  # room taken, not type: it need not sit in the safe area, but it has to be on the canvas
+                if (x0 < -1 or y0 < -1 or x1 > c["w"] + 1 or y1 > c["h"] + 1) and (i, name, "canvas") not in seen:
+                    seen.add((i, name, "canvas"))
+                    found.append(f"t={t:.1f}s: {name[1:]} ({x0:.0f},{y0:.0f})-({x1:.0f},{y1:.0f}) is outside the canvas {c['w']}x{c['h']}")
                 continue
             if sb and (x0 < sb[0] - 1 or y0 < sb[1] - 1 or x1 > sb[2] + 1 or y1 > sb[3] + 1) and (i, name, "safe") not in seen:
                 seen.add((i, name, "safe"))

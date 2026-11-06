@@ -176,12 +176,14 @@ def refuse_overwrite(spec: dict, base_dir: Path, out: Path, keep: list[Path]) ->
 
 def preflight(spec: dict, cx: Ctx) -> None:
     """Draw every overlay once, in the middle of its time, before any frame is rendered: a graphic that cannot be drawn fails in a second, with its place in the spec, not minutes in."""
+    own = len(spec.get("overlays") or [])
     for i, el in enumerate(S.all_overlays(spec)):
         layer = Image.new("RGBA", (cx.W, cx.H), (0, 0, 0, 0))
         try:
             ELEMENTS[el["element"]].draw(layer, (el["t0"] + el["t1"]) / 2, el, cx, el)
         except Exception as e:  # noqa: BLE001
-            raise FilmkitError(f"overlays[{i}] ({el['element']}) cannot be drawn: {type(e).__name__}: {e}") from e
+            where = f"overlays[{i - (len(S.all_overlays(spec)) - own)}]" if i >= len(S.all_overlays(spec)) - own else "a panel's title or caption"
+            raise FilmkitError(f"{where} ({el['element']}) cannot be drawn: {type(e).__name__}: {e}") from e
 
 
 def render(spec: dict, base_dir: Path, out: Path, *, preview: float | None = None, workdir: Path | None = None, progress=None, keep: list[Path] = ()) -> dict:

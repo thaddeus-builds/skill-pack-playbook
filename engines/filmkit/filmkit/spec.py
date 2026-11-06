@@ -154,6 +154,11 @@ def _overlay_problems(el: dict, w: str, assets: dict) -> list[str]:
     for k in ("color", "fill", "accent"):
         if k in el and el[k] is not None and not (isinstance(el[k], list) and len(el[k]) >= 3 and all(_n(c, 0, 255) for c in el[k][:3])):
             out.append(f"{w}.{k}: must be [r, g, b], each from 0 to 255")
+    if "stroke" in el and el["stroke"] is not None:
+        st = el["stroke"]
+        if not (isinstance(st, dict) and set(st) <= {"width", "color", "alpha"} and _n(st.get("width"), 0.5, 40) and _n(st.get("alpha", 0.85), 0, 1)
+                and (st.get("color") is None or (isinstance(st["color"], list) and len(st["color"]) >= 3 and all(_n(c, 0, 255) for c in st["color"][:3])))):
+            out.append(f"{w}.stroke: must be {{width (0.5 to 40), color [r, g, b], alpha (0 to 1)}}")
     if "dir" in el and el["dir"] not in ("left", "right", "top", "bottom"):
         out.append(f"{w}.dir: must be left, right, top or bottom")
     if "align" in el and el["align"] not in ("l", "m"):
@@ -231,6 +236,10 @@ def _split_problems(s: dict, w: str, assets: dict) -> list[str]:
     for k in b:
         if k not in ("asset", "in", "speed", "camera", "dim", "blur"):
             out.append(f"{w}.split.bottom.{k}: not a key of a half (asset, in, speed, camera, dim, blur)")
+    if "blur" in b and not _n(b["blur"], 0, 100):
+        out.append(f"{w}.split.bottom.blur: must be a number from 0 to 100")
+    if "dim" in b and not (isinstance(b["dim"], list) and len(b["dim"]) == 2 and all(_n(x, 0, 1) for x in b["dim"])):
+        out.append(f"{w}.split.bottom.dim: must be [from, to], each from 0 to 1")
     if "in" in b and not _n(b["in"], 0, 36000):
         out.append(f"{w}.split.bottom.in: must be a number of seconds from 0")
     if "speed" in b and not _n(b["speed"], 0.05, 20):
@@ -411,6 +420,13 @@ def _matte_problems(spec: dict, i: int, s: dict, base_dir: Path, info: dict) -> 
             ref = None
     if size and ref and ref.get("w") and tuple(size) != (ref["w"], ref["h"]):
         out.append(f"{w}: the matte is {size[0]}x{size[1]} and the clip {ref['w']}x{ref['h']}: they must be the same size")
+    if ma["type"] == "frames":                      # a numbered sequence has no duration of its own: count its pictures, and what the shot reads of it
+        count, k = 0, n
+        while Path(str(p) % k).is_file():
+            count, k = count + 1, k + 1
+        have, need = count / ma.get("fps", 30), s.get("in", 0) + (s["end"] - s["start"]) * s.get("speed", 1.0)
+        if have < need - 0.1:
+            out.append(f"{w}: the sequence has {count} pictures ({have:.2f} s at {ma.get('fps', 30)} fps) and the shot reads {need:.2f} s of the clip: a shorter matte holds its last picture while the clip moves")
     mm = info.get(c["matte"])
     if mm and ref and mm["duration"] and ref.get("duration") and mm["duration"] < ref["duration"] - 0.1:
         out.append(f"{w}: the matte runs {mm['duration']:.2f} s and the clip {ref['duration']:.2f} s: they must have the same frames")
@@ -483,6 +499,14 @@ def _problems(spec, base_dir: Path | None) -> list[str]:
             ok_shots = False
         else:
             prev_end = end
+    cv = spec.get("canvas")
+    if isinstance(cv, dict) and _n(cv.get("w")) and _n(cv.get("h")):
+        for i, s in enumerate(shots):
+            if isinstance(s, dict) and s.get("fit") == "panel" and isinstance(s.get("panel"), dict) and not _panel_problems(s, "x"):
+                g = PN.geometry(s["panel"], cv["w"], cv["h"])
+                x0, y0, x1, y1 = g["outer"]
+                if not (x0 >= 0 and y0 >= 0 and x1 <= cv["w"] and y1 <= cv["h"] and x1 - x0 >= 40 and y1 - y0 >= 40):
+                    out.append(f"shots[{i}].panel: the framed picture {tuple(round(v) for v in g['outer'])} must lie inside the {cv['w']}x{cv['h']} canvas and be at least 40 px each way (margin, y, height)")
     if ok_shots and abs(prev_end - dur) > 1e-3:
         out.append(f"shots: end at {prev_end}, the duration is {dur}")
     overlays = spec.get("overlays", [])

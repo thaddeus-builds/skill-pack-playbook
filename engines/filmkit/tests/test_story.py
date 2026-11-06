@@ -207,6 +207,35 @@ def test_a_panel_background_can_run_from_one_colour_to_another_and_a_text_can_ha
         assert (outlined.sum(axis=2) < plainimg.sum(axis=2) - 60).sum() > 200, "the outline darkens the pixels round the letters"
 
 
+def test_what_the_review_found_a_bad_panel_stroke_or_half_is_named_before_rendering_and_a_short_matte_is_counted():
+    with _t.tmpdir() as d:
+        _t.make_assets(d)
+        spec = plain(_t.film_spec(d))
+        spec["shots"][2].update(fit="panel", panel={"bg": [28, 84, 200], "margin": 600})
+        assert any("framed picture" in m and "canvas" in m for m in problems(spec, d)), problems(spec, d)
+        spec["shots"][2]["panel"] = {"bg": [28, 84, 200], "margin": 0}
+        assert any("framed picture" in m for m in problems(spec, d)), "the frame would hang over the edge"
+        spec = plain(_t.film_spec(d))
+        spec["overlays"] = [{"element": "text", "t0": 0.0, "t1": 2.0, "text": "A", "x": 540, "y": 900, "stroke": bad} for bad in ({"color": [0, 0, 0]}, "x", {"width": "a"})]
+        bad = problems(spec, d)
+        assert sum(".stroke: must be" in m for m in bad) == 3, bad
+        spec = plain(_t.film_spec(d))
+        spec["shots"][2].update(fit="split", split={"bottom": {"asset": spec["shots"][2]["asset"], "dim": "x", "blur": "y"}})
+        bad = problems(spec, d)
+        assert any("split.bottom.dim" in m for m in bad) and any("split.bottom.blur" in m for m in bad), bad
+        # a numbered sequence shorter than what the shot reads of the clip
+        spec = plain(_t.film_spec(d))
+        spec["assets"]["mt"] = {"type": "frames", "path": "short/m_%04d.png", "fps": 30}
+        (d / "short").mkdir()
+        import subprocess
+        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(d / spec["assets"][spec["shots"][0]["asset"]]["path"])], capture_output=True, text=True).stdout.split()[0].split(",")
+        for k in range(1, 6):
+            Image.new("L", (int(probe[0]), int(probe[1])), 255).save(d / "short" / f"m_{k:04d}.png")
+        spec["shots"][0]["cutout"] = {"matte": "mt"}
+        bad = problems(spec, d)
+        assert any("the sequence has 5 pictures" in m for m in bad), bad
+
+
 def test_a_split_shot_stacks_two_clips_each_with_its_own_in_and_camera_and_a_seam_between():
     with _t.tmpdir() as d:
         _t.make_assets(d)
