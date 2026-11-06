@@ -25,6 +25,7 @@ ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COM
 SAMPLE = (ROOT / "kit" / "tools" / "pre-push.sample").read_text()
 RUNNER = 'import sys\nprint("RESULT: 1 passed")\nsys.exit(0)\n'
 FAILING = 'import sys\nprint("RESULT: 0 passed")\nsys.exit(1)\n'
+SILENT = 'import sys\nsys.exit(0)\n'
 NEEDS_UNTRACKED = 'import os, sys\nok = os.path.exists("extra.txt")\nprint("RESULT: 1 passed" if ok else "RESULT: 0 passed")\nsys.exit(0 if ok else 1)\n'
 
 
@@ -101,6 +102,13 @@ def test_run_is_green_on_a_passing_suite_and_red_on_a_failing_one():
         r = gate(pack, "run")
         assert r.returncode == 1 and "GATE: red (the suite failed on the merge result" in r.stdout, r.stdout
         assert "worktrees" not in sh(pack, "git", "worktree", "list").replace(str(pack), "")   # the throwaway worktree is gone
+
+
+def test_a_suite_that_exits_zero_without_a_result_line_is_red():
+    with _t.tmpdir() as t:
+        pack = make_pack(Path(t), SILENT)
+        r = gate(pack, "run")
+        assert r.returncode == 1 and "no `RESULT: N passed` line" in r.stdout, r.stdout
 
 
 def test_run_is_red_when_the_commit_does_not_merge_with_main():

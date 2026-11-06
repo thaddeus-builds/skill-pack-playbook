@@ -117,10 +117,19 @@ def install(pack: Path) -> tuple[bool, str]:
     return True, f"hook ok, {SETTING} = {suite_text(pack)}"
 
 
+RESULT_LINE = re.compile(r"^RESULT: \d+ passed$", re.M)
+
+
 def run_suite(cwd: Path) -> tuple[int, str]:
+    """Exit code and the line that sums the run up. A suite that exits 0 without printing `RESULT: N passed` stopped early or
+    ran nothing, so it is red (the same rule as the packs' CI jobs)."""
     r = fleet.run(cwd, *fleet.suite_command(cwd), env=None)
-    lines = (r.stdout + r.stderr).strip().splitlines()
-    return r.returncode, lines[-1] if lines else f"exit {r.returncode}"
+    out = r.stdout + r.stderr
+    found = RESULT_LINE.findall(out)
+    if r.returncode == 0 and not found:
+        return 1, "no `RESULT: N passed` line"
+    lines = [ln for ln in out.splitlines() if ln.startswith("RESULT:")]
+    return r.returncode, lines[-1] if lines else (out.strip().splitlines() or [f"exit {r.returncode}"])[-1]
 
 
 def gate(pack: Path, fresh: bool, remote: str = "origin") -> tuple[bool, str]:
