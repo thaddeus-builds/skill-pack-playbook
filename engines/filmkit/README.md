@@ -9,7 +9,7 @@ filmkit lives in the skill-pack playbook, in `engines/filmkit/` (it moved there 
 dependencies, and is not part of `kit/`: a pack that makes no films never carries ffmpeg. Who should use it: [docs/who-should-use.md](docs/who-should-use.md).
 
 ```
-filmkit/            the package: spec, elements (title, text, chip, brackets, scan, counter, steps, rule, logo), media (shots, camera), transitions, grade, audio, check, render, cli, demo
+filmkit/            the package: spec, elements (title, text, chip, brackets, scan, counter, steps, rule, logo, kinetic, year), media (shots, camera), panel (the panel shot), cutout (the presenter cutout), transitions, grade, audio, check, render, cli, demo
 docs/filmkit.md     the spec, the elements, the checks, the craft rules, the limits
 skills/filmkit/     an agent's order of work
 tests/              python3 engines/filmkit/tests/run.py  (offline: synthetic clips; from the playbook's root, `python3 run_all.py filmkit`)
@@ -26,7 +26,7 @@ python3 -m filmkit inspect /tmp/demo/film.mp4                  # duration, size,
 ```
 
 Needs Python 3.10+, numpy, Pillow, scipy and `ffmpeg`/`ffprobe` on the PATH (`uv run --with numpy --with pillow --with scipy python3 -m filmkit ...`). Fonts are not shipped: a spec names four
-(black, bold, medium, regular) or the Noto Sans CJK on the machine is used. Nothing third-party ends up in a film.
+(black, bold, medium, regular, and `serif` for display type) or the Noto Sans CJK (Noto Serif CJK for `serif`) on the machine is used. Nothing third-party ends up in a film.
 
 Use it from another project by vendoring `engines/filmkit/filmkit/` as a plain copy (never edit the copy: fix it in the playbook and take it again; the proofcut pack's `tools/vendor_filmkit.py` is the worked example). It is not stdlib-only, so a pack that
 holds to the kit's stdlib rule calls it as a program (`python3 -m filmkit`) rather than importing it into its own package.

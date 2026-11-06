@@ -61,6 +61,7 @@ class Ctx:
     fonts: object
     assets: dict = field(default_factory=dict)
     assets_type: dict = field(default_factory=dict)
+    assets_fps: dict = field(default_factory=dict)        # the rate of a picture sequence (asset type `frames`)
     base_dir: Path = Path(".")
     cache: dict = field(default_factory=dict)
     notes: list = field(default_factory=list)          # what a render says about its material that is not a problem (an HDR clip)

@@ -1,4 +1,4 @@
-"""Fonts: a spec names four roles (black, bold, med, reg) as files; nothing is shipped (a face's licence is the client's to check). A role with no file falls back to Noto Sans CJK in the
+"""Fonts: a spec names five roles (black, bold, med, reg, serif) as files; nothing is shipped (a face's licence is the client's to check). A role with no file falls back to Noto Sans CJK (Noto Serif CJK for `serif`) in the
 usual places, then to the face Pillow carries, so a render never stops for a missing font and the check says which fallback was used."""
 from __future__ import annotations
 
@@ -9,13 +9,14 @@ from PIL import ImageFont
 
 from .util import FilmkitError
 
-ROLES = ("black", "bold", "med", "reg")
+ROLES = ("black", "bold", "med", "reg", "serif")
 # (file name, face index): the split OTF release (macOS) and the .ttc collections Debian and Ubuntu install (`fonts-noto-cjk`; Black and Medium come with `fonts-noto-cjk-extra`), in which Simplified Chinese is face 2
 CANDIDATES = {
     "black": [("NotoSansCJKsc-Black.otf", 0), ("NotoSansSC-Black.otf", 0), ("NotoSans-Black.ttf", 0), ("NotoSansCJK-Black.ttc", 2)],
     "bold": [("NotoSansCJKsc-Bold.otf", 0), ("NotoSansSC-Bold.otf", 0), ("NotoSans-Bold.ttf", 0), ("NotoSansCJK-Bold.ttc", 2)],
     "med": [("NotoSansCJKsc-Medium.otf", 0), ("NotoSansSC-Medium.otf", 0), ("NotoSans-Medium.ttf", 0), ("NotoSansCJK-Medium.ttc", 2)],
     "reg": [("NotoSansCJKsc-Regular.otf", 0), ("NotoSansSC-Regular.otf", 0), ("NotoSans-Regular.ttf", 0), ("NotoSansCJK-Regular.ttc", 2)],
+    "serif": [("NotoSerifCJKsc-Bold.otf", 0), ("NotoSerifSC-Bold.otf", 0), ("NotoSerif-Bold.ttf", 0), ("NotoSerifCJK-Bold.ttc", 2)],
 }
 DIRS = [Path.home() / "Library/Fonts", Path("/Library/Fonts"), Path("/usr/share/fonts/opentype/noto"), Path("/usr/share/fonts/truetype/noto"), Path.home() / ".fonts"]
 

@@ -28,7 +28,7 @@ def make_ctx(spec: dict, base_dir: Path, q: float) -> Ctx:
         p = Path(a["path"])
         assets[name] = str(p if p.is_absolute() else base_dir / p)
         kinds[name] = a["type"]
-    return Ctx(c["w"], c["h"], q, Fonts(spec.get("fonts"), base_dir), assets, kinds, base_dir)
+    return Ctx(c["w"], c["h"], q, Fonts(spec.get("fonts"), base_dir), assets, kinds, {n: a["fps"] for n, a in spec["assets"].items() if "fps" in a}, base_dir)
 
 
 def make_shots(spec: dict, cx: Ctx) -> list[Shot]:
@@ -54,7 +54,7 @@ def scrim(spec: dict, cx: Ctx) -> Image.Image | None:
 
 def overlay_frame(spec: dict, t: float, cx: Ctx) -> Image.Image:
     layer = Image.new("RGBA", (cx.W, cx.H), (0, 0, 0, 0))
-    for el in spec.get("overlays", []):
+    for el in S.all_overlays(spec):
         if el["t0"] <= t < el["t1"]:
             ELEMENTS[el["element"]].draw(layer, t, el, cx, el)
     sc = scrim(spec, cx)
@@ -176,12 +176,14 @@ def refuse_overwrite(spec: dict, base_dir: Path, out: Path, keep: list[Path]) ->
 
 def preflight(spec: dict, cx: Ctx) -> None:
     """Draw every overlay once, in the middle of its time, before any frame is rendered: a graphic that cannot be drawn fails in a second, with its place in the spec, not minutes in."""
-    for i, el in enumerate(spec.get("overlays", [])):
+    own = len(spec.get("overlays") or [])
+    for i, el in enumerate(S.all_overlays(spec)):
         layer = Image.new("RGBA", (cx.W, cx.H), (0, 0, 0, 0))
         try:
             ELEMENTS[el["element"]].draw(layer, (el["t0"] + el["t1"]) / 2, el, cx, el)
         except Exception as e:  # noqa: BLE001
-            raise FilmkitError(f"overlays[{i}] ({el['element']}) cannot be drawn: {type(e).__name__}: {e}") from e
+            where = f"overlays[{i - (len(S.all_overlays(spec)) - own)}]" if i >= len(S.all_overlays(spec)) - own else "a panel's title or caption"
+            raise FilmkitError(f"{where} ({el['element']}) cannot be drawn: {type(e).__name__}: {e}") from e
 
 
 def render(spec: dict, base_dir: Path, out: Path, *, preview: float | None = None, workdir: Path | None = None, progress=None, keep: list[Path] = ()) -> dict:
@@ -223,7 +225,7 @@ def render(spec: dict, base_dir: Path, out: Path, *, preview: float | None = Non
         for k in range(n):
             t = k / fps
             for s in shots:
-                if s.end <= t and s.proc:
+                if s.end <= t and s.busy():
                     s.close()
             foot.write(np.clip(footage_frame(spec, shots, t), 0, 255).astype(np.uint8).tobytes())
             over.write(np.asarray(overlay_frame(spec, t, cx), dtype=np.uint8).tobytes())

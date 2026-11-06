@@ -18,7 +18,7 @@ def test_a_spec_with_every_element_renders_to_the_right_file():
         info = render(spec, d, out, preview=0.25)
         assert info["width"] == 270 and info["height"] == 480 and abs(info["duration"] - 6.0) < 0.1, info
         assert info["lufs"] is not None and -19 < info["lufs"] < -13, info                       # the loudness target is -16
-        assert info["fonts_fallback"] == ["black", "bold", "med", "reg"], info                    # tests use the face Pillow carries
+        assert info["fonts_fallback"] == ["black", "bold", "med", "reg", "serif"], info                    # tests use the face Pillow carries
         assert inspect(out)["duration"] == info["duration"]
         r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(out)], capture_output=True, text=True)
         assert r.stdout.strip() == "aac", r.stdout
