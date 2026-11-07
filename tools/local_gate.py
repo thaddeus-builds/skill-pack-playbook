@@ -117,7 +117,7 @@ def install(pack: Path) -> tuple[bool, str]:
     return True, f"hook ok, {SETTING} = {suite_text(pack)}"
 
 
-RESULT_LINE = re.compile(r"^RESULT: \d+ passed$", re.M)
+RESULT_LINE = re.compile(r"^RESULT: \d+ passed(, 0 failed)?$", re.M)   # seo-skill-pack ends its line ", 0 failed"
 
 
 def run_suite(cwd: Path) -> tuple[int, str]:
