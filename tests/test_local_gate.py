@@ -104,6 +104,13 @@ def test_run_is_green_on_a_passing_suite_and_red_on_a_failing_one():
         assert "worktrees" not in sh(pack, "git", "worktree", "list").replace(str(pack), "")   # the throwaway worktree is gone
 
 
+def test_a_result_line_that_ends_0_failed_is_green():
+    with _t.tmpdir() as t:
+        pack = make_pack(Path(t), RUNNER.replace("1 passed", "1 passed, 0 failed"))
+        r = gate(pack, "run")
+        assert r.returncode == 0 and r.stdout.strip().endswith("GATE: green"), r.stdout + r.stderr
+
+
 def test_a_suite_that_exits_zero_without_a_result_line_is_red():
     with _t.tmpdir() as t:
         pack = make_pack(Path(t), SILENT)
